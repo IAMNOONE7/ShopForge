@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Hosting;
 
 namespace ShopForge.IntegrationTests.Health;
 
-public sealed class HealthEndpointTests(ShopForgeApiFactory factory) : IClassFixture<ShopForgeApiFactory>
+public sealed class HealthEndpointTests(ShopForgeApiFactory factory)
 {
     private const string UnreachableDatabase = "Host=localhost;Port=1;Username=shopforge;Password=shopforge";
 

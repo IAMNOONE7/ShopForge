@@ -4,7 +4,12 @@
     <Project Path="src/ShopForge.Infrastructure/ShopForge.Infrastructure.csproj" />
     <Project Path="src/ShopForge.Shared/ShopForge.Shared.csproj" />
   </Folder>
+  <Folder Name="/src/Modules/">
+    <Project Path="src/Modules/Stores/ShopForge.Stores/ShopForge.Stores.csproj" />
+  </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/ShopForge.ArchitectureTests/ShopForge.ArchitectureTests.csproj" />
     <Project Path="tests/ShopForge.IntegrationTests/ShopForge.IntegrationTests.csproj" />
+    <Project Path="tests/ShopForge.UnitTests/ShopForge.UnitTests.csproj" />
   </Folder>
 </Solution>

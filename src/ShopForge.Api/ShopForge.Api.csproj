@@ -1,12 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\ShopForge.Infrastructure\ShopForge.Infrastructure.csproj" />
     <ProjectReference Include="..\ShopForge.Shared\ShopForge.Shared.csproj" />
+    <ProjectReference Include="..\Modules\Stores\ShopForge.Stores\ShopForge.Stores.csproj" />
   </ItemGroup>
 
 </Project>
