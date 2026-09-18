@@ -1,4 +1,8 @@
 :root {
+  --color-primary: #1f2328;
+  --color-secondary: #f6f8fa;
+  --radius: 6px;
+
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
   line-height: 1.5;
   color: #1f2328;
@@ -13,4 +17,22 @@ body {
   max-width: 64rem;
   margin: 0 auto;
   padding: 2rem 1rem;
+}
+
+.store-header {
+  padding: 1rem;
+  color: #fff;
+  background: var(--color-primary);
+}
+
+.store-header h1 {
+  max-width: 64rem;
+  margin: 0 auto;
+  font-size: 1.5rem;
+}
+
+.panel {
+  padding: 1rem 1.25rem;
+  background: var(--color-secondary);
+  border-radius: var(--radius);
 }
