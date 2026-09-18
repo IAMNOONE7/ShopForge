@@ -3,4 +3,7 @@
     <Project Path="src/ShopForge.Api/ShopForge.Api.csproj" />
     <Project Path="src/ShopForge.Infrastructure/ShopForge.Infrastructure.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ShopForge.IntegrationTests/ShopForge.IntegrationTests.csproj" />
+  </Folder>
 </Solution>
