@@ -22,6 +22,7 @@ builder.Services.AddScoped<StoreContext>();
 builder.Services.AddScoped<IStoreContext>(provider => provider.GetRequiredService<StoreContext>());
 
 builder.Services.AddInfrastructure(builder.Configuration, [StoresModule.Assembly]);
+builder.Services.AddStoresModule();
 
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<ShopForgeDbContext>("database", tags: [HealthEndpoints.ReadinessTag]);
@@ -31,8 +32,12 @@ var app = builder.Build();
 app.UseHttpLogging();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
+app.UseStoreResolution();
 
 app.MapHealthEndpoints();
+
+var storefront = app.MapGroup("/api/storefront").RequireStore();
+storefront.MapStoresStorefrontEndpoints();
 
 if (app.Environment.IsDevelopment())
 {
