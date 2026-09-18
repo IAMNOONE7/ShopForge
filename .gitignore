@@ -1,0 +1,29 @@
+# Build output
+bin/
+obj/
+artifacts/
+
+# Test results
+TestResults/
+*.trx
+
+# IDEs and editors
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.DotSettings.user
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Local environment
+.env
+*.local
+
+# OS
+.DS_Store
+Thumbs.db
