@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ShopForge.Infrastructure\ShopForge.Infrastructure.csproj" />
+    <ProjectReference Include="..\ShopForge.Shared\ShopForge.Shared.csproj" />
   </ItemGroup>
 
 </Project>

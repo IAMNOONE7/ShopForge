@@ -5,4 +5,8 @@
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\ShopForge.Shared\ShopForge.Shared.csproj" />
+  </ItemGroup>
+
 </Project>

@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/ShopForge.Api/ShopForge.Api.csproj" />
     <Project Path="src/ShopForge.Infrastructure/ShopForge.Infrastructure.csproj" />
+    <Project Path="src/ShopForge.Shared/ShopForge.Shared.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/ShopForge.IntegrationTests/ShopForge.IntegrationTests.csproj" />

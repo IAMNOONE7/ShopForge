@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.HttpLogging;
 using ShopForge.Api.Health;
 using ShopForge.Infrastructure;
 using ShopForge.Infrastructure.Persistence;
+using ShopForge.Shared.Tenancy;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,7 +16,10 @@ builder.Services.AddHttpLogging(options =>
     options.CombineLogs = true;
 });
 
-builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddScoped<StoreContext>();
+builder.Services.AddScoped<IStoreContext>(provider => provider.GetRequiredService<StoreContext>());
+
+builder.Services.AddInfrastructure(builder.Configuration, []);
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<ShopForgeDbContext>("database", tags: [HealthEndpoints.ReadinessTag]);
 
