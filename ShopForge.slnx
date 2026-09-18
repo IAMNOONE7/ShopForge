@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/ShopForge.Api/ShopForge.Api.csproj" />
+    <Project Path="src/ShopForge.Infrastructure/ShopForge.Infrastructure.csproj" />
   </Folder>
 </Solution>

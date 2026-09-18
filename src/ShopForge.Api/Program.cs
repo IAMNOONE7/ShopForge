@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.HttpLogging;
 using ShopForge.Api.Health;
+using ShopForge.Infrastructure;
+using ShopForge.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,7 +14,10 @@ builder.Services.AddHttpLogging(options =>
         | HttpLoggingFields.Duration;
     options.CombineLogs = true;
 });
-builder.Services.AddHealthChecks();
+
+builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<ShopForgeDbContext>("database", tags: [HealthEndpoints.ReadinessTag]);
 
 var app = builder.Build();
 

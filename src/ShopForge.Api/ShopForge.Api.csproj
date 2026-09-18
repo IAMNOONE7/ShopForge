@@ -1,3 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ShopForge.Infrastructure\ShopForge.Infrastructure.csproj" />
+  </ItemGroup>
+
 </Project>
