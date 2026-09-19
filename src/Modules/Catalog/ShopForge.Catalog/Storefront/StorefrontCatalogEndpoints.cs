@@ -131,6 +131,7 @@ internal static class StorefrontCatalogEndpoints
             .AsNoTracking()
             .Include(storeProduct => storeProduct.Categories)
             .Include(storeProduct => storeProduct.AttributeValues)
+            .AsSplitQuery()
             .SingleOrDefaultAsync(storeProduct => storeProduct.Slug == slug && storeProduct.IsVisible, cancellationToken);
 
         if (storeProduct is null)
