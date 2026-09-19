@@ -189,10 +189,16 @@ internal static class StorefrontCatalogEndpoints
                 select image.FilePath)
             .SingleOrDefaultAsync(cancellationToken);
 
-        // Image files never change: a new upload gets a new id and therefore a new URL.
-        httpContext.Response.Headers.CacheControl = "public, max-age=86400, immutable";
+        var result = await ImageResults.StreamAsync(filePath, fileStorage, cancellationToken);
 
-        return await ImageResults.StreamAsync(filePath, fileStorage, cancellationToken);
+        // Image files never change: a new upload gets a new id and therefore a new URL. A 404 must not be cached
+        // the same way, because the product may become visible later.
+        if (result.Result is FileStreamHttpResult)
+        {
+            httpContext.Response.Headers.CacheControl = "public, max-age=86400, immutable";
+        }
+
+        return result;
     }
 
     private static async Task<List<AttributeDefinition>> FacetDefinitionsAsync(

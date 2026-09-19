@@ -149,6 +149,8 @@ public sealed class CatalogTests(ShopForgeApiFactory factory)
         Assert.Equal("image/png", image.Content.Headers.ContentType?.MediaType);
         Assert.Equal(AdminCatalogApi.PngBytes, await image.Content.ReadAsByteArrayAsync(CancellationToken));
         Assert.Equal(HttpStatusCode.NotFound, imageViaOtherStore.StatusCode);
+        Assert.True(image.Headers.CacheControl?.Public == true && image.Headers.CacheControl.Extensions.Any(extension => extension.Name == "immutable"));
+        Assert.Null(imageViaOtherStore.Headers.CacheControl);
     }
 
     [Fact]

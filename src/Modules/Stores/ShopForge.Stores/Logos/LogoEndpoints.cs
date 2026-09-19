@@ -21,6 +21,9 @@ internal static class LogoEndpoints
         storeAdmin.MapGet("/logo", GetLogoAsync);
     }
 
+    public static void MapStorefrontLogo(this IEndpointRouteBuilder storefront) =>
+        storefront.MapGet("/store/logo", GetStorefrontLogoAsync);
+
     private static async Task<Results<NoContent, ValidationProblem>> ReplaceLogoAsync(
         IFormFile? file,
         DbContext dbContext,
@@ -55,9 +58,6 @@ internal static class LogoEndpoints
         return TypedResults.NoContent();
     }
 
-    public static void MapStorefrontLogo(this IEndpointRouteBuilder storefront) =>
-        storefront.MapGet("/store/logo", GetStorefrontLogoAsync);
-
     private static async Task<Results<FileStreamHttpResult, NotFound>> GetStorefrontLogoAsync(
         HttpContext httpContext,
         DbContext dbContext,
@@ -65,9 +65,14 @@ internal static class LogoEndpoints
         IFileStorage fileStorage,
         CancellationToken cancellationToken)
     {
-        httpContext.Response.Headers.CacheControl = "public, max-age=300";
+        var result = await GetLogoAsync(dbContext, storeContext, fileStorage, cancellationToken);
 
-        return await GetLogoAsync(dbContext, storeContext, fileStorage, cancellationToken);
+        if (result.Result is FileStreamHttpResult)
+        {
+            httpContext.Response.Headers.CacheControl = "public, max-age=300";
+        }
+
+        return result;
     }
 
     private static async Task<Results<FileStreamHttpResult, NotFound>> GetLogoAsync(
