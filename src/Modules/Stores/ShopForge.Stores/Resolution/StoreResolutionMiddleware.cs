@@ -1,5 +1,7 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using ShopForge.Shared.Security;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Stores.Resolution;
@@ -8,20 +10,45 @@ internal sealed class StoreResolutionMiddleware(RequestDelegate next, ILogger<St
 {
     public async Task InvokeAsync(HttpContext context, StoreResolver resolver, StoreContext storeContext)
     {
-        if (context.GetEndpoint()?.Metadata.GetMetadata<StoreRequiredMetadata>() is null)
+        var metadata = context.GetEndpoint()?.Metadata;
+        ResolvedStore? store;
+
+        if (metadata?.GetMetadata<StoreRequiredMetadata>() is not null)
+        {
+            store = await resolver.ResolveAsync(context.Request.Host.Host, context.RequestAborted);
+        }
+        else if (metadata?.GetMetadata<AdminScopeMetadata>() is { } adminScope)
+        {
+            if (!Guid.TryParse(context.User.FindFirstValue(ShopForgeClaimTypes.TenantId), out var tenantId))
+            {
+                await TypedResults.Problem(statusCode: StatusCodes.Status401Unauthorized).ExecuteAsync(context);
+                return;
+            }
+
+            storeContext.SetTenant(tenantId);
+
+            if (!adminScope.RequiresStore)
+            {
+                await next(context);
+                return;
+            }
+
+            store = Guid.TryParse(context.Request.RouteValues["storeId"] as string, out var storeId)
+                ? await resolver.FindForTenantAsync(storeId, tenantId, context.RequestAborted)
+                : null;
+        }
+        else
         {
             await next(context);
             return;
         }
-
-        var store = await resolver.ResolveAsync(context.Request.Host.Host, context.RequestAborted);
 
         if (store is null)
         {
             await TypedResults.Problem(
                     statusCode: StatusCodes.Status404NotFound,
                     title: "Store not found",
-                    detail: "No store is configured for the requested host.")
+                    detail: "The requested store does not exist or is not accessible.")
                 .ExecuteAsync(context);
             return;
         }

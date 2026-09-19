@@ -2,6 +2,7 @@ using System.Reflection;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using ShopForge.Stores.Admin;
 using ShopForge.Stores.Resolution;
 using ShopForge.Stores.Storefront;
 
@@ -27,6 +28,21 @@ public static class StoresModule
     public static TBuilder RequireStore<TBuilder>(this TBuilder builder)
         where TBuilder : IEndpointConventionBuilder =>
         builder.WithMetadata(new StoreRequiredMetadata());
+
+    public static TBuilder RequireAdminTenant<TBuilder>(this TBuilder builder)
+        where TBuilder : IEndpointConventionBuilder =>
+        builder.WithMetadata(new AdminScopeMetadata(RequiresStore: false));
+
+    public static TBuilder RequireAdminStore<TBuilder>(this TBuilder builder)
+        where TBuilder : IEndpointConventionBuilder =>
+        builder.WithMetadata(new AdminScopeMetadata(RequiresStore: true));
+
+    public static IEndpointRouteBuilder MapStoresAdminEndpoints(this IEndpointRouteBuilder tenantAdmin)
+    {
+        tenantAdmin.MapAdminStores();
+
+        return tenantAdmin;
+    }
 
     public static IEndpointRouteBuilder MapStoresStorefrontEndpoints(this IEndpointRouteBuilder storefront)
     {

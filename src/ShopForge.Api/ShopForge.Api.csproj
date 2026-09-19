@@ -8,6 +8,7 @@
   <ItemGroup>
     <ProjectReference Include="..\ShopForge.Infrastructure\ShopForge.Infrastructure.csproj" />
     <ProjectReference Include="..\ShopForge.Shared\ShopForge.Shared.csproj" />
+    <ProjectReference Include="..\Modules\Access\ShopForge.Access\ShopForge.Access.csproj" />
     <ProjectReference Include="..\Modules\Stores\ShopForge.Stores\ShopForge.Stores.csproj" />
   </ItemGroup>
 

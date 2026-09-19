@@ -10,9 +10,6 @@ public sealed class ShopForgeDbContext(
     IStoreContext storeContext,
     EntityConfigurationAssemblies configurationAssemblies) : DbContext(options)
 {
-    public const string StoreFilter = "Store";
-    public const string TenantFilter = "Tenant";
-
     private Guid? CurrentStoreId => storeContext.StoreId;
 
     private Guid? CurrentTenantId => storeContext.TenantId;
@@ -41,13 +38,13 @@ public sealed class ShopForgeDbContext(
             if (typeof(IStoreOwned).IsAssignableFrom(clrType))
             {
                 modelBuilder.Entity(clrType).HasQueryFilter(
-                    StoreFilter, OwnershipFilter(clrType, nameof(IStoreOwned.StoreId), nameof(CurrentStoreId)));
+                    TenancyFilters.Store, OwnershipFilter(clrType, nameof(IStoreOwned.StoreId), nameof(CurrentStoreId)));
             }
 
             if (typeof(ITenantOwned).IsAssignableFrom(clrType))
             {
                 modelBuilder.Entity(clrType).HasQueryFilter(
-                    TenantFilter, OwnershipFilter(clrType, nameof(ITenantOwned.TenantId), nameof(CurrentTenantId)));
+                    TenancyFilters.Tenant, OwnershipFilter(clrType, nameof(ITenantOwned.TenantId), nameof(CurrentTenantId)));
             }
         }
     }

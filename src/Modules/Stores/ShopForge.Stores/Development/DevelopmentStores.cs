@@ -7,17 +7,24 @@ namespace ShopForge.Stores.Development;
 
 public static class DevelopmentStores
 {
-    public static async Task SeedDevelopmentStoresAsync(this IServiceProvider services, CancellationToken cancellationToken = default)
+    public const string DemoTenantName = "Demo Retail";
+
+    public static async Task<Guid> SeedDevelopmentStoresAsync(this IServiceProvider services, CancellationToken cancellationToken = default)
     {
         await using (var scope = services.CreateAsyncScope())
         {
-            if (await scope.ServiceProvider.GetRequiredService<DbContext>().Set<Tenant>().AnyAsync(cancellationToken))
+            var existingTenantId = await scope.ServiceProvider.GetRequiredService<DbContext>().Set<Tenant>()
+                .Where(tenant => tenant.Name == DemoTenantName)
+                .Select(tenant => (Guid?)tenant.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (existingTenantId is not null)
             {
-                return;
+                return existingTenantId.Value;
             }
         }
 
-        var tenant = new Tenant("Demo Retail");
+        var tenant = new Tenant(DemoTenantName);
 
         var woodenHome = new Store(tenant.Id, "Wooden Home", "CZK", "cs-CZ", new StoreTheme("#8B5A2B", "#F5F0E8", 8));
         woodenHome.AddDomain("shop-a.localhost");
@@ -27,6 +34,8 @@ public static class DevelopmentStores
 
         await SaveAsync(services, woodenHome, [tenant, woodenHome], cancellationToken);
         await SaveAsync(services, voltElectronics, [voltElectronics], cancellationToken);
+
+        return tenant.Id;
     }
 
     private static async Task SaveAsync(IServiceProvider services, Store store, object[] entities, CancellationToken cancellationToken)

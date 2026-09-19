@@ -39,4 +39,11 @@ internal sealed class StoreResolver(DbContext dbContext, IMemoryCache cache)
 
         return store;
     }
+
+    public Task<ResolvedStore?> FindForTenantAsync(Guid storeId, Guid tenantId, CancellationToken cancellationToken) =>
+        dbContext.Set<Store>()
+            .IgnoreQueryFilters()
+            .Where(store => store.Id == storeId && store.TenantId == tenantId)
+            .Select(store => new ResolvedStore(store.Id, store.TenantId))
+            .SingleOrDefaultAsync(cancellationToken);
 }
