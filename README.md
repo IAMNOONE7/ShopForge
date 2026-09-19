@@ -2,6 +2,13 @@
 
 A multi-store e-commerce platform. One ASP.NET Core backend and one React storefront serve any number of independent stores, each with its own domain, branding, catalog and configuration — launching a new store is a matter of configuration, not a new deployment.
 
+## Architecture
+
+- **Modular monolith.** One ASP.NET Core host, one project per business module (`Stores`, `Access`, `Catalog`), module internals kept `internal`. Architecture tests enforce the dependency rules.
+- **Multi-tenancy in one database.** Stores are resolved from the request hostname. EF Core query filters scope every store- and tenant-owned table, a save-time guard rejects cross-store writes, and composite foreign keys make cross-store links impossible in the database.
+- **Shared products, per-store listings.** A physical product belongs to the company (tenant); each store lists it with its own name, price and visibility.
+- **Replaceable infrastructure behind small interfaces.** For example, file storage (`IFileStorage`, Azure Blob Storage adapter, Azurite locally). Payment and shipping providers will follow the same pattern.
+
 ## Tech stack
 
 - **Backend:** .NET 10, ASP.NET Core minimal APIs, Entity Framework Core, PostgreSQL
@@ -13,7 +20,7 @@ A multi-store e-commerce platform. One ASP.NET Core backend and one React storef
 Prerequisites: .NET 10 SDK, Node.js 22.12+, Docker.
 
 ```bash
-docker compose up -d                     # PostgreSQL on localhost:5433
+docker compose up -d                     # PostgreSQL on localhost:5433, Azurite on :10000
 dotnet run --project src/ShopForge.Api   # API on http://localhost:5080
 ```
 
@@ -28,6 +35,8 @@ In development the API applies database migrations on startup and seeds two demo
 
 - http://shop-a.localhost:5173 — Wooden Home
 - http://shop-b.localhost:5173 — Volt Electronics
+
+The admin app (http://localhost:5174) signs in with the development account `owner@demo.local` / `ShopForge-demo-1`.
 
 The API exposes `/health/live` and `/health/ready`.
 
@@ -44,17 +53,19 @@ dotnet ef migrations add <Name> --project src/ShopForge.Infrastructure --startup
 dotnet test
 ```
 
-Integration tests start their own PostgreSQL container, so Docker needs to be running.
+Integration tests start their own PostgreSQL and Azurite containers, so Docker needs to be running.
 
 ## Repository layout
 
 ```
 src/
   ShopForge.Api               ASP.NET Core host and composition root
-  ShopForge.Infrastructure    persistence (single DbContext, migrations, tenancy filters)
-  ShopForge.Shared            cross-cutting abstractions (current store context)
+  ShopForge.Infrastructure    persistence (single DbContext, migrations, tenancy filters), blob storage
+  ShopForge.Shared            cross-cutting abstractions (store context, file storage, claims)
   Modules/
-    Stores                    tenants, stores, domains, host-based store resolution
+    Stores                    tenants, stores, domains, store resolution, logos
+    Access                    tenant users, sign-in, admin roles
+    Catalog                   products, store listings, categories, images
 tests/
   ShopForge.UnitTests
   ShopForge.IntegrationTests
@@ -66,4 +77,4 @@ frontend/
 
 ## Status
 
-Early development. Multi-store support is in place: stores are resolved from the request hostname and store-owned data is isolated. The product catalog comes next.
+Early development. Multi-store support and the product catalog (admin and storefront) are in place. Dynamic product attributes and filters come next.
