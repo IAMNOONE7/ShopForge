@@ -1,0 +1,125 @@
+using System.Linq.Expressions;
+using Microsoft.EntityFrameworkCore;
+using ShopForge.Catalog.Domain;
+
+namespace ShopForge.Catalog.Storefront;
+
+internal sealed class ProductQuery(DbContext dbContext, Guid? categoryId, IReadOnlyList<ProductFilter> filters)
+{
+    public IQueryable<StoreProduct> Products() => Filtered(except: null);
+
+    // A facet is computed with every filter except its own, so selecting one option still shows the alternatives.
+    public IQueryable<StoreProduct> ProductsForFacet(AttributeDefinition facet) => Filtered(except: facet);
+
+    public IQueryable<ProductAttributeValue> FacetValues(AttributeDefinition facet)
+    {
+        var products = ProductsForFacet(facet);
+
+        return dbContext.Set<ProductAttributeValue>()
+            .Where(value => value.AttributeDefinitionId == facet.Id && products.Any(product => product.Id == value.StoreProductId));
+    }
+
+    public static IOrderedQueryable<StoreProduct> Sort(IQueryable<StoreProduct> products, ProductSort sort)
+    {
+        var id = sort.Attribute?.Id;
+
+        return (sort.Key, sort.Descending) switch
+        {
+            ("price", false) => products.OrderBy(product => product.Price).ThenBy(product => product.Id),
+            ("price", true) => products.OrderByDescending(product => product.Price).ThenBy(product => product.Id),
+            ("name", false) => products.OrderBy(product => product.Name).ThenBy(product => product.Id),
+            ("name", true) => products.OrderByDescending(product => product.Name).ThenBy(product => product.Id),
+            ("attribute", _) => sort.Attribute!.Type switch
+            {
+                AttributeType.Integer => ByAttribute(products, product => product.AttributeValues.Where(value => value.AttributeDefinitionId == id).Select(value => value.IntegerValue).FirstOrDefault(), sort.Descending),
+                AttributeType.Decimal => ByAttribute(products, product => product.AttributeValues.Where(value => value.AttributeDefinitionId == id).Select(value => value.DecimalValue).FirstOrDefault(), sort.Descending),
+                AttributeType.Date => ByAttribute(products, product => product.AttributeValues.Where(value => value.AttributeDefinitionId == id).Select(value => value.DateValue).FirstOrDefault(), sort.Descending),
+                _ => ByAttribute(products, product => product.AttributeValues.Where(value => value.AttributeDefinitionId == id).Select(value => value.TextValue).FirstOrDefault(), sort.Descending),
+            },
+            _ => products.OrderBy(product => product.SortOrder).ThenBy(product => product.Name).ThenBy(product => product.Id),
+        };
+    }
+
+    // Products without a value come last in both directions.
+    private static IOrderedQueryable<StoreProduct> ByAttribute<TKey>(
+        IQueryable<StoreProduct> products,
+        Expression<Func<StoreProduct, TKey?>> key,
+        bool descending)
+    {
+        var withValueFirst = products.OrderBy(HasNoValue(key));
+
+        return (descending ? withValueFirst.ThenByDescending(key) : withValueFirst.ThenBy(key)).ThenBy(product => product.Id);
+    }
+
+    private IQueryable<StoreProduct> Filtered(AttributeDefinition? except)
+    {
+        var products = dbContext.Set<StoreProduct>().Where(product => product.IsVisible);
+
+        if (categoryId is not null)
+        {
+            products = products.Where(product => product.Categories.Any(assignment => assignment.CategoryId == categoryId));
+        }
+
+        foreach (var filter in filters.Where(filter => filter.Definition != except))
+        {
+            var matching = Matching(filter);
+            products = products.Where(product => matching.Any(value => value.StoreProductId == product.Id));
+        }
+
+        return products;
+    }
+
+    private IQueryable<ProductAttributeValue> Matching(ProductFilter filter)
+    {
+        var id = filter.Definition.Id;
+        var values = dbContext.Set<ProductAttributeValue>().Where(value => value.AttributeDefinitionId == id);
+
+        if (filter.OptionIds.Count > 0)
+        {
+            var optionIds = filter.OptionIds;
+            values = values.Where(value => value.OptionId != null && optionIds.Contains(value.OptionId.Value));
+        }
+
+        if (filter.Boolean is { } boolean)
+        {
+            values = values.Where(value => value.BooleanValue == boolean);
+        }
+
+        if (filter.IntegerMin is { } integerMin)
+        {
+            values = values.Where(value => value.IntegerValue >= integerMin);
+        }
+
+        if (filter.IntegerMax is { } integerMax)
+        {
+            values = values.Where(value => value.IntegerValue <= integerMax);
+        }
+
+        if (filter.DecimalMin is { } decimalMin)
+        {
+            values = values.Where(value => value.DecimalValue >= decimalMin);
+        }
+
+        if (filter.DecimalMax is { } decimalMax)
+        {
+            values = values.Where(value => value.DecimalValue <= decimalMax);
+        }
+
+        if (filter.DateMin is { } dateMin)
+        {
+            values = values.Where(value => value.DateValue >= dateMin);
+        }
+
+        if (filter.DateMax is { } dateMax)
+        {
+            values = values.Where(value => value.DateValue <= dateMax);
+        }
+
+        return values;
+    }
+
+    private static Expression<Func<StoreProduct, bool>> HasNoValue<TKey>(Expression<Func<StoreProduct, TKey?>> key) =>
+        Expression.Lambda<Func<StoreProduct, bool>>(Expression.Equal(key.Body, Expression.Constant(null, key.Body.Type)), key.Parameters);
+}
+
+internal sealed record ProductSort(string Key, bool Descending, AttributeDefinition? Attribute);
