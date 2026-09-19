@@ -11,11 +11,37 @@ export type ProductSummary = {
   imageUrl: string | null
 }
 
+export type AttributeType = 'text' | 'integer' | 'decimal' | 'boolean' | 'date' | 'select' | 'multiSelect'
+
+export type Facet = {
+  code: string
+  name: string
+  type: AttributeType
+  unit: string | null
+  options: { code: string; name: string; count: number; selected: boolean }[] | null
+  min: number | string | null
+  max: number | string | null
+  selectedMin: number | string | null
+  selectedMax: number | string | null
+  trueCount: number | null
+  falseCount: number | null
+  selected: boolean | null
+}
+
 export type ProductPage = {
   items: ProductSummary[]
   totalCount: number
   page: number
   pageSize: number
+  filters: Facet[]
+}
+
+export type ProductAttribute = {
+  code: string
+  name: string
+  type: AttributeType
+  unit: string | null
+  value: string | number | boolean | string[]
 }
 
 export type ProductDetail = {
@@ -26,6 +52,7 @@ export type ProductDetail = {
   price: number
   images: { url: string; altText: string | null }[]
   categories: Category[]
+  attributes: ProductAttribute[]
 }
 
 export class NotFoundError extends Error {}
@@ -48,9 +75,13 @@ export function getCategories(signal: AbortSignal) {
   return getJson<Category[]>('/api/storefront/categories', signal)
 }
 
-export function getProducts(category: string | undefined, signal: AbortSignal) {
-  const query = category ? `?category=${encodeURIComponent(category)}` : ''
-  return getJson<ProductPage>(`/api/storefront/products${query}`, signal)
+// `query` carries filters (f.<code>), sort and page exactly as they appear in the page URL.
+export function getProducts(category: string | undefined, query: URLSearchParams, signal: AbortSignal) {
+  const parameters = new URLSearchParams(query)
+  if (category) {
+    parameters.set('category', category)
+  }
+  return getJson<ProductPage>(`/api/storefront/products?${parameters}`, signal)
 }
 
 export function getProduct(slug: string, signal: AbortSignal) {

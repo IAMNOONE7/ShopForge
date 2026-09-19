@@ -120,3 +120,92 @@ a {
 .message h1 {
   margin-top: 0;
 }
+
+.catalog {
+  display: grid;
+  grid-template-columns: minmax(12rem, 15rem) 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+@media (max-width: 48rem) {
+  .catalog {
+    grid-template-columns: 1fr;
+  }
+}
+
+.filter-panel fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0 0 1rem;
+  padding: 0 0 1rem;
+  border: 0;
+  border-bottom: 1px solid var(--color-secondary);
+}
+
+.filter-panel legend {
+  margin-bottom: 0.25rem;
+  font-weight: 600;
+}
+
+.filter-option {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.filter-count {
+  color: #57606a;
+  font-size: 0.9em;
+}
+
+.range-filter {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.range-filter input {
+  width: 5rem;
+  min-width: 0;
+}
+
+.link-button {
+  padding: 0;
+  color: var(--color-primary);
+  text-decoration: underline;
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+
+.catalog-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.pagination {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  align-items: center;
+  margin-top: 2rem;
+}
+
+.product-attributes {
+  border-collapse: collapse;
+}
+
+.product-attributes th,
+.product-attributes td {
+  padding: 0.35rem 1rem 0.35rem 0;
+  text-align: left;
+  border-bottom: 1px solid var(--color-secondary);
+}
+
+.product-attributes th {
+  font-weight: 600;
+}

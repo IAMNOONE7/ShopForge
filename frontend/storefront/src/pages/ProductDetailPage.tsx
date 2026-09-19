@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router'
-import { getProduct } from '../api'
+import { getProduct, type ProductAttribute } from '../api'
 import { Message } from '../components/Message'
+import type { Store } from '../store'
 import { formatPrice, useStore } from '../storeContext'
 import { useRequest } from '../useRequest'
 
@@ -17,7 +18,7 @@ export function ProductDetailPage() {
     case 'error':
       return <Message title="Something went wrong" text="The product could not be loaded. Please try again." />
     case 'ready': {
-      const { name, price, description, images, categories } = product.data
+      const { name, price, description, images, categories, attributes } = product.data
 
       return (
         <article className="product-detail">
@@ -32,6 +33,18 @@ export function ProductDetailPage() {
             <h1>{name}</h1>
             <p className="product-price">{formatPrice(price, store)}</p>
             {description && <p>{description}</p>}
+            {attributes.length > 0 && (
+              <table className="product-attributes">
+                <tbody>
+                  {attributes.map((attribute) => (
+                    <tr key={attribute.code}>
+                      <th scope="row">{attribute.name}</th>
+                      <td>{formatAttribute(attribute, store)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
             {categories.length > 0 && (
               <p className="product-categories">
                 {categories.map((category) => (
@@ -45,5 +58,25 @@ export function ProductDetailPage() {
         </article>
       )
     }
+  }
+}
+
+function formatAttribute(attribute: ProductAttribute, store: Store) {
+  const { value, unit } = attribute
+
+  if (Array.isArray(value)) {
+    return value.join(', ')
+  }
+
+  switch (attribute.type) {
+    case 'boolean':
+      return value ? 'Yes' : 'No'
+    case 'date':
+      return new Date(`${value}T00:00:00`).toLocaleDateString(store.culture)
+    case 'integer':
+    case 'decimal':
+      return `${Number(value).toLocaleString(store.culture)}${unit ? ` ${unit}` : ''}`
+    default:
+      return String(value)
   }
 }
