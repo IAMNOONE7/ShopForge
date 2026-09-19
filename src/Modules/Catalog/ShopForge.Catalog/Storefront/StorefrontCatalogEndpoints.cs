@@ -89,7 +89,7 @@ internal static class StorefrontCatalogEndpoints
         var query = new ProductQuery(dbContext, categoryId, filters);
         var products = query.Products();
         var totalCount = await products.CountAsync(cancellationToken);
-        var items = await ProductQuery.Sort(products, productSort!)
+        var items = await query.Sort(products, productSort!)
             .Skip((pageNumber - 1) * size)
             .Take(size)
             .Select(storeProduct => new
