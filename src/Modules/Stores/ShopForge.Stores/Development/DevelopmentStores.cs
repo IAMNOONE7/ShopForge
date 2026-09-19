@@ -7,7 +7,7 @@ namespace ShopForge.Stores.Development;
 
 public static class DevelopmentStores
 {
-    public const string DemoTenantName = "Demo Retail";
+    private const string DemoTenantName = "Demo Retail";
     private const string WoodenHomeHost = "shop-a.localhost";
     private const string VoltElectronicsHost = "shop-b.localhost";
 

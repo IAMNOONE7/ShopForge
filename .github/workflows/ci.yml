@@ -25,6 +25,9 @@ jobs:
       - name: Build
         run: dotnet build --no-restore --configuration Release
 
+      - name: Check formatting
+        run: dotnet format ShopForge.slnx --no-restore --verify-no-changes --exclude src/ShopForge.Infrastructure/Persistence/Migrations
+
       - name: Test
         run: dotnet test --no-build --configuration Release
 
