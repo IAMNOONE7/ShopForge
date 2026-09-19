@@ -32,10 +32,11 @@ internal static class StorefrontStoreEndpoint
             store.Name,
             store.Currency,
             store.Culture,
+            store.LogoPath is null ? null : "/api/storefront/store/logo",
             new StorefrontThemeResponse(store.Theme.PrimaryColor, store.Theme.SecondaryColor, store.Theme.BorderRadius)));
     }
 }
 
-internal sealed record StorefrontStoreResponse(Guid Id, string Name, string Currency, string Culture, StorefrontThemeResponse Theme);
+internal sealed record StorefrontStoreResponse(Guid Id, string Name, string Currency, string Culture, string? LogoUrl, StorefrontThemeResponse Theme);
 
 internal sealed record StorefrontThemeResponse(string PrimaryColor, string SecondaryColor, int BorderRadius);

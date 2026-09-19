@@ -1,4 +1,5 @@
 using System.Globalization;
+using ShopForge.Shared.Files;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Stores.Domain;
@@ -35,6 +36,8 @@ internal sealed class Store : ITenantOwned
 
     public StoreTheme Theme { get; private set; } = null!;
 
+    public string? LogoPath { get; private set; }
+
     public IReadOnlyCollection<StoreDomain> Domains => _domains;
 
     public StoreDomain AddDomain(string hostName)
@@ -48,6 +51,14 @@ internal sealed class Store : ITenantOwned
 
         _domains.Add(domain);
         return domain;
+    }
+
+    public string? ReplaceLogo(string contentType)
+    {
+        var previousPath = LogoPath;
+        LogoPath = $"tenants/{TenantId}/stores/{Id}/logo-{Guid.CreateVersion7()}{ImageFormats.ExtensionFor(contentType)}";
+
+        return previousPath;
     }
 
     private static string ToCurrencyCode(string currency)

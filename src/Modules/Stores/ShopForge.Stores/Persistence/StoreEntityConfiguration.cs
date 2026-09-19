@@ -14,6 +14,7 @@ internal sealed class StoreEntityConfiguration : IEntityTypeConfiguration<Store>
         builder.Property(store => store.Name).HasMaxLength(200);
         builder.Property(store => store.Currency).HasMaxLength(3).IsFixedLength();
         builder.Property(store => store.Culture).HasMaxLength(35);
+        builder.Property(store => store.LogoPath).HasMaxLength(300);
         builder.ComplexProperty(store => store.Theme, theme => theme.ToJson());
 
         builder.HasOne<Tenant>()

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Stores.Admin;
+using ShopForge.Stores.Logos;
 using ShopForge.Stores.Resolution;
 using ShopForge.Stores.Storefront;
 
@@ -44,9 +45,17 @@ public static class StoresModule
         return tenantAdmin;
     }
 
+    public static IEndpointRouteBuilder MapStoresStoreAdminEndpoints(this IEndpointRouteBuilder storeAdmin)
+    {
+        storeAdmin.MapAdminStoreLogo();
+
+        return storeAdmin;
+    }
+
     public static IEndpointRouteBuilder MapStoresStorefrontEndpoints(this IEndpointRouteBuilder storefront)
     {
         storefront.MapStorefrontStore();
+        storefront.MapStorefrontLogo();
 
         return storefront;
     }

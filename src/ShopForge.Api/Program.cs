@@ -60,6 +60,7 @@ tenantAdmin.MapStoresAdminEndpoints();
 tenantAdmin.MapCatalogTenantAdminEndpoints();
 
 var storeAdmin = tenantAdmin.MapGroup("/stores/{storeId:guid}").RequireAdminStore();
+storeAdmin.MapStoresStoreAdminEndpoints();
 storeAdmin.MapCatalogStoreAdminEndpoints();
 
 if (app.Environment.IsDevelopment())

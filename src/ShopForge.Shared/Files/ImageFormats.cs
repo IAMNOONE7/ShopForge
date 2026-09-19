@@ -1,8 +1,20 @@
-namespace ShopForge.Catalog.Images;
+namespace ShopForge.Shared.Files;
 
-internal static class ImageFormats
+public static class ImageFormats
 {
     public const long MaxBytes = 5 * 1024 * 1024;
+
+    private static readonly Dictionary<string, string> Extensions = new()
+    {
+        ["image/jpeg"] = ".jpg",
+        ["image/png"] = ".png",
+        ["image/webp"] = ".webp",
+    };
+
+    public static string ExtensionFor(string contentType) =>
+        Extensions.TryGetValue(contentType, out var extension)
+            ? extension
+            : throw new ArgumentException($"'{contentType}' is not a supported image type.", nameof(contentType));
 
     // The content type is taken from the file signature, never from the client-supplied header.
     public static async Task<string?> DetectAsync(Stream stream, CancellationToken cancellationToken)

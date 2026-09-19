@@ -40,7 +40,11 @@ public static class AccessModule
             .AddPolicy(AdminPolicies.CatalogManagement, policy => policy
                 .RequireAuthenticatedUser()
                 .RequireClaim(ShopForgeClaimTypes.TenantId)
-                .RequireRole(nameof(TenantRole.Owner), nameof(TenantRole.Admin), nameof(TenantRole.CatalogManager)));
+                .RequireRole(nameof(TenantRole.Owner), nameof(TenantRole.Admin), nameof(TenantRole.CatalogManager)))
+            .AddPolicy(AdminPolicies.StoreManagement, policy => policy
+                .RequireAuthenticatedUser()
+                .RequireClaim(ShopForgeClaimTypes.TenantId)
+                .RequireRole(nameof(TenantRole.Owner), nameof(TenantRole.Admin)));
 
         return services;
     }

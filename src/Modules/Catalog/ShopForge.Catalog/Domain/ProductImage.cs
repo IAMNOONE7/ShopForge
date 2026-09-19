@@ -1,24 +1,16 @@
+using ShopForge.Shared.Files;
+
 namespace ShopForge.Catalog.Domain;
 
 internal sealed class ProductImage
 {
-    private static readonly Dictionary<string, string> Extensions = new()
-    {
-        ["image/jpeg"] = ".jpg",
-        ["image/png"] = ".png",
-        ["image/webp"] = ".webp",
-    };
-
     private ProductImage()
     {
     }
 
     internal ProductImage(Guid productId, Guid tenantId, string contentType, string? altText, int position)
     {
-        if (!Extensions.TryGetValue(contentType, out var extension))
-        {
-            throw new ArgumentException($"'{contentType}' is not a supported image type.", nameof(contentType));
-        }
+        var extension = ImageFormats.ExtensionFor(contentType);
 
         Id = Guid.CreateVersion7();
         ContentType = contentType;
