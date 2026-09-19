@@ -31,6 +31,18 @@ internal static class AdminCatalogApi
         return await IdFromAsync(response);
     }
 
+    public static async Task<Guid> CreateAttributeAsync(this HttpClient admin, Guid storeId, object attribute)
+    {
+        using var response = await admin.PostAsJsonAsync($"/api/admin/stores/{storeId}/attributes", attribute);
+        return await IdFromAsync(response);
+    }
+
+    public static Task<HttpResponseMessage> SetAttributesAsync(this HttpClient admin, Guid storeId, Guid storeProductId, object values) =>
+        admin.PutAsJsonAsync($"/api/admin/stores/{storeId}/products/{storeProductId}/attributes", new { Values = values });
+
+    public static Task<HttpResponseMessage> AssignCategoryAttributesAsync(this HttpClient admin, Guid storeId, Guid categoryId, params Guid[] attributeIds) =>
+        admin.PutAsJsonAsync($"/api/admin/stores/{storeId}/categories/{categoryId}/attributes", new { AttributeIds = attributeIds });
+
     public static Task<HttpResponseMessage> AssignCategoriesAsync(this HttpClient admin, Guid storeId, Guid storeProductId, params Guid[] categoryIds) =>
         admin.PutAsJsonAsync($"/api/admin/stores/{storeId}/products/{storeProductId}/categories", new { CategoryIds = categoryIds });
 

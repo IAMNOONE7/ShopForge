@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Catalog.Domain;
+using ShopForge.Catalog.Http;
 using ShopForge.Shared.Security;
 using ShopForge.Shared.Tenancy;
 
@@ -158,7 +159,12 @@ internal static class AdminStoreCatalogEndpoints
         var categories = await dbContext.Set<Category>()
             .OrderBy(category => category.SortOrder)
             .ThenBy(category => category.Name)
-            .Select(category => new AdminCategoryResponse(category.Id, category.Name, category.Slug, category.SortOrder))
+            .Select(category => new AdminCategoryResponse(
+                category.Id,
+                category.Name,
+                category.Slug,
+                category.SortOrder,
+                category.Attributes.OrderBy(assignment => assignment.SortOrder).Select(assignment => assignment.AttributeDefinitionId).ToList()))
             .ToListAsync(cancellationToken);
 
         return TypedResults.Ok(categories);
@@ -190,7 +196,7 @@ internal static class AdminStoreCatalogEndpoints
 
         return TypedResults.Created(
             $"/api/admin/stores/{category.StoreId}/categories/{category.Id}",
-            new AdminCategoryResponse(category.Id, category.Name, category.Slug, category.SortOrder));
+            new AdminCategoryResponse(category.Id, category.Name, category.Slug, category.SortOrder, []));
     }
 
     private static async Task<Results<Ok<AdminCategoryResponse>, ValidationProblem, ProblemHttpResult, NotFound>> UpdateCategoryAsync(
@@ -206,7 +212,9 @@ internal static class AdminStoreCatalogEndpoints
             return errors.ToProblem();
         }
 
-        var category = await dbContext.Set<Category>().SingleOrDefaultAsync(category => category.Id == categoryId, cancellationToken);
+        var category = await dbContext.Set<Category>()
+            .Include(category => category.Attributes)
+            .SingleOrDefaultAsync(category => category.Id == categoryId, cancellationToken);
 
         if (category is null)
         {
@@ -223,7 +231,12 @@ internal static class AdminStoreCatalogEndpoints
         category.Update(request.Name!, slug, request.SortOrder);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return TypedResults.Ok(new AdminCategoryResponse(category.Id, category.Name, category.Slug, category.SortOrder));
+        return TypedResults.Ok(new AdminCategoryResponse(
+            category.Id,
+            category.Name,
+            category.Slug,
+            category.SortOrder,
+            [.. category.Attributes.OrderBy(assignment => assignment.SortOrder).Select(assignment => assignment.AttributeDefinitionId)]));
     }
 
     private static RequestErrors ValidateDetails(string? name, string? slug, decimal price) =>
@@ -254,7 +267,7 @@ internal sealed record AssignCategoriesRequest(List<Guid>? CategoryIds);
 
 internal sealed record CategoryRequest(string? Name, string? Slug, int SortOrder);
 
-internal sealed record AdminCategoryResponse(Guid Id, string Name, string Slug, int SortOrder);
+internal sealed record AdminCategoryResponse(Guid Id, string Name, string Slug, int SortOrder, List<Guid> AttributeIds);
 
 internal sealed record AdminStoreProductResponse(
     Guid Id,

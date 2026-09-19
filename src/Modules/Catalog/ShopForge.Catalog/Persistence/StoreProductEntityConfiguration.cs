@@ -26,6 +26,12 @@ internal sealed class StoreProductEntityConfiguration : IEntityTypeConfiguration
             .HasForeignKey(storeProduct => storeProduct.ProductId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasMany(storeProduct => storeProduct.AttributeValues)
+            .WithOne()
+            .HasForeignKey(value => new { value.StoreId, value.StoreProductId })
+            .HasPrincipalKey(storeProduct => new { storeProduct.StoreId, storeProduct.Id })
+            .OnDelete(DeleteBehavior.Cascade);
+
         builder.HasMany(storeProduct => storeProduct.Categories)
             .WithOne()
             .HasForeignKey(assignment => new { assignment.StoreId, assignment.StoreProductId })

@@ -21,6 +21,7 @@ public static class CatalogModule
     public static IEndpointRouteBuilder MapCatalogStoreAdminEndpoints(this IEndpointRouteBuilder storeAdmin)
     {
         storeAdmin.MapAdminStoreCatalog();
+        storeAdmin.MapAdminAttributes();
 
         return storeAdmin;
     }

@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.HttpLogging;
 using ShopForge.Access;
 using ShopForge.Access.Development;
@@ -16,6 +18,8 @@ using ShopForge.Stores.Development;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddProblemDetails();
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
 builder.Services.AddExceptionHandler<UniqueViolationExceptionHandler>();
 builder.Services.AddHttpLogging(options =>
 {

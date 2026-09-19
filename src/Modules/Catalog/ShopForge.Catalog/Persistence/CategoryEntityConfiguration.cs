@@ -16,5 +16,11 @@ internal sealed class CategoryEntityConfiguration : IEntityTypeConfiguration<Cat
         builder.Property(category => category.Slug).HasMaxLength(Slugs.MaxLength);
 
         builder.HasIndex(category => new { category.StoreId, category.Slug }).IsUnique();
+
+        builder.HasMany(category => category.Attributes)
+            .WithOne()
+            .HasForeignKey(assignment => new { assignment.StoreId, assignment.CategoryId })
+            .HasPrincipalKey(category => new { category.StoreId, category.Id })
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

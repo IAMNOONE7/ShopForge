@@ -5,6 +5,7 @@ namespace ShopForge.Catalog.Domain;
 internal sealed class StoreProduct : IStoreOwned
 {
     private readonly List<ProductCategory> _categories = [];
+    private readonly List<ProductAttributeValue> _attributeValues = [];
 
     private StoreProduct()
     {
@@ -38,6 +39,8 @@ internal sealed class StoreProduct : IStoreOwned
 
     public IReadOnlyCollection<ProductCategory> Categories => _categories;
 
+    public IReadOnlyCollection<ProductAttributeValue> AttributeValues => _attributeValues;
+
     public void Update(StoreProductDetails details)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(details.Name);
@@ -58,6 +61,22 @@ internal sealed class StoreProduct : IStoreOwned
         Price = details.Price;
         IsVisible = details.IsVisible;
         SortOrder = details.SortOrder;
+    }
+
+    public void ReplaceAttributeValues(IReadOnlyCollection<(AttributeDefinition Definition, AttributeValue Value)> values)
+    {
+        if (values.Any(item => item.Definition.StoreId != StoreId))
+        {
+            throw new InvalidOperationException("Attributes must belong to the product's store.");
+        }
+
+        if (values.Select(item => item.Definition.Id).Distinct().Count() != values.Count)
+        {
+            throw new ArgumentException("Each attribute can be set only once.", nameof(values));
+        }
+
+        _attributeValues.Clear();
+        _attributeValues.AddRange(values.SelectMany(item => item.Definition.CreateValues(Id, item.Value)));
     }
 
     public void AssignCategories(IReadOnlyCollection<Category> categories)

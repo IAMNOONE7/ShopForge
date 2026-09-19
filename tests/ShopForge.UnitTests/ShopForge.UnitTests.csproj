@@ -9,6 +9,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Modules\Catalog\ShopForge.Catalog\ShopForge.Catalog.csproj" />
     <ProjectReference Include="..\..\src\Modules\Stores\ShopForge.Stores\ShopForge.Stores.csproj" />
     <ProjectReference Include="..\..\src\ShopForge.Shared\ShopForge.Shared.csproj" />
   </ItemGroup>

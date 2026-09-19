@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 
-namespace ShopForge.Catalog.Admin;
+namespace ShopForge.Catalog.Http;
 
 internal sealed class RequestErrors
 {
