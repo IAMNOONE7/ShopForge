@@ -1,8 +1,11 @@
 using System.Reflection;
+using Azure.Storage.Blobs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using ShopForge.Infrastructure.Files;
 using ShopForge.Infrastructure.Persistence;
+using ShopForge.Shared.Files;
 
 namespace ShopForge.Infrastructure;
 
@@ -21,6 +24,13 @@ public static class DependencyInjection
             .UseNpgsql(connectionString)
             .UseSnakeCaseNamingConvention());
         services.AddScoped<DbContext>(provider => provider.GetRequiredService<ShopForgeDbContext>());
+
+        var fileStorageConnectionString = configuration.GetConnectionString("FileStorage")
+            ?? throw new InvalidOperationException("Connection string 'FileStorage' is not configured.");
+        var containerName = configuration["FileStorage:Container"] ?? "media";
+
+        services.AddSingleton(new BlobContainerClient(fileStorageConnectionString, containerName));
+        services.AddSingleton<IFileStorage, AzureBlobFileStorage>();
 
         return services;
     }

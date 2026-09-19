@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.HttpLogging;
 using ShopForge.Api.Health;
 using ShopForge.Infrastructure;
+using ShopForge.Infrastructure.Files;
 using ShopForge.Infrastructure.Persistence;
 using ShopForge.Shared.Tenancy;
 using ShopForge.Stores;
@@ -42,6 +43,7 @@ storefront.MapStoresStorefrontEndpoints();
 if (app.Environment.IsDevelopment())
 {
     await app.Services.MigrateDatabaseAsync();
+    await app.Services.CreateFileStorageContainerAsync();
     await app.Services.SeedDevelopmentStoresAsync();
 }
 
