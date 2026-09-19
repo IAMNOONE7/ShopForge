@@ -7,6 +7,7 @@ A multi-store e-commerce platform. One ASP.NET Core backend and one React storef
 - **Modular monolith.** One ASP.NET Core host, one project per business module (`Stores`, `Access`, `Catalog`), module internals kept `internal`. Architecture tests enforce the dependency rules.
 - **Multi-tenancy in one database.** Stores are resolved from the request hostname. EF Core query filters scope every store- and tenant-owned table, a save-time guard rejects cross-store writes, and composite foreign keys make cross-store links impossible in the database.
 - **Shared products, per-store listings.** A physical product belongs to the company (tenant); each store lists it with its own name, price and visibility.
+- **Metadata-driven product attributes.** Stores define typed attributes (numbers, dates, yes/no, options) stored as typed EAV rows. The storefront gets filters, ranges and counts computed from the data, so a furniture store and an electronics store run the same code with different filters.
 - **Replaceable infrastructure behind small interfaces.** For example, file storage (`IFileStorage`, Azure Blob Storage adapter, Azurite locally). Payment and shipping providers will follow the same pattern.
 
 ## Tech stack
@@ -77,4 +78,4 @@ frontend/
 
 ## Status
 
-Early development. Multi-store support and the product catalog (admin and storefront) are in place. Dynamic product attributes and filters come next.
+Early development. Multi-store support, the product catalog and attribute-based filtering are in place. Bulk product import comes next.
