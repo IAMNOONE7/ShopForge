@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.HttpLogging;
 using ShopForge.Access;
 using ShopForge.Access.Development;
 using ShopForge.Catalog;
+using ShopForge.Catalog.Development;
 using ShopForge.Api.Errors;
 using ShopForge.Api.Health;
 using ShopForge.Infrastructure;
@@ -67,8 +68,9 @@ if (app.Environment.IsDevelopment())
 {
     await app.Services.MigrateDatabaseAsync();
     await app.Services.CreateFileStorageContainerAsync();
-    var demoTenantId = await app.Services.SeedDevelopmentStoresAsync();
-    await app.Services.SeedDevelopmentUsersAsync(demoTenantId);
+    var demo = await app.Services.SeedDevelopmentStoresAsync();
+    await app.Services.SeedDevelopmentUsersAsync(demo.TenantId);
+    await app.Services.SeedDevelopmentCatalogAsync(demo.TenantId, demo.WoodenHomeStoreId, demo.VoltElectronicsStoreId);
 }
 
 await app.RunAsync();
