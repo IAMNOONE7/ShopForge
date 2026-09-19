@@ -29,6 +29,7 @@ public static class AccessModule
                 options.Cookie.SameSite = SameSiteMode.Strict;
                 options.ExpireTimeSpan = TimeSpan.FromHours(8);
                 options.SlidingExpiration = true;
+                options.Events.OnValidatePrincipal = SessionValidation.ValidateAsync;
                 options.Events.OnRedirectToLogin = context => SetStatusCode(context.Response, StatusCodes.Status401Unauthorized);
                 options.Events.OnRedirectToAccessDenied = context => SetStatusCode(context.Response, StatusCodes.Status403Forbidden);
             });
