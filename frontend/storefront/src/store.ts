@@ -9,6 +9,7 @@ export type Store = {
   name: string
   currency: string
   culture: string
+  logoUrl: string | null
   theme: StoreTheme
 }
 

@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react'
+import { BrowserRouter, Route, Routes } from 'react-router'
+import { Layout } from './components/Layout'
+import { Message } from './components/Message'
+import { ProductDetailPage } from './pages/ProductDetailPage'
+import { ProductListPage } from './pages/ProductListPage'
 import { applyStore, fetchStore, type Store } from './store'
+import { StoreContext } from './storeContext'
 
 type StoreState =
   | { status: 'loading' }
@@ -35,32 +41,33 @@ function App() {
     case 'loading':
       return null
     case 'not-found':
-      return <Message title="Store not found" text="There is no store at this address." />
+      return (
+        <main className="app">
+          <Message title="Store not found" text="There is no store at this address." />
+        </main>
+      )
     case 'unavailable':
-      return <Message title="Store unavailable" text="Please try again in a moment." />
+      return (
+        <main className="app">
+          <Message title="Store unavailable" text="Please try again in a moment." />
+        </main>
+      )
     case 'ready':
       return (
-        <>
-          <header className="store-header">
-            <h1>{state.store.name}</h1>
-          </header>
-          <main className="app">
-            <section className="panel">
-              <p>Prices are shown in {state.store.currency}.</p>
-            </section>
-          </main>
-        </>
+        <StoreContext value={state.store}>
+          <BrowserRouter>
+            <Routes>
+              <Route element={<Layout />}>
+                <Route index element={<ProductListPage />} />
+                <Route path="c/:slug" element={<ProductListPage />} />
+                <Route path="p/:slug" element={<ProductDetailPage />} />
+                <Route path="*" element={<Message title="Page not found" text="This page does not exist." />} />
+              </Route>
+            </Routes>
+          </BrowserRouter>
+        </StoreContext>
       )
   }
-}
-
-function Message({ title, text }: { title: string; text: string }) {
-  return (
-    <main className="app">
-      <h1>{title}</h1>
-      <p>{text}</p>
-    </main>
-  )
 }
 
 export default App
