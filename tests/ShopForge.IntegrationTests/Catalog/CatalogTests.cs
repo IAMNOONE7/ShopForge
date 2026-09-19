@@ -162,6 +162,30 @@ public sealed class CatalogTests(ShopForgeApiFactory factory)
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    [Fact]
+    public async Task Renaming_without_a_slug_keeps_existing_urls()
+    {
+        var (store, _) = await TestStores.CreateTwoStoresOfOneTenantAsync(factory.Services);
+        using var admin = await TestUsers.LoginAsync(factory, await TestUsers.CreateAsync(factory.Services, store.TenantId));
+        var boardId = await admin.ListProductAsync(store.StoreId, await admin.CreateProductAsync(), "Oak Board", 10m);
+        var categoryId = await admin.CreateCategoryAsync(store.StoreId, "Boards");
+
+        using var renameProduct = await admin.PutAsJsonAsync(
+            $"/api/admin/stores/{store.StoreId}/products/{boardId}",
+            new { Name = "Oak Board XL", Price = 12m, IsVisible = true, SortOrder = 0 },
+            CancellationToken);
+        using var renameCategory = await admin.PutAsJsonAsync(
+            $"/api/admin/stores/{store.StoreId}/categories/{categoryId}", new { Name = "Chopping Boards", SortOrder = 0 }, CancellationToken);
+        using var storefront = factory.CreateClient();
+        var detail = await storefront.GetFromJsonAsync<ProductDetail>($"http://{store.HostName}/api/storefront/products/oak-board", CancellationToken);
+        using var categoryPage = await storefront.GetAsync($"http://{store.HostName}/api/storefront/products?category=boards", CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, renameProduct.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, renameCategory.StatusCode);
+        Assert.Equal("Oak Board XL", detail!.Name);
+        Assert.Equal(HttpStatusCode.OK, categoryPage.StatusCode);
+    }
+
     private async Task<ProductPage> GetStorefrontProductsAsync(TestStore store, string query = "")
     {
         using var storefront = factory.CreateClient();

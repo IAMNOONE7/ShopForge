@@ -90,13 +90,6 @@ internal static class AdminStoreCatalogEndpoints
         DbContext dbContext,
         CancellationToken cancellationToken)
     {
-        var errors = ValidateDetails(request.Name, request.Slug, request.Price);
-
-        if (errors.Any)
-        {
-            return errors.ToProblem();
-        }
-
         var storeProduct = await dbContext.Set<StoreProduct>()
             .Include(storeProduct => storeProduct.Categories)
             .SingleOrDefaultAsync(storeProduct => storeProduct.Id == storeProductId, cancellationToken);
@@ -106,7 +99,16 @@ internal static class AdminStoreCatalogEndpoints
             return TypedResults.NotFound();
         }
 
-        var details = ToDetails(request.Name!, request.Slug, request.Description, request.Price, request.IsVisible, request.SortOrder);
+        // Without an explicit slug the public URL stays as it is, even when the name changes.
+        var slug = request.Slug ?? storeProduct.Slug;
+        var errors = ValidateDetails(request.Name, slug, request.Price);
+
+        if (errors.Any)
+        {
+            return errors.ToProblem();
+        }
+
+        var details = ToDetails(request.Name!, slug, request.Description, request.Price, request.IsVisible, request.SortOrder);
 
         if (await dbContext.Set<StoreProduct>().AnyAsync(other => other.Slug == details.Slug && other.Id != storeProductId, cancellationToken))
         {
@@ -205,13 +207,6 @@ internal static class AdminStoreCatalogEndpoints
         DbContext dbContext,
         CancellationToken cancellationToken)
     {
-        var errors = ValidateCategory(request);
-
-        if (errors.Any)
-        {
-            return errors.ToProblem();
-        }
-
         var category = await dbContext.Set<Category>()
             .Include(category => category.Attributes)
             .SingleOrDefaultAsync(category => category.Id == categoryId, cancellationToken);
@@ -221,7 +216,13 @@ internal static class AdminStoreCatalogEndpoints
             return TypedResults.NotFound();
         }
 
-        var slug = request.Slug ?? Slugs.Create(request.Name!);
+        var slug = request.Slug ?? category.Slug;
+        var errors = ValidateCategory(request with { Slug = slug });
+
+        if (errors.Any)
+        {
+            return errors.ToProblem();
+        }
 
         if (await dbContext.Set<Category>().AnyAsync(other => other.Slug == slug && other.Id != categoryId, cancellationToken))
         {
