@@ -158,3 +158,19 @@ td {
   flex-direction: row;
   gap: 0.4rem;
 }
+
+.inline-form.compact {
+  margin: 0.25rem 0 0;
+}
+
+.edit-form fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.attribute-field {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}

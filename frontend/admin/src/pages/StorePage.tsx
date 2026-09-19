@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { useOutletContext, useParams } from 'react-router'
-import { api, type AdminStore, type Category, type StoreProduct } from '../api'
+import { api, type AdminStore, type AttributeDefinition, type AttributeValues, type Category, type StoreProduct, type StoreProductInput } from '../api'
+import { AttributesSection } from '../components/AttributesSection'
+import { AttributeValueFields } from '../components/AttributeValueFields'
+import { readAttributeValues } from '../components/attributeValues'
 import { useAction } from '../useAction'
 import { useRequest } from '../useRequest'
 
@@ -13,10 +16,12 @@ export function StorePage() {
 
   const [storeProducts, reloadStoreProducts] = useRequest(`store-products:${storeId}`, () => api.storeProducts(storeId))
   const [categories, reloadCategories] = useRequest(`categories:${storeId}`, () => api.categories(storeId))
+  const [attributes, reloadAttributes] = useRequest(`attributes:${storeId}`, () => api.attributes(storeId))
   const [products] = useRequest('products', api.products)
   const [error, run] = useAction(() => {
     reloadStoreProducts()
     reloadCategories()
+    reloadAttributes()
     reloadStores()
   })
   const [editing, setEditing] = useState<string | null>(null)
@@ -26,6 +31,7 @@ export function StorePage() {
   }
 
   const categoryList = categories.status === 'ready' ? categories.data : []
+  const attributeList = attributes.status === 'ready' ? attributes.data : []
   const listed = storeProducts.status === 'ready' ? storeProducts.data : []
   const unlisted = products.status === 'ready' ? products.data.filter((product) => !listed.some((item) => item.productId === product.id)) : []
   const money = new Intl.NumberFormat(store.culture, { style: 'currency', currency: store.currency })
@@ -70,15 +76,27 @@ export function StorePage() {
         </div>
       </section>
 
+      <AttributesSection storeId={storeId} attributes={attributeList} run={run} />
+
       <section>
         <h2>Categories</h2>
-        <p className="chips">
-          {categoryList.map((category) => (
-            <span key={category.id} className="chip">
-              {category.name}
-            </span>
-          ))}
-        </p>
+        <p className="hint">Tick the attributes each category offers as filters.</p>
+        {categoryList.map((category) => (
+          <form
+            key={category.id}
+            className="inline-form"
+            action={(form) => run(() => api.assignCategoryAttributes(storeId, category.id, form.getAll('attributeIds').map(String)))}
+          >
+            <strong className="chip">{category.name}</strong>
+            {attributeList.map((attribute) => (
+              <label key={attribute.id}>
+                <input name="attributeIds" type="checkbox" value={attribute.id} defaultChecked={category.attributeIds.includes(attribute.id)} />{' '}
+                {attribute.name}
+              </label>
+            ))}
+            <button type="submit">Save</button>
+          </form>
+        ))}
         <form action={(form) => run(() => api.createCategory(storeId, String(form.get('name'))))} className="inline-form">
           <input name="name" placeholder="New category" required />
           <button type="submit">Add category</button>
@@ -122,13 +140,16 @@ export function StorePage() {
               editing === item.id ? (
                 <EditRow
                   key={item.id}
+                  storeId={storeId}
                   item={item}
                   categories={categoryList}
+                  attributes={attributeList}
                   onCancel={() => setEditing(null)}
-                  onSave={(input, categoryIds) =>
+                  onSave={(input, categoryIds, values) =>
                     run(async () => {
                       await api.updateStoreProduct(storeId, item.id, input)
                       await api.assignCategories(storeId, item.id, categoryIds)
+                      await api.setProductAttributes(storeId, item.id, values)
                       setEditing(null)
                     })
                   }
@@ -156,13 +177,17 @@ export function StorePage() {
 }
 
 type EditRowProps = {
+  storeId: string
   item: StoreProduct
   categories: Category[]
+  attributes: AttributeDefinition[]
   onCancel: () => void
-  onSave: (input: { name: string; slug: string; description: string | null; price: number; isVisible: boolean; sortOrder: number }, categoryIds: string[]) => void
+  onSave: (input: StoreProductInput, categoryIds: string[], values: AttributeValues) => void
 }
 
-function EditRow({ item, categories, onCancel, onSave }: EditRowProps) {
+function EditRow({ storeId, item, categories, attributes, onCancel, onSave }: EditRowProps) {
+  const [current] = useRequest(`product-attributes:${item.id}`, () => api.productAttributes(storeId, item.id))
+
   function save(form: FormData) {
     onSave(
       {
@@ -174,6 +199,15 @@ function EditRow({ item, categories, onCancel, onSave }: EditRowProps) {
         sortOrder: item.sortOrder,
       },
       form.getAll('categoryIds').map(String),
+      readAttributeValues(form, attributes),
+    )
+  }
+
+  if (current.status !== 'ready') {
+    return (
+      <tr>
+        <td colSpan={6}>{current.status === 'error' ? current.message : 'Loading…'}</td>
+      </tr>
     )
   }
 
@@ -204,6 +238,7 @@ function EditRow({ item, categories, onCancel, onSave }: EditRowProps) {
               </label>
             ))}
           </fieldset>
+          {attributes.length > 0 && <AttributeValueFields attributes={attributes} values={current.data.values} />}
           <p className="inline-form">
             <button type="submit">Save</button>
             <button type="button" onClick={onCancel}>

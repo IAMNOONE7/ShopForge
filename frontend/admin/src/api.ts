@@ -26,7 +26,32 @@ export type StoreProduct = {
   categoryIds: string[]
 }
 
-export type Category = { id: string; name: string; slug: string; sortOrder: number }
+export type Category = { id: string; name: string; slug: string; sortOrder: number; attributeIds: string[] }
+
+export type AttributeType = 'text' | 'integer' | 'decimal' | 'boolean' | 'date' | 'select' | 'multiSelect'
+
+export type AttributeDefinition = {
+  id: string
+  code: string
+  name: string
+  type: AttributeType
+  unit: string | null
+  isFilterable: boolean
+  isVisibleOnProductPage: boolean
+  sortOrder: number
+  options: { id: string; code: string; name: string }[]
+}
+
+export type AttributeInput = {
+  name: string
+  type: AttributeType
+  unit: string | null
+  isFilterable: boolean
+  isVisibleOnProductPage: boolean
+  options: string[]
+}
+
+export type AttributeValues = Record<string, string | number | boolean | string[]>
 
 export type StoreProductInput = {
   name: string
@@ -88,6 +113,18 @@ export const api = {
     request<StoreProduct>('PUT', `/api/admin/stores/${storeId}/products/${storeProductId}`, input),
   assignCategories: (storeId: string, storeProductId: string, categoryIds: string[]) =>
     request<StoreProduct>('PUT', `/api/admin/stores/${storeId}/products/${storeProductId}/categories`, { categoryIds }),
+
+  attributes: (storeId: string) => request<AttributeDefinition[]>('GET', `/api/admin/stores/${storeId}/attributes`),
+  createAttribute: (storeId: string, input: AttributeInput) =>
+    request<AttributeDefinition>('POST', `/api/admin/stores/${storeId}/attributes`, { ...input, sortOrder: 0 }),
+  addOption: (storeId: string, attributeId: string, name: string) =>
+    request<AttributeDefinition>('POST', `/api/admin/stores/${storeId}/attributes/${attributeId}/options`, { name }),
+  assignCategoryAttributes: (storeId: string, categoryId: string, attributeIds: string[]) =>
+    request<string[]>('PUT', `/api/admin/stores/${storeId}/categories/${categoryId}/attributes`, { attributeIds }),
+  productAttributes: (storeId: string, storeProductId: string) =>
+    request<{ values: AttributeValues }>('GET', `/api/admin/stores/${storeId}/products/${storeProductId}/attributes`),
+  setProductAttributes: (storeId: string, storeProductId: string, values: AttributeValues) =>
+    request<{ values: AttributeValues }>('PUT', `/api/admin/stores/${storeId}/products/${storeProductId}/attributes`, { values }),
 
   categories: (storeId: string) => request<Category[]>('GET', `/api/admin/stores/${storeId}/categories`),
   createCategory: (storeId: string, name: string) =>
