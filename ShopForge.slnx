@@ -6,6 +6,7 @@
   </Folder>
   <Folder Name="/src/Modules/">
     <Project Path="src/Modules/Access/ShopForge.Access/ShopForge.Access.csproj" />
+    <Project Path="src/Modules/Catalog/ShopForge.Catalog/ShopForge.Catalog.csproj" />
     <Project Path="src/Modules/Stores/ShopForge.Stores/ShopForge.Stores.csproj" />
   </Folder>
   <Folder Name="/tests/">

@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.HttpLogging;
 using ShopForge.Access;
 using ShopForge.Access.Development;
+using ShopForge.Catalog;
+using ShopForge.Api.Errors;
 using ShopForge.Api.Health;
 using ShopForge.Infrastructure;
 using ShopForge.Infrastructure.Files;
@@ -13,6 +15,7 @@ using ShopForge.Stores.Development;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<UniqueViolationExceptionHandler>();
 builder.Services.AddHttpLogging(options =>
 {
     options.LoggingFields = HttpLoggingFields.RequestMethod
@@ -25,7 +28,7 @@ builder.Services.AddHttpLogging(options =>
 builder.Services.AddScoped<StoreContext>();
 builder.Services.AddScoped<IStoreContext>(provider => provider.GetRequiredService<StoreContext>());
 
-builder.Services.AddInfrastructure(builder.Configuration, [StoresModule.Assembly, AccessModule.Assembly]);
+builder.Services.AddInfrastructure(builder.Configuration, [StoresModule.Assembly, AccessModule.Assembly, CatalogModule.Assembly]);
 builder.Services.AddStoresModule();
 builder.Services.AddAccessModule();
 
@@ -45,6 +48,7 @@ app.MapHealthEndpoints();
 
 var storefront = app.MapGroup("/api/storefront").RequireStore();
 storefront.MapStoresStorefrontEndpoints();
+storefront.MapCatalogStorefrontEndpoints();
 
 var admin = app.MapGroup("/api/admin");
 admin.MapAccessAdminEndpoints();
@@ -53,6 +57,10 @@ var tenantAdmin = app.MapGroup("/api/admin")
     .RequireAuthorization(AdminPolicies.TenantUser)
     .RequireAdminTenant();
 tenantAdmin.MapStoresAdminEndpoints();
+tenantAdmin.MapCatalogTenantAdminEndpoints();
+
+var storeAdmin = tenantAdmin.MapGroup("/stores/{storeId:guid}").RequireAdminStore();
+storeAdmin.MapCatalogStoreAdminEndpoints();
 
 if (app.Environment.IsDevelopment())
 {

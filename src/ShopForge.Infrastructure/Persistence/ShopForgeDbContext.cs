@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Metadata;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Infrastructure.Persistence;
@@ -31,6 +32,16 @@ public sealed class ShopForgeDbContext(
         foreach (var assembly in configurationAssemblies.Assemblies)
         {
             modelBuilder.ApplyConfigurationsFromAssembly(assembly);
+        }
+
+        // Ids are generated in code (Guid v7). Without this, EF treats a set key on a new child added to a tracked
+        // parent as an existing row and issues an UPDATE instead of an INSERT.
+        foreach (var key in modelBuilder.Model.GetEntityTypes().Select(type => type.FindPrimaryKey()).OfType<IMutableKey>())
+        {
+            if (key.Properties is [{ Name: "Id", ClrType: var idType } idProperty] && idType == typeof(Guid))
+            {
+                idProperty.ValueGenerated = ValueGenerated.Never;
+            }
         }
 
         foreach (var clrType in modelBuilder.Model.GetEntityTypes().Where(type => !type.IsOwned()).Select(type => type.ClrType))
