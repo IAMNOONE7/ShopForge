@@ -22,6 +22,7 @@ internal sealed class Store : ITenantOwned
         Currency = ToCurrencyCode(currency);
         Culture = CultureInfo.GetCultureInfo(culture, predefinedOnly: true).Name;
         Theme = theme;
+        Status = StoreStatus.Draft;
     }
 
     public Guid Id { get; private set; }
@@ -38,6 +39,8 @@ internal sealed class Store : ITenantOwned
 
     public string? LogoPath { get; private set; }
 
+    public StoreStatus Status { get; private set; }
+
     public IReadOnlyCollection<StoreDomain> Domains => _domains;
 
     public StoreDomain AddDomain(string hostName)
@@ -52,6 +55,29 @@ internal sealed class Store : ITenantOwned
         _domains.Add(domain);
         return domain;
     }
+
+    public void UpdateSettings(string name, string? currency, string culture, StoreTheme theme)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        if (currency is not null)
+        {
+            if (Status != StoreStatus.Draft && ToCurrencyCode(currency) != Currency)
+            {
+                throw new InvalidOperationException("The currency of a published store cannot be changed.");
+            }
+
+            Currency = ToCurrencyCode(currency);
+        }
+
+        Name = name.Trim();
+        Culture = CultureInfo.GetCultureInfo(culture, predefinedOnly: true).Name;
+        Theme = theme;
+    }
+
+    public void Publish() => Status = StoreStatus.Published;
+
+    public void Unpublish() => Status = StoreStatus.Draft;
 
     public string? ReplaceLogo(string contentType)
     {

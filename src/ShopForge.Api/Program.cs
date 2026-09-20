@@ -36,6 +36,7 @@ builder.Services.AddScoped<IStoreContext>(provider => provider.GetRequiredServic
 builder.Services.AddInfrastructure(builder.Configuration, [StoresModule.Assembly, AccessModule.Assembly, CatalogModule.Assembly]);
 builder.Services.AddStoresModule();
 builder.Services.AddAccessModule();
+builder.Services.AddCatalogModule();
 
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<ShopForgeDbContext>("database", tags: [HealthEndpoints.ReadinessTag]);

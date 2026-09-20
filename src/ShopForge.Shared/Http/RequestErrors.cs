@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 
-namespace ShopForge.Catalog.Http;
+namespace ShopForge.Shared.Http;
 
-internal sealed class RequestErrors
+public sealed class RequestErrors
 {
     private readonly Dictionary<string, string[]> _errors = new(StringComparer.OrdinalIgnoreCase);
 

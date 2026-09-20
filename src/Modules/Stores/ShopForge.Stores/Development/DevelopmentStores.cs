@@ -34,9 +34,11 @@ public static class DevelopmentStores
 
         var woodenHome = new Store(tenant.Id, "Wooden Home", "CZK", "cs-CZ", new StoreTheme("#8B5A2B", "#F5F0E8", 8));
         woodenHome.AddDomain(WoodenHomeHost);
+        woodenHome.Publish();
 
         var voltElectronics = new Store(tenant.Id, "Volt Electronics", "EUR", "en-IE", new StoreTheme("#1F6FEB", "#EEF4FF", 2));
         voltElectronics.AddDomain(VoltElectronicsHost);
+        voltElectronics.Publish();
 
         await SaveAsync(services, woodenHome, [tenant, woodenHome], cancellationToken);
         await SaveAsync(services, voltElectronics, [voltElectronics], cancellationToken);

@@ -5,9 +5,9 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Catalog.Attributes;
 using ShopForge.Catalog.Domain;
-using ShopForge.Catalog.Http;
 using ShopForge.Catalog.Images;
 using ShopForge.Shared.Files;
+using ShopForge.Shared.Http;
 
 namespace ShopForge.Catalog.Storefront;
 

@@ -1,8 +1,11 @@
 using System.Reflection;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Catalog.Admin;
 using ShopForge.Catalog.Import;
+using ShopForge.Catalog.Publishing;
 using ShopForge.Catalog.Storefront;
+using ShopForge.Shared.Stores;
 
 namespace ShopForge.Catalog;
 
@@ -11,6 +14,13 @@ public static class CatalogModule
     internal const string Schema = "catalog";
 
     public static Assembly Assembly => typeof(CatalogModule).Assembly;
+
+    public static IServiceCollection AddCatalogModule(this IServiceCollection services)
+    {
+        services.AddScoped<IStorePublishCheck, CatalogPublishCheck>();
+
+        return services;
+    }
 
     public static IEndpointRouteBuilder MapCatalogTenantAdminEndpoints(this IEndpointRouteBuilder tenantAdmin)
     {

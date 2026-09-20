@@ -23,7 +23,11 @@ public sealed class HostNamesTests
     [InlineData("   ")]
     [InlineData(":8080")]
     [InlineData(".")]
-    public void Normalize_returns_null_for_missing_host(string? host)
+    [InlineData("not a host")]
+    [InlineData("under_score.test")]
+    [InlineData("shop..example.com")]
+    [InlineData("-shop.example.com")]
+    public void Normalize_returns_null_for_invalid_host(string? host)
     {
         Assert.Null(HostNames.Normalize(host));
     }

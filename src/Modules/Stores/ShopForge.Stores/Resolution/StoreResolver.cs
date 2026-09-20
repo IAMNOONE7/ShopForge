@@ -17,7 +17,7 @@ internal sealed class StoreResolver(DbContext dbContext, IMemoryCache cache)
             return null;
         }
 
-        var cacheKey = $"stores:host:{hostName}";
+        var cacheKey = CacheKey(hostName);
 
         if (cache.TryGetValue(cacheKey, out ResolvedStore? store))
         {
@@ -27,7 +27,7 @@ internal sealed class StoreResolver(DbContext dbContext, IMemoryCache cache)
         store = await (
                 from domain in dbContext.Set<StoreDomain>().IgnoreQueryFilters()
                 join owner in dbContext.Set<Store>().IgnoreQueryFilters() on domain.StoreId equals owner.Id
-                where domain.HostName == hostName
+                where domain.HostName == hostName && owner.Status == StoreStatus.Published
                 select new ResolvedStore(owner.Id, owner.TenantId))
             .SingleOrDefaultAsync(cancellationToken);
 
@@ -46,4 +46,14 @@ internal sealed class StoreResolver(DbContext dbContext, IMemoryCache cache)
             .Where(store => store.Id == storeId && store.TenantId == tenantId)
             .Select(store => new ResolvedStore(store.Id, store.TenantId))
             .SingleOrDefaultAsync(cancellationToken);
+
+    public void Forget(IEnumerable<string> hostNames)
+    {
+        foreach (var hostName in hostNames)
+        {
+            cache.Remove(CacheKey(hostName));
+        }
+    }
+
+    private static string CacheKey(string hostName) => $"stores:host:{hostName}";
 }

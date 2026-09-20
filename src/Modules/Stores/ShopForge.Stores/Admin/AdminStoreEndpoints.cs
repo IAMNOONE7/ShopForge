@@ -24,6 +24,7 @@ internal static class AdminStoreEndpoints
                 store.Name,
                 store.Currency,
                 store.Culture,
+                store.Status,
                 store.LogoPath == null ? null : "/api/admin/stores/" + store.Id + "/logo",
                 store.Domains.Where(domain => domain.IsPrimary).Select(domain => domain.HostName).FirstOrDefault()))
             .ToListAsync(cancellationToken);
@@ -32,4 +33,21 @@ internal static class AdminStoreEndpoints
     }
 }
 
-internal sealed record AdminStoreResponse(Guid Id, string Name, string Currency, string Culture, string? LogoUrl, string? PrimaryHostName);
+internal sealed record AdminStoreResponse(
+    Guid Id,
+    string Name,
+    string Currency,
+    string Culture,
+    StoreStatus Status,
+    string? LogoUrl,
+    string? PrimaryHostName)
+{
+    public static AdminStoreResponse From(Store store, string? primaryHostName) => new(
+        store.Id,
+        store.Name,
+        store.Currency,
+        store.Culture,
+        store.Status,
+        store.LogoPath is null ? null : $"/api/admin/stores/{store.Id}/logo",
+        primaryHostName);
+}

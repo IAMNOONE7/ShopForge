@@ -2,8 +2,10 @@ using System.Reflection;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using ShopForge.Shared.Stores;
 using ShopForge.Stores.Admin;
 using ShopForge.Stores.Logos;
+using ShopForge.Stores.Provisioning;
 using ShopForge.Stores.Resolution;
 using ShopForge.Stores.Storefront;
 
@@ -19,6 +21,7 @@ public static class StoresModule
     {
         services.AddMemoryCache();
         services.AddScoped<StoreResolver>();
+        services.AddScoped<IStorePublishCheck, StoreBrandingPublishCheck>();
 
         return services;
     }
@@ -41,6 +44,7 @@ public static class StoresModule
     public static IEndpointRouteBuilder MapStoresAdminEndpoints(this IEndpointRouteBuilder tenantAdmin)
     {
         tenantAdmin.MapAdminStores();
+        tenantAdmin.MapStoreProvisioning();
 
         return tenantAdmin;
     }
@@ -48,6 +52,7 @@ public static class StoresModule
     public static IEndpointRouteBuilder MapStoresStoreAdminEndpoints(this IEndpointRouteBuilder storeAdmin)
     {
         storeAdmin.MapAdminStoreLogo();
+        storeAdmin.MapStoreLifecycle();
 
         return storeAdmin;
     }

@@ -7,6 +7,8 @@ internal static class HostNames
 {
     // Stored domains and incoming Host headers share this normalization, so resolution is an exact match:
     // no port, no trailing dot, lower case, internationalized names in their ASCII (punycode) form.
+    // STD3 rules are on, so anything that is not a legal host name (spaces, underscores, symbols) is rejected here
+    // rather than by the database.
     public static string? Normalize(string? host)
     {
         if (string.IsNullOrWhiteSpace(host))
@@ -23,7 +25,7 @@ internal static class HostNames
 
         try
         {
-            return new IdnMapping().GetAscii(hostName).ToLowerInvariant();
+            return new IdnMapping { UseStd3AsciiRules = true }.GetAscii(hostName).ToLowerInvariant();
         }
         catch (ArgumentException)
         {

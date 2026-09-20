@@ -36,6 +36,7 @@ internal static class TestStores
     {
         var store = new Store(tenant.Id, name, "EUR", "en-IE", new StoreTheme("#112233", "#FFFFFF", 4));
         var domain = store.AddDomain(UniqueHostName());
+        store.Publish();
 
         await using var scope = services.CreateAsyncScope();
         scope.ServiceProvider.GetRequiredService<StoreContext>().Set(store.Id, store.TenantId);
