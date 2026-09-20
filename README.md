@@ -4,12 +4,13 @@ A multi-store e-commerce platform. One ASP.NET Core backend and one React storef
 
 ## Architecture
 
-- **Modular monolith.** One ASP.NET Core host, one project per business module (`Stores`, `Access`, `Catalog`, `Orders`), module internals kept `internal`. Architecture tests enforce the dependency rules.
+- **Modular monolith.** One ASP.NET Core host, one project per business module (`Stores`, `Access`, `Catalog`, `Inventory`, `Orders`), module internals kept `internal`. Architecture tests enforce the dependency rules.
 - **Multi-tenancy in one database.** Stores are resolved from the request hostname. EF Core query filters scope every store- and tenant-owned table, a save-time guard rejects cross-store writes, and composite foreign keys make cross-store links impossible in the database.
 - **Shared products, per-store listings.** A physical product belongs to the company (tenant); each store lists it with its own name, price and visibility.
 - **Metadata-driven product attributes.** Stores define typed attributes (numbers, dates, yes/no, options) stored as typed EAV rows. The storefront gets filters, ranges and counts computed from the data, so a furniture store and an electronics store run the same code with different filters.
 - **Stores are created as data.** A tenant admin provisions a store with its address, currency, language and theme. It starts as a draft and goes live only once every module reports it ready (branding, products), with no deployment involved.
 - **Guest checkout.** A server-side cart identified by a cookie, gross prices with a per-product VAT rate, and orders that snapshot the product name, price, VAT and the chosen payment and shipping method, numbered per store.
+- **Stock that cannot oversell.** Warehouses hold the tenant's stock, shared by its stores. Checkout reserves with a conditional update, so two shoppers racing for the last item cannot both get it; paying turns the reservation into a stock movement and an unpaid order releases it when it expires.
 - **Bulk import.** Store staff upload an .xlsx file; rows are matched by SKU and update products, listings, categories and attribute values, with a per-row report of what changed and what was rejected.
 - **Replaceable infrastructure behind small interfaces.** File storage (`IFileStorage`, Azure Blob Storage adapter, Azurite locally) and payments (`IPaymentProvider`, with methods the store settles itself today and a hosted provider later).
 
@@ -70,6 +71,7 @@ src/
     Stores                    tenants, stores, domains, store resolution, provisioning, logos
     Access                    tenant users, sign-in, admin roles
     Catalog                   products, store listings, categories, images, attributes, import
+    Inventory                 warehouses, stock levels, movements, reservations
     Orders                    carts, checkout, orders, payment and shipping methods
 tests/
   ShopForge.UnitTests
@@ -82,4 +84,4 @@ frontend/
 
 ## Status
 
-Early development. Multi-store support, the product catalog, attribute-based filtering, bulk import, store provisioning and guest checkout are in place. Stock and reservations come next.
+Early development. Multi-store support, the product catalog, attribute-based filtering, bulk import, store provisioning, guest checkout and stock reservations are in place. Customer accounts come next.
