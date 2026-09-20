@@ -146,7 +146,7 @@ public static class DevelopmentCatalog
         foreach (var (sku, name, description, price) in items)
         {
             var product = new Product(tenantId, sku, ean: null, weightGrams: null);
-            var storeProduct = new StoreProduct(storeId, product, new StoreProductDetails(name, Slugs.Create(name), description, price, IsVisible: true, SortOrder: 0));
+            var storeProduct = new StoreProduct(storeId, product, new StoreProductDetails(name, Slugs.Create(name), description, price, VatRate: 21m, IsVisible: true, SortOrder: 0));
             storeProduct.AssignCategories([category]);
             dbContext.AddRange(product, storeProduct);
         }

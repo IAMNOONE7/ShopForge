@@ -33,6 +33,8 @@ internal sealed class StoreProduct : IStoreOwned
 
     public decimal Price { get; private set; }
 
+    public decimal VatRate { get; private set; }
+
     public bool IsVisible { get; private set; }
 
     public int SortOrder { get; private set; }
@@ -50,6 +52,11 @@ internal sealed class StoreProduct : IStoreOwned
             throw new ArgumentOutOfRangeException(nameof(details), "Price must be a non-negative amount with at most two decimals.");
         }
 
+        if (details.VatRate is < 0 or > 100 || decimal.Round(details.VatRate, 2) != details.VatRate)
+        {
+            throw new ArgumentOutOfRangeException(nameof(details), "The VAT rate must be between 0 and 100 with at most two decimals.");
+        }
+
         if (!Slugs.IsValid(details.Slug))
         {
             throw new ArgumentException($"'{details.Slug}' is not a valid slug.", nameof(details));
@@ -60,6 +67,7 @@ internal sealed class StoreProduct : IStoreOwned
             details.Slug,
             string.IsNullOrWhiteSpace(details.Description) ? null : details.Description.Trim(),
             details.Price,
+            details.VatRate,
             details.IsVisible,
             details.SortOrder);
 
@@ -72,13 +80,14 @@ internal sealed class StoreProduct : IStoreOwned
         Slug = updated.Slug;
         Description = updated.Description;
         Price = updated.Price;
+        VatRate = updated.VatRate;
         IsVisible = updated.IsVisible;
         SortOrder = updated.SortOrder;
 
         return true;
     }
 
-    public StoreProductDetails Current => new(Name, Slug, Description, Price, IsVisible, SortOrder);
+    public StoreProductDetails Current => new(Name, Slug, Description, Price, VatRate, IsVisible, SortOrder);
 
     // Import sets only the attributes present in the file; values of other attributes stay as they are.
     public bool SetAttributeValue(AttributeDefinition definition, AttributeValue value)
@@ -147,4 +156,4 @@ internal sealed class StoreProduct : IStoreOwned
     }
 }
 
-internal sealed record StoreProductDetails(string Name, string Slug, string? Description, decimal Price, bool IsVisible, int SortOrder);
+internal sealed record StoreProductDetails(string Name, string Slug, string? Description, decimal Price, decimal VatRate, bool IsVisible, int SortOrder);

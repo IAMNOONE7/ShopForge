@@ -30,6 +30,7 @@ internal static class StoreProvisioningEndpoints
         CreateStoreRequest request,
         DbContext dbContext,
         StoreContext storeContext,
+        IEnumerable<IStoreInitializer> initializers,
         CancellationToken cancellationToken)
     {
         var hostName = HostNames.Normalize(request.HostName);
@@ -57,6 +58,13 @@ internal static class StoreProvisioningEndpoints
         // Adding the store's own domain is a write inside the new store, so the tenant scope is narrowed to it first.
         storeContext.Set(store.Id, store.TenantId);
         dbContext.Add(store);
+
+        // Modules set up what the new store needs to work, for example its payment and shipping methods.
+        foreach (var initializer in initializers)
+        {
+            await initializer.InitializeAsync(cancellationToken);
+        }
+
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return TypedResults.Created($"/api/admin/stores/{store.Id}", AdminStoreResponse.From(store, hostName));

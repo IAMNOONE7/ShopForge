@@ -5,6 +5,7 @@ using ShopForge.Catalog.Admin;
 using ShopForge.Catalog.Import;
 using ShopForge.Catalog.Publishing;
 using ShopForge.Catalog.Storefront;
+using ShopForge.Shared.Catalog;
 using ShopForge.Shared.Stores;
 
 namespace ShopForge.Catalog;
@@ -18,6 +19,7 @@ public static class CatalogModule
     public static IServiceCollection AddCatalogModule(this IServiceCollection services)
     {
         services.AddScoped<IStorePublishCheck, CatalogPublishCheck>();
+        services.AddScoped<ISellableProducts, SellableProductLookup>();
 
         return services;
     }

@@ -84,7 +84,7 @@ public sealed class CatalogIsolationTests(ShopForgeApiFactory factory)
 
         var product = new Product(store.TenantId, $"SKU-{Guid.NewGuid():N}", ean: null, weightGrams: null);
         var category = new Category(store.StoreId, "Boards", $"boards-{Guid.NewGuid():N}", 0);
-        var storeProduct = new StoreProduct(store.StoreId, product, new StoreProductDetails("Board", $"board-{Guid.NewGuid():N}", null, 10m, true, 0));
+        var storeProduct = new StoreProduct(store.StoreId, product, new StoreProductDetails("Board", $"board-{Guid.NewGuid():N}", null, 10m, 21m, true, 0));
         storeProduct.AssignCategories([category]);
 
         dbContext.AddRange(product, category, storeProduct);

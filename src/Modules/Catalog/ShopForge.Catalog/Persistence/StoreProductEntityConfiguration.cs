@@ -9,7 +9,10 @@ internal sealed class StoreProductEntityConfiguration : IEntityTypeConfiguration
     public void Configure(EntityTypeBuilder<StoreProduct> builder)
     {
         builder.ToTable("store_products", CatalogModule.Schema, table =>
-            table.HasCheckConstraint("ck_store_products_price", "price >= 0"));
+        {
+            table.HasCheckConstraint("ck_store_products_price", "price >= 0");
+            table.HasCheckConstraint("ck_store_products_vat_rate", "vat_rate >= 0 AND vat_rate <= 100");
+        });
 
         builder.HasAlternateKey(storeProduct => new { storeProduct.StoreId, storeProduct.Id });
 
@@ -17,6 +20,7 @@ internal sealed class StoreProductEntityConfiguration : IEntityTypeConfiguration
         builder.Property(storeProduct => storeProduct.Slug).HasMaxLength(Slugs.MaxLength);
         builder.Property(storeProduct => storeProduct.Description).HasMaxLength(10_000);
         builder.Property(storeProduct => storeProduct.Price).HasPrecision(12, 2);
+        builder.Property(storeProduct => storeProduct.VatRate).HasPrecision(5, 2);
 
         builder.HasIndex(storeProduct => new { storeProduct.StoreId, storeProduct.Slug }).IsUnique();
         builder.HasIndex(storeProduct => new { storeProduct.StoreId, storeProduct.ProductId }).IsUnique();

@@ -38,6 +38,7 @@ internal static class AdminStoreCatalogEndpoints
                     storeProduct.Slug,
                     storeProduct.Description,
                     storeProduct.Price,
+                    storeProduct.VatRate,
                     storeProduct.IsVisible,
                     storeProduct.SortOrder,
                     storeProduct.Categories.Select(assignment => assignment.CategoryId).ToList()))
@@ -52,7 +53,7 @@ internal static class AdminStoreCatalogEndpoints
         IStoreContext storeContext,
         CancellationToken cancellationToken)
     {
-        var errors = ValidateDetails(request.Name, request.Slug, request.Price);
+        var errors = ValidateDetails(request.Name, request.Slug, request.Price, request.VatRate);
 
         // The tenant filter makes products of other tenants invisible, so they cannot be listed here.
         var product = await dbContext.Set<Product>().SingleOrDefaultAsync(product => product.Id == request.ProductId, cancellationToken);
@@ -63,7 +64,7 @@ internal static class AdminStoreCatalogEndpoints
             return errors.ToProblem();
         }
 
-        var details = ToDetails(request.Name!, request.Slug, request.Description, request.Price, request.IsVisible, request.SortOrder);
+        var details = ToDetails(request.Name!, request.Slug, request.Description, request.Price, request.VatRate, request.IsVisible, request.SortOrder);
 
         if (await dbContext.Set<StoreProduct>().AnyAsync(existing => existing.ProductId == product!.Id, cancellationToken))
         {
@@ -101,14 +102,14 @@ internal static class AdminStoreCatalogEndpoints
 
         // Without an explicit slug the public URL stays as it is, even when the name changes.
         var slug = request.Slug ?? storeProduct.Slug;
-        var errors = ValidateDetails(request.Name, slug, request.Price);
+        var errors = ValidateDetails(request.Name, slug, request.Price, request.VatRate);
 
         if (errors.Any)
         {
             return errors.ToProblem();
         }
 
-        var details = ToDetails(request.Name!, slug, request.Description, request.Price, request.IsVisible, request.SortOrder);
+        var details = ToDetails(request.Name!, slug, request.Description, request.Price, request.VatRate, request.IsVisible, request.SortOrder);
 
         if (await dbContext.Set<StoreProduct>().AnyAsync(other => other.Slug == details.Slug && other.Id != storeProductId, cancellationToken))
         {
@@ -240,12 +241,13 @@ internal static class AdminStoreCatalogEndpoints
             [.. category.Attributes.OrderBy(assignment => assignment.SortOrder).Select(assignment => assignment.AttributeDefinitionId)]));
     }
 
-    private static RequestErrors ValidateDetails(string? name, string? slug, decimal price) =>
+    private static RequestErrors ValidateDetails(string? name, string? slug, decimal price, decimal vatRate) =>
         new RequestErrors()
             .Check(!string.IsNullOrWhiteSpace(name) && name.Trim().Length <= 200, "name", "Name is required (up to 200 characters).")
             .Check(slug is null || Slugs.IsValid(slug), "slug", "Slug may contain lower-case letters, digits and single hyphens.")
             .Check(name is null || slug is not null || Slugs.Create(name).Length > 0, "slug", "A slug cannot be derived from this name; provide one.")
-            .Check(price >= 0 && decimal.Round(price, 2) == price, "price", "Price must be zero or more, with at most two decimals.");
+            .Check(price >= 0 && decimal.Round(price, 2) == price, "price", "Price must be zero or more, with at most two decimals.")
+            .Check(vatRate is >= 0 and <= 100 && decimal.Round(vatRate, 2) == vatRate, "vatRate", "The VAT rate must be between 0 and 100.");
 
     private static RequestErrors ValidateCategory(CategoryRequest request) =>
         new RequestErrors()
@@ -253,16 +255,17 @@ internal static class AdminStoreCatalogEndpoints
             .Check(request.Slug is null || Slugs.IsValid(request.Slug), "slug", "Slug may contain lower-case letters, digits and single hyphens.")
             .Check(request.Name is null || request.Slug is not null || Slugs.Create(request.Name).Length > 0, "slug", "A slug cannot be derived from this name; provide one.");
 
-    private static StoreProductDetails ToDetails(string name, string? slug, string? description, decimal price, bool isVisible, int sortOrder) =>
-        new(name, slug ?? Slugs.Create(name), description, price, isVisible, sortOrder);
+    private static StoreProductDetails ToDetails(
+        string name, string? slug, string? description, decimal price, decimal vatRate, bool isVisible, int sortOrder) =>
+        new(name, slug ?? Slugs.Create(name), description, price, vatRate, isVisible, sortOrder);
 
     private static ProblemHttpResult SlugTaken() =>
         TypedResults.Problem(statusCode: StatusCodes.Status409Conflict, title: "The slug is already used in this store");
 }
 
-internal sealed record ListProductRequest(Guid ProductId, string? Name, string? Slug, string? Description, decimal Price, bool IsVisible, int SortOrder);
+internal sealed record ListProductRequest(Guid ProductId, string? Name, string? Slug, string? Description, decimal Price, decimal VatRate, bool IsVisible, int SortOrder);
 
-internal sealed record UpdateStoreProductRequest(string? Name, string? Slug, string? Description, decimal Price, bool IsVisible, int SortOrder);
+internal sealed record UpdateStoreProductRequest(string? Name, string? Slug, string? Description, decimal Price, decimal VatRate, bool IsVisible, int SortOrder);
 
 internal sealed record AssignCategoriesRequest(List<Guid>? CategoryIds);
 
@@ -278,6 +281,7 @@ internal sealed record AdminStoreProductResponse(
     string Slug,
     string? Description,
     decimal Price,
+    decimal VatRate,
     bool IsVisible,
     int SortOrder,
     List<Guid> CategoryIds)
@@ -290,6 +294,7 @@ internal sealed record AdminStoreProductResponse(
         storeProduct.Slug,
         storeProduct.Description,
         storeProduct.Price,
+        storeProduct.VatRate,
         storeProduct.IsVisible,
         storeProduct.SortOrder,
         storeProduct.Categories.Select(assignment => assignment.CategoryId).ToList());

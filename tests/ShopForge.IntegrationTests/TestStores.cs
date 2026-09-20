@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using ShopForge.Orders.Domain;
 using ShopForge.Shared.Tenancy;
 using ShopForge.Stores.Domain;
 
@@ -48,6 +49,8 @@ internal static class TestStores
         }
 
         dbContext.Add(store);
+        dbContext.Add(new PaymentMethod(store.Id, "bank-transfer", "Bank transfer", "manual"));
+        dbContext.Add(new ShippingMethod(store.Id, "courier", "Courier", "manual", price: 4.90m, vatRate: 21m));
         await dbContext.SaveChangesAsync();
 
         return new TestStore(store.Id, store.TenantId, store.Name, domain.HostName, domain.Id);

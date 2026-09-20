@@ -34,14 +34,17 @@ public sealed class ShopForgeDbContext(
             modelBuilder.ApplyConfigurationsFromAssembly(assembly);
         }
 
-        // Ids are generated in code (Guid v7). Without this, EF treats a set key on a new child added to a tracked
-        // parent as an existing row and issues an UPDATE instead of an INSERT.
-        foreach (var key in modelBuilder.Model.GetEntityTypes().Select(type => type.FindPrimaryKey()).OfType<IMutableKey>())
+        // Every Guid key in ShopForge is generated in code (Guid v7). Without this, EF treats a set key on a new child
+        // added to a tracked parent as an existing row and issues an UPDATE instead of an INSERT.
+        var keyProperties = modelBuilder.Model.GetEntityTypes()
+            .Select(type => type.FindPrimaryKey())
+            .OfType<IMutableKey>()
+            .SelectMany(key => key.Properties)
+            .Where(property => property.ClrType == typeof(Guid));
+
+        foreach (var property in keyProperties)
         {
-            if (key.Properties is [{ Name: "Id", ClrType: var idType } idProperty] && idType == typeof(Guid))
-            {
-                idProperty.ValueGenerated = ValueGenerated.Never;
-            }
+            property.ValueGenerated = ValueGenerated.Never;
         }
 
         foreach (var clrType in modelBuilder.Model.GetEntityTypes().Where(type => !type.IsOwned()).Select(type => type.ClrType))

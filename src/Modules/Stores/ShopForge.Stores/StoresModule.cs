@@ -22,6 +22,7 @@ public static class StoresModule
         services.AddMemoryCache();
         services.AddScoped<StoreResolver>();
         services.AddScoped<IStorePublishCheck, StoreBrandingPublishCheck>();
+        services.AddScoped<ICurrentStoreSettings, CurrentStoreSettings>();
 
         return services;
     }

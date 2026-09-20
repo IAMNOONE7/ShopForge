@@ -10,6 +10,7 @@
     <ProjectReference Include="..\ShopForge.Shared\ShopForge.Shared.csproj" />
     <ProjectReference Include="..\Modules\Access\ShopForge.Access\ShopForge.Access.csproj" />
     <ProjectReference Include="..\Modules\Catalog\ShopForge.Catalog\ShopForge.Catalog.csproj" />
+    <ProjectReference Include="..\Modules\Orders\ShopForge.Orders\ShopForge.Orders.csproj" />
     <ProjectReference Include="..\Modules\Stores\ShopForge.Stores\ShopForge.Stores.csproj" />
   </ItemGroup>
 

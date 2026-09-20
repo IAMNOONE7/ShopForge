@@ -131,6 +131,7 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
         name = string.IsNullOrWhiteSpace(name) ? null : name;
         var description = row.Has(ImportColumns.Description) ? row[ImportColumns.Description].Text : listing?.Description;
         decimal? price = listing?.Price;
+        decimal? vatRate = listing?.VatRate;
         var visible = listing?.IsVisible ?? true;
         var sortOrder = listing?.SortOrder ?? 0;
 
@@ -153,6 +154,22 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
         else if (price is null)
         {
             Invalid(ImportColumns.Price, "Price is required for a product that is not yet listed in this store.");
+        }
+
+        if (row.Has(ImportColumns.Vat))
+        {
+            if (row[ImportColumns.Vat].TryDecimal(out var value) && value is >= 0 and <= 100 && decimal.Round(value, 2) == value)
+            {
+                vatRate = value;
+            }
+            else
+            {
+                Invalid(ImportColumns.Vat, "The VAT rate must be between 0 and 100.");
+            }
+        }
+        else if (vatRate is null)
+        {
+            Invalid(ImportColumns.Vat, "A VAT rate is required for a product that is not yet listed in this store.");
         }
 
         if (row.Has(ImportColumns.Visible) && !row[ImportColumns.Visible].TryBoolean(out visible))
@@ -184,7 +201,7 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
             Invalid(ImportColumns.Slug, $"The slug '{slug}' is already used by another product in this store.");
         }
 
-        return issues.Count > 0 ? null : new StoreProductDetails(name!, slug!, description, price!.Value, visible, sortOrder);
+        return issues.Count > 0 ? null : new StoreProductDetails(name!, slug!, description, price!.Value, vatRate!.Value, visible, sortOrder);
     }
 
     private static List<string> ReadCategoryNames(ImportRow row, List<ImportIssue> issues)

@@ -21,7 +21,7 @@ internal static class AdminCatalogApi
     {
         using var response = await admin.PostAsJsonAsync(
             $"/api/admin/stores/{storeId}/products",
-            new { ProductId = productId, Name = name, Slug = slug, Description = $"{name} description", Price = price, IsVisible = isVisible, SortOrder = 0 });
+            new { ProductId = productId, Name = name, Slug = slug, Description = $"{name} description", Price = price, VatRate = 21m, IsVisible = isVisible, SortOrder = 0 });
         return await IdFromAsync(response);
     }
 

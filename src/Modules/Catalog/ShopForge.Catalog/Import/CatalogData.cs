@@ -78,11 +78,12 @@ internal static class ImportColumns
     public const string Slug = "slug";
     public const string Description = "description";
     public const string Price = "price";
+    public const string Vat = "vat";
     public const string Visible = "visible";
     public const string SortOrder = "sortorder";
     public const string Categories = "categories";
     public const string Ean = "ean";
     public const string Weight = "weight";
 
-    public static readonly string[] All = [Sku, Name, Slug, Description, Price, Visible, SortOrder, Categories, Ean, Weight];
+    public static readonly string[] All = [Sku, Name, Slug, Description, Price, Vat, Visible, SortOrder, Categories, Ean, Weight];
 }

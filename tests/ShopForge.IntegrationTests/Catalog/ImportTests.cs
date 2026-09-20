@@ -7,7 +7,7 @@ namespace ShopForge.IntegrationTests.Catalog;
 
 public sealed class ImportTests(ShopForgeApiFactory factory)
 {
-    private static readonly string[] Columns = ["sku", "name", "price", "categories", "material", "width", "visible"];
+    private static readonly string[] Columns = ["sku", "name", "price", "vat", "categories", "material", "width", "visible"];
 
     private static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
 
@@ -17,8 +17,8 @@ public sealed class ImportTests(ShopForgeApiFactory factory)
         var furniture = await FurnitureStore.CreateAsync(factory);
 
         var report = await ImportAsync(furniture, Columns,
-            ["IMP-1", "Imported Oak Chair", 149.90m, "Chairs, Outdoor", "Oak", 42.5m, true],
-            ["IMP-2", "Imported Beech Stool", 79m, "Chairs", "Beech", 30m, false]);
+            ["IMP-1", "Imported Oak Chair", 149.90m, 21m, "Chairs, Outdoor", "Oak", 42.5m, true],
+            ["IMP-2", "Imported Beech Stool", 79m, 21m, "Chairs", "Beech", 30m, false]);
 
         var page = await GetAsync<ProductPage>(furniture, "/api/storefront/products?f.material=oak&f.width=40..45");
         var detail = await GetAsync<ProductDetail>(furniture, "/api/storefront/products/imported-oak-chair");
@@ -35,7 +35,7 @@ public sealed class ImportTests(ShopForgeApiFactory factory)
     public async Task Importing_the_same_file_twice_changes_nothing()
     {
         var furniture = await FurnitureStore.CreateAsync(factory);
-        object?[][] rows = [["IMP-1", "Imported Chair", 149.90m, "Chairs", "Oak", 42.5m, true]];
+        object?[][] rows = [["IMP-1", "Imported Chair", 149.90m, 21m, "Chairs", "Oak", 42.5m, true]];
 
         var first = await ImportAsync(furniture, Columns, rows);
         var second = await ImportAsync(furniture, Columns, rows);
@@ -64,14 +64,14 @@ public sealed class ImportTests(ShopForgeApiFactory factory)
     {
         var furniture = await FurnitureStore.CreateAsync(factory);
 
-        var report = await ImportAsync(furniture, ["sku", "name", "price", "width", "released"],
-            ["IMP-OK", "Valid Chair", 10m, 40m, new DateOnly(2024, 5, 1)],
-            ["", "No SKU", 10m, 40m, null],
-            ["IMP-PRICE", "Bad Price", "cheap", 40m, null],
-            ["IMP-NEW", null, 10m, 40m, null],
-            ["IMP-WIDTH", "Bad Width", 10m, "wide", null],
-            ["IMP-DATE", "Bad Date", 10m, 40m, "1st May"],
-            ["IMP-OK", "Duplicate SKU", 10m, 40m, null]);
+        var report = await ImportAsync(furniture, ["sku", "name", "price", "vat", "width", "released"],
+            ["IMP-OK", "Valid Chair", 10m, 21m, 40m, new DateOnly(2024, 5, 1)],
+            ["", "No SKU", 10m, 21m, 40m, null],
+            ["IMP-PRICE", "Bad Price", "cheap", 21m, 40m, null],
+            ["IMP-NEW", null, 10m, 21m, 40m, null],
+            ["IMP-WIDTH", "Bad Width", 10m, 21m, "wide", null],
+            ["IMP-DATE", "Bad Date", 10m, 21m, 40m, "1st May"],
+            ["IMP-OK", "Duplicate SKU", 10m, 21m, 40m, null]);
 
         Assert.Equal((1, 0, 0, 6), (report.Created, report.Updated, report.Skipped, report.Invalid));
         Assert.Equal(["price", "released", "sku", "sku", "width"], report.Issues.Where(issue => issue.Column != "name").Select(issue => issue.Column).Order());
@@ -83,7 +83,7 @@ public sealed class ImportTests(ShopForgeApiFactory factory)
     {
         var furniture = await FurnitureStore.CreateAsync(factory);
 
-        var report = await ImportAsync(furniture, ["sku", "name", "price", "stock", "supplier"], ["IMP-1", "Chair", 10m, 5, "ACME"]);
+        var report = await ImportAsync(furniture, ["sku", "name", "price", "vat", "stock", "supplier"], ["IMP-1", "Chair", 10m, 21m, 5, "ACME"]);
 
         Assert.Equal(1, report.Created);
         Assert.Equal(["stock", "supplier"], report.IgnoredColumns.Order());
@@ -94,7 +94,7 @@ public sealed class ImportTests(ShopForgeApiFactory factory)
     {
         var furniture = await FurnitureStore.CreateAsync(factory);
 
-        var report = await ImportAsync(furniture, ["sku", "name", "price", "material", "colors"], ["IMP-1", "Teak Chair", 10m, "Teak", "Black, Green"]);
+        var report = await ImportAsync(furniture, ["sku", "name", "price", "vat", "material", "colors"], ["IMP-1", "Teak Chair", 10m, 21m, "Teak", "Black, Green"]);
         var page = await GetAsync<ProductPage>(furniture, "/api/storefront/products?f.material=teak");
 
         Assert.Equal(1, report.Created);
@@ -107,9 +107,9 @@ public sealed class ImportTests(ShopForgeApiFactory factory)
     {
         var furniture = await FurnitureStore.CreateAsync(factory);
 
-        var report = await ImportAsync(furniture, ["sku", "name", "price", "categories", "material"],
-            ["IMP-GOOD", "Real Chair", 10m, "Chairs", "Oak"],
-            ["IMP-BAD", "Ghost Chair", "free", "Ghost Category", "Phantom"]);
+        var report = await ImportAsync(furniture, ["sku", "name", "price", "vat", "categories", "material"],
+            ["IMP-GOOD", "Real Chair", 10m, 21m, "Chairs", "Oak"],
+            ["IMP-BAD", "Ghost Chair", "free", 21m, "Ghost Category", "Phantom"]);
         var categories = await GetAsync<List<StorefrontCategory>>(furniture, "/api/storefront/categories");
         var page = await GetAsync<ProductPage>(furniture, "/api/storefront/products");
 
@@ -148,8 +148,8 @@ public sealed class ImportTests(ShopForgeApiFactory factory)
         var furniture = await FurnitureStore.CreateAsync(factory);
         using var support = await TestUsers.LoginAsync(factory, await TestUsers.CreateAsync(factory.Services, furniture.Store.TenantId, TenantRole.Support));
 
-        using var forbidden = await support.ImportAsync(furniture.Store.StoreId, ImportFiles.Workbook(["sku", "name", "price"], ["IMP-1", "Chair", 10m]));
-        await ImportAsync(furniture, ["sku", "name", "price"], ["IMP-1", "Chair", 10m]);
+        using var forbidden = await support.ImportAsync(furniture.Store.StoreId, ImportFiles.Workbook(["sku", "name", "price", "vat"], ["IMP-1", "Chair", 10m, 21m]));
+        await ImportAsync(furniture, ["sku", "name", "price", "vat"], ["IMP-1", "Chair", 10m, 21m]);
         var otherStore = await GetAsync<ProductPage>(furniture with { Store = furniture.OtherStore }, "/api/storefront/products");
 
         Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);

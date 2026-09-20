@@ -88,7 +88,7 @@ public sealed class AttributeIsolationTests(ShopForgeApiFactory factory)
         category.AssignAttributes([material]);
 
         var product = new Product(store.TenantId, $"SKU-{Guid.NewGuid():N}", ean: null, weightGrams: null);
-        var storeProduct = new StoreProduct(store.StoreId, product, new StoreProductDetails("Chair", $"chair-{Guid.NewGuid():N}", null, 10m, true, 0));
+        var storeProduct = new StoreProduct(store.StoreId, product, new StoreProductDetails("Chair", $"chair-{Guid.NewGuid():N}", null, 10m, 21m, true, 0));
         storeProduct.ReplaceAttributeValues([(material, new AttributeValue { OptionIds = [oak.Id] }), (width, new AttributeValue { Decimal = 45m })]);
 
         dbContext.AddRange(material, finish, width, category, product, storeProduct);
