@@ -20,6 +20,7 @@ public static class CatalogModule
     {
         services.AddScoped<IStorePublishCheck, CatalogPublishCheck>();
         services.AddScoped<ISellableProducts, SellableProductLookup>();
+        services.AddScoped<ITenantProducts, TenantProductLookup>();
 
         return services;
     }

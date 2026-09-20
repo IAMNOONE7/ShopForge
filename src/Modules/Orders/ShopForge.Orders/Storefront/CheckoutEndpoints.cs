@@ -7,6 +7,7 @@ using ShopForge.Orders.Domain;
 using ShopForge.Orders.Persistence;
 using ShopForge.Shared.Catalog;
 using ShopForge.Shared.Http;
+using ShopForge.Shared.Inventory;
 using ShopForge.Shared.Payments;
 using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
@@ -15,6 +16,9 @@ namespace ShopForge.Orders.Storefront;
 
 internal static class CheckoutEndpoints
 {
+    // How long an unpaid order keeps its stock before the sweep gives it back (D-048).
+    public static readonly TimeSpan ReservationWindow = TimeSpan.FromMinutes(30);
+
     public static void MapCheckout(this IEndpointRouteBuilder storefront)
     {
         storefront.MapGet("/checkout/methods", GetMethodsAsync);
@@ -47,11 +51,12 @@ internal static class CheckoutEndpoints
         IStoreContext storeContext,
         ISellableProducts products,
         ICurrentStoreSettings storeSettings,
+        IStockLedger stock,
         IEnumerable<IPaymentProvider> paymentProviders,
         TimeProvider clock,
         CancellationToken cancellationToken)
     {
-        var carts = new Carts(httpContext, dbContext, storeContext, products);
+        var carts = new Carts(httpContext, dbContext, storeContext, products, stock);
         var cart = await carts.FindAsync(cancellationToken);
         var contents = cart is null ? null : await carts.ContentsAsync(cart, cancellationToken);
 
@@ -59,6 +64,16 @@ internal static class CheckoutEndpoints
             .SingleOrDefaultAsync(method => method.Code == request.PaymentMethodCode && method.IsActive, cancellationToken);
         var shipping = await dbContext.Set<ShippingMethod>()
             .SingleOrDefaultAsync(method => method.Code == request.ShippingMethodCode && method.IsActive, cancellationToken);
+
+        if (contents is { Changed: true })
+        {
+            return TypedResults.Problem(
+                statusCode: StatusCodes.Status409Conflict,
+                title: "Some products are no longer available",
+                detail: contents.ShortNames.Count > 0
+                    ? $"{string.Join(", ", contents.ShortNames)}: fewer items are in stock than your cart held. Please check it before ordering again."
+                    : "The cart was updated; please check it before ordering again.");
+        }
 
         var errors = new RequestErrors()
             .Check(IsEmail(request.Email), "email", "A valid e-mail address is required.")
@@ -73,25 +88,44 @@ internal static class CheckoutEndpoints
             return errors.ToProblem();
         }
 
-        if (contents!.RemovedLines > 0)
-        {
-            return TypedResults.Problem(
-                statusCode: StatusCodes.Status409Conflict,
-                title: "Some products are no longer available",
-                detail: "The cart was updated; please check it before ordering again.");
-        }
-
         var settings = await storeSettings.GetAsync(cancellationToken);
         var placedAt = clock.GetUtcNow();
+        var reservationExpiresAt = placedAt + ReservationWindow;
+
+        // Number, stock and order rows are written together: a checkout that cannot reserve leaves nothing behind.
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        var number = await OrderNumbers.NextAsync(dbContext, storeContext.StoreId!.Value, placedAt.Year, cancellationToken);
+        var requests = contents!.Items
+            .GroupBy(item => item.Product.ProductId)
+            .Select(group => new StockRequest(group.Key, group.Sum(item => item.Quantity)))
+            .ToList();
+        var reserved = await stock.ReserveAsync(requests, number, reservationExpiresAt, cancellationToken);
+
+        if (!reserved.Succeeded)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+
+            var names = contents.Items
+                .Where(item => reserved.UnavailableProductIds.Contains(item.Product.ProductId))
+                .Select(item => item.Product.Name);
+
+            return TypedResults.Problem(
+                statusCode: StatusCodes.Status409Conflict,
+                title: "Some products are no longer in stock",
+                detail: $"{string.Join(", ", names)}: not enough items left. Please check your cart.");
+        }
+
         var order = new Order(
             storeContext.StoreId!.Value,
-            await OrderNumbers.NextAsync(dbContext, storeContext.StoreId!.Value, placedAt.Year, cancellationToken),
+            number,
             settings.Currency,
             request.Email!,
             request.BillingAddress!.ToAddress(),
             (request.ShippingAddress ?? request.BillingAddress).ToAddress(),
             new ChosenMethods(payment!.Code, payment.Name, shipping!.Code, shipping.Name, shipping.Price, shipping.VatRate),
-            placedAt);
+            placedAt,
+            reservationExpiresAt);
 
         foreach (var item in contents.Items)
         {
@@ -101,6 +135,7 @@ internal static class CheckoutEndpoints
         dbContext.Add(order);
         dbContext.Remove(cart!);
         await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         carts.Forget();
 
         var provider = paymentProviders.Single(candidate => candidate.Key == payment.ProviderKey);

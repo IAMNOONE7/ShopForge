@@ -25,6 +25,15 @@ internal static class AdminCatalogApi
         return await IdFromAsync(response);
     }
 
+    public static async Task<HttpResponseMessage> SetStockAsync(this HttpClient admin, Guid productId, int quantity) =>
+        await admin.PutAsJsonAsync($"/api/admin/stock/{productId}", new { Quantity = quantity }, TestContext.Current.CancellationToken);
+
+    public static async Task StockAsync(this HttpClient admin, Guid productId, int quantity)
+    {
+        using var response = await admin.SetStockAsync(productId, quantity);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
     public static async Task<Guid> CreateCategoryAsync(this HttpClient admin, Guid storeId, string name)
     {
         using var response = await admin.PostAsJsonAsync($"/api/admin/stores/{storeId}/categories", new { Name = name, SortOrder = 0 });

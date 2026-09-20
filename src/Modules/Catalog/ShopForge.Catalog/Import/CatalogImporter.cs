@@ -1,12 +1,15 @@
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Catalog.Domain;
+using ShopForge.Shared.Inventory;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Catalog.Import;
 
-internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeContext)
+internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeContext, IStockLedger stock)
 {
     private const int MaxIssues = 200;
+
+    private readonly List<StockUpdate> _stockUpdates = [];
 
     public async Task<ImportReport> ImportAsync(ImportFile file, CancellationToken cancellationToken)
     {
@@ -35,6 +38,7 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
             try
             {
                 await dbContext.SaveChangesAsync(cancellationToken);
+                await ApplyStockAsync(issues, cancellationToken);
             }
             catch (DbUpdateException exception)
             {
@@ -52,6 +56,18 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
             failed,
             [.. file.Columns.Where(column => !ImportColumns.All.Contains(column) && !catalog.Definitions.ContainsKey(column))],
             [.. issues.Take(MaxIssues)]);
+    }
+
+    // Products only have their ids once the catalog is saved, so stock is written afterwards, from the rows that were valid.
+    private async Task ApplyStockAsync(List<ImportIssue> issues, CancellationToken cancellationToken)
+    {
+        foreach (var update in _stockUpdates)
+        {
+            if (!await stock.SetOnHandAsync(update.Product.Id, update.Quantity, "import", cancellationToken))
+            {
+                issues.Add(new ImportIssue(update.Row, ImportColumns.Stock, "Stock was left unchanged: open orders reserve more items than this."));
+            }
+        }
     }
 
     private RowOutcome Apply(ImportRow row, CatalogData catalog, List<ImportIssue> issues)
@@ -79,6 +95,7 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
         var attributes = ReadAttributes(row, catalog, issues);
         var ean = ReadEan(row, product, issues);
         var weight = ReadWeight(row, product, issues);
+        var stockQuantity = ReadStock(row, issues);
 
         if (issues.Count > 0)
         {
@@ -120,7 +137,30 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
             changed |= listing.SetAttributeValue(definition, AttributeCells.Resolve(definition, pending));
         }
 
+        if (stockQuantity is { } quantity)
+        {
+            _stockUpdates.Add(new StockUpdate(row.Number, product, quantity));
+            changed = true;
+        }
+
         return created ? RowOutcome.Created : changed ? RowOutcome.Updated : RowOutcome.Unchanged;
+    }
+
+    private static int? ReadStock(ImportRow row, List<ImportIssue> issues)
+    {
+        if (!row.Has(ImportColumns.Stock))
+        {
+            return null;
+        }
+
+        if (row[ImportColumns.Stock].TryInteger(out var quantity) && quantity >= 0)
+        {
+            return (int)quantity;
+        }
+
+        issues.Add(new ImportIssue(row.Number, ImportColumns.Stock, "Stock must be a whole number of zero or more."));
+
+        return null;
     }
 
     private static StoreProductDetails? ReadDetails(ImportRow row, StoreProduct? listing, CatalogData catalog, List<ImportIssue> issues)
@@ -301,3 +341,5 @@ internal enum RowOutcome
     Unchanged,
     Invalid,
 }
+
+internal sealed record StockUpdate(int Row, Product Product, int Quantity);

@@ -2,8 +2,16 @@ using System.Net;
 
 namespace ShopForge.IntegrationTests.Catalog;
 
-internal sealed record FurnitureStore(TestStore Store, TestStore OtherStore, HttpClient Admin, Guid ChairsCategoryId, Dictionary<string, Guid> Products)
+internal sealed record FurnitureStore(
+    TestStore Store,
+    TestStore OtherStore,
+    HttpClient Admin,
+    Guid ChairsCategoryId,
+    Dictionary<string, Guid> Products,
+    Dictionary<string, Guid> ProductIds)
 {
+    public const int StockPerProduct = 50;
+
     public static string SkuOf(string slug) => $"FURN-{slug.ToUpperInvariant()}";
 
     public static async Task<FurnitureStore> CreateAsync(ShopForgeApiFactory factory)
@@ -24,21 +32,33 @@ internal sealed record FurnitureStore(TestStore Store, TestStore OtherStore, Htt
         using var assigned = await admin.AssignCategoryAttributesAsync(storeId, chairs, material, width);
         Assert.Equal(HttpStatusCode.OK, assigned.StatusCode);
 
+        var productIds = new Dictionary<string, Guid>();
         var products = new Dictionary<string, Guid>
         {
-            ["oak-chair"] = await AddAsync(admin, storeId, "Oak Chair", 100m, chairs, new { material = "oak", width = 45, foldable = false, colors = new[] { "natural" }, seats = 1, released = "2024-03-01", care = "Oil once a year" }),
-            ["walnut-chair"] = await AddAsync(admin, storeId, "Walnut Chair", 200m, chairs, new { material = "walnut", width = 50, foldable = true, colors = new[] { "black", "natural" }, seats = 1, released = "2025-01-15" }),
-            ["beech-stool"] = await AddAsync(admin, storeId, "Beech Stool", 50m, chairs, new { material = "beech", width = 30.5, foldable = false, colors = new[] { "white" }, seats = 1, released = "2023-06-30" }),
-            ["oak-bench"] = await AddAsync(admin, storeId, "Oak Bench", 300m, categoryId: null, new { material = "oak", width = 120, foldable = false, colors = new[] { "natural" }, seats = 3 }),
+            ["oak-chair"] = await AddAsync(admin, storeId, productIds, "Oak Chair", 100m, chairs, new { material = "oak", width = 45, foldable = false, colors = new[] { "natural" }, seats = 1, released = "2024-03-01", care = "Oil once a year" }),
+            ["walnut-chair"] = await AddAsync(admin, storeId, productIds, "Walnut Chair", 200m, chairs, new { material = "walnut", width = 50, foldable = true, colors = new[] { "black", "natural" }, seats = 1, released = "2025-01-15" }),
+            ["beech-stool"] = await AddAsync(admin, storeId, productIds, "Beech Stool", 50m, chairs, new { material = "beech", width = 30.5, foldable = false, colors = new[] { "white" }, seats = 1, released = "2023-06-30" }),
+            ["oak-bench"] = await AddAsync(admin, storeId, productIds, "Oak Bench", 300m, categoryId: null, new { material = "oak", width = 120, foldable = false, colors = new[] { "natural" }, seats = 3 }),
         };
 
-        return new FurnitureStore(store, otherStore, admin, chairs, products);
+        return new FurnitureStore(store, otherStore, admin, chairs, products, productIds);
     }
 
-    private static async Task<Guid> AddAsync(HttpClient admin, Guid storeId, string name, decimal price, Guid? categoryId, object values)
+    private static async Task<Guid> AddAsync(
+        HttpClient admin,
+        Guid storeId,
+        Dictionary<string, Guid> productIds,
+        string name,
+        decimal price,
+        Guid? categoryId,
+        object values)
     {
         var slug = name.Replace(' ', '-').ToLowerInvariant();
-        var storeProductId = await admin.ListProductAsync(storeId, await admin.CreateProductAsync(FurnitureStore.SkuOf(slug)), name, price);
+        var productId = await admin.CreateProductAsync(FurnitureStore.SkuOf(slug));
+        var storeProductId = await admin.ListProductAsync(storeId, productId, name, price);
+
+        productIds[slug] = productId;
+        await admin.StockAsync(productId, StockPerProduct);
 
         using var setValues = await admin.SetAttributesAsync(storeId, storeProductId, values);
         Assert.Equal(HttpStatusCode.OK, setValues.StatusCode);

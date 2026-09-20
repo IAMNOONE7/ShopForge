@@ -79,14 +79,16 @@ public sealed class ImportTests(ShopForgeApiFactory factory)
     }
 
     [Fact]
-    public async Task Stock_and_unknown_columns_are_ignored_and_reported()
+    public async Task Import_sets_stock_and_reports_unknown_columns()
     {
         var furniture = await FurnitureStore.CreateAsync(factory);
 
         var report = await ImportAsync(furniture, ["sku", "name", "price", "vat", "stock", "supplier"], ["IMP-1", "Chair", 10m, 21m, 5, "ACME"]);
+        var page = await GetAsync<ProductPage>(furniture, "/api/storefront/products");
 
         Assert.Equal(1, report.Created);
-        Assert.Equal(["stock", "supplier"], report.IgnoredColumns.Order());
+        Assert.Equal(["supplier"], report.IgnoredColumns);
+        Assert.Equal(5, page.Items.Single(item => item.Slug == "chair").Available);
     }
 
     [Fact]
@@ -194,7 +196,7 @@ public sealed class ImportTests(ShopForgeApiFactory factory)
 
     private sealed record ProductPage(List<ProductSummary> Items, List<Facet> Filters);
 
-    private sealed record ProductSummary(string Slug, decimal Price);
+    private sealed record ProductSummary(string Slug, decimal Price, int Available);
 
     private sealed record Facet(string Code, List<FacetOption>? Options);
 

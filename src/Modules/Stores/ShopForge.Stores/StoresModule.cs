@@ -23,6 +23,7 @@ public static class StoresModule
         services.AddScoped<StoreResolver>();
         services.AddScoped<IStorePublishCheck, StoreBrandingPublishCheck>();
         services.AddScoped<ICurrentStoreSettings, CurrentStoreSettings>();
+        services.AddScoped<IStoreDirectory, StoreDirectory>();
 
         return services;
     }

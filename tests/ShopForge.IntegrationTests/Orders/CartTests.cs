@@ -66,7 +66,7 @@ public sealed class CartTests(ShopForgeApiFactory factory)
 
         Assert.Equal(HttpStatusCode.OK, hidden.StatusCode);
         Assert.Empty(cart.Items);
-        Assert.Equal(1, cart.RemovedLines);
+        Assert.True(cart.Changed);
     }
 
     [Theory]

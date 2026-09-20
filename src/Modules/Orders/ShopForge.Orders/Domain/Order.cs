@@ -10,7 +10,16 @@ internal sealed class Order : IStoreOwned
     {
     }
 
-    public Order(Guid storeId, string number, string currency, string email, Address billing, Address shipping, ChosenMethods methods, DateTimeOffset placedAt)
+    public Order(
+        Guid storeId,
+        string number,
+        string currency,
+        string email,
+        Address billing,
+        Address shipping,
+        ChosenMethods methods,
+        DateTimeOffset placedAt,
+        DateTimeOffset reservationExpiresAt)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(email);
 
@@ -28,8 +37,9 @@ internal sealed class Order : IStoreOwned
         ShippingMethodName = methods.ShippingName;
         ShippingPrice = methods.ShippingPrice;
         ShippingVatRate = methods.ShippingVatRate;
-        Status = OrderStatus.Placed;
+        Status = OrderStatus.AwaitingPayment;
         PlacedAt = placedAt;
+        ReservationExpiresAt = reservationExpiresAt;
     }
 
     public Guid Id { get; private set; }
@@ -43,6 +53,11 @@ internal sealed class Order : IStoreOwned
     public OrderStatus Status { get; private set; }
 
     public DateTimeOffset PlacedAt { get; private set; }
+
+    // Until this moment the order holds stock; after it, an unpaid order is cancelled and the stock goes back (D-048).
+    public DateTimeOffset ReservationExpiresAt { get; private set; }
+
+    public DateTimeOffset? PaidAt { get; private set; }
 
     public string Email { get; private set; } = null!;
 
@@ -81,6 +96,31 @@ internal sealed class Order : IStoreOwned
 
         _lines.Add(new OrderLine(storeProductId, name, unitPrice, vatRate, quantity));
     }
+
+    public bool ConfirmPayment(DateTimeOffset paidAt)
+    {
+        if (Status != OrderStatus.AwaitingPayment)
+        {
+            return false;
+        }
+
+        Status = OrderStatus.Paid;
+        PaidAt = paidAt;
+
+        return true;
+    }
+
+    public bool Cancel()
+    {
+        if (Status != OrderStatus.AwaitingPayment)
+        {
+            return false;
+        }
+
+        Status = OrderStatus.Cancelled;
+
+        return true;
+    }
 }
 
 internal sealed class OrderLine
@@ -115,7 +155,8 @@ internal sealed class OrderLine
 
 internal enum OrderStatus
 {
-    Placed,
+    AwaitingPayment,
+    Paid,
     Cancelled,
 }
 

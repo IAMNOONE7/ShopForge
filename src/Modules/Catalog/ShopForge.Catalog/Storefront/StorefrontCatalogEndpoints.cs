@@ -8,6 +8,7 @@ using ShopForge.Catalog.Domain;
 using ShopForge.Catalog.Images;
 using ShopForge.Shared.Files;
 using ShopForge.Shared.Http;
+using ShopForge.Shared.Inventory;
 
 namespace ShopForge.Catalog.Storefront;
 
@@ -37,6 +38,7 @@ internal static class StorefrontCatalogEndpoints
     private static async Task<Results<Ok<ProductPageResponse>, NotFound, ValidationProblem>> GetProductsAsync(
         HttpRequest request,
         DbContext dbContext,
+        IStockLedger stock,
         string? category,
         string? sort,
         int? page,
@@ -95,6 +97,7 @@ internal static class StorefrontCatalogEndpoints
             .Select(storeProduct => new
             {
                 storeProduct.Id,
+                storeProduct.ProductId,
                 storeProduct.Slug,
                 storeProduct.Name,
                 storeProduct.Price,
@@ -107,6 +110,7 @@ internal static class StorefrontCatalogEndpoints
             })
             .ToListAsync(cancellationToken);
 
+        var available = await stock.AvailableAsync([.. items.Select(item => item.ProductId)], cancellationToken);
         var facets = new List<ProductFacetResponse>();
 
         foreach (var definition in await FacetDefinitionsAsync(dbContext, categoryId, definitions, cancellationToken))
@@ -115,7 +119,15 @@ internal static class StorefrontCatalogEndpoints
         }
 
         return TypedResults.Ok(new ProductPageResponse(
-            [.. items.Select(item => new ProductSummaryResponse(item.Id, item.Slug, item.Name, item.Price, ImageUrl(item.Id, item.ImageId)))],
+            [
+                .. items.Select(item => new ProductSummaryResponse(
+                    item.Id,
+                    item.Slug,
+                    item.Name,
+                    item.Price,
+                    available.GetValueOrDefault(item.ProductId),
+                    ImageUrl(item.Id, item.ImageId))),
+            ],
             totalCount,
             pageNumber,
             size,
@@ -125,6 +137,7 @@ internal static class StorefrontCatalogEndpoints
     private static async Task<Results<Ok<ProductDetailResponse>, NotFound>> GetProductAsync(
         string slug,
         DbContext dbContext,
+        IStockLedger stock,
         CancellationToken cancellationToken)
     {
         var storeProduct = await dbContext.Set<StoreProduct>()
@@ -156,12 +169,15 @@ internal static class StorefrontCatalogEndpoints
             .ThenBy(definition => definition.Name)
             .ToListAsync(cancellationToken);
 
+        var available = await stock.AvailableAsync([storeProduct.ProductId], cancellationToken);
+
         return TypedResults.Ok(new ProductDetailResponse(
             storeProduct.Id,
             storeProduct.Slug,
             storeProduct.Name,
             storeProduct.Description,
             storeProduct.Price,
+            available.GetValueOrDefault(storeProduct.ProductId),
             [.. product.Images.OrderBy(image => image.Position).Select(image => new ProductImageResponse(ImageUrl(storeProduct.Id, image.Id)!, image.AltText))],
             categories,
             [.. definitions.Select(definition => new ProductAttributeResponse(
@@ -319,7 +335,7 @@ internal sealed record StorefrontCategoryResponse(string Name, string Slug);
 
 internal sealed record ProductPageResponse(List<ProductSummaryResponse> Items, int TotalCount, int Page, int PageSize, List<ProductFacetResponse> Filters);
 
-internal sealed record ProductSummaryResponse(Guid Id, string Slug, string Name, decimal Price, string? ImageUrl);
+internal sealed record ProductSummaryResponse(Guid Id, string Slug, string Name, decimal Price, int Available, string? ImageUrl);
 
 internal sealed record ProductFacetResponse(string Code, string Name, AttributeType Type, string? Unit)
 {
@@ -348,6 +364,7 @@ internal sealed record ProductDetailResponse(
     string Name,
     string? Description,
     decimal Price,
+    int Available,
     List<ProductImageResponse> Images,
     List<StorefrontCategoryResponse> Categories,
     List<ProductAttributeResponse> Attributes);

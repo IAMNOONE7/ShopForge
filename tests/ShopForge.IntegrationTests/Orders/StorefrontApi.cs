@@ -39,9 +39,9 @@ internal sealed class StorefrontApi(ShopForgeApiFactory factory, TestStore store
     private string Url(string path) => $"http://{store.HostName}{path}";
 }
 
-internal sealed record CartView(List<CartLineView> Items, int Count, decimal ItemsTotal, decimal VatTotal, int RemovedLines);
+internal sealed record CartView(List<CartLineView> Items, int Count, decimal ItemsTotal, decimal VatTotal, bool Changed);
 
-internal sealed record CartLineView(Guid StoreProductId, string Name, decimal UnitPrice, int Quantity, decimal LineTotal);
+internal sealed record CartLineView(Guid StoreProductId, string Name, decimal UnitPrice, int Quantity, decimal LineTotal, int Available);
 
 internal sealed record PlacedOrder(string Number, Guid Token, string PaymentInstructions);
 

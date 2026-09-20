@@ -10,6 +10,7 @@ using ShopForge.Catalog.Development;
 using ShopForge.Infrastructure;
 using ShopForge.Infrastructure.Files;
 using ShopForge.Infrastructure.Persistence;
+using ShopForge.Inventory;
 using ShopForge.Orders;
 using ShopForge.Orders.Development;
 using ShopForge.Shared.Security;
@@ -36,10 +37,13 @@ builder.Services.AddHttpLogging(options =>
 builder.Services.AddScoped<StoreContext>();
 builder.Services.AddScoped<IStoreContext>(provider => provider.GetRequiredService<StoreContext>());
 
-builder.Services.AddInfrastructure(builder.Configuration, [StoresModule.Assembly, AccessModule.Assembly, CatalogModule.Assembly, OrdersModule.Assembly]);
+builder.Services.AddInfrastructure(
+    builder.Configuration,
+    [StoresModule.Assembly, AccessModule.Assembly, CatalogModule.Assembly, InventoryModule.Assembly, OrdersModule.Assembly]);
 builder.Services.AddStoresModule();
 builder.Services.AddAccessModule();
 builder.Services.AddCatalogModule();
+builder.Services.AddInventoryModule();
 builder.Services.AddOrdersModule();
 
 builder.Services.AddHealthChecks()
@@ -69,6 +73,7 @@ var tenantAdmin = app.MapGroup("/api/admin")
     .RequireAdminTenant();
 tenantAdmin.MapStoresAdminEndpoints();
 tenantAdmin.MapCatalogTenantAdminEndpoints();
+tenantAdmin.MapInventoryTenantAdminEndpoints();
 
 var storeAdmin = tenantAdmin.MapGroup("/stores/{storeId:guid}").RequireAdminStore();
 storeAdmin.MapStoresStoreAdminEndpoints();

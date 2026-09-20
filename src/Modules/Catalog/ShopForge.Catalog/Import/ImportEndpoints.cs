@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Catalog.Domain;
+using ShopForge.Shared.Inventory;
 using ShopForge.Shared.Security;
 using ShopForge.Shared.Tenancy;
 
@@ -27,6 +28,7 @@ internal static class ImportEndpoints
         IFormFile? file,
         DbContext dbContext,
         IStoreContext storeContext,
+        IStockLedger stock,
         CancellationToken cancellationToken)
     {
         if (file is not { Length: > 0 } || file.Length > ImportFile.MaxBytes)
@@ -39,7 +41,7 @@ internal static class ImportEndpoints
             await using var content = file.OpenReadStream();
             var import = ImportFile.Read(content);
 
-            return TypedResults.Ok(await new CatalogImporter(dbContext, storeContext).ImportAsync(import, cancellationToken));
+            return TypedResults.Ok(await new CatalogImporter(dbContext, storeContext, stock).ImportAsync(import, cancellationToken));
         }
         catch (ImportFileException exception)
         {

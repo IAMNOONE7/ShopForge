@@ -15,6 +15,7 @@ internal sealed class SellableProductLookup(DbContext dbContext) : ISellableProd
                 select new
                 {
                     storeProduct.Id,
+                    storeProduct.ProductId,
                     storeProduct.Name,
                     storeProduct.Slug,
                     storeProduct.Price,
@@ -27,6 +28,7 @@ internal sealed class SellableProductLookup(DbContext dbContext) : ISellableProd
         [
             .. products.Select(product => new SellableProduct(
                 product.Id,
+                product.ProductId,
                 product.Name,
                 product.Slug,
                 product.Price,

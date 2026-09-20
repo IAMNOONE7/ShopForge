@@ -6,4 +6,4 @@ public interface ISellableProducts
     Task<IReadOnlyList<SellableProduct>> FindAsync(IReadOnlyCollection<Guid> storeProductIds, CancellationToken cancellationToken);
 }
 
-public sealed record SellableProduct(Guid StoreProductId, string Name, string Slug, decimal Price, decimal VatRate, string? ImageUrl);
+public sealed record SellableProduct(Guid StoreProductId, Guid ProductId, string Name, string Slug, decimal Price, decimal VatRate, string? ImageUrl);

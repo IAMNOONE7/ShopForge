@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Orders.Domain;
+using ShopForge.Shared.Inventory;
+using ShopForge.Shared.Security;
 
 namespace ShopForge.Orders.Admin;
 
@@ -13,6 +15,8 @@ internal static class AdminOrderEndpoints
     {
         storeAdmin.MapGet("/orders", GetOrdersAsync);
         storeAdmin.MapGet("/orders/{number}", GetOrderAsync);
+        storeAdmin.MapPost("/orders/{number}/payment", ConfirmPaymentAsync).RequireAuthorization(AdminPolicies.StoreManagement);
+        storeAdmin.MapPost("/orders/{number}/cancel", CancelAsync).RequireAuthorization(AdminPolicies.StoreManagement);
     }
 
     private static async Task<Ok<List<AdminOrderResponse>>> GetOrdersAsync(DbContext dbContext, CancellationToken cancellationToken)
@@ -34,6 +38,63 @@ internal static class AdminOrderEndpoints
         var order = await dbContext.Set<Order>().AsNoTracking().SingleOrDefaultAsync(order => order.Number == number, cancellationToken);
 
         return order is null ? TypedResults.NotFound() : TypedResults.Ok(AdminOrderDetailResponse.From(order));
+    }
+
+    // Payment for the manual methods is confirmed by hand; the reserved stock leaves the warehouse at that moment.
+    private static Task<Results<Ok<AdminOrderDetailResponse>, NotFound, ProblemHttpResult>> ConfirmPaymentAsync(
+        string number,
+        DbContext dbContext,
+        IStockLedger stock,
+        TimeProvider clock,
+        CancellationToken cancellationToken) =>
+        ChangeAsync(
+            number,
+            dbContext,
+            order => order.ConfirmPayment(clock.GetUtcNow()),
+            (order, token) => stock.ConfirmAsync(order.Number, token),
+            "The order is not awaiting payment",
+            cancellationToken);
+
+    private static Task<Results<Ok<AdminOrderDetailResponse>, NotFound, ProblemHttpResult>> CancelAsync(
+        string number,
+        DbContext dbContext,
+        IStockLedger stock,
+        CancellationToken cancellationToken) =>
+        ChangeAsync(
+            number,
+            dbContext,
+            order => order.Cancel(),
+            (order, token) => stock.ReleaseAsync(order.Number, token),
+            "Only an order that is awaiting payment can be cancelled",
+            cancellationToken);
+
+    private static async Task<Results<Ok<AdminOrderDetailResponse>, NotFound, ProblemHttpResult>> ChangeAsync(
+        string number,
+        DbContext dbContext,
+        Func<Order, bool> change,
+        Func<Order, CancellationToken, Task> moveStock,
+        string rejection,
+        CancellationToken cancellationToken)
+    {
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        var order = await dbContext.Set<Order>().SingleOrDefaultAsync(order => order.Number == number, cancellationToken);
+
+        if (order is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        if (!change(order))
+        {
+            return TypedResults.Problem(statusCode: StatusCodes.Status409Conflict, title: rejection, detail: $"The order is {order.Status}.");
+        }
+
+        await moveStock(order, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return TypedResults.Ok(AdminOrderDetailResponse.From(order));
     }
 }
 

@@ -21,7 +21,7 @@ public sealed class CheckoutTests(ShopForgeApiFactory factory)
 
         Assert.Matches(@"^\d{4}-\d{5}$", order.Number);
         Assert.Contains(order.Number, order.PaymentInstructions, StringComparison.Ordinal);
-        Assert.Equal(("Placed", "buyer@example.test", "EUR"), (confirmation.Status, confirmation.Email, confirmation.Currency));
+        Assert.Equal(("AwaitingPayment", "buyer@example.test", "EUR"), (confirmation.Status, confirmation.Email, confirmation.Currency));
         Assert.Equal(2, confirmation.Lines.Single().Quantity);
         Assert.Empty(cart.Items);
     }
@@ -32,6 +32,7 @@ public sealed class CheckoutTests(ShopForgeApiFactory factory)
         var furniture = await FurnitureStore.CreateAsync(factory);
         var product = await furniture.Admin.CreateProductAsync();
         var storeProductId = await furniture.Admin.ListProductAsync(furniture.Store.StoreId, product, "Priced Chair", 121m);
+        await furniture.Admin.StockAsync(product, 10);
         using var shopper = new StorefrontApi(factory, furniture.Store);
         await AddToCartAsync(shopper, storeProductId, 2);
 
@@ -69,6 +70,7 @@ public sealed class CheckoutTests(ShopForgeApiFactory factory)
         var furniture = await FurnitureStore.CreateAsync(factory);
         var otherProduct = await furniture.Admin.CreateProductAsync();
         var otherListing = await furniture.Admin.ListProductAsync(furniture.OtherStore.StoreId, otherProduct, "Lamp", 10m);
+        await furniture.Admin.StockAsync(otherProduct, 10);
         using var firstShopper = new StorefrontApi(factory, furniture.Store);
         using var secondShopper = new StorefrontApi(factory, furniture.Store);
         using var otherStoreShopper = new StorefrontApi(factory, furniture.OtherStore);

@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using ShopForge.Orders.Domain;
 using ShopForge.Shared.Catalog;
 using ShopForge.Shared.Http;
+using ShopForge.Shared.Inventory;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Orders.Storefront;
@@ -27,9 +28,10 @@ internal static class CartEndpoints
         DbContext dbContext,
         IStoreContext storeContext,
         ISellableProducts products,
+        IStockLedger stock,
         CancellationToken cancellationToken)
     {
-        var carts = new Carts(httpContext, dbContext, storeContext, products);
+        var carts = new Carts(httpContext, dbContext, storeContext, products, stock);
         var cart = await carts.FindAsync(cancellationToken);
 
         return TypedResults.Ok(cart is null
@@ -43,6 +45,7 @@ internal static class CartEndpoints
         DbContext dbContext,
         IStoreContext storeContext,
         ISellableProducts products,
+        IStockLedger stock,
         CancellationToken cancellationToken)
     {
         var quantity = request.Quantity ?? 1;
@@ -58,7 +61,7 @@ internal static class CartEndpoints
             return new RequestErrors().Check(false, "storeProductId", "The product is not available in this store.").ToProblem();
         }
 
-        var carts = new Carts(httpContext, dbContext, storeContext, products);
+        var carts = new Carts(httpContext, dbContext, storeContext, products, stock);
         var cart = await carts.GetOrCreateAsync(cancellationToken);
         cart.Add(request.StoreProductId, quantity);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -73,6 +76,7 @@ internal static class CartEndpoints
         DbContext dbContext,
         IStoreContext storeContext,
         ISellableProducts products,
+        IStockLedger stock,
         CancellationToken cancellationToken)
     {
         var errors = new RequestErrors().Check(request.Quantity is >= 0 and <= Cart.MaxQuantity, "quantity", $"Quantity must be between 0 and {Cart.MaxQuantity}.");
@@ -82,7 +86,14 @@ internal static class CartEndpoints
             return errors.ToProblem();
         }
 
-        return await ChangeAsync(httpContext, dbContext, storeContext, products, cart => cart.SetQuantity(storeProductId, request.Quantity), cancellationToken);
+        return await ChangeAsync(
+            httpContext,
+            dbContext,
+            storeContext,
+            products,
+            stock,
+            cart => cart.SetQuantity(storeProductId, request.Quantity),
+            cancellationToken);
     }
 
     private static Task<Results<Ok<CartResponse>, ValidationProblem, NotFound>> RemoveItemAsync(
@@ -91,18 +102,20 @@ internal static class CartEndpoints
         DbContext dbContext,
         IStoreContext storeContext,
         ISellableProducts products,
+        IStockLedger stock,
         CancellationToken cancellationToken) =>
-        ChangeAsync(httpContext, dbContext, storeContext, products, cart => cart.SetQuantity(storeProductId, 0), cancellationToken);
+        ChangeAsync(httpContext, dbContext, storeContext, products, stock, cart => cart.SetQuantity(storeProductId, 0), cancellationToken);
 
     private static async Task<Results<Ok<CartResponse>, ValidationProblem, NotFound>> ChangeAsync(
         HttpContext httpContext,
         DbContext dbContext,
         IStoreContext storeContext,
         ISellableProducts products,
+        IStockLedger stock,
         Action<Cart> change,
         CancellationToken cancellationToken)
     {
-        var carts = new Carts(httpContext, dbContext, storeContext, products);
+        var carts = new Carts(httpContext, dbContext, storeContext, products, stock);
         var cart = await carts.FindAsync(cancellationToken);
 
         if (cart is null)
@@ -121,9 +134,9 @@ internal sealed record AddItemRequest(Guid StoreProductId, int? Quantity);
 
 internal sealed record SetQuantityRequest(int Quantity);
 
-internal sealed record CartResponse(List<CartLineResponse> Items, int Count, decimal ItemsTotal, decimal VatTotal, int RemovedLines)
+internal sealed record CartResponse(List<CartLineResponse> Items, int Count, decimal ItemsTotal, decimal VatTotal, bool Changed)
 {
-    public static readonly CartResponse Empty = new([], 0, 0m, 0m, 0);
+    public static readonly CartResponse Empty = new([], 0, 0m, 0m, false);
 
     public static CartResponse From(CartContents contents) => new(
         [
@@ -134,12 +147,13 @@ internal sealed record CartResponse(List<CartLineResponse> Items, int Count, dec
                 item.Product.Price,
                 item.Quantity,
                 item.LineTotal,
+                item.Available,
                 item.Product.ImageUrl)),
         ],
         contents.Count,
         contents.ItemsTotal,
         contents.VatTotal,
-        contents.RemovedLines);
+        contents.Changed);
 }
 
 internal sealed record CartLineResponse(
@@ -149,4 +163,5 @@ internal sealed record CartLineResponse(
     decimal UnitPrice,
     int Quantity,
     decimal LineTotal,
+    int Available,
     string? ImageUrl);

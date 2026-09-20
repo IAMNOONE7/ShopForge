@@ -2,11 +2,12 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Orders.Domain;
 using ShopForge.Shared.Catalog;
+using ShopForge.Shared.Inventory;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Orders.Storefront;
 
-internal sealed class Carts(HttpContext httpContext, DbContext dbContext, IStoreContext storeContext, ISellableProducts products)
+internal sealed class Carts(HttpContext httpContext, DbContext dbContext, IStoreContext storeContext, ISellableProducts products, IStockLedger stock)
 {
     private const string CookieName = "shopforge_cart";
 
@@ -48,37 +49,59 @@ internal sealed class Carts(HttpContext httpContext, DbContext dbContext, IStore
 
     public void Forget() => httpContext.Response.Cookies.Delete(CookieName);
 
-    // Lines are priced from the catalog on every read; products that disappeared drop out of the cart.
+    // Lines are priced from the catalog on every read: products that disappeared drop out of the cart, and quantities
+    // are capped at what is in stock so checkout is not the first place a customer hears about it.
     public async Task<CartContents> ContentsAsync(Cart cart, CancellationToken cancellationToken)
     {
         var sellable = await products.FindAsync([.. cart.Lines.Select(line => line.StoreProductId)], cancellationToken);
-        var removed = cart.Lines.Where(line => sellable.All(product => product.StoreProductId != line.StoreProductId)).ToList();
+        var available = await stock.AvailableAsync([.. sellable.Select(product => product.ProductId)], cancellationToken);
 
-        foreach (var line in removed)
+        var changed = false;
+        var shortNames = new List<string>();
+
+        foreach (var line in cart.Lines.ToList())
         {
-            cart.SetQuantity(line.StoreProductId, 0);
+            var product = sellable.SingleOrDefault(candidate => candidate.StoreProductId == line.StoreProductId);
+            var limit = product is null ? 0 : available.GetValueOrDefault(product.ProductId);
+
+            if (line.Quantity <= limit)
+            {
+                continue;
+            }
+
+            cart.SetQuantity(line.StoreProductId, limit);
+            changed = true;
+
+            if (product is not null)
+            {
+                shortNames.Add(product.Name);
+            }
         }
 
-        if (removed.Count > 0)
+        if (changed)
         {
             await dbContext.SaveChangesAsync(cancellationToken);
         }
 
         var items = sellable
-            .Select(product => new CartItem(product, cart.Lines.Single(line => line.StoreProductId == product.StoreProductId).Quantity))
+            .Where(product => cart.Lines.Any(line => line.StoreProductId == product.StoreProductId))
+            .Select(product => new CartItem(
+                product,
+                cart.Lines.Single(line => line.StoreProductId == product.StoreProductId).Quantity,
+                available.GetValueOrDefault(product.ProductId)))
             .OrderBy(item => item.Product.Name)
             .ToList();
 
-        return new CartContents(items, removed.Count);
+        return new CartContents(items, changed, shortNames);
     }
 }
 
-internal sealed record CartItem(SellableProduct Product, int Quantity)
+internal sealed record CartItem(SellableProduct Product, int Quantity, int Available)
 {
     public decimal LineTotal => Product.Price * Quantity;
 }
 
-internal sealed record CartContents(IReadOnlyList<CartItem> Items, int RemovedLines)
+internal sealed record CartContents(IReadOnlyList<CartItem> Items, bool Changed, IReadOnlyList<string> ShortNames)
 {
     public decimal ItemsTotal => Items.Sum(item => item.LineTotal);
 
