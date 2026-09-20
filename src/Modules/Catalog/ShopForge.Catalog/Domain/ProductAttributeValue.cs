@@ -41,4 +41,12 @@ internal sealed class ProductAttributeValue : IStoreOwned
     public DateOnly? DateValue { get; private set; }
 
     public Guid? OptionId { get; private set; }
+
+    internal bool HasSameValueAs(ProductAttributeValue other) =>
+        TextValue == other.TextValue
+        && IntegerValue == other.IntegerValue
+        && DecimalValue == other.DecimalValue
+        && BooleanValue == other.BooleanValue
+        && DateValue == other.DateValue
+        && OptionId == other.OptionId;
 }

@@ -4,6 +4,8 @@ namespace ShopForge.IntegrationTests.Catalog;
 
 internal sealed record FurnitureStore(TestStore Store, TestStore OtherStore, HttpClient Admin, Guid ChairsCategoryId, Dictionary<string, Guid> Products)
 {
+    public static string SkuOf(string slug) => $"FURN-{slug.ToUpperInvariant()}";
+
     public static async Task<FurnitureStore> CreateAsync(ShopForgeApiFactory factory)
     {
         var (store, otherStore) = await TestStores.CreateTwoStoresOfOneTenantAsync(factory.Services);
@@ -35,7 +37,8 @@ internal sealed record FurnitureStore(TestStore Store, TestStore OtherStore, Htt
 
     private static async Task<Guid> AddAsync(HttpClient admin, Guid storeId, string name, decimal price, Guid? categoryId, object values)
     {
-        var storeProductId = await admin.ListProductAsync(storeId, await admin.CreateProductAsync(), name, price);
+        var slug = name.Replace(' ', '-').ToLowerInvariant();
+        var storeProductId = await admin.ListProductAsync(storeId, await admin.CreateProductAsync(FurnitureStore.SkuOf(slug)), name, price);
 
         using var setValues = await admin.SetAttributesAsync(storeId, storeProductId, values);
         Assert.Equal(HttpStatusCode.OK, setValues.StatusCode);

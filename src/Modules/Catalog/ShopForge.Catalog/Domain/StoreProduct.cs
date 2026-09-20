@@ -41,7 +41,7 @@ internal sealed class StoreProduct : IStoreOwned
 
     public IReadOnlyCollection<ProductAttributeValue> AttributeValues => _attributeValues;
 
-    public void Update(StoreProductDetails details)
+    public bool Update(StoreProductDetails details)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(details.Name);
 
@@ -55,12 +55,64 @@ internal sealed class StoreProduct : IStoreOwned
             throw new ArgumentException($"'{details.Slug}' is not a valid slug.", nameof(details));
         }
 
-        Name = details.Name.Trim();
-        Slug = details.Slug;
-        Description = string.IsNullOrWhiteSpace(details.Description) ? null : details.Description.Trim();
-        Price = details.Price;
-        IsVisible = details.IsVisible;
-        SortOrder = details.SortOrder;
+        var updated = new StoreProductDetails(
+            details.Name.Trim(),
+            details.Slug,
+            string.IsNullOrWhiteSpace(details.Description) ? null : details.Description.Trim(),
+            details.Price,
+            details.IsVisible,
+            details.SortOrder);
+
+        if (updated == Current)
+        {
+            return false;
+        }
+
+        Name = updated.Name;
+        Slug = updated.Slug;
+        Description = updated.Description;
+        Price = updated.Price;
+        IsVisible = updated.IsVisible;
+        SortOrder = updated.SortOrder;
+
+        return true;
+    }
+
+    public StoreProductDetails Current => new(Name, Slug, Description, Price, IsVisible, SortOrder);
+
+    // Import sets only the attributes present in the file; values of other attributes stay as they are.
+    public bool SetAttributeValue(AttributeDefinition definition, AttributeValue value)
+    {
+        if (definition.StoreId != StoreId)
+        {
+            throw new InvalidOperationException("Attributes must belong to the product's store.");
+        }
+
+        var replacement = definition.CreateValues(Id, value).ToList();
+        var existing = _attributeValues.Where(current => current.AttributeDefinitionId == definition.Id).ToList();
+
+        if (existing.Count == replacement.Count && existing.All(current => replacement.Any(candidate => candidate.HasSameValueAs(current))))
+        {
+            return false;
+        }
+
+        _attributeValues.RemoveAll(existing.Contains);
+        _attributeValues.AddRange(replacement);
+
+        return true;
+    }
+
+    public bool AddToCategories(IReadOnlyCollection<Category> categories)
+    {
+        if (categories.Any(category => category.StoreId != StoreId))
+        {
+            throw new InvalidOperationException("Categories must belong to the product's store.");
+        }
+
+        var missing = categories.Where(category => _categories.All(assignment => assignment.CategoryId != category.Id)).ToList();
+        _categories.AddRange(missing.Select(category => new ProductCategory(StoreId, Id, category.Id)));
+
+        return missing.Count > 0;
     }
 
     public void ReplaceAttributeValues(IReadOnlyCollection<(AttributeDefinition Definition, AttributeValue Value)> values)

@@ -32,15 +32,24 @@ internal sealed class Product : ITenantOwned
 
     public IReadOnlyList<ProductImage> Images => _images;
 
-    public void UpdatePhysicalData(string? ean, int? weightGrams)
+    public bool UpdatePhysicalData(string? ean, int? weightGrams)
     {
         if (weightGrams is < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(weightGrams), "Weight cannot be negative.");
         }
 
-        Ean = string.IsNullOrWhiteSpace(ean) ? null : ean.Trim();
+        var updatedEan = string.IsNullOrWhiteSpace(ean) ? null : ean.Trim();
+
+        if (updatedEan == Ean && weightGrams == WeightGrams)
+        {
+            return false;
+        }
+
+        Ean = updatedEan;
         WeightGrams = weightGrams;
+
+        return true;
     }
 
     public ProductImage AddImage(string contentType, string? altText)

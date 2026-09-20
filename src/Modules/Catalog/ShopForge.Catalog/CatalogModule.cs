@@ -1,6 +1,7 @@
 using System.Reflection;
 using Microsoft.AspNetCore.Routing;
 using ShopForge.Catalog.Admin;
+using ShopForge.Catalog.Import;
 using ShopForge.Catalog.Storefront;
 
 namespace ShopForge.Catalog;
@@ -22,6 +23,7 @@ public static class CatalogModule
     {
         storeAdmin.MapAdminStoreCatalog();
         storeAdmin.MapAdminAttributes();
+        storeAdmin.MapCatalogImport();
 
         return storeAdmin;
     }
