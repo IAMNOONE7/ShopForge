@@ -53,6 +53,18 @@ export type AttributeInput = {
 
 export type AttributeValues = Record<string, string | number | boolean | string[]>
 
+export type ImportIssue = { row: number; column: string | null; message: string }
+
+export type ImportReport = {
+  created: number
+  updated: number
+  skipped: number
+  invalid: number
+  failed: number
+  ignoredColumns: string[]
+  issues: ImportIssue[]
+}
+
 export type StoreProductInput = {
   name: string
   slug?: string | null
@@ -113,6 +125,8 @@ export const api = {
     request<StoreProduct>('PUT', `/api/admin/stores/${storeId}/products/${storeProductId}`, input),
   assignCategories: (storeId: string, storeProductId: string, categoryIds: string[]) =>
     request<StoreProduct>('PUT', `/api/admin/stores/${storeId}/products/${storeProductId}/categories`, { categoryIds }),
+
+  importProducts: (storeId: string, file: File) => request<ImportReport>('POST', `/api/admin/stores/${storeId}/import`, formWith(file)),
 
   attributes: (storeId: string) => request<AttributeDefinition[]>('GET', `/api/admin/stores/${storeId}/attributes`),
   createAttribute: (storeId: string, input: AttributeInput) =>

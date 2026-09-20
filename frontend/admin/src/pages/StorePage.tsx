@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useOutletContext, useParams } from 'react-router'
 import { api, type AdminStore, type AttributeDefinition, type AttributeValues, type Category, type StoreProduct, type StoreProductInput } from '../api'
 import { AttributesSection } from '../components/AttributesSection'
+import { ImportSection } from '../components/ImportSection'
 import { AttributeValueFields } from '../components/AttributeValueFields'
 import { readAttributeValues } from '../components/attributeValues'
 import { useAction } from '../useAction'
@@ -77,6 +78,8 @@ export function StorePage() {
       </section>
 
       <AttributesSection storeId={storeId} attributes={attributeList} run={run} />
+
+      <ImportSection storeId={storeId} run={run} />
 
       <section>
         <h2>Categories</h2>

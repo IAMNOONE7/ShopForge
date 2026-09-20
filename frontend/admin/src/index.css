@@ -174,3 +174,7 @@ td {
   flex-wrap: wrap;
   gap: 0.5rem 1rem;
 }
+
+.import-summary {
+  font-weight: 600;
+}
