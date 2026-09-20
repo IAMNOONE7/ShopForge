@@ -75,7 +75,7 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
         var product = catalog.Products.GetValueOrDefault(sku);
         var listing = product is null ? null : catalog.Listings.GetValueOrDefault(product.Id);
         var details = ReadDetails(row, listing, catalog, issues);
-        var categories = ReadCategories(row, catalog, issues);
+        var categoryNames = ReadCategoryNames(row, issues);
         var attributes = ReadAttributes(row, catalog, issues);
         var ean = ReadEan(row, product, issues);
         var weight = ReadWeight(row, product, issues);
@@ -113,11 +113,11 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
         }
 
         catalog.Slugs[details!.Slug] = listing.Id;
-        changed |= listing.AddToCategories(categories);
+        changed |= listing.AddToCategories(ResolveCategories(categoryNames, catalog));
 
-        foreach (var (definition, value) in attributes)
+        foreach (var (definition, pending) in attributes)
         {
-            changed |= listing.SetAttributeValue(definition, value);
+            changed |= listing.SetAttributeValue(definition, AttributeCells.Resolve(definition, pending));
         }
 
         return created ? RowOutcome.Created : changed ? RowOutcome.Updated : RowOutcome.Unchanged;
@@ -187,23 +187,29 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
         return issues.Count > 0 ? null : new StoreProductDetails(name!, slug!, description, price!.Value, visible, sortOrder);
     }
 
-    private List<Category> ReadCategories(ImportRow row, CatalogData catalog, List<ImportIssue> issues)
+    private static List<string> ReadCategoryNames(ImportRow row, List<ImportIssue> issues)
+    {
+        var names = Split(row[ImportColumns.Categories].Text).ToList();
+
+        foreach (var name in names.Where(name => Slugs.Create(name).Length == 0))
+        {
+            issues.Add(new ImportIssue(row.Number, ImportColumns.Categories, $"'{name}' is not a usable category name."));
+        }
+
+        return names;
+    }
+
+    private List<Category> ResolveCategories(IEnumerable<string> names, CatalogData catalog)
     {
         var categories = new List<Category>();
 
-        foreach (var entry in Split(row[ImportColumns.Categories].Text))
+        foreach (var name in names)
         {
-            var slug = Slugs.Create(entry);
-
-            if (slug.Length == 0)
-            {
-                issues.Add(new ImportIssue(row.Number, ImportColumns.Categories, $"'{entry}' is not a usable category name."));
-                continue;
-            }
+            var slug = Slugs.Create(name);
 
             if (!catalog.Categories.TryGetValue(slug, out var category))
             {
-                category = new Category(catalog.StoreId, entry, slug, catalog.Categories.Count);
+                category = new Category(catalog.StoreId, name, slug, catalog.Categories.Count);
                 catalog.Categories[slug] = category;
                 dbContext.Add(category);
             }
@@ -214,9 +220,9 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
         return categories;
     }
 
-    private static List<(AttributeDefinition Definition, AttributeValue Value)> ReadAttributes(ImportRow row, CatalogData catalog, List<ImportIssue> issues)
+    private static List<(AttributeDefinition Definition, PendingAttributeValue Value)> ReadAttributes(ImportRow row, CatalogData catalog, List<ImportIssue> issues)
     {
-        var values = new List<(AttributeDefinition, AttributeValue)>();
+        var values = new List<(AttributeDefinition, PendingAttributeValue)>();
 
         foreach (var (column, definition) in catalog.Definitions.Where(entry => row.Has(entry.Key)))
         {

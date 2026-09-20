@@ -4,38 +4,38 @@ namespace ShopForge.Catalog.Import;
 
 internal static class AttributeCells
 {
-    // Options named in the file but missing from the attribute are created, so a store can grow its option lists by importing.
-    public static bool TryRead(AttributeDefinition definition, ImportCell cell, out AttributeValue value)
+    // Reads a cell without touching the model: option names are resolved (and created) only once the whole row is valid.
+    public static bool TryRead(AttributeDefinition definition, ImportCell cell, out PendingAttributeValue value)
     {
-        value = new AttributeValue();
+        value = new PendingAttributeValue();
 
         switch (definition.Type)
         {
             case AttributeType.Text when cell.Text.Length <= AttributeDefinition.MaxTextLength:
-                value = new AttributeValue { Text = cell.Text };
+                value = new PendingAttributeValue { Value = new AttributeValue { Text = cell.Text } };
                 return true;
             case AttributeType.Integer when cell.TryInteger(out var integer):
-                value = new AttributeValue { Integer = integer };
+                value = new PendingAttributeValue { Value = new AttributeValue { Integer = integer } };
                 return true;
             case AttributeType.Decimal when cell.TryDecimal(out var number):
-                value = new AttributeValue { Decimal = number };
+                value = new PendingAttributeValue { Value = new AttributeValue { Decimal = number } };
                 return true;
             case AttributeType.Boolean when cell.TryBoolean(out var flag):
-                value = new AttributeValue { Boolean = flag };
+                value = new PendingAttributeValue { Value = new AttributeValue { Boolean = flag } };
                 return true;
             case AttributeType.Date when cell.TryDate(out var date):
-                value = new AttributeValue { Date = date };
+                value = new PendingAttributeValue { Value = new AttributeValue { Date = date } };
                 return true;
             case AttributeType.Select or AttributeType.MultiSelect:
-                var names = definition.Type == AttributeType.Select ? [cell.Text] : CatalogImporter.Split(cell.Text).ToList();
-                var options = names.Select(name => Option(definition, name)).ToList();
+                List<string> names = definition.Type == AttributeType.Select ? [cell.Text] : [.. CatalogImporter.Split(cell.Text)];
+                var codes = names.Select(Slugs.Create).ToList();
 
-                if (names.Count == 0 || options.Any(option => option is null) || options.Distinct().Count() != options.Count)
+                if (names.Count == 0 || codes.Any(code => code.Length == 0) || codes.Distinct().Count() != codes.Count)
                 {
                     return false;
                 }
 
-                value = new AttributeValue { OptionIds = [.. options.Select(option => option!.Id)] };
+                value = new PendingAttributeValue { OptionNames = names };
                 return true;
             default:
                 return false;
@@ -53,15 +53,24 @@ internal static class AttributeCells
         _ => "Expected a list of distinct option names.",
     };
 
-    private static AttributeOption? Option(AttributeDefinition definition, string name)
+    // Options named in the file but missing from the attribute are created, so a store can grow its option lists by importing.
+    public static AttributeValue Resolve(AttributeDefinition definition, PendingAttributeValue pending)
     {
-        var code = Slugs.Create(name);
-
-        if (code.Length == 0)
+        if (pending.Value is { } value)
         {
-            return null;
+            return value;
         }
 
-        return definition.Options.SingleOrDefault(option => option.Code == code) ?? definition.AddOption(name, code);
+        var options = pending.OptionNames.Select(name =>
+            definition.Options.SingleOrDefault(option => option.Code == Slugs.Create(name)) ?? definition.AddOption(name, Slugs.Create(name)));
+
+        return new AttributeValue { OptionIds = [.. options.Select(option => option.Id)] };
     }
+}
+
+internal sealed record PendingAttributeValue
+{
+    public AttributeValue? Value { get; init; }
+
+    public IReadOnlyList<string> OptionNames { get; init; } = [];
 }

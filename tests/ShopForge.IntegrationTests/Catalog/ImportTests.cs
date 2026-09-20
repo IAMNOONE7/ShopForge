@@ -102,6 +102,22 @@ public sealed class ImportTests(ShopForgeApiFactory factory)
         Assert.Contains(page.Filters.Single(filter => filter.Code == "colors").Options!, option => option.Code == "green");
     }
 
+    [Fact]
+    public async Task An_invalid_row_creates_neither_categories_nor_options()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+
+        var report = await ImportAsync(furniture, ["sku", "name", "price", "categories", "material"],
+            ["IMP-GOOD", "Real Chair", 10m, "Chairs", "Oak"],
+            ["IMP-BAD", "Ghost Chair", "free", "Ghost Category", "Phantom"]);
+        var categories = await GetAsync<List<StorefrontCategory>>(furniture, "/api/storefront/categories");
+        var page = await GetAsync<ProductPage>(furniture, "/api/storefront/products");
+
+        Assert.Equal((1, 1), (report.Created, report.Invalid));
+        Assert.DoesNotContain(categories, category => category.Slug == "ghost-category");
+        Assert.DoesNotContain(page.Filters.Single(filter => filter.Code == "material").Options!, option => option.Code == "phantom");
+    }
+
     [Theory]
     [InlineData(new[] { "name", "price" }, "sku")]
     [InlineData(new[] { "sku", "sku" }, "unique")]
