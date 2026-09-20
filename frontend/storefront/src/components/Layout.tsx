@@ -1,10 +1,12 @@
 import { Link, NavLink, Outlet } from 'react-router'
 import { getCategories, type Category } from '../api'
+import { useCart } from '../cartContext'
 import { useStore } from '../storeContext'
 import { useRequest } from '../useRequest'
 
 export function Layout() {
   const store = useStore()
+  const { cart } = useCart()
   const categories = useRequest('categories', getCategories)
   const categoryList: Category[] = categories.status === 'ready' ? categories.data : []
 
@@ -25,6 +27,9 @@ export function Layout() {
               </NavLink>
             ))}
           </nav>
+          <NavLink to="/cart" className="cart-link">
+            Cart{cart && cart.count > 0 && <span className="cart-count">{cart.count}</span>}
+          </NavLink>
         </div>
       </header>
       <main className="app">

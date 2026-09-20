@@ -190,3 +190,14 @@ td {
   color: #57606a;
   border-radius: 999px;
 }
+
+.order-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: start;
+}
+
+.order-detail address {
+  font-style: normal;
+}

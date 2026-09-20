@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react'
 import { BrowserRouter, Route, Routes } from 'react-router'
+import { CartProvider } from './components/CartProvider'
 import { Layout } from './components/Layout'
 import { Message } from './components/Message'
+import { CartPage } from './pages/CartPage'
+import { CheckoutPage } from './pages/CheckoutPage'
+import { OrderPage } from './pages/OrderPage'
 import { ProductDetailPage } from './pages/ProductDetailPage'
 import { ProductListPage } from './pages/ProductListPage'
 import { applyStore, fetchStore, type Store } from './store'
@@ -55,16 +59,21 @@ function App() {
     case 'ready':
       return (
         <StoreContext value={state.store}>
-          <BrowserRouter>
-            <Routes>
-              <Route element={<Layout />}>
-                <Route index element={<ProductListPage />} />
-                <Route path="c/:slug" element={<ProductListPage />} />
-                <Route path="p/:slug" element={<ProductDetailPage />} />
-                <Route path="*" element={<Message title="Page not found" text="This page does not exist." />} />
-              </Route>
-            </Routes>
-          </BrowserRouter>
+          <CartProvider>
+            <BrowserRouter>
+              <Routes>
+                <Route element={<Layout />}>
+                  <Route index element={<ProductListPage />} />
+                  <Route path="c/:slug" element={<ProductListPage />} />
+                  <Route path="p/:slug" element={<ProductDetailPage />} />
+                  <Route path="cart" element={<CartPage />} />
+                  <Route path="checkout" element={<CheckoutPage />} />
+                  <Route path="order/:number" element={<OrderPage />} />
+                  <Route path="*" element={<Message title="Page not found" text="This page does not exist." />} />
+                </Route>
+              </Routes>
+            </BrowserRouter>
+          </CartProvider>
         </StoreContext>
       )
   }

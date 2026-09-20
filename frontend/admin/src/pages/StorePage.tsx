@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useOutletContext, useParams } from 'react-router'
 import { api, type AdminStore, type AttributeDefinition, type AttributeValues, type Category, type StoreProduct, type StoreProductInput } from '../api'
 import { AttributesSection } from '../components/AttributesSection'
+import { MethodsSection } from '../components/MethodsSection'
+import { OrdersSection } from '../components/OrdersSection'
 import { StoreSettingsSection } from '../components/StoreSettingsSection'
 import { ImportSection } from '../components/ImportSection'
 import { AttributeValueFields } from '../components/AttributeValueFields'
@@ -43,6 +45,7 @@ export function StorePage() {
       api.listProduct(storeId, String(form.get('productId')), {
         name: String(form.get('name')),
         price: Number(form.get('price')),
+        vatRate: Number(form.get('vatRate')),
         isVisible: form.get('isVisible') === 'on',
         sortOrder: 0,
       }),
@@ -95,6 +98,8 @@ export function StorePage() {
         </div>
       </section>
 
+      <MethodsSection storeId={storeId} money={money} run={run} />
+
       <AttributesSection storeId={storeId} attributes={attributeList} run={run} />
 
       <ImportSection storeId={storeId} run={run} />
@@ -139,6 +144,7 @@ export function StorePage() {
           </select>
           <input name="name" placeholder="Name in this store" required />
           <input name="price" placeholder="Price" type="number" min="0" step="0.01" required />
+          <input name="vatRate" placeholder="VAT %" type="number" min="0" max="100" step="0.01" defaultValue="21" required />
           <label>
             <input name="isVisible" type="checkbox" defaultChecked /> Visible
           </label>
@@ -151,6 +157,7 @@ export function StorePage() {
               <th>Name</th>
               <th>SKU</th>
               <th>Price</th>
+              <th>VAT</th>
               <th>Visible</th>
               <th>Categories</th>
               <th />
@@ -180,6 +187,7 @@ export function StorePage() {
                   <td>{item.name}</td>
                   <td>{item.sku}</td>
                   <td>{money.format(item.price)}</td>
+                  <td>{item.vatRate}%</td>
                   <td>{item.isVisible ? 'Yes' : 'Hidden'}</td>
                   <td>{categoryList.filter((category) => item.categoryIds.includes(category.id)).map((category) => category.name).join(', ')}</td>
                   <td>
@@ -193,6 +201,8 @@ export function StorePage() {
           </tbody>
         </table>
       </section>
+
+      <OrdersSection storeId={storeId} money={money} culture={store.culture} />
     </>
   )
 }
@@ -216,6 +226,7 @@ function EditRow({ storeId, item, categories, attributes, onCancel, onSave }: Ed
         slug: String(form.get('slug')),
         description: String(form.get('description')) || null,
         price: Number(form.get('price')),
+        vatRate: Number(form.get('vatRate')),
         isVisible: form.get('isVisible') === 'on',
         sortOrder: item.sortOrder,
       },
@@ -227,14 +238,14 @@ function EditRow({ storeId, item, categories, attributes, onCancel, onSave }: Ed
   if (current.status !== 'ready') {
     return (
       <tr>
-        <td colSpan={6}>{current.status === 'error' ? current.message : 'Loading…'}</td>
+        <td colSpan={7}>{current.status === 'error' ? current.message : 'Loading…'}</td>
       </tr>
     )
   }
 
   return (
     <tr>
-      <td colSpan={6}>
+      <td colSpan={7}>
         <form action={save} className="stack edit-form">
           <label>
             Name <input name="name" defaultValue={item.name} required />
@@ -247,6 +258,9 @@ function EditRow({ storeId, item, categories, attributes, onCancel, onSave }: Ed
           </label>
           <label>
             Price <input name="price" type="number" min="0" step="0.01" defaultValue={item.price} required />
+          </label>
+          <label>
+            VAT rate % <input name="vatRate" type="number" min="0" max="100" step="0.01" defaultValue={item.vatRate} required />
           </label>
           <label>
             <input name="isVisible" type="checkbox" defaultChecked={item.isVisible} /> Visible in the storefront

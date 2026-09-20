@@ -31,6 +31,7 @@ export type StoreProduct = {
   slug: string
   description: string | null
   price: number
+  vatRate: number
   isVisible: boolean
   sortOrder: number
   categoryIds: string[]
@@ -80,9 +81,37 @@ export type StoreProductInput = {
   slug?: string | null
   description?: string | null
   price: number
+  vatRate: number
   isVisible: boolean
   sortOrder: number
 }
+
+export type AdminOrder = { number: string; placedAt: string; status: string; email: string; grandTotal: number; items: number }
+
+export type AdminAddress = { fullName: string; line1: string; line2: string | null; city: string; postalCode: string; country: string }
+
+export type AdminOrderLine = { productName: string; unitPrice: number; vatRate: number; quantity: number; lineTotal: number }
+
+export type AdminOrderDetail = {
+  number: string
+  placedAt: string
+  status: string
+  email: string
+  currency: string
+  paymentMethod: string
+  shippingMethod: string
+  shippingPrice: number
+  itemsTotal: number
+  vatTotal: number
+  grandTotal: number
+  billingAddress: AdminAddress
+  shippingAddress: AdminAddress
+  lines: AdminOrderLine[]
+}
+
+export type PaymentMethod = { code: string; name: string; providerKey: string; isActive: boolean }
+
+export type ShippingMethod = { code: string; name: string; providerKey: string; price: number; vatRate: number; isActive: boolean }
 
 type Problem = { title?: string; errors?: Record<string, string[]>; problems?: string[] }
 
@@ -153,6 +182,21 @@ export const api = {
     request<{ values: AttributeValues }>('GET', `/api/admin/stores/${storeId}/products/${storeProductId}/attributes`),
   setProductAttributes: (storeId: string, storeProductId: string, values: AttributeValues) =>
     request<{ values: AttributeValues }>('PUT', `/api/admin/stores/${storeId}/products/${storeProductId}/attributes`, { values }),
+
+  orders: (storeId: string) => request<AdminOrder[]>('GET', `/api/admin/stores/${storeId}/orders`),
+  order: (storeId: string, number: string) => request<AdminOrderDetail>('GET', `/api/admin/stores/${storeId}/orders/${number}`),
+
+  paymentMethods: (storeId: string) => request<PaymentMethod[]>('GET', `/api/admin/stores/${storeId}/payment-methods`),
+  createPaymentMethod: (storeId: string, name: string) =>
+    request<PaymentMethod>('POST', `/api/admin/stores/${storeId}/payment-methods`, { name, isActive: true }),
+  updatePaymentMethod: (storeId: string, code: string, input: { name: string; isActive: boolean }) =>
+    request<PaymentMethod>('PUT', `/api/admin/stores/${storeId}/payment-methods/${code}`, input),
+
+  shippingMethods: (storeId: string) => request<ShippingMethod[]>('GET', `/api/admin/stores/${storeId}/shipping-methods`),
+  createShippingMethod: (storeId: string, input: { name: string; price: number; vatRate: number }) =>
+    request<ShippingMethod>('POST', `/api/admin/stores/${storeId}/shipping-methods`, { ...input, isActive: true }),
+  updateShippingMethod: (storeId: string, code: string, input: { name: string; price: number; vatRate: number; isActive: boolean }) =>
+    request<ShippingMethod>('PUT', `/api/admin/stores/${storeId}/shipping-methods/${code}`, input),
 
   categories: (storeId: string) => request<Category[]>('GET', `/api/admin/stores/${storeId}/categories`),
   createCategory: (storeId: string, name: string) =>
