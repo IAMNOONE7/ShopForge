@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Catalog.Domain;
+using ShopForge.Shared.Inventory;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Catalog.Development;
@@ -143,14 +144,24 @@ public static class DevelopmentCatalog
         var category = new Category(storeId, categoryName, Slugs.Create(categoryName), sortOrder: 0);
         dbContext.Add(category);
 
+        var products = new List<Product>();
+
         foreach (var (sku, name, description, price) in items)
         {
             var product = new Product(tenantId, sku, ean: null, weightGrams: null);
             var storeProduct = new StoreProduct(storeId, product, new StoreProductDetails(name, Slugs.Create(name), description, price, VatRate: 21m, IsVisible: true, SortOrder: 0));
             storeProduct.AssignCategories([category]);
             dbContext.AddRange(product, storeProduct);
+            products.Add(product);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        var stock = scope.ServiceProvider.GetRequiredService<IStockLedger>();
+
+        foreach (var product in products)
+        {
+            await stock.SetOnHandAsync(product.Id, 25, "seed", cancellationToken);
+        }
     }
 }

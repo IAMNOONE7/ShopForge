@@ -19,7 +19,7 @@ export function ProductDetailPage() {
     case 'error':
       return <Message title="Something went wrong" text="The product could not be loaded. Please try again." />
     case 'ready': {
-      const { id, name, price, description, images, categories, attributes } = product.data
+      const { id, name, price, available, description, images, categories, attributes } = product.data
 
       return (
         <article className="product-detail">
@@ -33,7 +33,8 @@ export function ProductDetailPage() {
           <div className="product-info">
             <h1>{name}</h1>
             <p className="product-price">{formatPrice(price, store)}</p>
-            <AddToCart storeProductId={id} />
+            <p className="availability">{availability(available)}</p>
+            {available > 0 && <AddToCart storeProductId={id} available={available} />}
             {description && <p>{description}</p>}
             {attributes.length > 0 && (
               <table className="product-attributes">
@@ -61,6 +62,14 @@ export function ProductDetailPage() {
       )
     }
   }
+}
+
+function availability(available: number) {
+  if (available === 0) {
+    return 'Out of stock'
+  }
+
+  return available <= 5 ? `Only ${available} left in stock` : 'In stock'
 }
 
 function formatAttribute(attribute: ProductAttribute, store: Store) {

@@ -7,6 +7,7 @@ export type CartLine = {
   unitPrice: number
   quantity: number
   lineTotal: number
+  available: number
   imageUrl: string | null
 }
 
@@ -15,7 +16,7 @@ export type Cart = {
   count: number
   itemsTotal: number
   vatTotal: number
-  removedLines: number
+  changed: boolean
 }
 
 export type PaymentMethod = {

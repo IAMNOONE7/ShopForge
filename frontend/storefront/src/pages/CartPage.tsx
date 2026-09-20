@@ -23,7 +23,7 @@ export function CartPage() {
   return (
     <section className="cart">
       <h1>Cart</h1>
-      {cart.removedLines > 0 && <p className="notice">Products that are no longer for sale were removed from your cart.</p>}
+      {cart.changed && <p className="notice">Your cart was updated: some products are no longer available in the quantity you picked.</p>}
       <ul className="cart-lines">
         {cart.items.map((line) => (
           <li key={line.storeProductId} className="cart-line">
@@ -39,7 +39,7 @@ export function CartPage() {
             <input
               type="number"
               min="1"
-              max="99"
+              max={Math.min(line.available, 99)}
               value={line.quantity}
               aria-label={`Quantity of ${line.name}`}
               onChange={(event) => {

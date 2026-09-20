@@ -14,6 +14,7 @@ export function ProductCard({ product }: { product: ProductSummary }) {
       )}
       <span className="product-name">{product.name}</span>
       <span className="product-price">{formatPrice(product.price, store)}</span>
+      {product.available === 0 && <span className="hint">Out of stock</span>}
     </Link>
   )
 }

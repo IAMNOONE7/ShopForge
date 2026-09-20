@@ -109,6 +109,10 @@ export type AdminOrderDetail = {
   lines: AdminOrderLine[]
 }
 
+export type Stock = { productId: string; onHand: number; reserved: number; available: number }
+
+export type StockMovement = { occurredAt: string; quantity: number; reason: string; reference: string }
+
 export type PaymentMethod = { code: string; name: string; providerKey: string; isActive: boolean }
 
 export type ShippingMethod = { code: string; name: string; providerKey: string; price: number; vatRate: number; isActive: boolean }
@@ -183,8 +187,15 @@ export const api = {
   setProductAttributes: (storeId: string, storeProductId: string, values: AttributeValues) =>
     request<{ values: AttributeValues }>('PUT', `/api/admin/stores/${storeId}/products/${storeProductId}/attributes`, { values }),
 
+  stock: () => request<Stock[]>('GET', '/api/admin/stock'),
+  setStock: (productId: string, quantity: number) => request<Stock>('PUT', `/api/admin/stock/${productId}`, { quantity }),
+  stockMovements: (productId: string) => request<StockMovement[]>('GET', `/api/admin/stock/${productId}/movements`),
+
   orders: (storeId: string) => request<AdminOrder[]>('GET', `/api/admin/stores/${storeId}/orders`),
   order: (storeId: string, number: string) => request<AdminOrderDetail>('GET', `/api/admin/stores/${storeId}/orders/${number}`),
+  confirmOrderPayment: (storeId: string, number: string) =>
+    request<AdminOrderDetail>('POST', `/api/admin/stores/${storeId}/orders/${number}/payment`),
+  cancelOrder: (storeId: string, number: string) => request<AdminOrderDetail>('POST', `/api/admin/stores/${storeId}/orders/${number}/cancel`),
 
   paymentMethods: (storeId: string) => request<PaymentMethod[]>('GET', `/api/admin/stores/${storeId}/payment-methods`),
   createPaymentMethod: (storeId: string, name: string) =>

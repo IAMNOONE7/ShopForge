@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api, type AdminAddress, type AdminOrder } from '../api'
+import { useAction } from '../useAction'
 import { useRequest } from '../useRequest'
 
 type OrdersSectionProps = {
@@ -9,13 +10,16 @@ type OrdersSectionProps = {
 }
 
 export function OrdersSection({ storeId, money, culture }: OrdersSectionProps) {
-  const [orders] = useRequest(`orders:${storeId}`, () => api.orders(storeId))
+  const [orders, reload] = useRequest(`orders:${storeId}`, () => api.orders(storeId))
+  const [error, run] = useAction(reload)
   const [open, setOpen] = useState<string | null>(null)
   const list: AdminOrder[] = orders.status === 'ready' ? orders.data : []
 
   return (
     <section>
       <h2>Orders</h2>
+      <p className="hint">An order holds its stock until it is paid; unpaid orders are cancelled automatically after 30 minutes.</p>
+      {error && <p className="error">{error}</p>}
       {orders.status === 'error' && <p className="error">{orders.message}</p>}
       {orders.status === 'ready' && list.length === 0 && <p className="hint">No orders yet.</p>}
       {list.length > 0 && (
@@ -25,6 +29,7 @@ export function OrdersSection({ storeId, money, culture }: OrdersSectionProps) {
               <th>Number</th>
               <th>Placed</th>
               <th>Customer</th>
+              <th>Status</th>
               <th>Items</th>
               <th>Total</th>
               <th />
@@ -40,6 +45,7 @@ export function OrdersSection({ storeId, money, culture }: OrdersSectionProps) {
                 culture={culture}
                 isOpen={open === order.number}
                 onToggle={() => setOpen(open === order.number ? null : order.number)}
+                run={run}
               />
             ))}
           </tbody>
@@ -56,32 +62,57 @@ type RowsProps = {
   culture: string
   isOpen: boolean
   onToggle: () => void
+  run: (change: () => Promise<unknown>) => Promise<void>
 }
 
-function Rows({ storeId, order, money, culture, isOpen, onToggle }: RowsProps) {
+function Rows({ storeId, order, money, culture, isOpen, onToggle, run }: RowsProps) {
+  const awaitingPayment = order.status === 'AwaitingPayment'
+
   return (
     <>
       <tr>
         <td>{order.number}</td>
         <td>{new Date(order.placedAt).toLocaleString(culture)}</td>
         <td>{order.email}</td>
+        <td>{statusLabel(order.status)}</td>
         <td>{order.items}</td>
         <td>{money.format(order.grandTotal)}</td>
-        <td>
+        <td className="inline-form compact">
           <button type="button" onClick={onToggle}>
             {isOpen ? 'Hide' : 'Details'}
           </button>
+          {awaitingPayment && (
+            <>
+              <button type="button" onClick={() => run(() => api.confirmOrderPayment(storeId, order.number))}>
+                Mark as paid
+              </button>
+              <button type="button" onClick={() => run(() => api.cancelOrder(storeId, order.number))}>
+                Cancel
+              </button>
+            </>
+          )}
         </td>
       </tr>
       {isOpen && (
         <tr>
-          <td colSpan={6}>
+          <td colSpan={7}>
             <OrderDetail storeId={storeId} number={order.number} money={money} />
           </td>
         </tr>
       )}
     </>
   )
+}
+
+function statusLabel(status: string) {
+  switch (status) {
+    case 'AwaitingPayment':
+      return 'Awaiting payment'
+    case 'Paid':
+      return 'Paid'
+    default:
+      return 'Cancelled'
+  }
 }
 
 function OrderDetail({ storeId, number, money }: { storeId: string; number: string; money: Intl.NumberFormat }) {

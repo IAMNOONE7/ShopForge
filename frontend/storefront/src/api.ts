@@ -8,6 +8,7 @@ export type ProductSummary = {
   slug: string
   name: string
   price: number
+  available: number
   imageUrl: string | null
 }
 
@@ -50,6 +51,7 @@ export type ProductDetail = {
   name: string
   description: string | null
   price: number
+  available: number
   images: { url: string; altText: string | null }[]
   categories: Category[]
   attributes: ProductAttribute[]
