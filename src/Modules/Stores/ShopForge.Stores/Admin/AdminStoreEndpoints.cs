@@ -25,6 +25,7 @@ internal static class AdminStoreEndpoints
                 store.Currency,
                 store.Culture,
                 store.Status,
+                new AdminThemeResponse(store.Theme.PrimaryColor, store.Theme.SecondaryColor, store.Theme.BorderRadius),
                 store.LogoPath == null ? null : "/api/admin/stores/" + store.Id + "/logo",
                 store.Domains.Where(domain => domain.IsPrimary).Select(domain => domain.HostName).FirstOrDefault()))
             .ToListAsync(cancellationToken);
@@ -39,6 +40,7 @@ internal sealed record AdminStoreResponse(
     string Currency,
     string Culture,
     StoreStatus Status,
+    AdminThemeResponse Theme,
     string? LogoUrl,
     string? PrimaryHostName)
 {
@@ -48,6 +50,9 @@ internal sealed record AdminStoreResponse(
         store.Currency,
         store.Culture,
         store.Status,
+        new AdminThemeResponse(store.Theme.PrimaryColor, store.Theme.SecondaryColor, store.Theme.BorderRadius),
         store.LogoPath is null ? null : $"/api/admin/stores/{store.Id}/logo",
         primaryHostName);
 }
+
+internal sealed record AdminThemeResponse(string PrimaryColor, string SecondaryColor, int BorderRadius);

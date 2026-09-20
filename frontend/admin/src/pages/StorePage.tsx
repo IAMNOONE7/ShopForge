@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useOutletContext, useParams } from 'react-router'
 import { api, type AdminStore, type AttributeDefinition, type AttributeValues, type Category, type StoreProduct, type StoreProductInput } from '../api'
 import { AttributesSection } from '../components/AttributesSection'
+import { StoreSettingsSection } from '../components/StoreSettingsSection'
 import { ImportSection } from '../components/ImportSection'
 import { AttributeValueFields } from '../components/AttributeValueFields'
 import { readAttributeValues } from '../components/attributeValues'
@@ -50,11 +51,28 @@ export function StorePage() {
 
   return (
     <>
-      <h1>{store.name}</h1>
+      <h1>
+        {store.name}
+        {store.status === 'draft' && <span className="badge">draft</span>}
+      </h1>
       <p className="hint">
-        {store.primaryHostName ?? 'No domain'} · {store.currency} · {store.culture}
+        {store.primaryHostName ?? 'No address'} · {store.currency} · {store.culture}
+      </p>
+      <p className="inline-form">
+        {store.status === 'draft' ? (
+          <button type="button" onClick={() => run(() => api.publishStore(storeId))}>
+            Publish store
+          </button>
+        ) : (
+          <button type="button" onClick={() => run(() => api.unpublishStore(storeId))}>
+            Unpublish store
+          </button>
+        )}
+        {store.status === 'draft' && <span className="hint">A draft store does not serve its address yet.</span>}
       </p>
       {error && <p className="error">{error}</p>}
+
+      <StoreSettingsSection store={store} theme={store.theme} run={run} />
 
       <section>
         <h2>Branding</h2>

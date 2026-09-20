@@ -1,13 +1,23 @@
 export type CurrentUser = { id: string; email: string; role: string; tenantId: string }
 
+export type StoreStatus = 'draft' | 'published'
+
+export type StoreTheme = { primaryColor: string; secondaryColor: string; borderRadius: number }
+
 export type AdminStore = {
   id: string
   name: string
   currency: string
   culture: string
+  status: StoreStatus
+  theme: StoreTheme
   logoUrl: string | null
   primaryHostName: string | null
 }
+
+export type StoreSettings = { name: string; currency: string; culture: string; theme: StoreTheme }
+
+export type NewStore = StoreSettings & { hostName: string }
 
 export type ProductImage = { id: string; url: string; altText: string | null; position: number }
 
@@ -74,13 +84,13 @@ export type StoreProductInput = {
   sortOrder: number
 }
 
-type Problem = { title?: string; errors?: Record<string, string[]> }
+type Problem = { title?: string; errors?: Record<string, string[]>; problems?: string[] }
 
 export class ApiError extends Error {
   readonly status: number
 
   constructor(status: number, problem: Problem | null) {
-    const details = problem?.errors ? Object.values(problem.errors).flat().join(' ') : ''
+    const details = [...Object.values(problem?.errors ?? {}).flat(), ...(problem?.problems ?? [])].join(' ')
     super([problem?.title, details].filter(Boolean).join(': ') || `Request failed with status ${status}.`)
     this.status = status
   }
@@ -108,6 +118,10 @@ export const api = {
   logout: () => request<void>('POST', '/api/admin/auth/logout'),
 
   stores: () => request<AdminStore[]>('GET', '/api/admin/stores'),
+  createStore: (input: NewStore) => request<AdminStore>('POST', '/api/admin/stores', input),
+  updateStore: (storeId: string, input: StoreSettings) => request<AdminStore>('PUT', `/api/admin/stores/${storeId}`, input),
+  publishStore: (storeId: string) => request<AdminStore>('POST', `/api/admin/stores/${storeId}/publish`),
+  unpublishStore: (storeId: string) => request<AdminStore>('POST', `/api/admin/stores/${storeId}/unpublish`),
   uploadLogo: (storeId: string, file: File) => request<void>('PUT', `/api/admin/stores/${storeId}/logo`, formWith(file)),
 
   products: () => request<Product[]>('GET', '/api/admin/products'),

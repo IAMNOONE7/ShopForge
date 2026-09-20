@@ -13,10 +13,12 @@ export function Layout() {
         <strong>ShopForge Admin</strong>
         <nav>
           <NavLink to="/products">Products</NavLink>
+          <NavLink to="/stores/new">New store</NavLink>
           {stores.status === 'ready' &&
             stores.data.map((store) => (
               <NavLink key={store.id} to={`/stores/${store.id}`}>
                 {store.name}
+                {store.status === 'draft' && <span className="badge">draft</span>}
               </NavLink>
             ))}
         </nav>

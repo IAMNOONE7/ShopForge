@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
 import { ApiError, api, type CurrentUser } from './api'
 import { Layout } from './components/Layout'
 import { LoginPage } from './pages/LoginPage'
+import { NewStorePage } from './pages/NewStorePage'
 import { ProductsPage } from './pages/ProductsPage'
 import { StorePage } from './pages/StorePage'
 import { SessionContext } from './session'
@@ -40,6 +41,7 @@ function App() {
             <Routes>
               <Route element={<Layout />}>
                 <Route path="products" element={<ProductsPage />} />
+                <Route path="stores/new" element={<NewStorePage />} />
                 <Route path="stores/:storeId" element={<StorePage />} />
                 <Route path="*" element={<Navigate to="/products" replace />} />
               </Route>
