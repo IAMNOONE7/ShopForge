@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { useLocation, useParams, useSearchParams } from 'react-router'
 import { getOrder } from '../cart'
 import { Message } from '../components/Message'
@@ -11,7 +12,20 @@ export function OrderPage() {
   const store = useStore()
   const { state } = useLocation()
   const instructions = (state as { instructions?: string } | null)?.instructions
-  const order = useRequest(`order:${number}:${token}`, (signal) => getOrder(number, token, signal))
+  // A hosted payment is confirmed by the provider calling us, which can land a moment after the shopper is back.
+  const [attempt, setAttempt] = useState(0)
+  const order = useRequest(`order:${number}:${token}:${attempt}`, (signal) => getOrder(number, token, signal))
+  const awaitingPayment = order.status === 'ready' && order.data.status === 'AwaitingPayment'
+
+  useEffect(() => {
+    if (!awaitingPayment || attempt >= 5) {
+      return
+    }
+
+    const timer = setTimeout(() => setAttempt((current) => current + 1), 3000)
+
+    return () => clearTimeout(timer)
+  }, [awaitingPayment, attempt])
 
   switch (order.status) {
     case 'loading':
@@ -21,7 +35,7 @@ export function OrderPage() {
     case 'error':
       return <Message title="Something went wrong" text="The order could not be loaded. Please try again." />
     case 'ready': {
-      const { lines, shippingMethod, shippingPrice, itemsTotal, vatTotal, grandTotal, email, paymentMethod } = order.data
+      const { lines, shippingMethod, shippingPrice, itemsTotal, vatTotal, grandTotal, email, paymentMethod, status } = order.data
 
       return (
         <section className="order">
@@ -30,6 +44,9 @@ export function OrderPage() {
             Order <strong>{order.data.number}</strong> was placed. A confirmation goes to {email}.
           </p>
           {instructions && <p className="notice">{instructions}</p>}
+          {status === 'AwaitingPayment' && !instructions && <p className="notice">We are waiting for your payment to be confirmed.</p>}
+          {status === 'Paid' && <p className="notice">Your payment was received. Thank you.</p>}
+          {status === 'Cancelled' && <p className="notice">This order was cancelled because it was not paid in time.</p>}
           <table className="order-lines">
             <tbody>
               {lines.map((line) => (

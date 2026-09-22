@@ -131,6 +131,44 @@ public sealed class StripePaymentTests : IDisposable
     }
 
     [Fact]
+    public async Task An_order_survives_a_provider_that_will_not_answer()
+    {
+        var store = await StripeStoreAsync();
+        using var shopper = new StorefrontApi(_withStripe, store.Store);
+        await AddToCartAsync(shopper, store.Products["oak-chair"], 1);
+        _sessions.Fails = true;
+
+        try
+        {
+            var order = await PlaceOrderAsync(shopper);
+            var confirmation = await shopper.GetJsonAsync<OrderView>($"/api/storefront/orders/{order.Number}?token={order.Token}");
+
+            Assert.Null(order.RedirectUrl);
+            Assert.Contains("could not be started", order.PaymentInstructions, StringComparison.Ordinal);
+            Assert.Equal("AwaitingPayment", confirmation.Status);
+        }
+        finally
+        {
+            _sessions.Fails = false;
+        }
+    }
+
+    // A store can be set up on a deployment that has Stripe and then run on one that does not.
+    [Fact]
+    public async Task A_method_whose_provider_is_not_configured_is_not_offered()
+    {
+        var store = await StripeStoreAsync();
+        using var shopper = new StorefrontApi(_factory, store.Store);
+        await AddToCartAsync(shopper, store.Products["oak-chair"], 1);
+
+        var methods = await shopper.GetJsonAsync<CheckoutMethodsView>("/api/storefront/checkout/methods");
+        using var refused = await shopper.PostAsync("/api/storefront/checkout", Checkout.Request(payment: "card"));
+
+        Assert.DoesNotContain(methods.PaymentMethods, method => method.Code == "card");
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+    }
+
+    [Fact]
     public async Task Without_keys_a_store_cannot_offer_stripe()
     {
         var furniture = await FurnitureStore.CreateAsync(_factory);
@@ -210,4 +248,8 @@ public sealed class StripePaymentTests : IDisposable
     private sealed record StockView(Guid ProductId, int OnHand, int Reserved, int Available);
 
     private sealed record MovementView(int Quantity, string Reason, string Reference);
+
+    private sealed record CheckoutMethodsView(List<MethodView> PaymentMethods, List<MethodView> ShippingMethods);
+
+    private sealed record MethodView(string Code, string Name);
 }

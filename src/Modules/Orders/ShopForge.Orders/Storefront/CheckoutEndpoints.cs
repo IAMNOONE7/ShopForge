@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using ShopForge.Orders.Domain;
 using ShopForge.Orders.Persistence;
 using ShopForge.Shared.Catalog;
@@ -28,10 +29,15 @@ internal static class CheckoutEndpoints
         storefront.MapGet("/orders/{number}", GetOrderAsync);
     }
 
-    private static async Task<Ok<CheckoutMethodsResponse>> GetMethodsAsync(DbContext dbContext, CancellationToken cancellationToken)
+    private static async Task<Ok<CheckoutMethodsResponse>> GetMethodsAsync(
+        DbContext dbContext,
+        IEnumerable<IPaymentProvider> paymentProviders,
+        CancellationToken cancellationToken)
     {
+        // A method whose provider is not configured on this deployment is not on offer, however active the store left it.
+        var providerKeys = paymentProviders.Select(provider => provider.Key).ToList();
         var payment = await dbContext.Set<PaymentMethod>()
-            .Where(method => method.IsActive)
+            .Where(method => method.IsActive && providerKeys.Contains(method.ProviderKey))
             .OrderBy(method => method.Name)
             .Select(method => new PaymentMethodResponse(method.Code, method.Name))
             .ToListAsync(cancellationToken);
@@ -56,6 +62,7 @@ internal static class CheckoutEndpoints
         ICurrentCustomer currentCustomer,
         IStockLedger stock,
         IEnumerable<IPaymentProvider> paymentProviders,
+        ILoggerFactory loggerFactory,
         TimeProvider clock,
         CancellationToken cancellationToken)
     {
@@ -63,8 +70,11 @@ internal static class CheckoutEndpoints
         var cart = await carts.FindAsync(cancellationToken);
         var contents = cart is null ? null : await carts.ContentsAsync(cart, cancellationToken);
 
+        var providerKeys = paymentProviders.Select(provider => provider.Key).ToList();
         var payment = await dbContext.Set<PaymentMethod>()
-            .SingleOrDefaultAsync(method => method.Code == request.PaymentMethodCode && method.IsActive, cancellationToken);
+            .SingleOrDefaultAsync(
+                method => method.Code == request.PaymentMethodCode && method.IsActive && providerKeys.Contains(method.ProviderKey),
+                cancellationToken);
         var shipping = await dbContext.Set<ShippingMethod>()
             .SingleOrDefaultAsync(method => method.Code == request.ShippingMethodCode && method.IsActive, cancellationToken);
 
@@ -148,7 +158,8 @@ internal static class CheckoutEndpoints
 
         var provider = paymentProviders.Single(candidate => candidate.Key == payment.ProviderKey);
         var storefront = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}";
-        var instructions = await provider.StartAsync(
+        var instructions = await StartPaymentAsync(
+            provider,
             new PaymentRequest(
                 order.StoreId,
                 order.Number,
@@ -158,11 +169,34 @@ internal static class CheckoutEndpoints
                 ReturnUrl: $"{storefront}/order/{order.Number}?token={order.AccessToken}",
                 CancelUrl: $"{storefront}/cart",
                 order.ReservationExpiresAt),
+            loggerFactory,
             cancellationToken);
 
         return TypedResults.Created(
             $"/api/storefront/orders/{order.Number}?token={order.AccessToken}",
             new PlacedOrderResponse(order.Number, order.AccessToken, instructions.Message, instructions.RedirectUrl));
+    }
+
+    // The order is committed before the provider is called: if the provider is down the shopper still has an order,
+    // its stock and its link, and the store can take the payment another way (or the reservation runs out).
+    private static async Task<PaymentInstructions> StartPaymentAsync(
+        IPaymentProvider provider,
+        PaymentRequest request,
+        ILoggerFactory loggerFactory,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await provider.StartAsync(request, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            loggerFactory.CreateLogger(typeof(CheckoutEndpoints))
+                .LogError(exception, "Starting the {Provider} payment for order {OrderNumber} failed.", provider.Key, request.OrderNumber);
+
+            return new PaymentInstructions(
+                $"Order {request.OrderNumber} is placed, but the payment could not be started. The store will contact you about paying.");
+        }
     }
 
     private static async Task<Results<Ok<OrderResponse>, NotFound>> GetOrderAsync(

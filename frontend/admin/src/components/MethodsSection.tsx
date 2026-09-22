@@ -8,9 +8,11 @@ type MethodsSectionProps = {
 }
 
 export function MethodsSection({ storeId, money, run }: MethodsSectionProps) {
+  const [providers] = useRequest(`payment-providers:${storeId}`, () => api.paymentProviders(storeId))
   const [payment, reloadPayment] = useRequest(`payment-methods:${storeId}`, () => api.paymentMethods(storeId))
   const [shipping, reloadShipping] = useRequest(`shipping-methods:${storeId}`, () => api.shippingMethods(storeId))
   const paymentMethods: PaymentMethod[] = payment.status === 'ready' ? payment.data : []
+  const providerKeys = providers.status === 'ready' ? providers.data : ['manual']
   const shippingMethods: ShippingMethod[] = shipping.status === 'ready' ? shipping.data : []
 
   return (
@@ -19,6 +21,9 @@ export function MethodsSection({ storeId, money, run }: MethodsSectionProps) {
       <p className="hint">The store settles these itself: the order is placed and the customer is told how to pay.</p>
 
       <h3>Payment</h3>
+      <p className="hint">
+        A manual method is settled by the store itself; a provider method sends the shopper to the provider's payment page.
+      </p>
       {paymentMethods.map((method) => (
         <form
           key={method.code}
@@ -31,6 +36,7 @@ export function MethodsSection({ storeId, money, run }: MethodsSectionProps) {
           }
         >
           <input name="name" defaultValue={method.name} required />
+          <span className="chip">{method.providerKey}</span>
           <label>
             <input name="isActive" type="checkbox" defaultChecked={method.isActive} /> Offered at checkout
           </label>
@@ -41,12 +47,19 @@ export function MethodsSection({ storeId, money, run }: MethodsSectionProps) {
         className="inline-form"
         action={(form) =>
           run(async () => {
-            await api.createPaymentMethod(storeId, String(form.get('name')))
+            await api.createPaymentMethod(storeId, String(form.get('name')), String(form.get('providerKey')))
             reloadPayment()
           })
         }
       >
         <input name="name" placeholder="New payment method" required />
+        <select name="providerKey" defaultValue="manual">
+          {providerKeys.map((key) => (
+            <option key={key} value={key}>
+              {key}
+            </option>
+          ))}
+        </select>
         <button type="submit">Add</button>
       </form>
 

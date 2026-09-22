@@ -205,9 +205,10 @@ export const api = {
     request<AdminOrderDetail>('POST', `/api/admin/stores/${storeId}/orders/${number}/payment`),
   cancelOrder: (storeId: string, number: string) => request<AdminOrderDetail>('POST', `/api/admin/stores/${storeId}/orders/${number}/cancel`),
 
+  paymentProviders: (storeId: string) => request<string[]>('GET', `/api/admin/stores/${storeId}/payment-providers`),
   paymentMethods: (storeId: string) => request<PaymentMethod[]>('GET', `/api/admin/stores/${storeId}/payment-methods`),
-  createPaymentMethod: (storeId: string, name: string) =>
-    request<PaymentMethod>('POST', `/api/admin/stores/${storeId}/payment-methods`, { name, isActive: true }),
+  createPaymentMethod: (storeId: string, name: string, providerKey: string) =>
+    request<PaymentMethod>('POST', `/api/admin/stores/${storeId}/payment-methods`, { name, providerKey, isActive: true }),
   updatePaymentMethod: (storeId: string, code: string, input: { name: string; isActive: boolean }) =>
     request<PaymentMethod>('PUT', `/api/admin/stores/${storeId}/payment-methods/${code}`, input),
 
