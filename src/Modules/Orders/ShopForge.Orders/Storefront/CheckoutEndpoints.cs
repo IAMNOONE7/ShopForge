@@ -11,6 +11,7 @@ using ShopForge.Shared.Customers;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Inventory;
 using ShopForge.Shared.Payments;
+using ShopForge.Shared.Shipping;
 using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
 
@@ -25,6 +26,7 @@ internal static class CheckoutEndpoints
     public static void MapCheckout(this IEndpointRouteBuilder storefront)
     {
         storefront.MapGet("/checkout/methods", GetMethodsAsync);
+        storefront.MapGet("/checkout/pickup-points/{methodCode}", GetPickupPointsAsync);
         storefront.MapPost("/checkout", PlaceOrderAsync);
         storefront.MapGet("/orders/{number}", GetOrderAsync);
     }
@@ -46,10 +48,32 @@ internal static class CheckoutEndpoints
             .Where(method => method.IsActive)
             .OrderBy(method => method.Price)
             .ThenBy(method => method.Name)
-            .Select(method => new ShippingMethodResponse(method.Code, method.Name, method.Price))
+            .Select(method => new ShippingMethodResponse(method.Code, method.Name, method.Price, method.RequiresPickupPoint))
             .ToListAsync(cancellationToken);
 
         return TypedResults.Ok(new CheckoutMethodsResponse(payment, shipping));
+    }
+
+    private static async Task<Results<Ok<List<PickupPointResponse>>, NotFound>> GetPickupPointsAsync(
+        string methodCode,
+        DbContext dbContext,
+        IEnumerable<IShippingProvider> shippingProviders,
+        CancellationToken cancellationToken)
+    {
+        var method = await dbContext.Set<ShippingMethod>()
+            .SingleOrDefaultAsync(candidate => candidate.Code == methodCode && candidate.IsActive, cancellationToken);
+        var provider = method is null ? null : shippingProviders.SingleOrDefault(candidate => candidate.Key == method.ProviderKey);
+
+        if (method is null || provider is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var points = await provider.FindPickupPointsAsync(cancellationToken);
+
+        return TypedResults.Ok(points
+            .Select(point => new PickupPointResponse(point.Code, point.Name, point.Line1, point.City, point.PostalCode, point.Country))
+            .ToList());
     }
 
     private static async Task<Results<Created<PlacedOrderResponse>, ValidationProblem, ProblemHttpResult>> PlaceOrderAsync(
@@ -62,6 +86,7 @@ internal static class CheckoutEndpoints
         ICurrentCustomer currentCustomer,
         IStockLedger stock,
         IEnumerable<IPaymentProvider> paymentProviders,
+        IEnumerable<IShippingProvider> shippingProviders,
         ILoggerFactory loggerFactory,
         TimeProvider clock,
         CancellationToken cancellationToken)
@@ -75,8 +100,15 @@ internal static class CheckoutEndpoints
             .SingleOrDefaultAsync(
                 method => method.Code == request.PaymentMethodCode && method.IsActive && providerKeys.Contains(method.ProviderKey),
                 cancellationToken);
+        var shippingProviderKeys = shippingProviders.Select(provider => provider.Key).ToList();
         var shipping = await dbContext.Set<ShippingMethod>()
-            .SingleOrDefaultAsync(method => method.Code == request.ShippingMethodCode && method.IsActive, cancellationToken);
+            .SingleOrDefaultAsync(
+                method => method.Code == request.ShippingMethodCode && method.IsActive && shippingProviderKeys.Contains(method.ProviderKey),
+                cancellationToken);
+        var pickupPoint = shipping?.RequiresPickupPoint == true && !string.IsNullOrWhiteSpace(request.PickupPointCode)
+            ? await dbContext.Set<StorePickupPoint>()
+                .SingleOrDefaultAsync(point => point.Code == request.PickupPointCode && point.IsActive, cancellationToken)
+            : null;
 
         if (contents is { Changed: true })
         {
@@ -94,6 +126,7 @@ internal static class CheckoutEndpoints
             .Check(request.ShippingAddress is null || request.ShippingAddress.IsComplete, "shippingAddress", "The shipping address is incomplete.")
             .Check(payment is not null, "paymentMethodCode", "Choose one of the store's payment methods.")
             .Check(shipping is not null, "shippingMethodCode", "Choose one of the store's shipping methods.")
+            .Check(shipping?.RequiresPickupPoint != true || pickupPoint is not null, "pickupPointCode", "Choose one of the pickup points.")
             .Check(contents is { Items.Count: > 0 }, "cart", "The cart is empty.");
 
         if (errors.Any)
@@ -137,6 +170,7 @@ internal static class CheckoutEndpoints
             request.BillingAddress!.ToAddress(),
             (request.ShippingAddress ?? request.BillingAddress).ToAddress(),
             new ChosenMethods(payment!.Code, payment.Name, shipping!.Code, shipping.Name, shipping.Price, shipping.VatRate),
+            pickupPoint is null ? null : new ChosenPickupPoint(pickupPoint.Code, pickupPoint.Name, pickupPoint.Address),
             placedAt,
             reservationExpiresAt);
 
@@ -222,7 +256,8 @@ internal sealed record CheckoutRequest(
     AddressRequest? BillingAddress,
     AddressRequest? ShippingAddress,
     string? PaymentMethodCode,
-    string? ShippingMethodCode);
+    string? ShippingMethodCode,
+    string? PickupPointCode);
 
 internal sealed record AddressRequest(string? FullName, string? Line1, string? Line2, string? City, string? PostalCode, string? Country)
 {
@@ -240,7 +275,9 @@ internal sealed record CheckoutMethodsResponse(List<PaymentMethodResponse> Payme
 
 internal sealed record PaymentMethodResponse(string Code, string Name);
 
-internal sealed record ShippingMethodResponse(string Code, string Name, decimal Price);
+internal sealed record ShippingMethodResponse(string Code, string Name, decimal Price, bool RequiresPickupPoint);
+
+internal sealed record PickupPointResponse(string Code, string Name, string Line1, string City, string PostalCode, string Country);
 
 internal sealed record PlacedOrderResponse(string Number, Guid Token, string PaymentInstructions, string? RedirectUrl);
 
@@ -256,6 +293,8 @@ internal sealed record OrderResponse(
     decimal ItemsTotal,
     decimal VatTotal,
     decimal GrandTotal,
+    string? PickupPoint,
+    ShipmentResponse? Shipment,
     List<OrderLineResponse> Lines)
 {
     public static OrderResponse From(Order order) => new(
@@ -270,7 +309,11 @@ internal sealed record OrderResponse(
         order.ItemsTotal,
         order.VatTotal,
         order.GrandTotal,
+        order.PickupPointName is null ? null : $"{order.PickupPointName}, {order.PickupPointAddress!.Line1}, {order.PickupPointAddress.City}",
+        order.Shipment is null ? null : new ShipmentResponse(order.Shipment.Carrier, order.Shipment.TrackingNumber, order.Shipment.TrackingUrl),
         [.. order.Lines.Select(line => new OrderLineResponse(line.ProductName, line.UnitPrice, line.VatRate, line.Quantity, line.LineTotal))]);
 }
+
+internal sealed record ShipmentResponse(string Carrier, string TrackingNumber, string? TrackingUrl);
 
 internal sealed record OrderLineResponse(string ProductName, decimal UnitPrice, decimal VatRate, int Quantity, decimal LineTotal);

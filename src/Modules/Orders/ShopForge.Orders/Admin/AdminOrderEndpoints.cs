@@ -4,8 +4,11 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Orders.Domain;
+using ShopForge.Orders.Shipping;
+using ShopForge.Shared.Http;
 using ShopForge.Shared.Inventory;
 using ShopForge.Shared.Security;
+using ShopForge.Shared.Shipping;
 
 namespace ShopForge.Orders.Admin;
 
@@ -17,6 +20,7 @@ internal static class AdminOrderEndpoints
         storeAdmin.MapGet("/orders/{number}", GetOrderAsync);
         storeAdmin.MapPost("/orders/{number}/payment", ConfirmPaymentAsync).RequireAuthorization(AdminPolicies.StoreManagement);
         storeAdmin.MapPost("/orders/{number}/cancel", CancelAsync).RequireAuthorization(AdminPolicies.StoreManagement);
+        storeAdmin.MapPost("/orders/{number}/shipment", CreateShipmentAsync).RequireAuthorization(AdminPolicies.StoreManagement);
     }
 
     private static async Task<Ok<List<AdminOrderResponse>>> GetOrdersAsync(DbContext dbContext, CancellationToken cancellationToken)
@@ -67,6 +71,70 @@ internal static class AdminOrderEndpoints
             (order, token) => stock.ReleaseAsync(order.Number, token),
             "Only an order that is awaiting payment can be cancelled",
             cancellationToken);
+
+    // The parcel is handed to the carrier by the store; the provider turns that into a tracking number (D-063).
+    private static async Task<Results<Ok<AdminOrderDetailResponse>, ValidationProblem, NotFound, ProblemHttpResult>> CreateShipmentAsync(
+        string number,
+        ShipmentCreationRequest request,
+        DbContext dbContext,
+        IEnumerable<IShippingProvider> shippingProviders,
+        TimeProvider clock,
+        CancellationToken cancellationToken)
+    {
+        var order = await dbContext.Set<Order>().SingleOrDefaultAsync(candidate => candidate.Number == number, cancellationToken);
+
+        if (order is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var method = await dbContext.Set<ShippingMethod>()
+            .SingleOrDefaultAsync(candidate => candidate.Code == order.ShippingMethodCode, cancellationToken);
+        var provider = method is null ? null : shippingProviders.SingleOrDefault(candidate => candidate.Key == method.ProviderKey);
+
+        if (provider is null)
+        {
+            return TypedResults.Problem(
+                statusCode: StatusCodes.Status409Conflict,
+                title: "The shipping provider of this order is not available",
+                detail: $"Order {order.Number} was placed with a method this deployment does not have.");
+        }
+
+        var errors = new RequestErrors().Check(
+            provider.Key != StoreShippingProvider.ProviderKey || !string.IsNullOrWhiteSpace(request.TrackingNumber),
+            "trackingNumber",
+            "A tracking number is required for a shipment the store hands over itself.");
+
+        if (errors.Any)
+        {
+            return errors.ToProblem();
+        }
+
+        var details = await provider.CreateShipmentAsync(
+            new ShipmentRequest(
+                order.Number,
+                order.ShippingMethodName,
+                order.ShippingAddress.FullName,
+                order.ShippingAddress.Line1,
+                order.ShippingAddress.City,
+                order.ShippingAddress.PostalCode,
+                order.ShippingAddress.Country,
+                order.PickupPointCode,
+                request.TrackingNumber?.Trim()),
+            cancellationToken);
+
+        if (!order.Ship(details, clock.GetUtcNow()))
+        {
+            return TypedResults.Problem(
+                statusCode: StatusCodes.Status409Conflict,
+                title: "Only a paid order can be shipped",
+                detail: $"The order is {order.Status}.");
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return TypedResults.Ok(AdminOrderDetailResponse.From(order));
+    }
 
     private static async Task<Results<Ok<AdminOrderDetailResponse>, NotFound, ProblemHttpResult>> ChangeAsync(
         string number,
@@ -131,6 +199,8 @@ internal sealed record AdminOrderDetailResponse(
     decimal GrandTotal,
     AdminAddressResponse BillingAddress,
     AdminAddressResponse ShippingAddress,
+    string? PickupPoint,
+    AdminShipmentResponse? Shipment,
     List<AdminOrderLineResponse> Lines)
 {
     public static AdminOrderDetailResponse From(Order order) => new(
@@ -147,6 +217,10 @@ internal sealed record AdminOrderDetailResponse(
         order.GrandTotal,
         AdminAddressResponse.From(order.BillingAddress),
         AdminAddressResponse.From(order.ShippingAddress),
+        order.PickupPointName is null ? null : $"{order.PickupPointName}, {order.PickupPointAddress!.Line1}, {order.PickupPointAddress.City}",
+        order.Shipment is null
+            ? null
+            : new AdminShipmentResponse(order.Shipment.Carrier, order.Shipment.TrackingNumber, order.Shipment.TrackingUrl, order.Shipment.ShippedAt),
         [.. order.Lines.Select(line => new AdminOrderLineResponse(line.ProductName, line.UnitPrice, line.VatRate, line.Quantity, line.LineTotal))]);
 }
 
@@ -157,3 +231,7 @@ internal sealed record AdminAddressResponse(string FullName, string Line1, strin
 }
 
 internal sealed record AdminOrderLineResponse(string ProductName, decimal UnitPrice, decimal VatRate, int Quantity, decimal LineTotal);
+
+internal sealed record ShipmentCreationRequest(string? TrackingNumber);
+
+internal sealed record AdminShipmentResponse(string Carrier, string TrackingNumber, string? TrackingUrl, DateTimeOffset ShippedAt);

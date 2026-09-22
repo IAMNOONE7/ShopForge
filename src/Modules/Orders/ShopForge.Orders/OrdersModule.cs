@@ -5,9 +5,11 @@ using ShopForge.Orders.Admin;
 using ShopForge.Orders.Background;
 using ShopForge.Orders.Payments;
 using ShopForge.Orders.Publishing;
+using ShopForge.Orders.Shipping;
 using ShopForge.Orders.Storefront;
 using ShopForge.Shared.Customers;
 using ShopForge.Shared.Payments;
+using ShopForge.Shared.Shipping;
 using ShopForge.Shared.Stores;
 
 namespace ShopForge.Orders;
@@ -21,6 +23,7 @@ public static class OrdersModule
     public static IServiceCollection AddOrdersModule(this IServiceCollection services)
     {
         services.AddScoped<IPaymentProvider, ManualPaymentProvider>();
+        services.AddScoped<IShippingProvider, StoreShippingProvider>();
         services.AddScoped<IStorePublishCheck, OrdersPublishCheck>();
         services.AddScoped<IStoreInitializer, DefaultStoreMethods>();
         services.AddScoped<ICustomerOrders, GuestOrderClaim>();
@@ -50,6 +53,7 @@ public static class OrdersModule
     {
         storeAdmin.MapAdminOrders();
         storeAdmin.MapAdminMethods();
+        storeAdmin.MapAdminPickupPoints();
 
         return storeAdmin;
     }

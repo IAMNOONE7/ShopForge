@@ -57,18 +57,27 @@ internal sealed record OrderView(
     decimal ItemsTotal,
     decimal VatTotal,
     decimal GrandTotal,
+    string? PickupPoint,
+    ShipmentView? Shipment,
     List<OrderLineView> Lines);
+
+internal sealed record ShipmentView(string Carrier, string TrackingNumber, string? TrackingUrl);
 
 internal sealed record OrderLineView(string ProductName, decimal UnitPrice, decimal VatRate, int Quantity, decimal LineTotal);
 
 internal static class Checkout
 {
-    public static object Request(string? email = "buyer@example.test", string? payment = "bank-transfer", string? shipping = "courier") => new
-    {
-        Email = email,
-        BillingAddress = new { FullName = "Alex Buyer", Line1 = "1 Main Street", Line2 = (string?)null, City = "Dublin", PostalCode = "D01 AB12", Country = "IE" },
-        ShippingAddress = (object?)null,
-        PaymentMethodCode = payment,
-        ShippingMethodCode = shipping,
-    };
+    public static object Request(
+        string? email = "buyer@example.test",
+        string? payment = "bank-transfer",
+        string? shipping = "courier",
+        string? pickupPoint = null) => new
+        {
+            Email = email,
+            BillingAddress = new { FullName = "Alex Buyer", Line1 = "1 Main Street", Line2 = (string?)null, City = "Dublin", PostalCode = "D01 AB12", Country = "IE" },
+            ShippingAddress = (object?)null,
+            PaymentMethodCode = payment,
+            ShippingMethodCode = shipping,
+            PickupPointCode = pickupPoint,
+        };
 }

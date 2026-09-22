@@ -41,8 +41,20 @@ internal sealed class OrderEntityConfiguration : IEntityTypeConfiguration<Order>
         builder.Ignore(order => order.GrandTotal);
         builder.Ignore(order => order.VatTotal);
 
+        builder.Property(order => order.PickupPointCode).HasMaxLength(50);
+        builder.Property(order => order.PickupPointName).HasMaxLength(100);
+
         builder.ComplexProperty(order => order.BillingAddress, address => ConfigureAddress(address, "billing"));
         builder.ComplexProperty(order => order.ShippingAddress, address => ConfigureAddress(address, "shipping"));
+        builder.OwnsOne(order => order.PickupPointAddress, address => ConfigureOwnedAddress(address, "pickup_point"));
+
+        builder.OwnsOne(order => order.Shipment, shipment =>
+        {
+            shipment.Property(value => value.Carrier).HasMaxLength(100).HasColumnName("shipment_carrier");
+            shipment.Property(value => value.TrackingNumber).HasMaxLength(100).HasColumnName("shipment_tracking_number");
+            shipment.Property(value => value.TrackingUrl).HasMaxLength(500).HasColumnName("shipment_tracking_url");
+            shipment.Property(value => value.ShippedAt).HasColumnName("shipment_shipped_at");
+        });
 
         builder.HasIndex(order => new { order.StoreId, order.Number }).IsUnique();
         builder.HasIndex(order => new { order.StoreId, order.PlacedAt });
@@ -59,6 +71,16 @@ internal sealed class OrderEntityConfiguration : IEntityTypeConfiguration<Order>
             lines.Ignore(line => line.LineTotal);
             lines.Ignore(line => line.VatAmount);
         });
+    }
+
+    private static void ConfigureOwnedAddress(OwnedNavigationBuilder<Order, Address> address, string prefix)
+    {
+        address.Property(value => value.FullName).HasMaxLength(200).HasColumnName($"{prefix}_full_name");
+        address.Property(value => value.Line1).HasMaxLength(200).HasColumnName($"{prefix}_line1");
+        address.Property(value => value.Line2).HasMaxLength(200).HasColumnName($"{prefix}_line2");
+        address.Property(value => value.City).HasMaxLength(100).HasColumnName($"{prefix}_city");
+        address.Property(value => value.PostalCode).HasMaxLength(20).HasColumnName($"{prefix}_postal_code");
+        address.Property(value => value.Country).HasMaxLength(2).IsFixedLength().HasColumnName($"{prefix}_country");
     }
 
     private static void ConfigureAddress(ComplexPropertyBuilder<Address> address, string prefix)
@@ -110,6 +132,28 @@ internal sealed class OrderNumberSequenceEntityConfiguration : IEntityTypeConfig
         builder.ToTable("order_numbers", OrdersModule.Schema);
 
         builder.HasKey(sequence => new { sequence.StoreId, sequence.Year });
+    }
+}
+
+internal sealed class StorePickupPointEntityConfiguration : IEntityTypeConfiguration<StorePickupPoint>
+{
+    public void Configure(EntityTypeBuilder<StorePickupPoint> builder)
+    {
+        builder.ToTable("pickup_points", OrdersModule.Schema);
+
+        builder.Property(point => point.Code).HasMaxLength(50);
+        builder.Property(point => point.Name).HasMaxLength(100);
+        builder.ComplexProperty(point => point.Address, address =>
+        {
+            address.Property(value => value.FullName).HasMaxLength(200);
+            address.Property(value => value.Line1).HasMaxLength(200);
+            address.Property(value => value.Line2).HasMaxLength(200);
+            address.Property(value => value.City).HasMaxLength(100);
+            address.Property(value => value.PostalCode).HasMaxLength(20);
+            address.Property(value => value.Country).HasMaxLength(2).IsFixedLength();
+        });
+
+        builder.HasIndex(point => new { point.StoreId, point.Code }).IsUnique();
     }
 }
 

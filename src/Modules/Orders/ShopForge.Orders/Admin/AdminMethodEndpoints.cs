@@ -5,9 +5,11 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Orders.Domain;
 using ShopForge.Orders.Payments;
+using ShopForge.Orders.Shipping;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Payments;
 using ShopForge.Shared.Security;
+using ShopForge.Shared.Shipping;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Orders.Admin;
@@ -21,6 +23,7 @@ internal static class AdminMethodEndpoints
         storeAdmin.MapPost("/payment-methods", CreatePaymentMethodAsync).RequireAuthorization(AdminPolicies.StoreManagement);
         storeAdmin.MapPut("/payment-methods/{code}", UpdatePaymentMethodAsync).RequireAuthorization(AdminPolicies.StoreManagement);
 
+        storeAdmin.MapGet("/shipping-providers", GetShippingProviders);
         storeAdmin.MapGet("/shipping-methods", GetShippingMethodsAsync);
         storeAdmin.MapPost("/shipping-methods", CreateShippingMethodAsync).RequireAuthorization(AdminPolicies.StoreManagement);
         storeAdmin.MapPut("/shipping-methods/{code}", UpdateShippingMethodAsync).RequireAuthorization(AdminPolicies.StoreManagement);
@@ -94,21 +97,35 @@ internal static class AdminMethodEndpoints
         return TypedResults.Ok(new AdminPaymentMethodResponse(method.Code, method.Name, method.ProviderKey, method.IsActive));
     }
 
+    private static Ok<List<string>> GetShippingProviders(IEnumerable<IShippingProvider> providers) =>
+        TypedResults.Ok(providers.Select(provider => provider.Key).Order(StringComparer.Ordinal).ToList());
+
     private static async Task<Ok<List<AdminShippingMethodResponse>>> GetShippingMethodsAsync(DbContext dbContext, CancellationToken cancellationToken) =>
         TypedResults.Ok(await dbContext.Set<ShippingMethod>()
             .OrderBy(method => method.Price)
             .ThenBy(method => method.Name)
-            .Select(method => new AdminShippingMethodResponse(method.Code, method.Name, method.ProviderKey, method.Price, method.VatRate, method.IsActive))
+            .Select(method => new AdminShippingMethodResponse(
+                method.Code,
+                method.Name,
+                method.ProviderKey,
+                method.Price,
+                method.VatRate,
+                method.IsActive,
+                method.RequiresPickupPoint))
             .ToListAsync(cancellationToken));
 
     private static async Task<Results<Created<AdminShippingMethodResponse>, ValidationProblem, ProblemHttpResult>> CreateShippingMethodAsync(
         ShippingMethodRequest request,
         DbContext dbContext,
         IStoreContext storeContext,
+        IEnumerable<IShippingProvider> providers,
         CancellationToken cancellationToken)
     {
         var code = Codes.Of(request.Name);
-        var errors = ValidateShipping(request).Check(code is not null, "name", "The name must contain letters or digits.");
+        var providerKey = request.ProviderKey ?? StoreShippingProvider.ProviderKey;
+        var errors = ValidateShipping(request)
+            .Check(code is not null, "name", "The name must contain letters or digits.")
+            .Check(providers.Any(provider => provider.Key == providerKey), "providerKey", "That shipping provider is not available.");
 
         if (errors.Any)
         {
@@ -121,13 +138,19 @@ internal static class AdminMethodEndpoints
         }
 
         var method = new ShippingMethod(
-            storeContext.StoreId!.Value, code!, request.Name!, ManualPaymentProvider.ProviderKey, request.Price, request.VatRate);
+            storeContext.StoreId!.Value,
+            code!,
+            request.Name!,
+            providerKey,
+            request.Price,
+            request.VatRate,
+            request.RequiresPickupPoint);
         dbContext.Add(method);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return TypedResults.Created(
             $"/api/admin/stores/{method.StoreId}/shipping-methods/{method.Code}",
-            new AdminShippingMethodResponse(method.Code, method.Name, method.ProviderKey, method.Price, method.VatRate, method.IsActive));
+            ShippingResponse(method));
     }
 
     private static async Task<Results<Ok<AdminShippingMethodResponse>, ValidationProblem, NotFound>> UpdateShippingMethodAsync(
@@ -150,11 +173,14 @@ internal static class AdminMethodEndpoints
             return TypedResults.NotFound();
         }
 
-        method.Update(request.Name!, request.Price, request.VatRate, request.IsActive);
+        method.Update(request.Name!, request.Price, request.VatRate, request.IsActive, request.RequiresPickupPoint);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return TypedResults.Ok(new AdminShippingMethodResponse(method.Code, method.Name, method.ProviderKey, method.Price, method.VatRate, method.IsActive));
+        return TypedResults.Ok(ShippingResponse(method));
     }
+
+    private static AdminShippingMethodResponse ShippingResponse(ShippingMethod method) =>
+        new(method.Code, method.Name, method.ProviderKey, method.Price, method.VatRate, method.IsActive, method.RequiresPickupPoint);
 
     private static RequestErrors ValidateName(string? name) =>
         new RequestErrors().Check(!string.IsNullOrWhiteSpace(name) && name.Trim().Length <= 100, "name", "Name is required (up to 100 characters).");
@@ -170,11 +196,18 @@ internal static class AdminMethodEndpoints
 
 internal sealed record PaymentMethodRequest(string? Name, string? ProviderKey, bool IsActive);
 
-internal sealed record ShippingMethodRequest(string? Name, decimal Price, decimal VatRate, bool IsActive);
+internal sealed record ShippingMethodRequest(string? Name, string? ProviderKey, decimal Price, decimal VatRate, bool IsActive, bool RequiresPickupPoint);
 
 internal sealed record AdminPaymentMethodResponse(string Code, string Name, string ProviderKey, bool IsActive);
 
-internal sealed record AdminShippingMethodResponse(string Code, string Name, string ProviderKey, decimal Price, decimal VatRate, bool IsActive);
+internal sealed record AdminShippingMethodResponse(
+    string Code,
+    string Name,
+    string ProviderKey,
+    decimal Price,
+    decimal VatRate,
+    bool IsActive,
+    bool RequiresPickupPoint);
 
 internal static class Codes
 {

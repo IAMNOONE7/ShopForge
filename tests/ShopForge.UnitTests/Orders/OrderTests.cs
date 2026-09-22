@@ -1,4 +1,5 @@
 using ShopForge.Orders.Domain;
+using ShopForge.Shared.Shipping;
 
 namespace ShopForge.UnitTests.Orders;
 
@@ -49,6 +50,30 @@ public sealed class OrderTests
         Assert.Equal(42.85m, order.VatTotal);
     }
 
-    private static Order Place() =>
-        new(Guid.NewGuid(), "2026-00001", "EUR", "buyer@example.test", Address, Address, Methods, PlacedAt, PlacedAt.AddMinutes(30));
+    [Fact]
+    public void Only_a_paid_order_can_be_shipped()
+    {
+        var unpaid = Place();
+        var paid = Place();
+        paid.ConfirmPayment(PlacedAt);
+
+        Assert.False(unpaid.Ship(Parcel, PlacedAt.AddHours(1)));
+        Assert.True(paid.Ship(Parcel, PlacedAt.AddHours(1)));
+        Assert.False(paid.Ship(Parcel, PlacedAt.AddHours(2)));
+        Assert.Equal((OrderStatus.Shipped, "PKG-1"), (paid.Status, paid.Shipment!.TrackingNumber));
+    }
+
+    private static readonly ShipmentDetails Parcel = new("Courier", "PKG-1", null);
+
+    private static Order Place() => new(
+        Guid.NewGuid(),
+        "2026-00001",
+        "EUR",
+        "buyer@example.test",
+        Address,
+        Address,
+        Methods,
+        pickupPoint: null,
+        PlacedAt,
+        PlacedAt.AddMinutes(30));
 }

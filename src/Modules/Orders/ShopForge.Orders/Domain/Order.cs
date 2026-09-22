@@ -1,3 +1,4 @@
+using ShopForge.Shared.Shipping;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Orders.Domain;
@@ -18,6 +19,7 @@ internal sealed class Order : IStoreOwned
         Address billing,
         Address shipping,
         ChosenMethods methods,
+        ChosenPickupPoint? pickupPoint,
         DateTimeOffset placedAt,
         DateTimeOffset reservationExpiresAt)
     {
@@ -37,6 +39,9 @@ internal sealed class Order : IStoreOwned
         ShippingMethodName = methods.ShippingName;
         ShippingPrice = methods.ShippingPrice;
         ShippingVatRate = methods.ShippingVatRate;
+        PickupPointCode = pickupPoint?.Code;
+        PickupPointName = pickupPoint?.Name;
+        PickupPointAddress = pickupPoint?.Address;
         Status = OrderStatus.AwaitingPayment;
         PlacedAt = placedAt;
         ReservationExpiresAt = reservationExpiresAt;
@@ -82,6 +87,14 @@ internal sealed class Order : IStoreOwned
 
     public decimal ShippingVatRate { get; private set; }
 
+    public string? PickupPointCode { get; private set; }
+
+    public string? PickupPointName { get; private set; }
+
+    public Address? PickupPointAddress { get; private set; }
+
+    public Shipment? Shipment { get; private set; }
+
     public IReadOnlyList<OrderLine> Lines => _lines;
 
     public decimal ItemsTotal => _lines.Sum(line => line.LineTotal);
@@ -126,6 +139,43 @@ internal sealed class Order : IStoreOwned
 
         return true;
     }
+
+    // One shipment per order, and only once it is paid for (D-064).
+    public bool Ship(ShipmentDetails details, DateTimeOffset shippedAt)
+    {
+        if (Status != OrderStatus.Paid)
+        {
+            return false;
+        }
+
+        Shipment = new Shipment(details.Carrier, details.TrackingNumber, details.TrackingUrl, shippedAt);
+        Status = OrderStatus.Shipped;
+
+        return true;
+    }
+}
+
+internal sealed class Shipment
+{
+    private Shipment()
+    {
+    }
+
+    internal Shipment(string carrier, string trackingNumber, string? trackingUrl, DateTimeOffset shippedAt)
+    {
+        Carrier = carrier;
+        TrackingNumber = trackingNumber;
+        TrackingUrl = trackingUrl;
+        ShippedAt = shippedAt;
+    }
+
+    public string Carrier { get; private set; } = null!;
+
+    public string TrackingNumber { get; private set; } = null!;
+
+    public string? TrackingUrl { get; private set; }
+
+    public DateTimeOffset ShippedAt { get; private set; }
 }
 
 internal sealed class OrderLine
@@ -162,8 +212,11 @@ internal enum OrderStatus
 {
     AwaitingPayment,
     Paid,
+    Shipped,
     Cancelled,
 }
+
+internal sealed record ChosenPickupPoint(string Code, string Name, Address Address);
 
 internal sealed record ChosenMethods(
     string PaymentCode,

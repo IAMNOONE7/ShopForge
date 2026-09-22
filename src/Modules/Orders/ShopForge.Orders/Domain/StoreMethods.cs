@@ -47,7 +47,7 @@ internal sealed class ShippingMethod : IStoreOwned
     {
     }
 
-    public ShippingMethod(Guid storeId, string code, string name, string providerKey, decimal price, decimal vatRate)
+    public ShippingMethod(Guid storeId, string code, string name, string providerKey, decimal price, decimal vatRate, bool requiresPickupPoint = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
@@ -55,7 +55,7 @@ internal sealed class ShippingMethod : IStoreOwned
         StoreId = storeId;
         Code = code;
         ProviderKey = providerKey;
-        Update(name, price, vatRate, isActive: true);
+        Update(name, price, vatRate, isActive: true, requiresPickupPoint);
     }
 
     public Guid Id { get; private set; }
@@ -74,7 +74,10 @@ internal sealed class ShippingMethod : IStoreOwned
 
     public bool IsActive { get; private set; }
 
-    public void Update(string name, decimal price, decimal vatRate, bool isActive)
+    // The shopper has to choose where the parcel goes before the order can be placed (D-062).
+    public bool RequiresPickupPoint { get; private set; }
+
+    public void Update(string name, decimal price, decimal vatRate, bool isActive, bool requiresPickupPoint)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
@@ -92,5 +95,6 @@ internal sealed class ShippingMethod : IStoreOwned
         Price = price;
         VatRate = vatRate;
         IsActive = isActive;
+        RequiresPickupPoint = requiresPickupPoint;
     }
 }
