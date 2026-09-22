@@ -67,6 +67,7 @@ type RowsProps = {
 
 function Rows({ storeId, order, money, culture, isOpen, onToggle, run }: RowsProps) {
   const awaitingPayment = order.status === 'AwaitingPayment'
+  const paid = order.status === 'Paid'
 
   return (
     <>
@@ -94,6 +95,15 @@ function Rows({ storeId, order, money, culture, isOpen, onToggle, run }: RowsPro
               </button>
             </>
           )}
+          {paid && (
+            <form
+              className="inline-form compact"
+              action={(form) => run(() => api.createShipment(storeId, order.number, String(form.get('trackingNumber'))))}
+            >
+              <input name="trackingNumber" placeholder="Tracking number" required />
+              <button type="submit">Ship</button>
+            </form>
+          )}
         </td>
       </tr>
       {isOpen && (
@@ -113,6 +123,8 @@ function statusLabel(status: string) {
       return 'Awaiting payment'
     case 'Paid':
       return 'Paid'
+    case 'Shipped':
+      return 'Shipped'
     default:
       return 'Cancelled'
   }
@@ -152,7 +164,10 @@ function OrderDetail({ storeId, number, money }: { storeId: string; number: stri
           </tr>
         </tbody>
       </table>
-      <p className="hint">Paying by {order.paymentMethod}.</p>
+      <p className="hint">
+        Paying by {order.paymentMethod}.{order.pickupPoint && ` Collection at ${order.pickupPoint}.`}
+        {order.shipment && ` Sent with ${order.shipment.carrier}, tracking ${order.shipment.trackingNumber}.`}
+      </p>
       <div className="chips">
         <AddressBlock title="Billing" address={order.billingAddress} />
         <AddressBlock title="Shipping" address={order.shippingAddress} />

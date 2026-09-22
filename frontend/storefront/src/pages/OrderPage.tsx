@@ -36,6 +36,7 @@ export function OrderPage() {
       return <Message title="Something went wrong" text="The order could not be loaded. Please try again." />
     case 'ready': {
       const { lines, shippingMethod, shippingPrice, itemsTotal, vatTotal, grandTotal, email, paymentMethod, status } = order.data
+      const { pickupPoint, shipment } = order.data
 
       return (
         <section className="order">
@@ -47,6 +48,18 @@ export function OrderPage() {
           {status === 'AwaitingPayment' && !instructions && <p className="notice">We are waiting for your payment to be confirmed.</p>}
           {status === 'Paid' && <p className="notice">Your payment was received. Thank you.</p>}
           {status === 'Cancelled' && <p className="notice">This order was cancelled because it was not paid in time.</p>}
+          {shipment && (
+            <p className="notice">
+              On its way with {shipment.carrier}, tracking number {shipment.trackingNumber}
+              {shipment.trackingUrl && (
+                <>
+                  {' '}
+                  (<a href={shipment.trackingUrl}>track it</a>)
+                </>
+              )}
+              .
+            </p>
+          )}
           <table className="order-lines">
             <tbody>
               {lines.map((line) => (
@@ -73,6 +86,7 @@ export function OrderPage() {
           </table>
           <p className="hint">
             Includes {formatPrice(vatTotal, store)} VAT. Paying by {paymentMethod}.
+            {pickupPoint && ` Collect at ${pickupPoint}.`}
           </p>
         </section>
       )

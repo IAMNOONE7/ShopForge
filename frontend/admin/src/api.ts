@@ -114,6 +114,8 @@ export type AdminOrderDetail = {
   grandTotal: number
   billingAddress: AdminAddress
   shippingAddress: AdminAddress
+  pickupPoint: string | null
+  shipment: Shipment | null
   lines: AdminOrderLine[]
 }
 
@@ -123,7 +125,29 @@ export type StockMovement = { occurredAt: string; quantity: number; reason: stri
 
 export type PaymentMethod = { code: string; name: string; providerKey: string; isActive: boolean }
 
-export type ShippingMethod = { code: string; name: string; providerKey: string; price: number; vatRate: number; isActive: boolean }
+export type ShippingMethod = {
+  code: string
+  name: string
+  providerKey: string
+  price: number
+  vatRate: number
+  isActive: boolean
+  requiresPickupPoint: boolean
+}
+
+export type PickupPoint = {
+  code: string
+  name: string
+  line1: string
+  city: string
+  postalCode: string
+  country: string
+  isActive: boolean
+}
+
+export type PickupPointInput = { name: string; line1: string; city: string; postalCode: string; country: string; isActive: boolean }
+
+export type Shipment = { carrier: string; trackingNumber: string; trackingUrl: string | null; shippedAt: string }
 
 type Problem = { title?: string; errors?: Record<string, string[]>; problems?: string[] }
 
@@ -204,6 +228,8 @@ export const api = {
   confirmOrderPayment: (storeId: string, number: string) =>
     request<AdminOrderDetail>('POST', `/api/admin/stores/${storeId}/orders/${number}/payment`),
   cancelOrder: (storeId: string, number: string) => request<AdminOrderDetail>('POST', `/api/admin/stores/${storeId}/orders/${number}/cancel`),
+  createShipment: (storeId: string, number: string, trackingNumber: string) =>
+    request<AdminOrderDetail>('POST', `/api/admin/stores/${storeId}/orders/${number}/shipment`, { trackingNumber }),
 
   paymentProviders: (storeId: string) => request<string[]>('GET', `/api/admin/stores/${storeId}/payment-providers`),
   paymentMethods: (storeId: string) => request<PaymentMethod[]>('GET', `/api/admin/stores/${storeId}/payment-methods`),
@@ -212,11 +238,23 @@ export const api = {
   updatePaymentMethod: (storeId: string, code: string, input: { name: string; isActive: boolean }) =>
     request<PaymentMethod>('PUT', `/api/admin/stores/${storeId}/payment-methods/${code}`, input),
 
+  shippingProviders: (storeId: string) => request<string[]>('GET', `/api/admin/stores/${storeId}/shipping-providers`),
   shippingMethods: (storeId: string) => request<ShippingMethod[]>('GET', `/api/admin/stores/${storeId}/shipping-methods`),
-  createShippingMethod: (storeId: string, input: { name: string; price: number; vatRate: number }) =>
-    request<ShippingMethod>('POST', `/api/admin/stores/${storeId}/shipping-methods`, { ...input, isActive: true }),
-  updateShippingMethod: (storeId: string, code: string, input: { name: string; price: number; vatRate: number; isActive: boolean }) =>
-    request<ShippingMethod>('PUT', `/api/admin/stores/${storeId}/shipping-methods/${code}`, input),
+  createShippingMethod: (
+    storeId: string,
+    input: { name: string; providerKey: string; price: number; vatRate: number; requiresPickupPoint: boolean },
+  ) => request<ShippingMethod>('POST', `/api/admin/stores/${storeId}/shipping-methods`, { ...input, isActive: true }),
+  updateShippingMethod: (
+    storeId: string,
+    code: string,
+    input: { name: string; price: number; vatRate: number; isActive: boolean; requiresPickupPoint: boolean },
+  ) => request<ShippingMethod>('PUT', `/api/admin/stores/${storeId}/shipping-methods/${code}`, input),
+
+  pickupPoints: (storeId: string) => request<PickupPoint[]>('GET', `/api/admin/stores/${storeId}/pickup-points`),
+  createPickupPoint: (storeId: string, input: PickupPointInput) =>
+    request<PickupPoint>('POST', `/api/admin/stores/${storeId}/pickup-points`, input),
+  updatePickupPoint: (storeId: string, code: string, input: PickupPointInput) =>
+    request<PickupPoint>('PUT', `/api/admin/stores/${storeId}/pickup-points/${code}`, input),
 
   categories: (storeId: string) => request<Category[]>('GET', `/api/admin/stores/${storeId}/categories`),
   createCategory: (storeId: string, name: string) =>

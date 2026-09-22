@@ -96,6 +96,8 @@ function status(value: string) {
       return 'Awaiting payment'
     case 'Paid':
       return 'Paid'
+    case 'Shipped':
+      return 'Shipped'
     default:
       return 'Cancelled'
   }

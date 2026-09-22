@@ -28,6 +28,16 @@ export type ShippingMethod = {
   code: string
   name: string
   price: number
+  requiresPickupPoint: boolean
+}
+
+export type PickupPoint = {
+  code: string
+  name: string
+  line1: string
+  city: string
+  postalCode: string
+  country: string
 }
 
 export type CheckoutMethods = {
@@ -50,6 +60,7 @@ export type CheckoutRequest = {
   shippingAddress: Address | null
   paymentMethodCode: string
   shippingMethodCode: string
+  pickupPointCode: string | null
 }
 
 export type PlacedOrder = {
@@ -67,6 +78,12 @@ export type OrderLine = {
   lineTotal: number
 }
 
+export type Shipment = {
+  carrier: string
+  trackingNumber: string
+  trackingUrl: string | null
+}
+
 export type Order = {
   number: string
   placedAt: string
@@ -79,6 +96,8 @@ export type Order = {
   itemsTotal: number
   vatTotal: number
   grandTotal: number
+  pickupPoint: string | null
+  shipment: Shipment | null
   lines: OrderLine[]
 }
 
@@ -133,6 +152,9 @@ export const removeFromCart = (storeProductId: string) => send<Cart>('DELETE', `
 
 export const getCheckoutMethods = (signal: AbortSignal) =>
   send<CheckoutMethods>('GET', '/api/storefront/checkout/methods', undefined, signal)
+
+export const getPickupPoints = (methodCode: string) =>
+  send<PickupPoint[]>('GET', `/api/storefront/checkout/pickup-points/${encodeURIComponent(methodCode)}`)
 
 export const placeOrder = (request: CheckoutRequest) => send<PlacedOrder>('POST', '/api/storefront/checkout', request)
 

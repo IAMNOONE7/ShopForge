@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { getCheckoutMethods, placeOrder, RequestFailed, type Address, type ShippingMethod } from '../cart'
+import { getCheckoutMethods, getPickupPoints, placeOrder, RequestFailed, type Address, type PickupPoint, type ShippingMethod } from '../cart'
 import { useCart } from '../cartContext'
 import { useCustomer } from '../customerContext'
 import { Message } from '../components/Message'
@@ -15,7 +15,27 @@ export function CheckoutPage() {
   const methods = useRequest('checkout-methods', getCheckoutMethods)
   const [shipElsewhere, setShipElsewhere] = useState(false)
   const [shipping, setShipping] = useState<ShippingMethod | null>(null)
+  const [pickupPoints, setPickupPoints] = useState<PickupPoint[]>([])
   const [problems, setProblems] = useState<string[]>([])
+  const firstShippingMethod = methods.status === 'ready' ? (methods.data.shippingMethods[0] ?? null) : null
+
+  // The first method is selected for the shopper, so its pickup points have to be loaded without a click.
+  useEffect(() => {
+    if (firstShippingMethod) {
+      chooseShipping(firstShippingMethod)
+    }
+  }, [firstShippingMethod?.code]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function chooseShipping(method: ShippingMethod) {
+    setShipping(method)
+    setPickupPoints([])
+
+    if (method.requiresPickupPoint) {
+      getPickupPoints(method.code)
+        .then(setPickupPoints)
+        .catch(() => setPickupPoints([]))
+    }
+  }
 
   async function submit(form: FormData) {
     setProblems([])
@@ -27,6 +47,7 @@ export function CheckoutPage() {
         shippingAddress: shipElsewhere ? address(form, 'shipping') : null,
         paymentMethodCode: String(form.get('paymentMethodCode')),
         shippingMethodCode: String(form.get('shippingMethodCode')),
+        pickupPointCode: form.get('pickupPointCode') === null ? null : String(form.get('pickupPointCode')),
       })
 
       reload()
@@ -94,12 +115,25 @@ export function CheckoutPage() {
                 name="shippingMethodCode"
                 value={method.code}
                 defaultChecked={index === 0}
-                onChange={() => setShipping(method)}
+                onChange={() => chooseShipping(method)}
                 required
               />
               {method.name} <span>{formatPrice(method.price, store)}</span>
             </label>
           ))}
+          {chosenShipping.requiresPickupPoint && (
+            <label>
+              Pickup point{' '}
+              <select name="pickupPointCode" required>
+                <option value="">Choose a pickup point…</option>
+                {pickupPoints.map((point) => (
+                  <option key={point.code} value={point.code}>
+                    {point.name} — {point.line1}, {point.city}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </fieldset>
         <fieldset>
           <legend>Payment</legend>
