@@ -1,10 +1,11 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace ShopForge.IntegrationTests.Orders;
 
 // A storefront visitor: one HttpClient keeps the cart cookie across requests, always against the same store host.
-internal sealed class StorefrontApi(ShopForgeApiFactory factory, TestStore store) : IDisposable
+internal sealed class StorefrontApi(WebApplicationFactory<Program> factory, TestStore store) : IDisposable
 {
     private readonly HttpClient _client = factory.CreateClient();
 

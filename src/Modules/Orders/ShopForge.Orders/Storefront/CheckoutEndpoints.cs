@@ -17,8 +17,9 @@ namespace ShopForge.Orders.Storefront;
 
 internal static class CheckoutEndpoints
 {
-    // How long an unpaid order keeps its stock before the sweep gives it back (D-048).
-    public static readonly TimeSpan ReservationWindow = TimeSpan.FromMinutes(30);
+    // How long an unpaid order keeps its stock before the sweep gives it back (D-048). Hosted checkout sessions must
+    // live at least half an hour, so the window is a little longer than that and the session expires with it (D-056).
+    public static readonly TimeSpan ReservationWindow = TimeSpan.FromMinutes(35);
 
     public static void MapCheckout(this IEndpointRouteBuilder storefront)
     {
@@ -146,8 +147,17 @@ internal static class CheckoutEndpoints
         carts.Forget();
 
         var provider = paymentProviders.Single(candidate => candidate.Key == payment.ProviderKey);
+        var storefront = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}";
         var instructions = await provider.StartAsync(
-            new PaymentRequest(order.Number, order.GrandTotal, order.Currency, order.Email),
+            new PaymentRequest(
+                order.StoreId,
+                order.Number,
+                order.GrandTotal,
+                order.Currency,
+                order.Email,
+                ReturnUrl: $"{storefront}/order/{order.Number}?token={order.AccessToken}",
+                CancelUrl: $"{storefront}/cart",
+                order.ReservationExpiresAt),
             cancellationToken);
 
         return TypedResults.Created(

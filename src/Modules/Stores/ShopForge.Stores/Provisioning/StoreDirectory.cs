@@ -14,4 +14,11 @@ internal sealed class StoreDirectory(DbContext dbContext) : IStoreDirectory
             .OrderBy(store => store.Id)
             .Select(store => new StoreReference(store.Id, store.TenantId))
             .ToListAsync(cancellationToken);
+
+    public Task<StoreReference?> FindAsync(Guid storeId, CancellationToken cancellationToken) =>
+        dbContext.Set<Store>()
+            .IgnoreQueryFilters()
+            .Where(store => store.Id == storeId)
+            .Select(store => new StoreReference(store.Id, store.TenantId))
+            .SingleOrDefaultAsync(cancellationToken);
 }

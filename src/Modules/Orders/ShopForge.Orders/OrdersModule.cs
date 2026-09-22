@@ -39,6 +39,13 @@ public static class OrdersModule
         return storefront;
     }
 
+    public static IEndpointRouteBuilder MapPaymentWebhookEndpoints(this IEndpointRouteBuilder payments)
+    {
+        payments.MapPaymentWebhooks();
+
+        return payments;
+    }
+
     public static IEndpointRouteBuilder MapOrdersStoreAdminEndpoints(this IEndpointRouteBuilder storeAdmin)
     {
         storeAdmin.MapAdminOrders();

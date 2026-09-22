@@ -5,9 +5,11 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Infrastructure.Email;
 using ShopForge.Infrastructure.Files;
+using ShopForge.Infrastructure.Payments;
 using ShopForge.Infrastructure.Persistence;
 using ShopForge.Shared.Email;
 using ShopForge.Shared.Files;
+using ShopForge.Shared.Payments;
 
 namespace ShopForge.Infrastructure;
 
@@ -34,6 +36,17 @@ public static class DependencyInjection
         services.AddSingleton(new BlobContainerClient(fileStorageConnectionString, containerName));
         services.AddSingleton<IFileStorage, AzureBlobFileStorage>();
         services.AddSingleton<IEmailSender, LoggingEmailSender>();
+
+        var stripe = configuration.GetSection(StripeOptions.Section).Get<StripeOptions>() ?? new StripeOptions();
+
+        // Without keys the provider is simply not offered, which is how development and CI run (D-059).
+        if (stripe.IsConfigured)
+        {
+            services.AddSingleton(stripe);
+            services.AddSingleton<ICheckoutSessions, StripeCheckoutSessions>();
+            services.AddSingleton<IPaymentProvider, StripePaymentProvider>();
+            services.AddSingleton<IPaymentNotifications, StripeNotifications>();
+        }
 
         return services;
     }

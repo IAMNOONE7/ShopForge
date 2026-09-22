@@ -91,6 +91,8 @@ storefront.MapCatalogStorefrontEndpoints();
 storefront.MapCustomersStorefrontEndpoints();
 storefront.MapOrdersStorefrontEndpoints();
 
+app.MapGroup("/api/payments").MapPaymentWebhookEndpoints();
+
 var admin = app.MapGroup("/api/admin");
 admin.MapAccessAdminEndpoints();
 

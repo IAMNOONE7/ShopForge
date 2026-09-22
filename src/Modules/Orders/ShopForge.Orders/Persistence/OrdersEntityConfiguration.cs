@@ -112,3 +112,17 @@ internal sealed class OrderNumberSequenceEntityConfiguration : IEntityTypeConfig
         builder.HasKey(sequence => new { sequence.StoreId, sequence.Year });
     }
 }
+
+internal sealed class PaymentEventEntityConfiguration : IEntityTypeConfiguration<PaymentEvent>
+{
+    public void Configure(EntityTypeBuilder<PaymentEvent> builder)
+    {
+        builder.ToTable("payment_events", OrdersModule.Schema);
+
+        builder.Property(paymentEvent => paymentEvent.Provider).HasMaxLength(50);
+        builder.Property(paymentEvent => paymentEvent.EventId).HasMaxLength(100);
+        builder.Property(paymentEvent => paymentEvent.OrderNumber).HasMaxLength(20);
+
+        builder.HasIndex(paymentEvent => new { paymentEvent.StoreId, paymentEvent.Provider, paymentEvent.EventId }).IsUnique();
+    }
+}

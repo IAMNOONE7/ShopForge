@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using ShopForge.Orders.Domain;
 using ShopForge.Orders.Payments;
 using ShopForge.Shared.Http;
+using ShopForge.Shared.Payments;
 using ShopForge.Shared.Security;
 using ShopForge.Shared.Tenancy;
 
@@ -15,6 +16,7 @@ internal static class AdminMethodEndpoints
 {
     public static void MapAdminMethods(this IEndpointRouteBuilder storeAdmin)
     {
+        storeAdmin.MapGet("/payment-providers", GetPaymentProviders);
         storeAdmin.MapGet("/payment-methods", GetPaymentMethodsAsync);
         storeAdmin.MapPost("/payment-methods", CreatePaymentMethodAsync).RequireAuthorization(AdminPolicies.StoreManagement);
         storeAdmin.MapPut("/payment-methods/{code}", UpdatePaymentMethodAsync).RequireAuthorization(AdminPolicies.StoreManagement);
@@ -23,6 +25,9 @@ internal static class AdminMethodEndpoints
         storeAdmin.MapPost("/shipping-methods", CreateShippingMethodAsync).RequireAuthorization(AdminPolicies.StoreManagement);
         storeAdmin.MapPut("/shipping-methods/{code}", UpdateShippingMethodAsync).RequireAuthorization(AdminPolicies.StoreManagement);
     }
+
+    private static Ok<List<string>> GetPaymentProviders(IEnumerable<IPaymentProvider> providers) =>
+        TypedResults.Ok(providers.Select(provider => provider.Key).Order(StringComparer.Ordinal).ToList());
 
     private static async Task<Ok<List<AdminPaymentMethodResponse>>> GetPaymentMethodsAsync(DbContext dbContext, CancellationToken cancellationToken) =>
         TypedResults.Ok(await dbContext.Set<PaymentMethod>()
@@ -34,10 +39,14 @@ internal static class AdminMethodEndpoints
         PaymentMethodRequest request,
         DbContext dbContext,
         IStoreContext storeContext,
+        IEnumerable<IPaymentProvider> providers,
         CancellationToken cancellationToken)
     {
         var code = Codes.Of(request.Name);
-        var errors = ValidateName(request.Name).Check(code is not null, "name", "The name must contain letters or digits.");
+        var providerKey = request.ProviderKey ?? ManualPaymentProvider.ProviderKey;
+        var errors = ValidateName(request.Name)
+            .Check(code is not null, "name", "The name must contain letters or digits.")
+            .Check(providers.Any(provider => provider.Key == providerKey), "providerKey", "That payment provider is not available.");
 
         if (errors.Any)
         {
@@ -49,7 +58,8 @@ internal static class AdminMethodEndpoints
             return Conflict("payment");
         }
 
-        var method = new PaymentMethod(storeContext.StoreId!.Value, code!, request.Name!, ManualPaymentProvider.ProviderKey);
+        // The provider is fixed once payments have run through a method; a store adds another method instead.
+        var method = new PaymentMethod(storeContext.StoreId!.Value, code!, request.Name!, providerKey);
         dbContext.Add(method);
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -158,7 +168,7 @@ internal static class AdminMethodEndpoints
         TypedResults.Problem(statusCode: StatusCodes.Status409Conflict, title: $"The store already has a {kind} method with this name");
 }
 
-internal sealed record PaymentMethodRequest(string? Name, bool IsActive);
+internal sealed record PaymentMethodRequest(string? Name, string? ProviderKey, bool IsActive);
 
 internal sealed record ShippingMethodRequest(string? Name, decimal Price, decimal VatRate, bool IsActive);
 

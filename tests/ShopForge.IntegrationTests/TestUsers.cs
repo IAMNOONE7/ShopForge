@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Access.Domain;
@@ -30,7 +31,7 @@ internal static class TestUsers
         return new TestUser(email, password, tenantId);
     }
 
-    public static async Task<HttpClient> LoginAsync(ShopForgeApiFactory factory, TestUser user)
+    public static async Task<HttpClient> LoginAsync(WebApplicationFactory<Program> factory, TestUser user)
     {
         var client = factory.CreateClient();
 

@@ -4,6 +4,8 @@ namespace ShopForge.Shared.Stores;
 public interface IStoreDirectory
 {
     Task<IReadOnlyList<StoreReference>> AllAsync(CancellationToken cancellationToken);
+
+    Task<StoreReference?> FindAsync(Guid storeId, CancellationToken cancellationToken);
 }
 
 public sealed record StoreReference(Guid StoreId, Guid TenantId);
