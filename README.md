@@ -15,6 +15,7 @@ A multi-store e-commerce platform. One ASP.NET Core backend and one React storef
 - **Customer accounts, per store.** One authentication identity inside a company, one relationship per store: an account created in one store cannot sign in to another, and each store sees only its own customers and their orders. Registration confirms the address by e-mail, and orders placed as a guest are handed over once that address is proven.
 - **Stock that cannot oversell.** Warehouses hold the tenant's stock, shared by its stores. Checkout reserves with a conditional update, so two shoppers racing for the last item cannot both get it; paying turns the reservation into a stock movement and an unpaid order releases it when it expires.
 - **Bulk import.** Store staff upload an .xlsx file; rows are matched by SKU and update products, listings, categories and attribute values, with a per-row report of what changed and what was rejected.
+- **Events through a transactional outbox.** What happens to an order is written with the change that caused it and delivered by a background worker: confirmations, payment receipts and shipment notices are handlers, not inline calls. Delivery is leased, retried with backoff, and anything that gives up lands in a failed-message list the store can requeue.
 - **Replaceable infrastructure behind small interfaces.** File storage (`IFileStorage`, Azure Blob Storage adapter, Azurite locally) and payments (`IPaymentProvider`, with methods the store settles itself today and a hosted provider later).
 
 ## Tech stack
@@ -95,4 +96,4 @@ frontend/
 
 ## Status
 
-Early development. Multi-store support, the product catalog, attribute-based filtering, bulk import, store provisioning, guest checkout, stock reservations, customer accounts, card payments and shipping are in place. Background processing comes next.
+Early development. Multi-store support, the product catalog, attribute-based filtering, bulk import, store provisioning, guest checkout, stock reservations, customer accounts, card payments, shipping and background processing are in place. Observability comes next.

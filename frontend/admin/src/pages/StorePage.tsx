@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useOutletContext, useParams } from 'react-router'
 import { api, type AdminStore, type AttributeDefinition, type AttributeValues, type Category, type StoreProduct, type StoreProductInput } from '../api'
 import { AttributesSection } from '../components/AttributesSection'
+import { FailedMessagesSection } from '../components/FailedMessagesSection'
 import { MethodsSection } from '../components/MethodsSection'
 import { OrdersSection } from '../components/OrdersSection'
 import { StoreSettingsSection } from '../components/StoreSettingsSection'
@@ -203,6 +204,8 @@ export function StorePage() {
       </section>
 
       <OrdersSection storeId={storeId} money={money} culture={store.culture} />
+
+      <FailedMessagesSection storeId={storeId} culture={store.culture} />
     </>
   )
 }

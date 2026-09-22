@@ -147,6 +147,8 @@ export type PickupPoint = {
 
 export type PickupPointInput = { name: string; line1: string; city: string; postalCode: string; country: string; isActive: boolean }
 
+export type FailedMessage = { id: string; type: string; attempts: number; createdAt: string; error: string | null }
+
 export type Shipment = { carrier: string; trackingNumber: string; trackingUrl: string | null; shippedAt: string }
 
 type Problem = { title?: string; errors?: Record<string, string[]>; problems?: string[] }
@@ -218,6 +220,10 @@ export const api = {
     request<{ values: AttributeValues }>('GET', `/api/admin/stores/${storeId}/products/${storeProductId}/attributes`),
   setProductAttributes: (storeId: string, storeProductId: string, values: AttributeValues) =>
     request<{ values: AttributeValues }>('PUT', `/api/admin/stores/${storeId}/products/${storeProductId}/attributes`, { values }),
+
+  failedMessages: (storeId: string) => request<FailedMessage[]>('GET', `/api/admin/stores/${storeId}/failed-messages`),
+  requeueMessage: (storeId: string, messageId: string) =>
+    request<void>('POST', `/api/admin/stores/${storeId}/failed-messages/${messageId}/requeue`),
 
   stock: () => request<Stock[]>('GET', '/api/admin/stock'),
   setStock: (productId: string, quantity: number) => request<Stock>('PUT', `/api/admin/stock/${productId}`, { quantity }),
