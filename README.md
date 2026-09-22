@@ -10,6 +10,7 @@ A multi-store e-commerce platform. One ASP.NET Core backend and one React storef
 - **Metadata-driven product attributes.** Stores define typed attributes (numbers, dates, yes/no, options) stored as typed EAV rows. The storefront gets filters, ranges and counts computed from the data, so a furniture store and an electronics store run the same code with different filters.
 - **Stores are created as data.** A tenant admin provisions a store with its address, currency, language and theme. It starts as a draft and goes live only once every module reports it ready (branding, products), with no deployment involved.
 - **Guest checkout.** A server-side cart identified by a cookie, gross prices with a per-product VAT rate, and orders that snapshot the product name, price, VAT and the chosen payment and shipping method, numbered per store.
+- **Shipping with pickup points and tracking.** Shipping methods name a provider the same way payment methods do. A method can require a pickup point, which the order then keeps; a paid order is shipped once and carries its tracking number to the shopper. The provider shipped today is the store itself — a carrier implements the same interface.
 - **Card payments behind one interface.** Checkout sends the shopper to Stripe's hosted page, and the order is marked paid by the signed webhook, not by the browser coming back. Every event is recorded once, so retries change nothing. Without keys the provider is simply not offered and the store's own methods (bank transfer, pickup) stay.
 - **Customer accounts, per store.** One authentication identity inside a company, one relationship per store: an account created in one store cannot sign in to another, and each store sees only its own customers and their orders. Registration confirms the address by e-mail, and orders placed as a guest are handed over once that address is proven.
 - **Stock that cannot oversell.** Warehouses hold the tenant's stock, shared by its stores. Checkout reserves with a conditional update, so two shoppers racing for the last item cannot both get it; paying turns the reservation into a stock movement and an unpaid order releases it when it expires.
@@ -94,4 +95,4 @@ frontend/
 
 ## Status
 
-Early development. Multi-store support, the product catalog, attribute-based filtering, bulk import, store provisioning, guest checkout, stock reservations, customer accounts and card payments are in place. Background processing comes next.
+Early development. Multi-store support, the product catalog, attribute-based filtering, bulk import, store provisioning, guest checkout, stock reservations, customer accounts, card payments and shipping are in place. Background processing comes next.
