@@ -5,10 +5,12 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Infrastructure.Email;
 using ShopForge.Infrastructure.Files;
+using ShopForge.Infrastructure.Messaging;
 using ShopForge.Infrastructure.Payments;
 using ShopForge.Infrastructure.Persistence;
 using ShopForge.Shared.Email;
 using ShopForge.Shared.Files;
+using ShopForge.Shared.Messaging;
 using ShopForge.Shared.Payments;
 
 namespace ShopForge.Infrastructure;
@@ -35,7 +37,16 @@ public static class DependencyInjection
 
         services.AddSingleton(new BlobContainerClient(fileStorageConnectionString, containerName));
         services.AddSingleton<IFileStorage, AzureBlobFileStorage>();
-        services.AddSingleton<IEmailSender, LoggingEmailSender>();
+        services.AddSingleton<IEmailDelivery, LoggingEmailDelivery>();
+        services.AddScoped<IEmailSender, OutboxEmailSender>();
+        services.AddScoped<IOutbox, Outbox>();
+        services.AddScoped<IEventHandler<EmailRequested>, EmailRequestedHandler>();
+        services.AddSingleton<OutboxEventTypes>();
+        services.AddSingleton<OutboxDispatcher>();
+        services.AddHostedService<OutboxWorker>();
+        services.AddScoped<OutboxAdmin>();
+        services.AddSingleton<StoreMaintenance>();
+        services.AddHostedService<MaintenanceWorker>();
 
         var stripe = configuration.GetSection(StripeOptions.Section).Get<StripeOptions>() ?? new StripeOptions();
 

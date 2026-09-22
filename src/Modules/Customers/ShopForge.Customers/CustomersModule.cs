@@ -8,6 +8,7 @@ using ShopForge.Customers.Accounts;
 using ShopForge.Customers.Authentication;
 using ShopForge.Customers.Domain;
 using ShopForge.Shared.Customers;
+using ShopForge.Shared.Maintenance;
 using ShopForge.Shared.Security;
 
 namespace ShopForge.Customers;
@@ -24,6 +25,7 @@ public static class CustomersModule
         services.AddSingleton<IPasswordHasher<CustomerIdentity>, PasswordHasher<CustomerIdentity>>();
         services.AddScoped<ICurrentCustomer, CurrentCustomer>();
         services.AddScoped<CustomerMail>();
+        services.AddScoped<IStoreMaintenance, RegistrationCleanup>();
 
         services.AddAuthentication().AddCookie(CustomerPolicies.Scheme, options =>
         {

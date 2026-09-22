@@ -7,6 +7,7 @@ using ShopForge.Access;
 using ShopForge.Access.Development;
 using ShopForge.Api.Errors;
 using ShopForge.Api.Health;
+using ShopForge.Api.Messaging;
 using ShopForge.Catalog;
 using ShopForge.Catalog.Development;
 using ShopForge.Customers;
@@ -107,6 +108,7 @@ var storeAdmin = tenantAdmin.MapGroup("/stores/{storeId:guid}").RequireAdminStor
 storeAdmin.MapStoresStoreAdminEndpoints();
 storeAdmin.MapCatalogStoreAdminEndpoints();
 storeAdmin.MapOrdersStoreAdminEndpoints();
+storeAdmin.MapAdminOutboxEndpoints();
 
 if (app.Environment.IsDevelopment())
 {

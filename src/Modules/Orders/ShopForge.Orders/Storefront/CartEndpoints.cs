@@ -29,9 +29,10 @@ internal static class CartEndpoints
         IStoreContext storeContext,
         ISellableProducts products,
         IStockLedger stock,
+        TimeProvider clock,
         CancellationToken cancellationToken)
     {
-        var carts = new Carts(httpContext, dbContext, storeContext, products, stock);
+        var carts = new Carts(httpContext, dbContext, storeContext, products, stock, clock);
         var cart = await carts.FindAsync(cancellationToken);
 
         return TypedResults.Ok(cart is null
@@ -46,6 +47,7 @@ internal static class CartEndpoints
         IStoreContext storeContext,
         ISellableProducts products,
         IStockLedger stock,
+        TimeProvider clock,
         CancellationToken cancellationToken)
     {
         var quantity = request.Quantity ?? 1;
@@ -61,9 +63,10 @@ internal static class CartEndpoints
             return new RequestErrors().Check(false, "storeProductId", "The product is not available in this store.").ToProblem();
         }
 
-        var carts = new Carts(httpContext, dbContext, storeContext, products, stock);
+        var carts = new Carts(httpContext, dbContext, storeContext, products, stock, clock);
         var cart = await carts.GetOrCreateAsync(cancellationToken);
         cart.Add(request.StoreProductId, quantity);
+        carts.Touch(cart);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return TypedResults.Ok(CartResponse.From(await carts.ContentsAsync(cart, cancellationToken)));
@@ -77,6 +80,7 @@ internal static class CartEndpoints
         IStoreContext storeContext,
         ISellableProducts products,
         IStockLedger stock,
+        TimeProvider clock,
         CancellationToken cancellationToken)
     {
         var errors = new RequestErrors().Check(request.Quantity is >= 0 and <= Cart.MaxQuantity, "quantity", $"Quantity must be between 0 and {Cart.MaxQuantity}.");
@@ -92,6 +96,7 @@ internal static class CartEndpoints
             storeContext,
             products,
             stock,
+            clock,
             cart => cart.SetQuantity(storeProductId, request.Quantity),
             cancellationToken);
     }
@@ -103,8 +108,9 @@ internal static class CartEndpoints
         IStoreContext storeContext,
         ISellableProducts products,
         IStockLedger stock,
+        TimeProvider clock,
         CancellationToken cancellationToken) =>
-        ChangeAsync(httpContext, dbContext, storeContext, products, stock, cart => cart.SetQuantity(storeProductId, 0), cancellationToken);
+        ChangeAsync(httpContext, dbContext, storeContext, products, stock, clock, cart => cart.SetQuantity(storeProductId, 0), cancellationToken);
 
     private static async Task<Results<Ok<CartResponse>, ValidationProblem, NotFound>> ChangeAsync(
         HttpContext httpContext,
@@ -112,10 +118,11 @@ internal static class CartEndpoints
         IStoreContext storeContext,
         ISellableProducts products,
         IStockLedger stock,
+        TimeProvider clock,
         Action<Cart> change,
         CancellationToken cancellationToken)
     {
-        var carts = new Carts(httpContext, dbContext, storeContext, products, stock);
+        var carts = new Carts(httpContext, dbContext, storeContext, products, stock, clock);
         var cart = await carts.FindAsync(cancellationToken);
 
         if (cart is null)
@@ -124,6 +131,7 @@ internal static class CartEndpoints
         }
 
         change(cart);
+        carts.Touch(cart);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return TypedResults.Ok(CartResponse.From(await carts.ContentsAsync(cart, cancellationToken)));

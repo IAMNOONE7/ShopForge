@@ -29,7 +29,7 @@ public sealed class ShopForgeDbContext(
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        foreach (var assembly in configurationAssemblies.Assemblies)
+        foreach (var assembly in configurationAssemblies.Assemblies.Append(typeof(ShopForgeDbContext).Assembly))
         {
             modelBuilder.ApplyConfigurationsFromAssembly(assembly);
         }

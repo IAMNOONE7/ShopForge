@@ -10,6 +10,7 @@ using ShopForge.Shared.Catalog;
 using ShopForge.Shared.Customers;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Inventory;
+using ShopForge.Shared.Messaging;
 using ShopForge.Shared.Payments;
 using ShopForge.Shared.Shipping;
 using ShopForge.Shared.Stores;
@@ -87,11 +88,12 @@ internal static class CheckoutEndpoints
         IStockLedger stock,
         IEnumerable<IPaymentProvider> paymentProviders,
         IEnumerable<IShippingProvider> shippingProviders,
+        IOutbox outbox,
         ILoggerFactory loggerFactory,
         TimeProvider clock,
         CancellationToken cancellationToken)
     {
-        var carts = new Carts(httpContext, dbContext, storeContext, products, stock);
+        var carts = new Carts(httpContext, dbContext, storeContext, products, stock, clock);
         var cart = await carts.FindAsync(cancellationToken);
         var contents = cart is null ? null : await carts.ContentsAsync(cart, cancellationToken);
 
@@ -186,9 +188,6 @@ internal static class CheckoutEndpoints
 
         dbContext.Add(order);
         dbContext.Remove(cart!);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        carts.Forget();
 
         var provider = paymentProviders.Single(candidate => candidate.Key == payment.ProviderKey);
         var storefront = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}";
@@ -205,6 +204,12 @@ internal static class CheckoutEndpoints
                 order.ReservationExpiresAt),
             loggerFactory,
             cancellationToken);
+
+        // The event goes in with the order, so a confirmation is never sent for an order that was rolled back (D-065).
+        outbox.Enqueue(new OrderPlaced(order.Number, order.Email, order.GrandTotal, order.Currency, instructions.Message));
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        carts.Forget();
 
         return TypedResults.Created(
             $"/api/storefront/orders/{order.Number}?token={order.AccessToken}",

@@ -3,11 +3,14 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Orders.Admin;
 using ShopForge.Orders.Background;
+using ShopForge.Orders.Notifications;
 using ShopForge.Orders.Payments;
 using ShopForge.Orders.Publishing;
 using ShopForge.Orders.Shipping;
 using ShopForge.Orders.Storefront;
 using ShopForge.Shared.Customers;
+using ShopForge.Shared.Maintenance;
+using ShopForge.Shared.Messaging;
 using ShopForge.Shared.Payments;
 using ShopForge.Shared.Shipping;
 using ShopForge.Shared.Stores;
@@ -27,6 +30,11 @@ public static class OrdersModule
         services.AddScoped<IStorePublishCheck, OrdersPublishCheck>();
         services.AddScoped<IStoreInitializer, DefaultStoreMethods>();
         services.AddScoped<ICustomerOrders, GuestOrderClaim>();
+        services.AddScoped<IEventHandler<OrderPlaced>, OrderNotifications>();
+        services.AddScoped<IEventHandler<PaymentReceived>, OrderNotifications>();
+        services.AddScoped<IEventHandler<OrderCancelled>, OrderNotifications>();
+        services.AddScoped<IEventHandler<ShipmentCreated>, OrderNotifications>();
+        services.AddScoped<IStoreMaintenance, CartCleanup>();
         services.AddSingleton<ExpiredOrders>();
         services.AddHostedService<ExpiredOrderSweeper>();
 

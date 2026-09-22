@@ -7,7 +7,13 @@ using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Orders.Storefront;
 
-internal sealed class Carts(HttpContext httpContext, DbContext dbContext, IStoreContext storeContext, ISellableProducts products, IStockLedger stock)
+internal sealed class Carts(
+    HttpContext httpContext,
+    DbContext dbContext,
+    IStoreContext storeContext,
+    ISellableProducts products,
+    IStockLedger stock,
+    TimeProvider clock)
 {
     private const string CookieName = "shopforge_cart";
 
@@ -20,7 +26,7 @@ internal sealed class Carts(HttpContext httpContext, DbContext dbContext, IStore
             return cart;
         }
 
-        cart = new Cart(storeContext.StoreId!.Value);
+        cart = new Cart(storeContext.StoreId!.Value, clock.GetUtcNow());
         dbContext.Add(cart);
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -48,6 +54,8 @@ internal sealed class Carts(HttpContext httpContext, DbContext dbContext, IStore
     }
 
     public void Forget() => httpContext.Response.Cookies.Delete(CookieName);
+
+    public void Touch(Cart cart) => cart.Touch(clock.GetUtcNow());
 
     // Lines are priced from the catalog on every read: products that disappeared drop out of the cart, and quantities
     // are capped at what is in stock so checkout is not the first place a customer hears about it.

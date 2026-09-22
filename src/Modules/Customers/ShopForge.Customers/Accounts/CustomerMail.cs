@@ -49,6 +49,8 @@ internal sealed class CustomerMail(
                 $"You already have a {store} account",
                 $"Someone tried to register this address at {store}. Sign in instead, or reset your password at {Link("account/forgot-password", token: null)}."),
             cancellationToken);
+
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private async Task SendWithTokenAsync(
@@ -69,12 +71,14 @@ internal sealed class CustomerMail(
 
         var (value, hash) = TokenValues.Create();
         dbContext.Add(new CustomerToken(identity.TenantId, identity.Id, storeContext.StoreId, purpose, hash, expiresAt));
-        await dbContext.SaveChangesAsync(cancellationToken);
 
         var store = (await storeSettings.GetAsync(cancellationToken)).Name;
         var (subject, body) = compose(store, Link(path, value));
 
+        // Sending is enqueued, so it has to happen before the save that makes the token real: the message and the
+        // token it points at are written together or not at all (D-065).
         await emailSender.SendAsync(new EmailMessage(identity.Email, subject, body), cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private string Link(string path, string? token)

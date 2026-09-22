@@ -10,7 +10,7 @@ internal sealed class PendingRegistration : IStoreOwned
     {
     }
 
-    public PendingRegistration(Guid customerIdentityId, string firstName, string lastName, string? phone, Guid storeId)
+    public PendingRegistration(Guid customerIdentityId, string firstName, string lastName, string? phone, Guid storeId, DateTimeOffset createdAt)
     {
         Id = Guid.CreateVersion7();
         StoreId = storeId;
@@ -18,6 +18,7 @@ internal sealed class PendingRegistration : IStoreOwned
         FirstName = firstName;
         LastName = lastName;
         Phone = phone;
+        CreatedAt = createdAt;
     }
 
     public Guid Id { get; private set; }
@@ -31,4 +32,6 @@ internal sealed class PendingRegistration : IStoreOwned
     public string LastName { get; private set; } = null!;
 
     public string? Phone { get; private set; }
+
+    public DateTimeOffset CreatedAt { get; private set; }
 }

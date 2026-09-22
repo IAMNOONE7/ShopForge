@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using ShopForge.Orders.Domain;
 using ShopForge.Shared.Inventory;
+using ShopForge.Shared.Messaging;
 using ShopForge.Shared.Payments;
 using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
@@ -28,6 +29,7 @@ internal static class PaymentWebhookEndpoints
         StoreContext storeContext,
         IStoreDirectory stores,
         IStockLedger stock,
+        IOutbox outbox,
         IEnumerable<IPaymentNotifications> notifications,
         TimeProvider clock,
         ILoggerFactory loggerFactory,
@@ -78,7 +80,7 @@ internal static class PaymentWebhookEndpoints
         }
 
         dbContext.Add(new PaymentEvent(store.StoreId, provider, notification.EventId, order.Number, clock.GetUtcNow()));
-        await ApplyAsync(notification.Result, order, stock, clock, logger, cancellationToken);
+        await ApplyAsync(notification.Result, order, stock, outbox, clock, logger, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
@@ -89,6 +91,7 @@ internal static class PaymentWebhookEndpoints
         PaymentResult result,
         Order order,
         IStockLedger stock,
+        IOutbox outbox,
         TimeProvider clock,
         ILogger logger,
         CancellationToken cancellationToken)
@@ -111,10 +114,12 @@ internal static class PaymentWebhookEndpoints
         if (result == PaymentResult.Paid)
         {
             await stock.ConfirmAsync(order.Number, cancellationToken);
+            outbox.Enqueue(new PaymentReceived(order.Number, order.Email, order.GrandTotal, order.Currency));
         }
         else
         {
             await stock.ReleaseAsync(order.Number, cancellationToken);
+            outbox.Enqueue(new OrderCancelled(order.Number, order.Email, "The payment was not completed in time."));
         }
     }
 }

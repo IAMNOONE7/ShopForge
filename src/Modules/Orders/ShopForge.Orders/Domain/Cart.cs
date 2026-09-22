@@ -12,10 +12,11 @@ internal sealed class Cart : IStoreOwned
     {
     }
 
-    public Cart(Guid storeId)
+    public Cart(Guid storeId, DateTimeOffset now)
     {
         Id = Guid.CreateVersion7();
         StoreId = storeId;
+        UpdatedAt = now;
     }
 
     public Guid Id { get; private set; }
@@ -23,6 +24,11 @@ internal sealed class Cart : IStoreOwned
     public Guid StoreId { get; private set; }
 
     public IReadOnlyCollection<CartLine> Lines => _lines;
+
+    // When the shopper last touched it: an untouched cart is cleaned up after a month.
+    public DateTimeOffset UpdatedAt { get; private set; }
+
+    public void Touch(DateTimeOffset now) => UpdatedAt = now;
 
     public void SetQuantity(Guid storeProductId, int quantity)
     {

@@ -54,6 +54,7 @@ public sealed class AccountTests(ShopForgeApiFactory factory)
         await VerifyAsync(shopper, email);
 
         using var second = await shopper.PostAsync("/api/storefront/account/register", Registration(email, firstName: "Someone"));
+        await factory.DispatchOutboxAsync(CancellationToken);
         var subjects = factory.Emails.For(email).Select(message => message.Subject).ToList();
         var profile = await shopper.GetJsonAsync<CustomerView>("/api/storefront/account/me");
 
@@ -153,6 +154,7 @@ public sealed class AccountTests(ShopForgeApiFactory factory)
         await VerifyAsync(shopper, email);
 
         using var asked = await shopper.PostAsync("/api/storefront/account/password/forgot", new { Email = email });
+        await factory.DispatchOutboxAsync(CancellationToken);
         var token = factory.Emails.LatestLinkFor(email);
         using var reset = await shopper.PostAsync("/api/storefront/account/password/reset", new { Token = token, Password = "New-password-2026" });
         using var reused = await shopper.PostAsync("/api/storefront/account/password/reset", new { Token = token, Password = "Another-password-2026" });
@@ -224,6 +226,8 @@ public sealed class AccountTests(ShopForgeApiFactory factory)
 
     private async Task<CustomerView> VerifyAsync(StorefrontApi shopper, string email)
     {
+        // The link is in a message the outbox delivers; nothing waits for the worker's tick in a test.
+        await factory.DispatchOutboxAsync(CancellationToken);
         var token = factory.Emails.LatestLinkFor(email);
         using var response = await shopper.PostAsync("/api/storefront/account/verify", new { Token = token });
 

@@ -81,7 +81,8 @@ internal static class AccountEndpoints
             request.FirstName!.Trim(),
             request.LastName!.Trim(),
             string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim(),
-            storeContext.StoreId!.Value));
+            storeContext.StoreId!.Value,
+            clock.GetUtcNow()));
 
         await mail.SendVerificationAsync(identity, clock.GetUtcNow(), cancellationToken);
 

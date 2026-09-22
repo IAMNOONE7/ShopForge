@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ShopForge.Orders.Domain;
 using ShopForge.Shared.Inventory;
+using ShopForge.Shared.Messaging;
 using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
 
@@ -34,6 +35,7 @@ internal sealed class ExpiredOrders(IServiceProvider services, TimeProvider cloc
 
         var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
         var stock = scope.ServiceProvider.GetRequiredService<IStockLedger>();
+        var outbox = scope.ServiceProvider.GetRequiredService<IOutbox>();
         var now = clock.GetUtcNow();
 
         var expired = await dbContext.Set<Order>()
@@ -44,6 +46,7 @@ internal sealed class ExpiredOrders(IServiceProvider services, TimeProvider cloc
         {
             order.Cancel();
             await stock.ReleaseAsync(order.Number, cancellationToken);
+            outbox.Enqueue(new OrderCancelled(order.Number, order.Email, "The order was not paid in time."));
         }
 
         if (expired.Count == 0)
