@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { getCheckoutMethods, placeOrder, RequestFailed, type Address, type ShippingMethod } from '../cart'
 import { useCart } from '../cartContext'
+import { useCustomer } from '../customerContext'
 import { Message } from '../components/Message'
 import { formatPrice, useStore } from '../storeContext'
 import { useRequest } from '../useRequest'
@@ -10,6 +11,7 @@ export function CheckoutPage() {
   const store = useStore()
   const navigate = useNavigate()
   const { cart, reload } = useCart()
+  const { customer } = useCustomer()
   const methods = useRequest('checkout-methods', getCheckoutMethods)
   const [shipElsewhere, setShipElsewhere] = useState(false)
   const [shipping, setShipping] = useState<ShippingMethod | null>(null)
@@ -63,11 +65,16 @@ export function CheckoutPage() {
       <div className="checkout-fields">
         <h1>Checkout</h1>
         <label>
-          E-mail <input name="email" type="email" required />
+          E-mail <input name="email" type="email" defaultValue={customer?.email ?? ''} readOnly={customer !== null} required />
         </label>
+        {customer === null && (
+          <p className="hint">
+            <Link to="/account/sign-in">Sign in</Link> to keep your orders in one place, or order as a guest.
+          </p>
+        )}
         <fieldset>
           <legend>Billing address</legend>
-          <AddressFields prefix="billing" />
+          <AddressFields prefix="billing" fullName={customer ? `${customer.firstName} ${customer.lastName}` : ''} />
         </fieldset>
         <label className="checkout-toggle">
           <input type="checkbox" checked={shipElsewhere} onChange={(event) => setShipElsewhere(event.target.checked)} /> Ship to a different address
@@ -75,7 +82,7 @@ export function CheckoutPage() {
         {shipElsewhere && (
           <fieldset>
             <legend>Shipping address</legend>
-            <AddressFields prefix="shipping" />
+            <AddressFields prefix="shipping" fullName="" />
           </fieldset>
         )}
         <fieldset>
@@ -134,11 +141,11 @@ export function CheckoutPage() {
   )
 }
 
-function AddressFields({ prefix }: { prefix: string }) {
+function AddressFields({ prefix, fullName }: { prefix: string; fullName: string }) {
   return (
     <>
       <label>
-        Full name <input name={`${prefix}.fullName`} autoComplete="name" required />
+        Full name <input name={`${prefix}.fullName`} defaultValue={fullName} autoComplete="name" required />
       </label>
       <label>
         Street and number <input name={`${prefix}.line1`} autoComplete="address-line1" required />

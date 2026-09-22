@@ -86,7 +86,15 @@ export type StoreProductInput = {
   sortOrder: number
 }
 
-export type AdminOrder = { number: string; placedAt: string; status: string; email: string; grandTotal: number; items: number }
+export type AdminOrder = {
+  number: string
+  placedAt: string
+  status: string
+  email: string
+  hasAccount: boolean
+  grandTotal: number
+  items: number
+}
 
 export type AdminAddress = { fullName: string; line1: string; line2: string | null; city: string; postalCode: string; country: string }
 

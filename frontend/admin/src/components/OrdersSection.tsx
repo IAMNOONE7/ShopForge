@@ -73,7 +73,10 @@ function Rows({ storeId, order, money, culture, isOpen, onToggle, run }: RowsPro
       <tr>
         <td>{order.number}</td>
         <td>{new Date(order.placedAt).toLocaleString(culture)}</td>
-        <td>{order.email}</td>
+        <td>
+          {order.email}
+          {!order.hasAccount && <span className="hint"> (guest)</span>}
+        </td>
         <td>{statusLabel(order.status)}</td>
         <td>{order.items}</td>
         <td>{money.format(order.grandTotal)}</td>

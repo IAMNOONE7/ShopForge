@@ -1,13 +1,20 @@
 import { useEffect, useState } from 'react'
 import { BrowserRouter, Route, Routes } from 'react-router'
 import { CartProvider } from './components/CartProvider'
+import { CustomerProvider } from './components/CustomerProvider'
 import { Layout } from './components/Layout'
 import { Message } from './components/Message'
+import { AccountPage } from './pages/AccountPage'
 import { CartPage } from './pages/CartPage'
 import { CheckoutPage } from './pages/CheckoutPage'
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { OrderPage } from './pages/OrderPage'
 import { ProductDetailPage } from './pages/ProductDetailPage'
 import { ProductListPage } from './pages/ProductListPage'
+import { RegisterPage } from './pages/RegisterPage'
+import { ResetPasswordPage } from './pages/ResetPasswordPage'
+import { SignInPage } from './pages/SignInPage'
+import { VerifyEmailPage } from './pages/VerifyEmailPage'
 import { applyStore, fetchStore, type Store } from './store'
 import { StoreContext } from './storeContext'
 
@@ -59,7 +66,8 @@ function App() {
     case 'ready':
       return (
         <StoreContext value={state.store}>
-          <CartProvider>
+          <CustomerProvider>
+            <CartProvider>
             <BrowserRouter>
               <Routes>
                 <Route element={<Layout />}>
@@ -69,11 +77,18 @@ function App() {
                   <Route path="cart" element={<CartPage />} />
                   <Route path="checkout" element={<CheckoutPage />} />
                   <Route path="order/:number" element={<OrderPage />} />
+                  <Route path="account" element={<AccountPage />} />
+                  <Route path="account/sign-in" element={<SignInPage />} />
+                  <Route path="account/register" element={<RegisterPage />} />
+                  <Route path="account/verify" element={<VerifyEmailPage />} />
+                  <Route path="account/forgot-password" element={<ForgotPasswordPage />} />
+                  <Route path="account/reset-password" element={<ResetPasswordPage />} />
                   <Route path="*" element={<Message title="Page not found" text="This page does not exist." />} />
                 </Route>
               </Routes>
             </BrowserRouter>
-          </CartProvider>
+            </CartProvider>
+          </CustomerProvider>
         </StoreContext>
       )
   }

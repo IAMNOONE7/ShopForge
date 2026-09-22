@@ -98,10 +98,23 @@ internal static class AdminOrderEndpoints
     }
 }
 
-internal sealed record AdminOrderResponse(string Number, DateTimeOffset PlacedAt, string Status, string Email, decimal GrandTotal, int Items)
+internal sealed record AdminOrderResponse(
+    string Number,
+    DateTimeOffset PlacedAt,
+    string Status,
+    string Email,
+    bool HasAccount,
+    decimal GrandTotal,
+    int Items)
 {
-    public static AdminOrderResponse From(Order order) =>
-        new(order.Number, order.PlacedAt, order.Status.ToString(), order.Email, order.GrandTotal, order.Lines.Sum(line => line.Quantity));
+    public static AdminOrderResponse From(Order order) => new(
+        order.Number,
+        order.PlacedAt,
+        order.Status.ToString(),
+        order.Email,
+        order.StoreCustomerId is not null,
+        order.GrandTotal,
+        order.Lines.Sum(line => line.Quantity));
 }
 
 internal sealed record AdminOrderDetailResponse(
