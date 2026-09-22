@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Access.Domain;
@@ -17,7 +18,7 @@ internal static class AuthEndpoints
 {
     public static void MapAuthEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapPost("/login", LoginAsync);
+        endpoints.MapPost("/login", LoginAsync).RequireRateLimiting(RateLimits.Authentication);
         endpoints.MapPost("/logout", Logout);
         endpoints.MapGet("/me", GetCurrentUser).RequireAuthorization(AdminPolicies.TenantUser);
     }

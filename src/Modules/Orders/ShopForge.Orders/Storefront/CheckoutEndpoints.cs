@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using ShopForge.Orders.Domain;
 using ShopForge.Orders.Persistence;
 using ShopForge.Shared.Catalog;
+using ShopForge.Shared.Customers;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Inventory;
 using ShopForge.Shared.Payments;
@@ -51,6 +52,7 @@ internal static class CheckoutEndpoints
         IStoreContext storeContext,
         ISellableProducts products,
         ICurrentStoreSettings storeSettings,
+        ICurrentCustomer currentCustomer,
         IStockLedger stock,
         IEnumerable<IPaymentProvider> paymentProviders,
         TimeProvider clock,
@@ -126,6 +128,11 @@ internal static class CheckoutEndpoints
             new ChosenMethods(payment!.Code, payment.Name, shipping!.Code, shipping.Name, shipping.Price, shipping.VatRate),
             placedAt,
             reservationExpiresAt);
+
+        if (await currentCustomer.FindStoreCustomerIdAsync(cancellationToken) is { } storeCustomerId)
+        {
+            order.AssignTo(storeCustomerId);
+        }
 
         foreach (var item in contents.Items)
         {

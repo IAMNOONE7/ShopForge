@@ -1,12 +1,15 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.HttpLogging;
+using Microsoft.AspNetCore.RateLimiting;
 using ShopForge.Access;
 using ShopForge.Access.Development;
 using ShopForge.Api.Errors;
 using ShopForge.Api.Health;
 using ShopForge.Catalog;
 using ShopForge.Catalog.Development;
+using ShopForge.Customers;
 using ShopForge.Infrastructure;
 using ShopForge.Infrastructure.Files;
 using ShopForge.Infrastructure.Persistence;
@@ -34,15 +37,36 @@ builder.Services.AddHttpLogging(options =>
     options.CombineLogs = true;
 });
 
+// Sign-in and password endpoints are the cheapest thing to brute-force, so they get a window of their own.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy(RateLimits.Authentication, context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = builder.Configuration.GetValue("RateLimiting:Authentication:PermitLimit", 10),
+            Window = TimeSpan.FromMinutes(1),
+        }));
+});
+
 builder.Services.AddScoped<StoreContext>();
 builder.Services.AddScoped<IStoreContext>(provider => provider.GetRequiredService<StoreContext>());
 
 builder.Services.AddInfrastructure(
     builder.Configuration,
-    [StoresModule.Assembly, AccessModule.Assembly, CatalogModule.Assembly, InventoryModule.Assembly, OrdersModule.Assembly]);
+    [
+        StoresModule.Assembly,
+        AccessModule.Assembly,
+        CatalogModule.Assembly,
+        CustomersModule.Assembly,
+        InventoryModule.Assembly,
+        OrdersModule.Assembly,
+    ]);
 builder.Services.AddStoresModule();
 builder.Services.AddAccessModule();
 builder.Services.AddCatalogModule();
+builder.Services.AddCustomersModule();
 builder.Services.AddInventoryModule();
 builder.Services.AddOrdersModule();
 
@@ -54,6 +78,7 @@ var app = builder.Build();
 app.UseHttpLogging();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseStoreResolution();
@@ -63,6 +88,7 @@ app.MapHealthEndpoints();
 var storefront = app.MapGroup("/api/storefront").RequireStore();
 storefront.MapStoresStorefrontEndpoints();
 storefront.MapCatalogStorefrontEndpoints();
+storefront.MapCustomersStorefrontEndpoints();
 storefront.MapOrdersStorefrontEndpoints();
 
 var admin = app.MapGroup("/api/admin");

@@ -46,6 +46,8 @@ internal sealed class OrderEntityConfiguration : IEntityTypeConfiguration<Order>
 
         builder.HasIndex(order => new { order.StoreId, order.Number }).IsUnique();
         builder.HasIndex(order => new { order.StoreId, order.PlacedAt });
+        builder.HasIndex(order => new { order.StoreId, order.StoreCustomerId });
+        builder.HasIndex(order => new { order.StoreId, order.Email });
 
         builder.OwnsMany(order => order.Lines, lines =>
         {

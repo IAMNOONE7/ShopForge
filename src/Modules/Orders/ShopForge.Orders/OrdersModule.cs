@@ -6,6 +6,7 @@ using ShopForge.Orders.Background;
 using ShopForge.Orders.Payments;
 using ShopForge.Orders.Publishing;
 using ShopForge.Orders.Storefront;
+using ShopForge.Shared.Customers;
 using ShopForge.Shared.Payments;
 using ShopForge.Shared.Stores;
 
@@ -22,6 +23,7 @@ public static class OrdersModule
         services.AddScoped<IPaymentProvider, ManualPaymentProvider>();
         services.AddScoped<IStorePublishCheck, OrdersPublishCheck>();
         services.AddScoped<IStoreInitializer, DefaultStoreMethods>();
+        services.AddScoped<ICustomerOrders, GuestOrderClaim>();
         services.AddSingleton<ExpiredOrders>();
         services.AddHostedService<ExpiredOrderSweeper>();
 
@@ -32,6 +34,7 @@ public static class OrdersModule
     {
         storefront.MapCart();
         storefront.MapCheckout();
+        storefront.MapCustomerOrders();
 
         return storefront;
     }

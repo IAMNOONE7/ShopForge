@@ -59,6 +59,9 @@ internal sealed class Order : IStoreOwned
 
     public DateTimeOffset? PaidAt { get; private set; }
 
+    // Null for a guest order; set at checkout or when the customer proves the e-mail it was placed with (D-054).
+    public Guid? StoreCustomerId { get; private set; }
+
     public string Email { get; private set; } = null!;
 
     public string Currency { get; private set; } = null!;
@@ -96,6 +99,8 @@ internal sealed class Order : IStoreOwned
 
         _lines.Add(new OrderLine(storeProductId, name, unitPrice, vatRate, quantity));
     }
+
+    public void AssignTo(Guid storeCustomerId) => StoreCustomerId = storeCustomerId;
 
     public bool ConfirmPayment(DateTimeOffset paidAt)
     {

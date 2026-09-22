@@ -1,6 +1,7 @@
 using System.Reflection;
 using ShopForge.Access;
 using ShopForge.Catalog;
+using ShopForge.Customers;
 using ShopForge.Infrastructure.Persistence;
 using ShopForge.Inventory;
 using ShopForge.Orders;
@@ -13,7 +14,14 @@ public sealed class DependencyRulesTests
 {
     private static readonly Assembly Shared = typeof(IStoreContext).Assembly;
     private static readonly Assembly Infrastructure = typeof(ShopForgeDbContext).Assembly;
-    private static readonly Assembly[] Modules = [StoresModule.Assembly, AccessModule.Assembly, CatalogModule.Assembly, InventoryModule.Assembly, OrdersModule.Assembly];
+    private static readonly Assembly[] Modules = [
+        StoresModule.Assembly,
+        AccessModule.Assembly,
+        CatalogModule.Assembly,
+        CustomersModule.Assembly,
+        InventoryModule.Assembly,
+        OrdersModule.Assembly,
+    ];
 
     [Fact]
     public void Shared_does_not_depend_on_other_ShopForge_projects()

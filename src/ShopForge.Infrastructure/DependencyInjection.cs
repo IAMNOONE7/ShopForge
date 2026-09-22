@@ -3,8 +3,10 @@ using Azure.Storage.Blobs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using ShopForge.Infrastructure.Email;
 using ShopForge.Infrastructure.Files;
 using ShopForge.Infrastructure.Persistence;
+using ShopForge.Shared.Email;
 using ShopForge.Shared.Files;
 
 namespace ShopForge.Infrastructure;
@@ -31,6 +33,7 @@ public static class DependencyInjection
 
         services.AddSingleton(new BlobContainerClient(fileStorageConnectionString, containerName));
         services.AddSingleton<IFileStorage, AzureBlobFileStorage>();
+        services.AddSingleton<IEmailSender, LoggingEmailSender>();
 
         return services;
     }
