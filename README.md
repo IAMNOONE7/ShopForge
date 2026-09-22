@@ -10,6 +10,7 @@ A multi-store e-commerce platform. One ASP.NET Core backend and one React storef
 - **Metadata-driven product attributes.** Stores define typed attributes (numbers, dates, yes/no, options) stored as typed EAV rows. The storefront gets filters, ranges and counts computed from the data, so a furniture store and an electronics store run the same code with different filters.
 - **Stores are created as data.** A tenant admin provisions a store with its address, currency, language and theme. It starts as a draft and goes live only once every module reports it ready (branding, products), with no deployment involved.
 - **Guest checkout.** A server-side cart identified by a cookie, gross prices with a per-product VAT rate, and orders that snapshot the product name, price, VAT and the chosen payment and shipping method, numbered per store.
+- **Card payments behind one interface.** Checkout sends the shopper to Stripe's hosted page, and the order is marked paid by the signed webhook, not by the browser coming back. Every event is recorded once, so retries change nothing. Without keys the provider is simply not offered and the store's own methods (bank transfer, pickup) stay.
 - **Customer accounts, per store.** One authentication identity inside a company, one relationship per store: an account created in one store cannot sign in to another, and each store sees only its own customers and their orders. Registration confirms the address by e-mail, and orders placed as a guest are handed over once that address is proven.
 - **Stock that cannot oversell.** Warehouses hold the tenant's stock, shared by its stores. Checkout reserves with a conditional update, so two shoppers racing for the last item cannot both get it; paying turns the reservation into a stock movement and an unpaid order releases it when it expires.
 - **Bulk import.** Store staff upload an .xlsx file; rows are matched by SKU and update products, listings, categories and attribute values, with a per-row report of what changed and what was rejected.
@@ -44,6 +45,13 @@ In development the API applies database migrations on startup and seeds two demo
 
 The admin app (http://localhost:5174) signs in with the development account `owner@demo.local` / `ShopForge-demo-1`.
 
+Card payments are off unless Stripe keys are configured:
+
+```bash
+export Payments__Stripe__SecretKey=sk_test_...
+export Payments__Stripe__WebhookSecret=whsec_...
+```
+
 The API exposes `/health/live` and `/health/ready`.
 
 ## Database migrations
@@ -74,7 +82,7 @@ src/
     Catalog                   products, store listings, categories, images, attributes, import
     Customers                 customer identities, store customers, sign-in, verification, password reset
     Inventory                 warehouses, stock levels, movements, reservations
-    Orders                    carts, checkout, orders, payment and shipping methods
+    Orders                    carts, checkout, orders, payment and shipping methods, payment webhooks
 tests/
   ShopForge.UnitTests
   ShopForge.IntegrationTests
@@ -86,4 +94,4 @@ frontend/
 
 ## Status
 
-Early development. Multi-store support, the product catalog, attribute-based filtering, bulk import, store provisioning, guest checkout, stock reservations and customer accounts are in place. Payments through a provider come next.
+Early development. Multi-store support, the product catalog, attribute-based filtering, bulk import, store provisioning, guest checkout, stock reservations, customer accounts and card payments are in place. Background processing comes next.
