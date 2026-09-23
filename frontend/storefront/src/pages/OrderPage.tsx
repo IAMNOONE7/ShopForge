@@ -36,7 +36,7 @@ export function OrderPage() {
       return <Message title="Something went wrong" text="The order could not be loaded. Please try again." />
     case 'ready': {
       const { lines, shippingMethod, shippingPrice, itemsTotal, vatTotal, grandTotal, email, paymentMethod, status } = order.data
-      const { pickupPoint, shipment } = order.data
+      const { pickupPoint, shipment, documents } = order.data
 
       return (
         <section className="order">
@@ -84,6 +84,15 @@ export function OrderPage() {
               </tr>
             </tbody>
           </table>
+          {documents.length > 0 && (
+            <p className="documents">
+              {documents.map((document) => (
+                <a key={document.number} href={`/api/storefront/orders/${order.data.number}/documents/${document.number}?token=${token}`}>
+                  {document.kind === 'CreditNote' ? 'Credit note' : 'Invoice'} {document.number} (PDF)
+                </a>
+              ))}
+            </p>
+          )}
           <p className="hint">
             Includes {formatPrice(vatTotal, store)} VAT. Paying by {paymentMethod}.
             {pickupPoint && ` Collect at ${pickupPoint}.`}

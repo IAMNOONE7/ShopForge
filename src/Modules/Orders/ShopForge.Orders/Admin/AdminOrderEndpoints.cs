@@ -48,8 +48,12 @@ internal static class AdminOrderEndpoints
     {
         var order = await dbContext.Set<Order>().AsNoTracking().SingleOrDefaultAsync(order => order.Number == number, cancellationToken);
 
-        return order is null ? TypedResults.NotFound() : TypedResults.Ok(AdminOrderDetailResponse.From(order));
+        return order is null ? TypedResults.NotFound() : TypedResults.Ok(await DetailAsync(dbContext, order, cancellationToken));
     }
+
+    // Every answer about an order lists the documents it has, so the admin never has to reload to see a new one.
+    private static async Task<AdminOrderDetailResponse> DetailAsync(DbContext dbContext, Order order, CancellationToken cancellationToken) =>
+        AdminOrderDetailResponse.From(order, await Documents.OfAsync(dbContext, order.Number, cancellationToken));
 
     // Payment for the manual methods is confirmed by hand; the reserved stock leaves the warehouse at that moment.
     private static Task<Results<Ok<AdminOrderDetailResponse>, NotFound, ProblemHttpResult>> ConfirmPaymentAsync(
@@ -145,7 +149,7 @@ internal static class AdminOrderEndpoints
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        return TypedResults.Ok(AdminOrderDetailResponse.From(order));
+        return TypedResults.Ok(await DetailAsync(dbContext, order, cancellationToken));
     }
 
     // The parcel is handed to the carrier by the store; the provider turns that into a tracking number (D-063).
@@ -213,7 +217,7 @@ internal static class AdminOrderEndpoints
         metrics.ShipmentCreated();
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return TypedResults.Ok(AdminOrderDetailResponse.From(order));
+        return TypedResults.Ok(await DetailAsync(dbContext, order, cancellationToken));
     }
 
     private static async Task<Results<Ok<AdminOrderDetailResponse>, NotFound, ProblemHttpResult>> ChangeAsync(
@@ -242,7 +246,7 @@ internal static class AdminOrderEndpoints
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        return TypedResults.Ok(AdminOrderDetailResponse.From(order));
+        return TypedResults.Ok(await DetailAsync(dbContext, order, cancellationToken));
     }
 }
 
@@ -284,7 +288,7 @@ internal sealed record AdminOrderDetailResponse(
     List<DocumentResponse> Documents,
     List<AdminOrderLineResponse> Lines)
 {
-    public static AdminOrderDetailResponse From(Order order, List<DocumentResponse>? documents = null) => new(
+    public static AdminOrderDetailResponse From(Order order, List<DocumentResponse> documents) => new(
         order.Number,
         order.PlacedAt,
         order.Status.ToString(),
@@ -302,7 +306,7 @@ internal sealed record AdminOrderDetailResponse(
         order.Shipment is null
             ? null
             : new AdminShipmentResponse(order.Shipment.Carrier, order.Shipment.TrackingNumber, order.Shipment.TrackingUrl, order.Shipment.ShippedAt),
-        documents ?? [],
+        documents,
         [.. order.Lines.Select(line => new AdminOrderLineResponse(line.ProductName, line.UnitPrice, line.VatRate, line.Quantity, line.LineTotal))]);
 }
 

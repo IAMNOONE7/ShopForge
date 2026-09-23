@@ -82,6 +82,23 @@ public sealed class InvoiceTests(ShopForgeApiFactory factory)
     }
 
     [Fact]
+    public async Task The_store_sees_the_documents_on_the_order()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+        using var shopper = new StorefrontApi(factory, furniture.Store);
+        var order = await PaidOrderAsync(furniture, shopper, "oak-chair", quantity: 1);
+
+        var detail = await furniture.Admin.GetFromJsonAsync<AdminOrderView>(
+            $"/api/admin/stores/{furniture.Store.StoreId}/orders/{order.Number}", CancellationToken);
+        using var refunded = await furniture.Admin.PostAsync(
+            $"/api/admin/stores/{furniture.Store.StoreId}/orders/{order.Number}/refund", null, CancellationToken);
+        var afterRefund = (await refunded.Content.ReadFromJsonAsync<AdminOrderView>(CancellationToken))!;
+
+        Assert.Equal(["Invoice"], detail!.Documents.Select(document => document.Kind));
+        Assert.Equal(["Invoice", "CreditNote"], afterRefund.Documents.Select(document => document.Kind));
+    }
+
+    [Fact]
     public async Task Refunding_returns_the_stock_and_issues_a_credit_note()
     {
         var furniture = await FurnitureStore.CreateAsync(factory);
@@ -189,4 +206,6 @@ public sealed class InvoiceTests(ShopForgeApiFactory factory)
             .SingleAsync(invoice => invoice.Number == documentNumber, CancellationToken));
 
     private sealed record StockView(Guid ProductId, int OnHand, int Reserved, int Available);
+
+    private sealed record AdminOrderView(string Number, string Status, List<DocumentView> Documents);
 }

@@ -451,3 +451,9 @@ button,
 .account .order-lines td {
   padding-right: 1rem;
 }
+
+.documents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}

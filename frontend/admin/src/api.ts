@@ -13,9 +13,20 @@ export type AdminStore = {
   theme: StoreTheme
   logoUrl: string | null
   primaryHostName: string | null
+  company: Company | null
 }
 
-export type StoreSettings = { name: string; currency: string; culture: string; theme: StoreTheme }
+export type Company = {
+  legalName: string
+  line1: string
+  city: string
+  postalCode: string
+  country: string
+  registrationNumber: string
+  vatNumber: string | null
+}
+
+export type StoreSettings = { name: string; currency: string; culture: string; theme: StoreTheme; company?: Company | null }
 
 export type NewStore = StoreSettings & { hostName: string }
 
@@ -116,6 +127,7 @@ export type AdminOrderDetail = {
   shippingAddress: AdminAddress
   pickupPoint: string | null
   shipment: Shipment | null
+  documents: OrderDocument[]
   lines: AdminOrderLine[]
 }
 
@@ -150,6 +162,8 @@ export type PickupPointInput = { name: string; line1: string; city: string; post
 export type FailedMessage = { id: string; type: string; attempts: number; createdAt: string; error: string | null }
 
 export type Shipment = { carrier: string; trackingNumber: string; trackingUrl: string | null; shippedAt: string }
+
+export type OrderDocument = { number: string; kind: string; issuedAt: string }
 
 type Problem = { title?: string; errors?: Record<string, string[]>; problems?: string[] }
 
@@ -236,6 +250,9 @@ export const api = {
   cancelOrder: (storeId: string, number: string) => request<AdminOrderDetail>('POST', `/api/admin/stores/${storeId}/orders/${number}/cancel`),
   createShipment: (storeId: string, number: string, trackingNumber: string) =>
     request<AdminOrderDetail>('POST', `/api/admin/stores/${storeId}/orders/${number}/shipment`, { trackingNumber }),
+  refundOrder: (storeId: string, number: string) => request<AdminOrderDetail>('POST', `/api/admin/stores/${storeId}/orders/${number}/refund`),
+  documentUrl: (storeId: string, orderNumber: string, documentNumber: string) =>
+    `/api/admin/stores/${storeId}/orders/${orderNumber}/documents/${documentNumber}`,
 
   paymentProviders: (storeId: string) => request<string[]>('GET', `/api/admin/stores/${storeId}/payment-providers`),
   paymentMethods: (storeId: string) => request<PaymentMethod[]>('GET', `/api/admin/stores/${storeId}/payment-methods`),

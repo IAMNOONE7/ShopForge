@@ -68,6 +68,7 @@ type RowsProps = {
 function Rows({ storeId, order, money, culture, isOpen, onToggle, run }: RowsProps) {
   const awaitingPayment = order.status === 'AwaitingPayment'
   const paid = order.status === 'Paid'
+  const refundable = order.status === 'Paid' || order.status === 'Shipped'
 
   return (
     <>
@@ -94,6 +95,11 @@ function Rows({ storeId, order, money, culture, isOpen, onToggle, run }: RowsPro
                 Cancel
               </button>
             </>
+          )}
+          {refundable && (
+            <button type="button" onClick={() => run(() => api.refundOrder(storeId, order.number))}>
+              Refund
+            </button>
           )}
           {paid && (
             <form
@@ -125,6 +131,8 @@ function statusLabel(status: string) {
       return 'Paid'
     case 'Shipped':
       return 'Shipped'
+    case 'Refunded':
+      return 'Refunded'
     default:
       return 'Cancelled'
   }
@@ -164,6 +172,15 @@ function OrderDetail({ storeId, number, money }: { storeId: string; number: stri
           </tr>
         </tbody>
       </table>
+      {order.documents.length > 0 && (
+        <p className="inline-form compact">
+          {order.documents.map((document) => (
+            <a key={document.number} href={api.documentUrl(storeId, order.number, document.number)}>
+              {document.kind === 'CreditNote' ? 'Credit note' : 'Invoice'} {document.number}
+            </a>
+          ))}
+        </p>
+      )}
       <p className="hint">
         Paying by {order.paymentMethod}.{order.pickupPoint && ` Collection at ${order.pickupPoint}.`}
         {order.shipment && ` Sent with ${order.shipment.carrier}, tracking ${order.shipment.trackingNumber}.`}

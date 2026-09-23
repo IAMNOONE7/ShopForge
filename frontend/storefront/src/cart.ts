@@ -84,6 +84,12 @@ export type Shipment = {
   trackingUrl: string | null
 }
 
+export type OrderDocument = {
+  number: string
+  kind: string
+  issuedAt: string
+}
+
 export type Order = {
   number: string
   placedAt: string
@@ -98,6 +104,7 @@ export type Order = {
   grandTotal: number
   pickupPoint: string | null
   shipment: Shipment | null
+  documents: OrderDocument[]
   lines: OrderLine[]
 }
 
