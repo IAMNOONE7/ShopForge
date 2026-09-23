@@ -3,6 +3,7 @@ using Azure.Storage.Blobs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using ShopForge.Infrastructure.Diagnostics;
 using ShopForge.Infrastructure.Email;
 using ShopForge.Infrastructure.Files;
 using ShopForge.Infrastructure.Messaging;
@@ -25,6 +26,7 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("ShopForge")
             ?? throw new InvalidOperationException("Connection string 'ShopForge' is not configured.");
 
+        services.AddObservability(configuration);
         services.AddSingleton(new EntityConfigurationAssemblies([.. entityConfigurationAssemblies]));
         services.AddDbContext<ShopForgeDbContext>(options => options
             .UseNpgsql(connectionString)

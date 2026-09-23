@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Orders.Domain;
 using ShopForge.Orders.Shipping;
+using ShopForge.Shared.Diagnostics;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Inventory;
 using ShopForge.Shared.Messaging;
@@ -51,6 +52,7 @@ internal static class AdminOrderEndpoints
         DbContext dbContext,
         IStockLedger stock,
         IOutbox outbox,
+        IShopForgeMetrics metrics,
         TimeProvider clock,
         CancellationToken cancellationToken) =>
         ChangeAsync(
@@ -61,6 +63,7 @@ internal static class AdminOrderEndpoints
             {
                 await stock.ConfirmAsync(order.Number, token);
                 outbox.Enqueue(new PaymentReceived(order.Number, order.Email, order.GrandTotal, order.Currency));
+                metrics.PaymentConfirmed(order.PaymentMethodCode);
             },
             "The order is not awaiting payment",
             cancellationToken);
@@ -70,6 +73,7 @@ internal static class AdminOrderEndpoints
         DbContext dbContext,
         IStockLedger stock,
         IOutbox outbox,
+        IShopForgeMetrics metrics,
         CancellationToken cancellationToken) =>
         ChangeAsync(
             number,
@@ -79,6 +83,7 @@ internal static class AdminOrderEndpoints
             {
                 await stock.ReleaseAsync(order.Number, token);
                 outbox.Enqueue(new OrderCancelled(order.Number, order.Email, "The store cancelled the order."));
+                metrics.OrderCancelled("admin");
             },
             "Only an order that is awaiting payment can be cancelled",
             cancellationToken);
@@ -90,6 +95,7 @@ internal static class AdminOrderEndpoints
         DbContext dbContext,
         IEnumerable<IShippingProvider> shippingProviders,
         IOutbox outbox,
+        IShopForgeMetrics metrics,
         TimeProvider clock,
         CancellationToken cancellationToken)
     {
@@ -144,6 +150,7 @@ internal static class AdminOrderEndpoints
         }
 
         outbox.Enqueue(new ShipmentCreated(order.Number, order.Email, details.Carrier, details.TrackingNumber, order.PickupPointName));
+        metrics.ShipmentCreated();
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return TypedResults.Ok(AdminOrderDetailResponse.From(order));

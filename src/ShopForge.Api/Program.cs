@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.HttpLogging;
 using Microsoft.AspNetCore.RateLimiting;
 using ShopForge.Access;
 using ShopForge.Access.Development;
+using ShopForge.Api.Diagnostics;
 using ShopForge.Api.Errors;
 using ShopForge.Api.Health;
 using ShopForge.Api.Messaging;
@@ -72,10 +73,12 @@ builder.Services.AddInventoryModule();
 builder.Services.AddOrdersModule();
 
 builder.Services.AddHealthChecks()
-    .AddDbContextCheck<ShopForgeDbContext>("database", tags: [HealthEndpoints.ReadinessTag]);
+    .AddDbContextCheck<ShopForgeDbContext>("database", tags: [HealthEndpoints.ReadinessTag])
+    .AddCheck<FileStorageHealthCheck>("file-storage", tags: [HealthEndpoints.ReadinessTag]);
 
 var app = builder.Build();
 
+app.UseMiddleware<CorrelationMiddleware>();
 app.UseHttpLogging();
 app.UseExceptionHandler();
 app.UseStatusCodePages();

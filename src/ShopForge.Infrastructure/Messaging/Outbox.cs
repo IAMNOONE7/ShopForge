@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Shared.Messaging;
@@ -14,6 +15,7 @@ internal sealed class Outbox(DbContext dbContext, IStoreContext storeContext, Ti
             storeContext.TenantId!.Value,
             TEvent.EventType,
             JsonSerializer.Serialize(domainEvent, OutboxJson.Options),
+            Activity.Current?.Id,
             clock.GetUtcNow()));
 }
 

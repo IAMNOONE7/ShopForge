@@ -8,6 +8,7 @@ using ShopForge.Orders.Domain;
 using ShopForge.Orders.Persistence;
 using ShopForge.Shared.Catalog;
 using ShopForge.Shared.Customers;
+using ShopForge.Shared.Diagnostics;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Inventory;
 using ShopForge.Shared.Messaging;
@@ -89,6 +90,7 @@ internal static class CheckoutEndpoints
         IEnumerable<IPaymentProvider> paymentProviders,
         IEnumerable<IShippingProvider> shippingProviders,
         IOutbox outbox,
+        IShopForgeMetrics metrics,
         ILoggerFactory loggerFactory,
         TimeProvider clock,
         CancellationToken cancellationToken)
@@ -114,6 +116,12 @@ internal static class CheckoutEndpoints
 
         if (contents is { Changed: true })
         {
+            if (contents.ShortNames.Count > 0)
+            {
+                // A sale lost to stock, whether the cart noticed first or the reservation did.
+                metrics.ReservationRefused();
+            }
+
             return TypedResults.Problem(
                 statusCode: StatusCodes.Status409Conflict,
                 title: "Some products are no longer available",
@@ -153,6 +161,7 @@ internal static class CheckoutEndpoints
         if (!reserved.Succeeded)
         {
             await transaction.RollbackAsync(cancellationToken);
+            metrics.ReservationRefused();
 
             var names = contents.Items
                 .Where(item => reserved.UnavailableProductIds.Contains(item.Product.ProductId))
@@ -207,6 +216,7 @@ internal static class CheckoutEndpoints
 
         // The event goes in with the order, so a confirmation is never sent for an order that was rolled back (D-065).
         outbox.Enqueue(new OrderPlaced(order.Number, order.Email, order.GrandTotal, order.Currency, instructions.Message));
+        metrics.OrderPlaced(payment.Code);
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         carts.Forget();

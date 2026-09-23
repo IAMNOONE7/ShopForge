@@ -19,13 +19,14 @@ internal sealed class OutboxMessage : IStoreOwned
     {
     }
 
-    public OutboxMessage(Guid storeId, Guid tenantId, string type, string payload, DateTimeOffset createdAt)
+    public OutboxMessage(Guid storeId, Guid tenantId, string type, string payload, string? traceParent, DateTimeOffset createdAt)
     {
         Id = Guid.CreateVersion7();
         StoreId = storeId;
         TenantId = tenantId;
         Type = type;
         Payload = payload;
+        TraceParent = traceParent;
         CreatedAt = createdAt;
         DueAt = createdAt;
         Status = OutboxStatus.Pending;
@@ -40,6 +41,9 @@ internal sealed class OutboxMessage : IStoreOwned
     public string Type { get; private set; } = null!;
 
     public string Payload { get; private set; } = null!;
+
+    // The request that caused the event, so the work it triggers stays in the same trace (D-070).
+    public string? TraceParent { get; private set; }
 
     public OutboxStatus Status { get; private set; }
 

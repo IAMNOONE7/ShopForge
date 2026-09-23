@@ -25,6 +25,15 @@ services:
     volumes:
       - azurite-data:/data
 
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.139.0
+    command: ["--config=/etc/otel-collector.yaml"]
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - ./docker/otel-collector.yaml:/etc/otel-collector.yaml:ro
+
 volumes:
   postgres-data:
   azurite-data:

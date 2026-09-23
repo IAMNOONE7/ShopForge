@@ -16,6 +16,7 @@ A multi-store e-commerce platform. One ASP.NET Core backend and one React storef
 - **Stock that cannot oversell.** Warehouses hold the tenant's stock, shared by its stores. Checkout reserves with a conditional update, so two shoppers racing for the last item cannot both get it; paying turns the reservation into a stock movement and an unpaid order releases it when it expires.
 - **Bulk import.** Store staff upload an .xlsx file; rows are matched by SKU and update products, listings, categories and attribute values, with a per-row report of what changed and what was rejected.
 - **Events through a transactional outbox.** What happens to an order is written with the change that caused it and delivered by a background worker: confirmations, payment receipts and shipment notices are handlers, not inline calls. Delivery is leased, retried with backoff, and anything that gives up lands in a failed-message list the store can requeue.
+- **Telemetry that follows the work.** OpenTelemetry traces cover a request, its database calls and the background work it causes — an order and the confirmation e-mail sent seconds later share one trace — plus business counters (orders, payments, refused reservations) and outbox gauges. Nothing is exported unless an OTLP endpoint is configured.
 - **Replaceable infrastructure behind small interfaces.** File storage (`IFileStorage`, Azure Blob Storage adapter, Azurite locally) and payments (`IPaymentProvider`, with methods the store settles itself today and a hosted provider later).
 
 ## Tech stack
@@ -29,7 +30,7 @@ A multi-store e-commerce platform. One ASP.NET Core backend and one React storef
 Prerequisites: .NET 10 SDK, Node.js 22.12+, Docker.
 
 ```bash
-docker compose up -d                     # PostgreSQL on localhost:5433, Azurite on :10000
+docker compose up -d                     # PostgreSQL on :5433, Azurite on :10000, OTLP collector on :4317
 dotnet run --project src/ShopForge.Api   # API on http://localhost:5080
 ```
 
@@ -46,6 +47,13 @@ In development the API applies database migrations on startup and seeds two demo
 - http://shop-b.localhost:5173 — Volt Electronics
 
 The admin app (http://localhost:5174) signs in with the development account `owner@demo.local` / `ShopForge-demo-1`.
+
+Telemetry is off unless an OTLP endpoint is configured. Compose brings a collector that prints what it receives:
+
+```bash
+export OpenTelemetry__Otlp__Endpoint=http://localhost:4317
+docker compose logs -f otel-collector
+```
 
 Card payments are off unless Stripe keys are configured:
 
@@ -96,4 +104,4 @@ frontend/
 
 ## Status
 
-Early development. Multi-store support, the product catalog, attribute-based filtering, bulk import, store provisioning, guest checkout, stock reservations, customer accounts, card payments, shipping and background processing are in place. Observability comes next.
+Early development. Multi-store support, the product catalog, attribute-based filtering, bulk import, store provisioning, guest checkout, stock reservations, customer accounts, card payments, shipping, background processing and telemetry are in place. Azure deployment comes next.

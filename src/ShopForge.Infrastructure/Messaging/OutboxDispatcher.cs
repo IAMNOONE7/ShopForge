@@ -1,8 +1,9 @@
-using System.Text.Json;
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using ShopForge.Infrastructure.Diagnostics;
 using ShopForge.Shared.Messaging;
 using ShopForge.Shared.Tenancy;
 
@@ -63,6 +64,10 @@ internal sealed class OutboxDispatcher(IServiceProvider services, OutboxEventTyp
 
         var message = await dbContext.Set<OutboxMessage>().SingleAsync(candidate => candidate.Id == claimed.Id, cancellationToken);
 
+        using var activity = ShopForgeMetrics.ActivitySource.StartActivity($"outbox {message.Type}", ActivityKind.Consumer, message.TraceParent);
+        activity?.SetTag("shopforge.store_id", message.StoreId);
+        activity?.SetTag("messaging.message.id", message.Id);
+
         try
         {
             await eventTypes.DeliverAsync(scope.ServiceProvider, message.Type, message.Payload, cancellationToken);
@@ -71,6 +76,7 @@ internal sealed class OutboxDispatcher(IServiceProvider services, OutboxEventTyp
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             logger.LogError(exception, "Handling outbox message {MessageId} ({Type}) failed on attempt {Attempt}.", message.Id, message.Type, message.Attempts + 1);
+            activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
             message.Fail(exception.Message, clock.GetUtcNow());
         }
 
