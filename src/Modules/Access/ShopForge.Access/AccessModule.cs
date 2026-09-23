@@ -17,7 +17,7 @@ public static class AccessModule
 
     public static Assembly Assembly => typeof(AccessModule).Assembly;
 
-    public static IServiceCollection AddAccessModule(this IServiceCollection services)
+    public static IServiceCollection AddAccessModule(this IServiceCollection services, bool requireSecureCookies)
     {
         services.AddSingleton<IPasswordHasher<TenantUser>, PasswordHasher<TenantUser>>();
 
@@ -27,6 +27,7 @@ public static class AccessModule
                 options.Cookie.Name = "shopforge_admin";
                 options.Cookie.HttpOnly = true;
                 options.Cookie.SameSite = SameSiteMode.Strict;
+                options.Cookie.SecurePolicy = requireSecureCookies ? CookieSecurePolicy.Always : CookieSecurePolicy.SameAsRequest;
                 options.ExpireTimeSpan = TimeSpan.FromHours(8);
                 options.SlidingExpiration = true;
                 options.Events.OnValidatePrincipal = SessionValidation.ValidateAsync;

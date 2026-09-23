@@ -19,7 +19,7 @@ public static class CustomersModule
 
     public static Assembly Assembly => typeof(CustomersModule).Assembly;
 
-    public static IServiceCollection AddCustomersModule(this IServiceCollection services)
+    public static IServiceCollection AddCustomersModule(this IServiceCollection services, bool requireSecureCookies)
     {
         services.AddHttpContextAccessor();
         services.AddSingleton<IPasswordHasher<CustomerIdentity>, PasswordHasher<CustomerIdentity>>();
@@ -32,6 +32,7 @@ public static class CustomersModule
             options.Cookie.Name = "shopforge_customer";
             options.Cookie.HttpOnly = true;
             options.Cookie.SameSite = SameSiteMode.Lax;
+            options.Cookie.SecurePolicy = requireSecureCookies ? CookieSecurePolicy.Always : CookieSecurePolicy.SameAsRequest;
             options.ExpireTimeSpan = TimeSpan.FromDays(14);
             options.SlidingExpiration = true;
             options.Events.OnValidatePrincipal = CustomerSessions.ValidateAsync;

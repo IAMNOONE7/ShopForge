@@ -1,3 +1,4 @@
+using Azure.Monitor.OpenTelemetry.AspNetCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -39,6 +40,12 @@ internal static class Observability
         if (!string.IsNullOrWhiteSpace(otlpEndpoint))
         {
             telemetry.UseOtlpExporter();
+        }
+
+        // In Azure the same instrumentation goes to Application Insights, logs included (D-077).
+        if (!string.IsNullOrWhiteSpace(configuration["ApplicationInsights:ConnectionString"]))
+        {
+            telemetry.UseAzureMonitor(options => options.ConnectionString = configuration["ApplicationInsights:ConnectionString"]);
         }
 
         return services;

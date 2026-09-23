@@ -1,0 +1,86 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to deploy
+        required: true
+        default: production
+        type: environment
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/*/package-lock.json
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and push the image
+        run: |
+          az acr login --name "${{ vars.REGISTRY_NAME }}"
+          docker build --tag "${{ vars.REGISTRY_SERVER }}/shopforge-api:${{ github.sha }}" .
+          docker push "${{ vars.REGISTRY_SERVER }}/shopforge-api:${{ github.sha }}"
+
+      - name: Build the storefront and admin
+        run: |
+          npm ci --prefix frontend/storefront && npm run build --prefix frontend/storefront
+          npm ci --prefix frontend/admin && npm run build --prefix frontend/admin
+
+      - name: Provision or update the environment
+        run: |
+          az deployment sub create \
+            --location "${{ vars.LOCATION }}" \
+            --template-file infra/main.bicep \
+            --parameters namePrefix="${{ vars.NAME_PREFIX }}" \
+                         location="${{ vars.LOCATION }}" \
+                         image="${{ vars.REGISTRY_SERVER }}/shopforge-api:${{ github.sha }}" \
+                         registryServer="${{ vars.REGISTRY_SERVER }}" \
+                         storefrontFqdn="${{ vars.STOREFRONT_FQDN }}" \
+                         databasePassword="${{ secrets.DATABASE_PASSWORD }}" \
+                         stripeSecretKey="${{ secrets.STRIPE_SECRET_KEY }}" \
+                         stripeWebhookSecret="${{ secrets.STRIPE_WEBHOOK_SECRET }}"
+
+      # The schema is migrated before the new revision serves traffic, never by the application itself (D-074).
+      # The bundle builds the application's host to find the context, so it needs the same configuration the app does.
+      - name: Apply database migrations
+        env:
+          ConnectionStrings__ShopForge: ${{ secrets.DATABASE_CONNECTION_STRING }}
+          ConnectionStrings__FileStorage: ${{ secrets.FILE_STORAGE_CONNECTION_STRING }}
+        run: |
+          dotnet tool restore
+          dotnet ef migrations bundle \
+            --project src/ShopForge.Infrastructure \
+            --startup-project src/ShopForge.Api \
+            --configuration Release \
+            --self-contained --runtime linux-x64 \
+            --output ./migrate
+          ./migrate
+
+      - name: Publish the built frontends
+        run: |
+          az storage blob upload-batch --account-name "${{ vars.STORAGE_ACCOUNT }}" --auth-mode login \
+            --source frontend/storefront/dist --destination '$web' --overwrite
+          az storage blob upload-batch --account-name "${{ vars.STORAGE_ACCOUNT }}" --auth-mode login \
+            --source frontend/admin/dist --destination '$web/admin' --overwrite

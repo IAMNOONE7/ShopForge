@@ -56,6 +56,9 @@ public sealed class ShopForgeApiFactory : WebApplicationFactory<Program>, IAsync
 
         // The suite signs in far more often than a person would; the limiter is exercised by its own test instead.
         builder.UseSetting("RateLimiting:Authentication:PermitLimit", "10000");
+
+        // The test host speaks plain HTTP, so cookies cannot be marked Secure the way a deployment marks them.
+        builder.UseSetting("Security:RequireSecureCookies", "false");
         // Only the last hop is faked: registration still writes an outbox message, which the dispatcher delivers.
         builder.ConfigureTestServices(services => services.AddSingleton<IEmailDelivery>(EmailDelivery));
     }

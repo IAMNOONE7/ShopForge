@@ -25,7 +25,15 @@ using ShopForge.Stores.Development;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Connection strings, provider keys and the telemetry connection live in Key Vault and are read with the container
+// app's own identity (D-076); locally there is no vault and Compose credentials apply.
+if (builder.Configuration["KeyVault:Uri"] is { Length: > 0 } keyVaultUri)
+{
+    builder.Configuration.AddAzureKeyVault(new Uri(keyVaultUri), new Azure.Identity.DefaultAzureCredential());
+}
+
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddEdgeHeaders();
 builder.Services.AddProblemDetails();
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
@@ -66,9 +74,12 @@ builder.Services.AddInfrastructure(
         OrdersModule.Assembly,
     ]);
 builder.Services.AddStoresModule();
-builder.Services.AddAccessModule();
+// Outside Development the browser always reaches the platform over TLS terminated at the edge (D-075). The setting
+// exists so a test host can serve plain HTTP; a deployment leaves it alone.
+var requireSecureCookies = builder.Configuration.GetValue("Security:RequireSecureCookies", !builder.Environment.IsDevelopment());
+builder.Services.AddAccessModule(requireSecureCookies);
 builder.Services.AddCatalogModule();
-builder.Services.AddCustomersModule();
+builder.Services.AddCustomersModule(requireSecureCookies);
 builder.Services.AddInventoryModule();
 builder.Services.AddOrdersModule();
 
@@ -78,6 +89,7 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
+app.UseEdgeHeaders();
 app.UseMiddleware<CorrelationMiddleware>();
 app.UseHttpLogging();
 app.UseExceptionHandler();
@@ -113,6 +125,7 @@ storeAdmin.MapCatalogStoreAdminEndpoints();
 storeAdmin.MapOrdersStoreAdminEndpoints();
 storeAdmin.MapAdminOutboxEndpoints();
 
+// Outside Development the schema is migrated by the pipeline before a new revision starts (D-074).
 if (app.Environment.IsDevelopment())
 {
     await app.Services.MigrateDatabaseAsync();

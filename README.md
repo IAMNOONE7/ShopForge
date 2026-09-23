@@ -64,6 +64,20 @@ export Payments__Stripe__WebhookSecret=whsec_...
 
 The API exposes `/health/live` and `/health/ready`.
 
+## Deployment
+
+`infra/` describes the whole Azure environment in Bicep: Log Analytics and Application Insights, Key Vault, Storage (product media plus the built frontends), PostgreSQL Flexible Server, the Container Apps environment and Front Door with its routes.
+
+```bash
+az deployment sub create --location westeurope --template-file infra/main.bicep --parameters infra/main.sample.bicepparam
+```
+
+The GitHub Actions `Deploy` workflow builds the image, pushes it, deploys the template, applies the migrations and uploads the built frontends. Three things are worth knowing:
+
+- The application migrates the database only in Development. Everywhere else a migration bundle runs in the pipeline before the new revision starts serving.
+- Secrets (database, storage, Stripe, Application Insights) live in Key Vault and are read by the container app's managed identity; the app is given only the vault's URI.
+- Behind Front Door the original host arrives as a header, which is trusted only when `X-Azure-FDID` matches the configured profile — otherwise the forwarded headers are dropped.
+
 ## Database migrations
 
 ```bash
