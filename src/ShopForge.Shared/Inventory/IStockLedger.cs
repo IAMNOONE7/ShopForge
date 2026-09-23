@@ -15,6 +15,9 @@ public interface IStockLedger
 
     Task ReleaseAsync(string reference, CancellationToken cancellationToken);
 
+    // Goods that came back: a refunded order puts its items on sale again (D-081).
+    Task ReturnAsync(IReadOnlyCollection<StockRequest> requests, string reference, CancellationToken cancellationToken);
+
     // False when the quantity is below what orders already reserved; the reservations have to go first.
     Task<bool> SetOnHandAsync(Guid productId, int quantity, string reference, CancellationToken cancellationToken);
 }

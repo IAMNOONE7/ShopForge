@@ -41,6 +41,9 @@ internal sealed class Store : ITenantOwned
 
     public StoreStatus Status { get; private set; }
 
+    // Null until the store fills it in; a store cannot be published without it, because an invoice names a seller.
+    public StoreCompany? Company { get; private set; }
+
     public IReadOnlyCollection<StoreDomain> Domains => _domains;
 
     public StoreDomain AddDomain(string hostName)
@@ -55,6 +58,8 @@ internal sealed class Store : ITenantOwned
         _domains.Add(domain);
         return domain;
     }
+
+    public void SetCompany(StoreCompany company) => Company = company;
 
     public void UpdateSettings(string name, string? currency, string culture, StoreTheme theme)
     {

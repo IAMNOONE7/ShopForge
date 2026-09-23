@@ -6,6 +6,8 @@ COPY src ./src
 RUN dotnet publish src/ShopForge.Api/ShopForge.Api.csproj --configuration Release --output /app
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
+# Invoices are rendered in the container, and PDFsharp brings no fonts of its own.
+RUN apk add --no-cache font-dejavu
 WORKDIR /app
 COPY --from=build /app ./
 

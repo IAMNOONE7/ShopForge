@@ -27,7 +27,17 @@ internal static class AdminStoreEndpoints
                 store.Status,
                 new AdminThemeResponse(store.Theme.PrimaryColor, store.Theme.SecondaryColor, store.Theme.BorderRadius),
                 store.LogoPath == null ? null : "/api/admin/stores/" + store.Id + "/logo",
-                store.Domains.Where(domain => domain.IsPrimary).Select(domain => domain.HostName).FirstOrDefault()))
+                store.Domains.Where(domain => domain.IsPrimary).Select(domain => domain.HostName).FirstOrDefault(),
+                store.Company == null
+                    ? null
+                    : new AdminCompanyResponse(
+                        store.Company.LegalName,
+                        store.Company.Line1,
+                        store.Company.City,
+                        store.Company.PostalCode,
+                        store.Company.Country,
+                        store.Company.RegistrationNumber,
+                        store.Company.VatNumber)))
             .ToListAsync(cancellationToken);
 
         return TypedResults.Ok(stores);
@@ -42,7 +52,8 @@ internal sealed record AdminStoreResponse(
     StoreStatus Status,
     AdminThemeResponse Theme,
     string? LogoUrl,
-    string? PrimaryHostName)
+    string? PrimaryHostName,
+    AdminCompanyResponse? Company)
 {
     public static AdminStoreResponse From(Store store, string? primaryHostName) => new(
         store.Id,
@@ -52,7 +63,26 @@ internal sealed record AdminStoreResponse(
         store.Status,
         new AdminThemeResponse(store.Theme.PrimaryColor, store.Theme.SecondaryColor, store.Theme.BorderRadius),
         store.LogoPath is null ? null : $"/api/admin/stores/{store.Id}/logo",
-        primaryHostName);
+        primaryHostName,
+        store.Company is null
+            ? null
+            : new AdminCompanyResponse(
+                store.Company.LegalName,
+                store.Company.Line1,
+                store.Company.City,
+                store.Company.PostalCode,
+                store.Company.Country,
+                store.Company.RegistrationNumber,
+                store.Company.VatNumber));
 }
+
+internal sealed record AdminCompanyResponse(
+    string LegalName,
+    string Line1,
+    string City,
+    string PostalCode,
+    string Country,
+    string RegistrationNumber,
+    string? VatNumber);
 
 internal sealed record AdminThemeResponse(string PrimaryColor, string SecondaryColor, int BorderRadius);

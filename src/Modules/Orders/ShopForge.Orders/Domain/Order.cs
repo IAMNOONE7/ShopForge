@@ -35,6 +35,7 @@ internal sealed class Order : IStoreOwned
         ShippingAddress = shipping;
         PaymentMethodCode = methods.PaymentCode;
         PaymentMethodName = methods.PaymentName;
+        PaymentProviderKey = methods.PaymentProviderKey;
         ShippingMethodCode = methods.ShippingCode;
         ShippingMethodName = methods.ShippingName;
         ShippingPrice = methods.ShippingPrice;
@@ -64,6 +65,9 @@ internal sealed class Order : IStoreOwned
 
     public DateTimeOffset? PaidAt { get; private set; }
 
+    // What the provider calls the payment, so it can be refunded later (D-081).
+    public string? PaymentReference { get; private set; }
+
     // Null for a guest order; set at checkout or when the customer proves the e-mail it was placed with (D-054).
     public Guid? StoreCustomerId { get; private set; }
 
@@ -78,6 +82,9 @@ internal sealed class Order : IStoreOwned
     public string PaymentMethodCode { get; private set; } = null!;
 
     public string PaymentMethodName { get; private set; } = null!;
+
+    // Which provider took the money, so a refund knows who to ask (D-081).
+    public string PaymentProviderKey { get; private set; } = null!;
 
     public string ShippingMethodCode { get; private set; } = null!;
 
@@ -115,7 +122,7 @@ internal sealed class Order : IStoreOwned
 
     public void AssignTo(Guid storeCustomerId) => StoreCustomerId = storeCustomerId;
 
-    public bool ConfirmPayment(DateTimeOffset paidAt)
+    public bool ConfirmPayment(DateTimeOffset paidAt, string? paymentReference = null)
     {
         if (Status != OrderStatus.AwaitingPayment)
         {
@@ -124,6 +131,20 @@ internal sealed class Order : IStoreOwned
 
         Status = OrderStatus.Paid;
         PaidAt = paidAt;
+        PaymentReference = paymentReference;
+
+        return true;
+    }
+
+    // Money and goods both go back, so an order that was never paid cannot be refunded (D-081).
+    public bool Refund()
+    {
+        if (Status is not (OrderStatus.Paid or OrderStatus.Shipped))
+        {
+            return false;
+        }
+
+        Status = OrderStatus.Refunded;
 
         return true;
     }
@@ -214,6 +235,7 @@ internal enum OrderStatus
     Paid,
     Shipped,
     Cancelled,
+    Refunded,
 }
 
 internal sealed record ChosenPickupPoint(string Code, string Name, Address Address);
@@ -221,6 +243,7 @@ internal sealed record ChosenPickupPoint(string Code, string Name, Address Addre
 internal sealed record ChosenMethods(
     string PaymentCode,
     string PaymentName,
+    string PaymentProviderKey,
     string ShippingCode,
     string ShippingName,
     decimal ShippingPrice,

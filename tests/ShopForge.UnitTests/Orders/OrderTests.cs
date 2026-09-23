@@ -6,7 +6,7 @@ namespace ShopForge.UnitTests.Orders;
 public sealed class OrderTests
 {
     private static readonly Address Address = new("Alex Buyer", "1 Main Street", null, "Dublin", "D01 AB12", "IE");
-    private static readonly ChosenMethods Methods = new("bank-transfer", "Bank transfer", "courier", "Courier", 4.90m, 21m);
+    private static readonly ChosenMethods Methods = new("bank-transfer", "Bank transfer", "manual", "courier", "Courier", 4.90m, 21m);
     private static readonly DateTimeOffset PlacedAt = new(2026, 9, 20, 10, 0, 0, TimeSpan.Zero);
 
     [Fact]

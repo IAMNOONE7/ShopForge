@@ -42,4 +42,5 @@ internal enum StockMovementReason
 {
     Adjustment,
     Sale,
+    Return,
 }

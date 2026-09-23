@@ -53,7 +53,9 @@ internal static class CustomerOrderEndpoints
             .AsNoTracking()
             .SingleOrDefaultAsync(order => order.Number == number && order.StoreCustomerId == storeCustomerId, cancellationToken);
 
-        return order is null ? TypedResults.NotFound() : TypedResults.Ok(OrderResponse.From(order));
+        return order is null
+            ? TypedResults.NotFound()
+            : TypedResults.Ok(OrderResponse.From(order, await Documents.OfAsync(dbContext, order.Number, cancellationToken)));
     }
 }
 

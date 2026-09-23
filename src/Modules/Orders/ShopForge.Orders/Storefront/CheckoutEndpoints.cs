@@ -151,7 +151,7 @@ internal static class CheckoutEndpoints
         // Number, stock and order rows are written together: a checkout that cannot reserve leaves nothing behind.
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
-        var number = await OrderNumbers.NextAsync(dbContext, storeContext.StoreId!.Value, placedAt.Year, cancellationToken);
+        var number = await Numbers.NextOrderNumberAsync(dbContext, storeContext.StoreId!.Value, placedAt.Year, cancellationToken);
         var requests = contents!.Items
             .GroupBy(item => item.Product.ProductId)
             .Select(group => new StockRequest(group.Key, group.Sum(item => item.Quantity)))
@@ -180,7 +180,14 @@ internal static class CheckoutEndpoints
             request.Email!,
             request.BillingAddress!.ToAddress(),
             (request.ShippingAddress ?? request.BillingAddress).ToAddress(),
-            new ChosenMethods(payment!.Code, payment.Name, shipping!.Code, shipping.Name, shipping.Price, shipping.VatRate),
+            new ChosenMethods(
+                payment!.Code,
+                payment.Name,
+                payment.ProviderKey,
+                shipping!.Code,
+                shipping.Name,
+                shipping.Price,
+                shipping.VatRate),
             pickupPoint is null ? null : new ChosenPickupPoint(pickupPoint.Code, pickupPoint.Name, pickupPoint.Address),
             placedAt,
             reservationExpiresAt);
@@ -258,7 +265,9 @@ internal static class CheckoutEndpoints
             .AsNoTracking()
             .SingleOrDefaultAsync(order => order.Number == number && order.AccessToken == token, cancellationToken);
 
-        return order is null ? TypedResults.NotFound() : TypedResults.Ok(OrderResponse.From(order));
+        return order is null
+            ? TypedResults.NotFound()
+            : TypedResults.Ok(OrderResponse.From(order, await Documents.OfAsync(dbContext, order.Number, cancellationToken)));
     }
 
     private static bool IsEmail(string? email) =>
@@ -310,9 +319,10 @@ internal sealed record OrderResponse(
     decimal GrandTotal,
     string? PickupPoint,
     ShipmentResponse? Shipment,
+    List<DocumentResponse> Documents,
     List<OrderLineResponse> Lines)
 {
-    public static OrderResponse From(Order order) => new(
+    public static OrderResponse From(Order order, List<DocumentResponse> documents) => new(
         order.Number,
         order.PlacedAt,
         order.Status.ToString(),
@@ -326,6 +336,7 @@ internal sealed record OrderResponse(
         order.GrandTotal,
         order.PickupPointName is null ? null : $"{order.PickupPointName}, {order.PickupPointAddress!.Line1}, {order.PickupPointAddress.City}",
         order.Shipment is null ? null : new ShipmentResponse(order.Shipment.Carrier, order.Shipment.TrackingNumber, order.Shipment.TrackingUrl),
+        documents,
         [.. order.Lines.Select(line => new OrderLineResponse(line.ProductName, line.UnitPrice, line.VatRate, line.Quantity, line.LineTotal))]);
 }
 

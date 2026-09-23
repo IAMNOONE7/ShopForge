@@ -82,7 +82,7 @@ internal static class PaymentWebhookEndpoints
         }
 
         dbContext.Add(new PaymentEvent(store.StoreId, provider, notification.EventId, order.Number, clock.GetUtcNow()));
-        await ApplyAsync(notification.Result, order, stock, outbox, metrics, provider, clock, logger, cancellationToken);
+        await ApplyAsync(notification, order, stock, outbox, metrics, provider, clock, logger, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
@@ -90,7 +90,7 @@ internal static class PaymentWebhookEndpoints
     }
 
     private static async Task ApplyAsync(
-        PaymentResult result,
+        PaymentNotification notification,
         Order order,
         IStockLedger stock,
         IOutbox outbox,
@@ -100,9 +100,10 @@ internal static class PaymentWebhookEndpoints
         ILogger logger,
         CancellationToken cancellationToken)
     {
+        var result = notification.Result;
         var applied = result switch
         {
-            PaymentResult.Paid => order.ConfirmPayment(clock.GetUtcNow()),
+            PaymentResult.Paid => order.ConfirmPayment(clock.GetUtcNow(), notification.PaymentReference),
             _ => order.Cancel(),
         };
 

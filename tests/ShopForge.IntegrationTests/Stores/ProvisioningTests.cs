@@ -39,11 +39,14 @@ public sealed class ProvisioningTests(ShopForgeApiFactory factory)
 
         await UploadLogoAsync(owner, store.Id);
         await owner.ListProductAsync(store.Id, await owner.CreateProductAsync(), "Spade", 19.90m);
+        await SetCompanyAsync(owner, store.Id);
         using var published = await owner.PostAsync($"/api/admin/stores/{store.Id}/publish", null, CancellationToken);
         using var storefront = await GetStorefrontAsync(hostName);
 
         Assert.Equal(HttpStatusCode.Conflict, tooEarly.StatusCode);
-        Assert.Equal(["The store has no logo.", "The store has no visible products."], problems.Order());
+        Assert.Equal(
+            ["The store has no company details.", "The store has no logo.", "The store has no visible products."],
+            problems.Order());
         Assert.Equal(HttpStatusCode.OK, published.StatusCode);
         Assert.Equal(HttpStatusCode.OK, storefront.StatusCode);
         Assert.Equal("Garden Tools", (await storefront.Content.ReadFromJsonAsync<StoreConfig>(CancellationToken))!.Name);
@@ -113,6 +116,7 @@ public sealed class ProvisioningTests(ShopForgeApiFactory factory)
             CancellationToken);
         await UploadLogoAsync(owner, store.Id);
         await owner.ListProductAsync(store.Id, await owner.CreateProductAsync(), "Spade", 19.90m);
+        await SetCompanyAsync(owner, store.Id);
         using var publish = await owner.PostAsync($"/api/admin/stores/{store.Id}/publish", null, CancellationToken);
         using var publishedChange = await owner.PutAsJsonAsync(
             $"/api/admin/stores/{store.Id}",
@@ -157,6 +161,32 @@ public sealed class ProvisioningTests(ShopForgeApiFactory factory)
 
     private static CreateStore NewStore(string name, string hostName) =>
         new(name, hostName, "EUR", "en-IE", new Theme("#123456", "#FFFFFF", 6));
+
+    internal static async Task SetCompanyAsync(HttpClient owner, Guid storeId, string name = "Garden Tools")
+    {
+        using var response = await owner.PutAsJsonAsync(
+            $"/api/admin/stores/{storeId}",
+            new
+            {
+                Name = name,
+                Currency = "CZK",
+                Culture = "cs-CZ",
+                Theme = new { PrimaryColor = "#123456", SecondaryColor = "#654321", BorderRadius = 4 },
+                Company = new
+                {
+                    LegalName = $"{name} s.r.o.",
+                    Line1 = "1 Trade Street",
+                    City = "Brno",
+                    PostalCode = "602 00",
+                    Country = "CZ",
+                    RegistrationNumber = "12345678",
+                    VatNumber = "CZ12345678",
+                },
+            },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
 
     private static async Task<AdminStore> CreateStoreAsync(HttpClient owner, string name, string hostName)
     {

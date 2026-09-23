@@ -33,6 +33,7 @@ internal sealed class OrderEntityConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(order => order.Status).HasConversion<string>().HasMaxLength(20);
         builder.Property(order => order.PaymentMethodCode).HasMaxLength(50);
         builder.Property(order => order.PaymentMethodName).HasMaxLength(100);
+        builder.Property(order => order.PaymentProviderKey).HasMaxLength(50);
         builder.Property(order => order.ShippingMethodCode).HasMaxLength(50);
         builder.Property(order => order.ShippingMethodName).HasMaxLength(100);
         builder.Property(order => order.ShippingPrice).HasPrecision(12, 2);
@@ -41,6 +42,7 @@ internal sealed class OrderEntityConfiguration : IEntityTypeConfiguration<Order>
         builder.Ignore(order => order.GrandTotal);
         builder.Ignore(order => order.VatTotal);
 
+        builder.Property(order => order.PaymentReference).HasMaxLength(100);
         builder.Property(order => order.PickupPointCode).HasMaxLength(50);
         builder.Property(order => order.PickupPointName).HasMaxLength(100);
 
@@ -125,13 +127,14 @@ internal sealed class ShippingMethodEntityConfiguration : IEntityTypeConfigurati
     }
 }
 
-internal sealed class OrderNumberSequenceEntityConfiguration : IEntityTypeConfiguration<OrderNumberSequence>
+internal sealed class NumberSequenceEntityConfiguration : IEntityTypeConfiguration<NumberSequence>
 {
-    public void Configure(EntityTypeBuilder<OrderNumberSequence> builder)
+    public void Configure(EntityTypeBuilder<NumberSequence> builder)
     {
-        builder.ToTable("order_numbers", OrdersModule.Schema);
+        builder.ToTable("number_sequences", OrdersModule.Schema);
 
-        builder.HasKey(sequence => new { sequence.StoreId, sequence.Year });
+        builder.Property(sequence => sequence.Series).HasMaxLength(20);
+        builder.HasKey(sequence => new { sequence.StoreId, sequence.Series, sequence.Year });
     }
 }
 
@@ -168,5 +171,57 @@ internal sealed class PaymentEventEntityConfiguration : IEntityTypeConfiguration
         builder.Property(paymentEvent => paymentEvent.OrderNumber).HasMaxLength(20);
 
         builder.HasIndex(paymentEvent => new { paymentEvent.StoreId, paymentEvent.Provider, paymentEvent.EventId }).IsUnique();
+    }
+}
+
+internal sealed class InvoiceEntityConfiguration : IEntityTypeConfiguration<Invoice>
+{
+    public void Configure(EntityTypeBuilder<Invoice> builder)
+    {
+        builder.ToTable("invoices", OrdersModule.Schema);
+
+        builder.Property(invoice => invoice.Number).HasMaxLength(30);
+        builder.Property(invoice => invoice.Kind).HasConversion<string>().HasMaxLength(20);
+        builder.Property(invoice => invoice.OrderNumber).HasMaxLength(20);
+        builder.Property(invoice => invoice.Currency).HasMaxLength(3).IsFixedLength();
+        builder.Property(invoice => invoice.BuyerEmail).HasMaxLength(254);
+        builder.Property(invoice => invoice.PaymentMethodName).HasMaxLength(100);
+        builder.Ignore(invoice => invoice.Total);
+        builder.Ignore(invoice => invoice.VatTotal);
+        builder.Ignore(invoice => invoice.NetTotal);
+
+        builder.ComplexProperty(invoice => invoice.Seller, seller =>
+        {
+            seller.Property(value => value.LegalName).HasMaxLength(200).HasColumnName("seller_legal_name");
+            seller.Property(value => value.Line1).HasMaxLength(200).HasColumnName("seller_line1");
+            seller.Property(value => value.City).HasMaxLength(100).HasColumnName("seller_city");
+            seller.Property(value => value.PostalCode).HasMaxLength(20).HasColumnName("seller_postal_code");
+            seller.Property(value => value.Country).HasMaxLength(2).IsFixedLength().HasColumnName("seller_country");
+            seller.Property(value => value.RegistrationNumber).HasMaxLength(50).HasColumnName("seller_registration_number");
+            seller.Property(value => value.VatNumber).HasMaxLength(50).HasColumnName("seller_vat_number");
+        });
+
+        builder.ComplexProperty(invoice => invoice.Buyer, buyer =>
+        {
+            buyer.Property(value => value.FullName).HasMaxLength(200).HasColumnName("buyer_full_name");
+            buyer.Property(value => value.Line1).HasMaxLength(200).HasColumnName("buyer_line1");
+            buyer.Property(value => value.Line2).HasMaxLength(200).HasColumnName("buyer_line2");
+            buyer.Property(value => value.City).HasMaxLength(100).HasColumnName("buyer_city");
+            buyer.Property(value => value.PostalCode).HasMaxLength(20).HasColumnName("buyer_postal_code");
+            buyer.Property(value => value.Country).HasMaxLength(2).IsFixedLength().HasColumnName("buyer_country");
+        });
+
+        builder.OwnsMany(invoice => invoice.Lines, lines =>
+        {
+            lines.ToTable("invoice_lines", OrdersModule.Schema);
+            lines.WithOwner().HasForeignKey("InvoiceId");
+            lines.Property(line => line.Description).HasMaxLength(200);
+            lines.Property(line => line.UnitPrice).HasPrecision(12, 2);
+            lines.Property(line => line.VatRate).HasPrecision(5, 2);
+            lines.Ignore(line => line.LineTotal);
+        });
+
+        builder.HasIndex(invoice => new { invoice.StoreId, invoice.Number }).IsUnique();
+        builder.HasIndex(invoice => new { invoice.StoreId, invoice.OrderNumber });
     }
 }

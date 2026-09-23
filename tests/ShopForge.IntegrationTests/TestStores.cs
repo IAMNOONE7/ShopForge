@@ -37,6 +37,7 @@ internal static class TestStores
     {
         var store = new Store(tenant.Id, name, "EUR", "en-IE", new StoreTheme("#112233", "#FFFFFF", 4));
         var domain = store.AddDomain(UniqueHostName());
+        store.SetCompany(new StoreCompany("Test Furniture s.r.o.", "1 Workshop Lane", "Brno", "602 00", "CZ", "12345678", "CZ12345678"));
         store.Publish();
 
         await using var scope = services.CreateAsyncScope();

@@ -46,7 +46,7 @@ internal sealed class StripeNotifications(StripeOptions options, ILogger<StripeN
             return null;
         }
 
-        return new PaymentNotification(stripeEvent.Id, storeId, orderNumber, result.Value);
+        return new PaymentNotification(stripeEvent.Id, storeId, orderNumber, result.Value, session.PaymentIntentId);
     }
 
     private static string? Metadata(Session session, string key) =>

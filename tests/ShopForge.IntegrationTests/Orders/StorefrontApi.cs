@@ -59,7 +59,10 @@ internal sealed record OrderView(
     decimal GrandTotal,
     string? PickupPoint,
     ShipmentView? Shipment,
+    List<DocumentView> Documents,
     List<OrderLineView> Lines);
+
+internal sealed record DocumentView(string Number, string Kind, DateTimeOffset IssuedAt);
 
 internal sealed record ShipmentView(string Carrier, string TrackingNumber, string? TrackingUrl);
 

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Orders.Admin;
 using ShopForge.Orders.Background;
+using ShopForge.Orders.Invoicing;
 using ShopForge.Orders.Notifications;
 using ShopForge.Orders.Payments;
 using ShopForge.Orders.Publishing;
@@ -32,6 +33,8 @@ public static class OrdersModule
         services.AddScoped<ICustomerOrders, GuestOrderClaim>();
         services.AddScoped<IEventHandler<OrderPlaced>, OrderNotifications>();
         services.AddScoped<IEventHandler<PaymentReceived>, OrderNotifications>();
+        services.AddScoped<IEventHandler<PaymentReceived>, InvoiceIssuing>();
+        services.AddScoped<Invoices>();
         services.AddScoped<IEventHandler<OrderCancelled>, OrderNotifications>();
         services.AddScoped<IEventHandler<ShipmentCreated>, OrderNotifications>();
         services.AddScoped<IStoreMaintenance, CartCleanup>();
@@ -46,6 +49,7 @@ public static class OrdersModule
         storefront.MapCart();
         storefront.MapCheckout();
         storefront.MapCustomerOrders();
+        storefront.MapStorefrontDocuments();
 
         return storefront;
     }
@@ -62,6 +66,7 @@ public static class OrdersModule
         storeAdmin.MapAdminOrders();
         storeAdmin.MapAdminMethods();
         storeAdmin.MapAdminPickupPoints();
+        storeAdmin.MapAdminDocuments();
 
         return storeAdmin;
     }

@@ -98,6 +98,33 @@ internal sealed class StockLedger(DbContext dbContext, IStoreContext storeContex
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task ReturnAsync(IReadOnlyCollection<StockRequest> requests, string reference, CancellationToken cancellationToken)
+    {
+        var warehouseId = await DefaultWarehouseIdAsync(cancellationToken);
+
+        foreach (var request in requests)
+        {
+            var item = await ItemAsync(request.ProductId, cancellationToken);
+
+            await dbContext.Set<InventoryItem>()
+                .Where(candidate => candidate.Id == item.Id)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(candidate => candidate.QuantityOnHand, candidate => candidate.QuantityOnHand + request.Quantity),
+                    cancellationToken);
+
+            dbContext.Add(new StockMovement(
+                TenantId,
+                warehouseId,
+                request.ProductId,
+                request.Quantity,
+                StockMovementReason.Return,
+                reference,
+                clock.GetUtcNow()));
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task<bool> SetOnHandAsync(Guid productId, int quantity, string reference, CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(quantity);

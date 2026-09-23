@@ -76,7 +76,9 @@ internal static class StoreProvisioningEndpoints
         IStoreContext storeContext,
         CancellationToken cancellationToken)
     {
-        var errors = ValidateSettings(request.Name, request.Currency, request.Culture, request.Theme);
+        var company = request.Company?.ToCompany();
+        var errors = ValidateSettings(request.Name, request.Currency, request.Culture, request.Theme)
+            .Check(request.Company is null || company is not null, "company", "Legal name, address and registration number are required.");
 
         if (errors.Any)
         {
@@ -88,6 +90,11 @@ internal static class StoreProvisioningEndpoints
         try
         {
             store.UpdateSettings(request.Name!, request.Currency, request.Culture!, request.Theme!.ToTheme());
+
+            if (company is not null)
+            {
+                store.SetCompany(company);
+            }
         }
         catch (InvalidOperationException exception)
         {
@@ -199,7 +206,20 @@ internal static class StoreProvisioningEndpoints
 
 internal sealed record CreateStoreRequest(string? Name, string? HostName, string? Currency, string? Culture, ThemeRequest? Theme);
 
-internal sealed record UpdateStoreRequest(string? Name, string? Currency, string? Culture, ThemeRequest? Theme);
+internal sealed record UpdateStoreRequest(string? Name, string? Currency, string? Culture, ThemeRequest? Theme, CompanyRequest? Company);
+
+internal sealed record CompanyRequest(
+    string? LegalName,
+    string? Line1,
+    string? City,
+    string? PostalCode,
+    string? Country,
+    string? RegistrationNumber,
+    string? VatNumber)
+{
+    public StoreCompany? ToCompany() =>
+        StoreCompany.From(LegalName, Line1, City, PostalCode, Country, RegistrationNumber, VatNumber);
+}
 
 internal sealed record ThemeRequest(string? PrimaryColor, string? SecondaryColor, int BorderRadius)
 {

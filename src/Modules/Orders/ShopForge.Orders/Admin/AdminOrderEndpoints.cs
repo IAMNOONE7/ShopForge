@@ -4,11 +4,15 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Orders.Domain;
+using ShopForge.Orders.Invoicing;
 using ShopForge.Orders.Shipping;
+using ShopForge.Orders.Storefront;
+using ShopForge.Shared.Catalog;
 using ShopForge.Shared.Diagnostics;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Inventory;
 using ShopForge.Shared.Messaging;
+using ShopForge.Shared.Payments;
 using ShopForge.Shared.Security;
 using ShopForge.Shared.Shipping;
 
@@ -23,6 +27,7 @@ internal static class AdminOrderEndpoints
         storeAdmin.MapPost("/orders/{number}/payment", ConfirmPaymentAsync).RequireAuthorization(AdminPolicies.StoreManagement);
         storeAdmin.MapPost("/orders/{number}/cancel", CancelAsync).RequireAuthorization(AdminPolicies.StoreManagement);
         storeAdmin.MapPost("/orders/{number}/shipment", CreateShipmentAsync).RequireAuthorization(AdminPolicies.StoreManagement);
+        storeAdmin.MapPost("/orders/{number}/refund", RefundAsync).RequireAuthorization(AdminPolicies.StoreManagement);
     }
 
     private static async Task<Ok<List<AdminOrderResponse>>> GetOrdersAsync(DbContext dbContext, CancellationToken cancellationToken)
@@ -87,6 +92,61 @@ internal static class AdminOrderEndpoints
             },
             "Only an order that is awaiting payment can be cancelled",
             cancellationToken);
+
+    // Money and goods go back together, and the credit note records it (D-081).
+    private static async Task<Results<Ok<AdminOrderDetailResponse>, NotFound, ProblemHttpResult>> RefundAsync(
+        string number,
+        DbContext dbContext,
+        IStockLedger stock,
+        ISellableProducts products,
+        Invoices invoices,
+        IEnumerable<IPaymentRefunds> paymentRefunds,
+        IOutbox outbox,
+        IShopForgeMetrics metrics,
+        CancellationToken cancellationToken)
+    {
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        var order = await dbContext.Set<Order>().SingleOrDefaultAsync(candidate => candidate.Number == number, cancellationToken);
+
+        if (order is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        if (!order.Refund())
+        {
+            return TypedResults.Problem(
+                statusCode: StatusCodes.Status409Conflict,
+                title: "Only a paid order can be refunded",
+                detail: $"The order is {order.Status}.");
+        }
+
+        var refunds = paymentRefunds.SingleOrDefault(candidate => candidate.Key == order.PaymentProviderKey);
+
+        if (refunds is not null && order.PaymentReference is { Length: > 0 } reference)
+        {
+            await refunds.RefundAsync(new RefundRequest(order.Number, reference, order.GrandTotal, order.Currency), cancellationToken);
+        }
+
+        var sold = await products.FindAsync([.. order.Lines.Select(line => line.StoreProductId)], cancellationToken);
+        var returned = order.Lines
+            .Join(sold, line => line.StoreProductId, product => product.StoreProductId, (line, product) => new StockRequest(product.ProductId, line.Quantity))
+            .ToList();
+
+        if (returned.Count > 0)
+        {
+            await stock.ReturnAsync(returned, order.Number, cancellationToken);
+        }
+
+        await invoices.IssueAsync(order, InvoiceKind.CreditNote, cancellationToken);
+        outbox.Enqueue(new OrderCancelled(order.Number, order.Email, "The order was refunded."));
+        metrics.OrderCancelled("refund");
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return TypedResults.Ok(AdminOrderDetailResponse.From(order));
+    }
 
     // The parcel is handed to the carrier by the store; the provider turns that into a tracking number (D-063).
     private static async Task<Results<Ok<AdminOrderDetailResponse>, ValidationProblem, NotFound, ProblemHttpResult>> CreateShipmentAsync(
@@ -221,9 +281,10 @@ internal sealed record AdminOrderDetailResponse(
     AdminAddressResponse ShippingAddress,
     string? PickupPoint,
     AdminShipmentResponse? Shipment,
+    List<DocumentResponse> Documents,
     List<AdminOrderLineResponse> Lines)
 {
-    public static AdminOrderDetailResponse From(Order order) => new(
+    public static AdminOrderDetailResponse From(Order order, List<DocumentResponse>? documents = null) => new(
         order.Number,
         order.PlacedAt,
         order.Status.ToString(),
@@ -241,6 +302,7 @@ internal sealed record AdminOrderDetailResponse(
         order.Shipment is null
             ? null
             : new AdminShipmentResponse(order.Shipment.Carrier, order.Shipment.TrackingNumber, order.Shipment.TrackingUrl, order.Shipment.ShippedAt),
+        documents ?? [],
         [.. order.Lines.Select(line => new AdminOrderLineResponse(line.ProductName, line.UnitPrice, line.VatRate, line.Quantity, line.LineTotal))]);
 }
 

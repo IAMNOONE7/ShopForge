@@ -11,7 +11,7 @@ public interface IPaymentNotifications
     Task<PaymentNotification?> ReadAsync(HttpRequest request, CancellationToken cancellationToken);
 }
 
-public sealed record PaymentNotification(string EventId, Guid StoreId, string OrderNumber, PaymentResult Result);
+public sealed record PaymentNotification(string EventId, Guid StoreId, string OrderNumber, PaymentResult Result, string? PaymentReference = null);
 
 public enum PaymentResult
 {

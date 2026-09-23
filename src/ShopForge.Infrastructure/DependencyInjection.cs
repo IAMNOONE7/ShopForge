@@ -4,11 +4,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Infrastructure.Diagnostics;
+using ShopForge.Infrastructure.Documents;
 using ShopForge.Infrastructure.Email;
 using ShopForge.Infrastructure.Files;
 using ShopForge.Infrastructure.Messaging;
 using ShopForge.Infrastructure.Payments;
 using ShopForge.Infrastructure.Persistence;
+using ShopForge.Shared.Documents;
 using ShopForge.Shared.Email;
 using ShopForge.Shared.Files;
 using ShopForge.Shared.Messaging;
@@ -39,6 +41,7 @@ public static class DependencyInjection
 
         services.AddSingleton(new BlobContainerClient(fileStorageConnectionString, containerName));
         services.AddSingleton<IFileStorage, AzureBlobFileStorage>();
+        services.AddSingleton<IDocumentRenderer, MigraDocRenderer>();
         services.AddSingleton<IEmailDelivery, LoggingEmailDelivery>();
         services.AddScoped<IEmailSender, OutboxEmailSender>();
         services.AddScoped<IOutbox, Outbox>();
@@ -59,6 +62,8 @@ public static class DependencyInjection
             services.AddSingleton<ICheckoutSessions, StripeCheckoutSessions>();
             services.AddSingleton<IPaymentProvider, StripePaymentProvider>();
             services.AddSingleton<IPaymentNotifications, StripeNotifications>();
+            services.AddSingleton<IRefunds, StripeRefundApi>();
+            services.AddSingleton<IPaymentRefunds, StripeRefunds>();
         }
 
         return services;
