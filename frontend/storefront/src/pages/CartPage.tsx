@@ -1,6 +1,7 @@
 import { Link } from 'react-router'
 import { removeFromCart, setCartQuantity, type Cart } from '../cart'
 import { useCart } from '../cartContext'
+import { DiscountField } from '../components/DiscountField'
 import { Message } from '../components/Message'
 import { LoadingState } from '../components/ui/LoadingState'
 import { formatPrice, useStore } from '../storeContext'
@@ -57,6 +58,7 @@ export function CartPage() {
           </li>
         ))}
       </ul>
+      <DiscountField />
       <p className="cart-total">
         Total <strong>{formatPrice(cart.itemsTotal, store)}</strong>
       </p>

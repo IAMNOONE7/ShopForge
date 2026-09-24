@@ -157,9 +157,18 @@ function OrderDetail({ storeId, number, money }: { storeId: string; number: stri
               <td>{line.quantity} ×</td>
               <td>{money.format(line.unitPrice)}</td>
               <td>{line.vatRate}% VAT</td>
-              <td>{money.format(line.lineTotal)}</td>
+              {/* Before the discount, which is its own row below. */}
+              <td>{money.format(line.unitPrice * line.quantity)}</td>
             </tr>
           ))}
+          {order.discount && (
+            <tr>
+              <td colSpan={4}>
+                {order.discount.name} ({order.discount.code})
+              </td>
+              <td>−{money.format(order.discount.amount)}</td>
+            </tr>
+          )}
           <tr>
             <td colSpan={4}>{order.shippingMethod}</td>
             <td>{money.format(order.shippingPrice)}</td>

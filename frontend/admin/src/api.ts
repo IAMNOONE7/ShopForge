@@ -125,6 +125,7 @@ export type AdminOrderDetail = {
   grandTotal: number
   billingAddress: AdminAddress
   shippingAddress: AdminAddress
+  discount: OrderDiscount | null
   pickupPoint: string | null
   shipment: Shipment | null
   documents: OrderDocument[]
@@ -164,6 +165,35 @@ export type FailedMessage = { id: string; type: string; attempts: number; create
 export type Shipment = { carrier: string; trackingNumber: string; trackingUrl: string | null; shippedAt: string }
 
 export type OrderDocument = { number: string; kind: string; issuedAt: string }
+
+export type OrderDiscount = { code: string; name: string; amount: number }
+
+export type Discount = {
+  code: string
+  name: string
+  kind: string
+  value: number
+  minimumOrderAmount: number | null
+  startsAt: string | null
+  endsAt: string | null
+  maxRedemptions: number | null
+  maxRedemptionsPerCustomer: number | null
+  redemptions: number
+  isActive: boolean
+}
+
+export type DiscountInput = {
+  code: string
+  name: string
+  kind: string
+  value: number
+  minimumOrderAmount: number | null
+  startsAt: string | null
+  endsAt: string | null
+  maxRedemptions: number | null
+  maxRedemptionsPerCustomer: number | null
+  isActive: boolean
+}
 
 type Problem = { title?: string; errors?: Record<string, string[]>; problems?: string[] }
 
@@ -272,6 +302,11 @@ export const api = {
     code: string,
     input: { name: string; price: number; vatRate: number; isActive: boolean; requiresPickupPoint: boolean },
   ) => request<ShippingMethod>('PUT', `/api/admin/stores/${storeId}/shipping-methods/${code}`, input),
+
+  discounts: (storeId: string) => request<Discount[]>('GET', `/api/admin/stores/${storeId}/discounts`),
+  createDiscount: (storeId: string, input: DiscountInput) => request<Discount>('POST', `/api/admin/stores/${storeId}/discounts`, input),
+  updateDiscount: (storeId: string, code: string, input: DiscountInput) =>
+    request<Discount>('PUT', `/api/admin/stores/${storeId}/discounts/${code}`, input),
 
   pickupPoints: (storeId: string) => request<PickupPoint[]>('GET', `/api/admin/stores/${storeId}/pickup-points`),
   createPickupPoint: (storeId: string, input: PickupPointInput) =>

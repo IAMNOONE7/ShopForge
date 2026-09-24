@@ -590,3 +590,42 @@
     flex: 1 1 8rem;
   }
 }
+
+.discount {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0 0 1rem;
+}
+
+.discount input {
+  padding: 0.4rem 0.5rem;
+  font: inherit;
+  border: 1px solid #d0d7de;
+  border-radius: var(--radius);
+}
+
+.discount.applied {
+  justify-content: space-between;
+  max-width: 24rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--color-secondary);
+  border-radius: var(--radius);
+}
+
+.checkout-summary-line {
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 0.25rem 0;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

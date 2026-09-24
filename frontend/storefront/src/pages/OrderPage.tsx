@@ -68,13 +68,22 @@ export function OrderPage() {
                   <td>{line.productName}</td>
                   <td>{line.quantity} ×</td>
                   <td>{formatPrice(line.unitPrice, store)}</td>
-                  <td className="order-amount">{formatPrice(line.lineTotal, store)}</td>
+                  <td className="order-amount">{formatPrice(line.unitPrice * line.quantity, store)}</td>
                 </tr>
               ))}
               <tr>
                 <td colSpan={3}>Items</td>
-                <td className="order-amount">{formatPrice(itemsTotal, store)}</td>
+                {/* The discount has its own row below, so the subtotal is shown before it is taken off. */}
+                <td className="order-amount">{formatPrice(itemsTotal + (order.data.discount?.amount ?? 0), store)}</td>
               </tr>
+              {order.data.discount && (
+                <tr>
+                  <td colSpan={3}>
+                    {order.data.discount.name} ({order.data.discount.code})
+                  </td>
+                  <td className="order-amount">−{formatPrice(order.data.discount.amount, store)}</td>
+                </tr>
+              )}
               <tr>
                 <td colSpan={3}>{shippingMethod}</td>
                 <td className="order-amount">{formatPrice(shippingPrice, store)}</td>

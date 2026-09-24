@@ -11,12 +11,20 @@ export type CartLine = {
   imageUrl: string | null
 }
 
+export type CartDiscount = {
+  code: string
+  name: string
+  amount: number
+}
+
 export type Cart = {
   items: CartLine[]
   count: number
   itemsTotal: number
   vatTotal: number
   changed: boolean
+  discount: CartDiscount | null
+  discountProblem: string | null
 }
 
 export type PaymentMethod = {
@@ -90,6 +98,12 @@ export type OrderDocument = {
   issuedAt: string
 }
 
+export type OrderDiscount = {
+  code: string
+  name: string
+  amount: number
+}
+
 export type Order = {
   number: string
   placedAt: string
@@ -102,6 +116,7 @@ export type Order = {
   itemsTotal: number
   vatTotal: number
   grandTotal: number
+  discount: OrderDiscount | null
   pickupPoint: string | null
   shipment: Shipment | null
   documents: OrderDocument[]
@@ -156,6 +171,10 @@ export const setCartQuantity = (storeProductId: string, quantity: number) =>
   send<Cart>('PUT', `/api/storefront/cart/items/${storeProductId}`, { quantity })
 
 export const removeFromCart = (storeProductId: string) => send<Cart>('DELETE', `/api/storefront/cart/items/${storeProductId}`)
+
+export const applyDiscount = (code: string) => send<Cart>('PUT', '/api/storefront/cart/discount', { code })
+
+export const removeDiscount = () => send<Cart>('DELETE', '/api/storefront/cart/discount')
 
 export const getCheckoutMethods = (signal: AbortSignal) =>
   send<CheckoutMethods>('GET', '/api/storefront/checkout/methods', undefined, signal)

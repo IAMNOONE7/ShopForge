@@ -171,6 +171,12 @@ export function CheckoutPage() {
             <span>{formatPrice(chosenShipping.price, store)}</span>
           </li>
         </ul>
+        {cart.discount && (
+          <p className="checkout-summary-line">
+            <span>{cart.discount.name}</span>
+            <span>−{formatPrice(cart.discount.amount, store)}</span>
+          </p>
+        )}
         <p className="checkout-total">
           Total <strong>{formatPrice(cart.itemsTotal + chosenShipping.price, store)}</strong>
         </p>
