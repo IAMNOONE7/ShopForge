@@ -17,11 +17,18 @@ internal static class AdminCatalogApi
     }
 
     public static async Task<Guid> ListProductAsync(
-        this HttpClient admin, Guid storeId, Guid productId, string name, decimal price, bool isVisible = true, string? slug = null)
+        this HttpClient admin,
+        Guid storeId,
+        Guid productId,
+        string name,
+        decimal price,
+        bool isVisible = true,
+        string? slug = null,
+        decimal vatRate = 21m)
     {
         using var response = await admin.PostAsJsonAsync(
             $"/api/admin/stores/{storeId}/products",
-            new { ProductId = productId, Name = name, Slug = slug, Description = $"{name} description", Price = price, VatRate = 21m, IsVisible = isVisible, SortOrder = 0 });
+            new { ProductId = productId, Name = name, Slug = slug, Description = $"{name} description", Price = price, VatRate = vatRate, IsVisible = isVisible, SortOrder = 0 });
         return await IdFromAsync(response);
     }
 

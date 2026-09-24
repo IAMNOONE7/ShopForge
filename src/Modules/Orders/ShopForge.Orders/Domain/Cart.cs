@@ -30,6 +30,11 @@ internal sealed class Cart : IStoreOwned
 
     public void Touch(DateTimeOffset now) => UpdatedAt = now;
 
+    // At most one code per cart; applying another replaces it (D-084).
+    public string? DiscountCode { get; private set; }
+
+    public void ApplyDiscount(string? code) => DiscountCode = code is null ? null : Discount.Normalize(code);
+
     public void SetQuantity(Guid storeProductId, int quantity)
     {
         if (quantity is < 0 or > MaxQuantity)

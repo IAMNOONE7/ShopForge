@@ -40,7 +40,15 @@ internal sealed class StorefrontApi(WebApplicationFactory<Program> factory, Test
     private string Url(string path) => $"http://{store.HostName}{path}";
 }
 
-internal sealed record CartView(List<CartLineView> Items, int Count, decimal ItemsTotal, decimal VatTotal, bool Changed);
+internal sealed record CartView(
+    List<CartLineView> Items,
+    int Count,
+    decimal ItemsTotal,
+    decimal VatTotal,
+    bool Changed,
+    DiscountView? Discount);
+
+internal sealed record DiscountView(string Code, string Name, decimal Amount);
 
 internal sealed record CartLineView(Guid StoreProductId, string Name, decimal UnitPrice, int Quantity, decimal LineTotal, int Available);
 
@@ -57,6 +65,7 @@ internal sealed record OrderView(
     decimal ItemsTotal,
     decimal VatTotal,
     decimal GrandTotal,
+    DiscountView? Discount,
     string? PickupPoint,
     ShipmentView? Shipment,
     List<DocumentView> Documents,

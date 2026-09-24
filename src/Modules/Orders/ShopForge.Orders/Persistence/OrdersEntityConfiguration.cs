@@ -10,6 +10,8 @@ internal sealed class CartEntityConfiguration : IEntityTypeConfiguration<Cart>
     {
         builder.ToTable("carts", OrdersModule.Schema);
 
+        builder.Property(cart => cart.DiscountCode).HasMaxLength(40);
+
         builder.OwnsMany(cart => cart.Lines, lines =>
         {
             lines.ToTable("cart_lines", OrdersModule.Schema, table =>
@@ -37,8 +39,13 @@ internal sealed class OrderEntityConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(order => order.ShippingMethodCode).HasMaxLength(50);
         builder.Property(order => order.ShippingMethodName).HasMaxLength(100);
         builder.Property(order => order.ShippingPrice).HasPrecision(12, 2);
+        builder.Property(order => order.ShippingDiscount).HasPrecision(12, 2);
+        builder.Property(order => order.DiscountTotal).HasPrecision(12, 2);
+        builder.Property(order => order.DiscountCode).HasMaxLength(40);
+        builder.Property(order => order.DiscountName).HasMaxLength(100);
         builder.Property(order => order.ShippingVatRate).HasPrecision(5, 2);
         builder.Ignore(order => order.ItemsTotal);
+        builder.Ignore(order => order.ShippingCharged);
         builder.Ignore(order => order.GrandTotal);
         builder.Ignore(order => order.VatTotal);
 
@@ -69,6 +76,7 @@ internal sealed class OrderEntityConfiguration : IEntityTypeConfiguration<Order>
             lines.WithOwner().HasForeignKey("OrderId");
             lines.Property(line => line.ProductName).HasMaxLength(200);
             lines.Property(line => line.UnitPrice).HasPrecision(12, 2);
+            lines.Property(line => line.Discount).HasPrecision(12, 2);
             lines.Property(line => line.VatRate).HasPrecision(5, 2);
             lines.Ignore(line => line.LineTotal);
             lines.Ignore(line => line.VatAmount);
@@ -217,11 +225,44 @@ internal sealed class InvoiceEntityConfiguration : IEntityTypeConfiguration<Invo
             lines.WithOwner().HasForeignKey("InvoiceId");
             lines.Property(line => line.Description).HasMaxLength(200);
             lines.Property(line => line.UnitPrice).HasPrecision(12, 2);
+            lines.Property(line => line.Discount).HasPrecision(12, 2);
             lines.Property(line => line.VatRate).HasPrecision(5, 2);
             lines.Ignore(line => line.LineTotal);
         });
 
         builder.HasIndex(invoice => new { invoice.StoreId, invoice.Number }).IsUnique();
         builder.HasIndex(invoice => new { invoice.StoreId, invoice.OrderNumber });
+    }
+}
+
+internal sealed class DiscountEntityConfiguration : IEntityTypeConfiguration<Discount>
+{
+    public void Configure(EntityTypeBuilder<Discount> builder)
+    {
+        builder.ToTable("discounts", OrdersModule.Schema, table =>
+            table.HasCheckConstraint("ck_discounts_value", "value >= 0 AND redemptions >= 0"));
+
+        builder.Property(discount => discount.Code).HasMaxLength(40);
+        builder.Property(discount => discount.Name).HasMaxLength(100);
+        builder.Property(discount => discount.Kind).HasConversion<string>().HasMaxLength(20);
+        builder.Property(discount => discount.Value).HasPrecision(12, 2);
+        builder.Property(discount => discount.MinimumOrderAmount).HasPrecision(12, 2);
+
+        builder.HasIndex(discount => new { discount.StoreId, discount.Code }).IsUnique();
+    }
+}
+
+internal sealed class DiscountRedemptionEntityConfiguration : IEntityTypeConfiguration<DiscountRedemption>
+{
+    public void Configure(EntityTypeBuilder<DiscountRedemption> builder)
+    {
+        builder.ToTable("discount_redemptions", OrdersModule.Schema);
+
+        builder.Property(redemption => redemption.OrderNumber).HasMaxLength(20);
+        builder.Property(redemption => redemption.Email).HasMaxLength(254);
+        builder.Property(redemption => redemption.Amount).HasPrecision(12, 2);
+
+        builder.HasOne<Discount>().WithMany().HasForeignKey(redemption => redemption.DiscountId);
+        builder.HasIndex(redemption => new { redemption.StoreId, redemption.DiscountId, redemption.Email });
     }
 }

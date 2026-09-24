@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Orders.Admin;
 using ShopForge.Orders.Background;
+using ShopForge.Orders.Discounts;
 using ShopForge.Orders.Invoicing;
 using ShopForge.Orders.Notifications;
 using ShopForge.Orders.Payments;
@@ -35,6 +36,7 @@ public static class OrdersModule
         services.AddScoped<IEventHandler<PaymentReceived>, OrderNotifications>();
         services.AddScoped<IEventHandler<PaymentReceived>, InvoiceIssuing>();
         services.AddScoped<Invoices>();
+        services.AddScoped<DiscountCodes>();
         services.AddScoped<IEventHandler<OrderCancelled>, OrderNotifications>();
         services.AddScoped<IEventHandler<ShipmentCreated>, OrderNotifications>();
         services.AddScoped<IStoreMaintenance, CartCleanup>();
@@ -66,6 +68,7 @@ public static class OrdersModule
         storeAdmin.MapAdminOrders();
         storeAdmin.MapAdminMethods();
         storeAdmin.MapAdminPickupPoints();
+        storeAdmin.MapAdminDiscounts();
         storeAdmin.MapAdminDocuments();
 
         return storeAdmin;

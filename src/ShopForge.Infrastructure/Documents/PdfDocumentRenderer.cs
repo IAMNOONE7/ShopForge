@@ -37,11 +37,12 @@ internal sealed class MigraDocRenderer : IDocumentRenderer
 
         var lines = section.AddTable();
         lines.Borders.Bottom.Width = 0.5;
-        lines.AddColumn(Unit.FromCentimeter(8));
+        lines.AddColumn(Unit.FromCentimeter(7));
+        lines.AddColumn(Unit.FromCentimeter(2));
         lines.AddColumn(Unit.FromCentimeter(2));
         lines.AddColumn(Unit.FromCentimeter(3));
         lines.AddColumn(Unit.FromCentimeter(3));
-        AddRow(lines, bold: true, "Description", "Quantity", "VAT", "Total");
+        AddRow(lines, bold: true, "Description", "Quantity", "VAT", "Discount", "Total");
 
         foreach (var line in document.Lines)
         {
@@ -51,6 +52,7 @@ internal sealed class MigraDocRenderer : IDocumentRenderer
                 line.Description,
                 line.Quantity.ToString(culture),
                 $"{line.VatRate.ToString("0.##", culture)} %",
+                line.Discount == 0 ? "—" : Money(-line.Discount, document.Currency, culture),
                 Money(line.LineTotal, document.Currency, culture));
         }
 
@@ -82,7 +84,10 @@ internal sealed class MigraDocRenderer : IDocumentRenderer
             Money(document.Vat, document.Currency, culture),
             Money(document.Total, document.Currency, culture));
 
-        section.AddParagraph($"Paid by {document.PaymentMethod}.").Format.SpaceBefore = Unit.FromMillimeter(8);
+        var footer = document.Discount is { Length: > 0 } discount
+            ? $"Paid by {document.PaymentMethod}. Discount {discount} applied."
+            : $"Paid by {document.PaymentMethod}.";
+        section.AddParagraph(footer).Format.SpaceBefore = Unit.FromMillimeter(8);
 
         var renderer = new MigraDoc.Rendering.PdfDocumentRenderer { Document = pdf };
         renderer.RenderDocument();

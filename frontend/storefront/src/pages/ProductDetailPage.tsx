@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router'
 import { getProduct, type ProductAttribute } from '../api'
 import { AddToCart } from '../components/AddToCart'
 import { Message } from '../components/Message'
+import { LoadingState } from '../components/ui/LoadingState'
 import type { Store } from '../store'
 import { formatPrice, useStore } from '../storeContext'
 import { useRequest } from '../useRequest'
@@ -13,7 +14,7 @@ export function ProductDetailPage() {
 
   switch (product.status) {
     case 'loading':
-      return null
+      return <LoadingState label="Loading product…" lines={6} />
     case 'not-found':
       return <Message title="Product not found" text="This product is not available." />
     case 'error':

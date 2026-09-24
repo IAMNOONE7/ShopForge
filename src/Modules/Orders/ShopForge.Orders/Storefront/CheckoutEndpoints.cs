@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using ShopForge.Orders.Discounts;
 using ShopForge.Orders.Domain;
 using ShopForge.Orders.Persistence;
 using ShopForge.Shared.Catalog;
@@ -89,13 +90,14 @@ internal static class CheckoutEndpoints
         IStockLedger stock,
         IEnumerable<IPaymentProvider> paymentProviders,
         IEnumerable<IShippingProvider> shippingProviders,
+        DiscountCodes discounts,
         IOutbox outbox,
         IShopForgeMetrics metrics,
         ILoggerFactory loggerFactory,
         TimeProvider clock,
         CancellationToken cancellationToken)
     {
-        var carts = new Carts(httpContext, dbContext, storeContext, products, stock, clock);
+        var carts = new Carts(httpContext, dbContext, storeContext, products, stock, discounts, clock);
         var cart = await carts.FindAsync(cancellationToken);
         var contents = cart is null ? null : await carts.ContentsAsync(cart, cancellationToken);
 
@@ -128,6 +130,15 @@ internal static class CheckoutEndpoints
                 detail: contents.ShortNames.Count > 0
                     ? $"{string.Join(", ", contents.ShortNames)}: fewer items are in stock than your cart held. Please check it before ordering again."
                     : "The cart was updated; please check it before ordering again.");
+        }
+
+        // A code that stopped applying is a change to what the shopper agreed to pay, so the order stops here.
+        if (contents?.DiscountProblem is { } discountProblem)
+        {
+            return TypedResults.Problem(
+                statusCode: StatusCodes.Status409Conflict,
+                title: "The discount code cannot be used",
+                detail: DiscountCodes.Explain(discountProblem));
         }
 
         var errors = new RequestErrors()
@@ -173,6 +184,28 @@ internal static class CheckoutEndpoints
                 detail: $"{string.Join(", ", names)}: not enough items left. Please check your cart.");
         }
 
+        // The code is re-checked and counted here, not in the cart: only one checkout can take the last redemption
+        // (D-086), and a code that ran out while the cart sat open must not be honoured.
+        var discount = contents.Discount?.Discount;
+        var allocation = discount is null
+            ? null
+            : DiscountAllocation.For(discount, [.. contents.Items.Select(item => item.LineTotal)], shipping!.Price);
+
+        if (discount is not null)
+        {
+            var refused = await discounts.FindProblemAsync(discount, contents.Items.Sum(item => item.LineTotal), request.Email, cancellationToken);
+
+            if (refused is not null || !await discounts.TryRedeemAsync(discount, cancellationToken))
+            {
+                await transaction.RollbackAsync(cancellationToken);
+
+                return TypedResults.Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "The discount code cannot be used",
+                    detail: DiscountCodes.Explain(refused ?? DiscountProblem.UsedUp));
+            }
+        }
+
         var order = new Order(
             storeContext.StoreId!.Value,
             number,
@@ -197,9 +230,27 @@ internal static class CheckoutEndpoints
             order.AssignTo(storeCustomerId);
         }
 
-        foreach (var item in contents.Items)
+        foreach (var (item, index) in contents.Items.Select((item, index) => (item, index)))
         {
-            order.AddLine(item.Product.StoreProductId, item.Product.Name, item.Product.Price, item.Product.VatRate, item.Quantity);
+            order.AddLine(
+                item.Product.StoreProductId,
+                item.Product.Name,
+                item.Product.Price,
+                item.Product.VatRate,
+                item.Quantity,
+                allocation?.LineDiscounts[index] ?? 0m);
+        }
+
+        if (discount is not null && allocation is not null)
+        {
+            order.ApplyDiscount(discount.Code, discount.Name, allocation.ShippingDiscount);
+            dbContext.Add(new DiscountRedemption(
+                order.StoreId,
+                discount.Id,
+                order.Number,
+                order.Email,
+                allocation.Total,
+                placedAt));
         }
 
         dbContext.Add(order);
@@ -317,6 +368,7 @@ internal sealed record OrderResponse(
     decimal ItemsTotal,
     decimal VatTotal,
     decimal GrandTotal,
+    OrderDiscountResponse? Discount,
     string? PickupPoint,
     ShipmentResponse? Shipment,
     List<DocumentResponse> Documents,
@@ -330,10 +382,11 @@ internal sealed record OrderResponse(
         order.Currency,
         order.PaymentMethodName,
         order.ShippingMethodName,
-        order.ShippingPrice,
+        order.ShippingCharged,
         order.ItemsTotal,
         order.VatTotal,
         order.GrandTotal,
+        order.DiscountCode is null ? null : new OrderDiscountResponse(order.DiscountCode, order.DiscountName!, order.DiscountTotal),
         order.PickupPointName is null ? null : $"{order.PickupPointName}, {order.PickupPointAddress!.Line1}, {order.PickupPointAddress.City}",
         order.Shipment is null ? null : new ShipmentResponse(order.Shipment.Carrier, order.Shipment.TrackingNumber, order.Shipment.TrackingUrl),
         documents,
@@ -341,5 +394,7 @@ internal sealed record OrderResponse(
 }
 
 internal sealed record ShipmentResponse(string Carrier, string TrackingNumber, string? TrackingUrl);
+
+internal sealed record OrderDiscountResponse(string Code, string Name, decimal Amount);
 
 internal sealed record OrderLineResponse(string ProductName, decimal UnitPrice, decimal VatRate, int Quantity, decimal LineTotal);

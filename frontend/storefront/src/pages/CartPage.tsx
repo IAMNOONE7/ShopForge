@@ -2,6 +2,7 @@ import { Link } from 'react-router'
 import { removeFromCart, setCartQuantity, type Cart } from '../cart'
 import { useCart } from '../cartContext'
 import { Message } from '../components/Message'
+import { LoadingState } from '../components/ui/LoadingState'
 import { formatPrice, useStore } from '../storeContext'
 
 export function CartPage() {
@@ -13,7 +14,7 @@ export function CartPage() {
   }
 
   if (!cart) {
-    return null
+    return <LoadingState label="Loading cart…" lines={4} />
   }
 
   if (cart.items.length === 0) {

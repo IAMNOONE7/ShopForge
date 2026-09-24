@@ -4,6 +4,7 @@ import { getCheckoutMethods, getPickupPoints, placeOrder, RequestFailed, type Ad
 import { useCart } from '../cartContext'
 import { useCustomer } from '../customerContext'
 import { Message } from '../components/Message'
+import { LoadingState } from '../components/ui/LoadingState'
 import { formatPrice, useStore } from '../storeContext'
 import { useRequest } from '../useRequest'
 
@@ -66,7 +67,11 @@ export function CheckoutPage() {
   }
 
   if (methods.status !== 'ready' || !cart) {
-    return methods.status === 'error' ? <Message title="Checkout unavailable" text="Please try again in a moment." /> : null
+    return methods.status === 'error' ? (
+      <Message title="Checkout unavailable" text="Please try again in a moment." />
+    ) : (
+      <LoadingState label="Loading checkout…" lines={6} />
+    )
   }
 
   if (cart.items.length === 0) {

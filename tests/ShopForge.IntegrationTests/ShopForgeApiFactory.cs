@@ -34,6 +34,26 @@ public sealed class ShopForgeApiFactory : WebApplicationFactory<Program>, IAsync
     public Task<int> DispatchOutboxAsync(CancellationToken cancellationToken = default) =>
         Services.GetRequiredService<OutboxDispatcher>().DispatchAsync(cancellationToken);
 
+    // Delivery is asynchronous and every test shares one worker, so a message can be leased by someone else's run.
+    // A test therefore waits for the effect it needs instead of assuming a single dispatch produced it.
+    public async Task<T> EventuallyAsync<T>(Func<Task<T>> read, Func<T, bool> until, CancellationToken cancellationToken = default)
+    {
+        for (var attempt = 0; attempt < 30; attempt++)
+        {
+            await DispatchOutboxAsync(cancellationToken);
+            var value = await read();
+
+            if (until(value))
+            {
+                return value;
+            }
+
+            await Task.Delay(100, cancellationToken);
+        }
+
+        throw new InvalidOperationException("The outbox did not produce what the test was waiting for.");
+    }
+
     internal async Task<T> QueryAsync<T>(TestStore store, Func<DbContext, Task<T>> query)
     {
         await using var scope = TestStores.CreateScope(Services, store);

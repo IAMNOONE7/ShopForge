@@ -55,8 +55,8 @@ public sealed class InvoiceTests(ShopForgeApiFactory factory)
         using var shopper = new StorefrontApi(factory, furniture.Store);
         var order = await PaidOrderAsync(furniture, shopper, "walnut-chair", quantity: 1);
 
-        await factory.DispatchOutboxAsync(CancellationToken);
         await RedeliverPaymentEventAsync(furniture, order.Number);
+        await factory.DispatchOutboxAsync(CancellationToken);
         await factory.DispatchOutboxAsync(CancellationToken);
         var confirmation = await shopper.GetJsonAsync<OrderView>($"/api/storefront/orders/{order.Number}?token={order.Token}");
 
@@ -171,10 +171,20 @@ public sealed class InvoiceTests(ShopForgeApiFactory factory)
             $"/api/admin/stores/{furniture.Store.StoreId}/orders/{order.Number}/payment", null, CancellationToken);
         Assert.Equal(HttpStatusCode.OK, paid.StatusCode);
 
-        await factory.DispatchOutboxAsync(CancellationToken);
+        // The invoice is issued by the worker, so wait for it rather than for one dispatch.
+        await factory.EventuallyAsync(
+            () => DocumentsAsync(furniture, order.Number),
+            documents => documents.Count > 0,
+            CancellationToken);
 
         return order;
     }
+
+    private Task<List<DocumentView>> DocumentsAsync(FurnitureStore furniture, string orderNumber) =>
+        factory.QueryAsync(furniture.Store, async dbContext => await dbContext.Set<Invoice>()
+            .Where(invoice => invoice.OrderNumber == orderNumber)
+            .Select(invoice => new DocumentView(invoice.Number, invoice.Kind.ToString(), invoice.IssuedAt))
+            .ToListAsync(CancellationToken));
 
     private static async Task<byte[]> DownloadAsync(StorefrontApi shopper, string path)
     {

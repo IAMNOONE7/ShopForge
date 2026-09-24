@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useParams, useSearchParams } from 'react-router'
 import { getOrder } from '../cart'
 import { Message } from '../components/Message'
+import { LoadingState } from '../components/ui/LoadingState'
 import { formatPrice, useStore } from '../storeContext'
 import { useRequest } from '../useRequest'
 
@@ -29,7 +30,7 @@ export function OrderPage() {
 
   switch (order.status) {
     case 'loading':
-      return null
+      return <LoadingState label="Loading order…" lines={6} />
     case 'not-found':
       return <Message title="Order not found" text="Check the link from your confirmation e-mail." />
     case 'error':

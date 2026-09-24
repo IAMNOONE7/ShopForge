@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
 import { ApiError, api, type CurrentUser } from './api'
 import { Layout } from './components/Layout'
+import { EmptyState } from './components/ui/EmptyState'
+import { LoadingState } from './components/ui/LoadingState'
 import { LoginPage } from './pages/LoginPage'
 import { NewStorePage } from './pages/NewStorePage'
 import { ProductsPage } from './pages/ProductsPage'
@@ -29,9 +31,17 @@ function App() {
 
   switch (session.status) {
     case 'checking':
-      return null
+      return (
+        <main className="app container app-boot">
+          <LoadingState label="Checking session…" lines={4} />
+        </main>
+      )
     case 'error':
-      return <p className="error">{session.message}</p>
+      return (
+        <main className="app container app-boot">
+          <EmptyState title="Admin unavailable">{session.message}</EmptyState>
+        </main>
+      )
     case 'signed-out':
       return <LoginPage onLogin={(user) => setSession({ status: 'signed-in', user })} />
     case 'signed-in':

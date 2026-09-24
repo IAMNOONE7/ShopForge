@@ -1,4 +1,6 @@
 import { api, type Stock } from '../api'
+import { EmptyState } from '../components/ui/EmptyState'
+import { LoadingState } from '../components/ui/LoadingState'
 import { useAction } from '../useAction'
 import { useRequest } from '../useRequest'
 
@@ -39,7 +41,13 @@ export function ProductsPage() {
       {error && <p className="error">{error}</p>}
 
       {products.status === 'error' && <p className="error">{products.message}</p>}
-      {products.status === 'ready' && (
+      {products.status === 'loading' && <LoadingState label="Loading products…" lines={5} />}
+      {products.status === 'ready' && products.data.length === 0 && (
+        <EmptyState title="No products yet" headingLevel={2}>
+          Add the first physical product with the form above.
+        </EmptyState>
+      )}
+      {products.status === 'ready' && products.data.length > 0 && (
         <table>
           <thead>
             <tr>

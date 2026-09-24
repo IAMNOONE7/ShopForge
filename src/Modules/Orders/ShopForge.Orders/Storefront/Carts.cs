@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using ShopForge.Orders.Discounts;
 using ShopForge.Orders.Domain;
 using ShopForge.Shared.Catalog;
 using ShopForge.Shared.Inventory;
@@ -13,6 +14,7 @@ internal sealed class Carts(
     IStoreContext storeContext,
     ISellableProducts products,
     IStockLedger stock,
+    DiscountCodes discounts,
     TimeProvider clock)
 {
     private const string CookieName = "shopforge_cart";
@@ -100,7 +102,38 @@ internal sealed class Carts(
             .OrderBy(item => item.Product.Name)
             .ToList();
 
-        return new CartContents(items, changed, shortNames);
+        var (discount, problem) = await DiscountForAsync(cart, items, cancellationToken);
+
+        return new CartContents(items, changed, shortNames, discount, problem);
+    }
+
+    // A code can stop applying while it sits in the cart — it expires, it is used up, the cart drops below its
+    // minimum. The cart keeps it and reports why, because an order must not quietly cost more than it showed.
+    private async Task<(AppliedDiscount? Applied, DiscountProblem? Problem)> DiscountForAsync(
+        Cart cart,
+        IReadOnlyList<CartItem> items,
+        CancellationToken cancellationToken)
+    {
+        if (cart.DiscountCode is not { Length: > 0 } code || items.Count == 0)
+        {
+            return (null, null);
+        }
+
+        var discount = await discounts.FindAsync(code, cancellationToken);
+
+        if (discount is null)
+        {
+            return (null, DiscountProblem.Unknown);
+        }
+
+        if (await discounts.FindProblemAsync(discount, items.Sum(item => item.LineTotal), email: null, cancellationToken) is { } problem)
+        {
+            return (null, problem);
+        }
+
+        var allocation = DiscountAllocation.For(discount, [.. items.Select(item => item.LineTotal)], shippingPrice: 0m);
+
+        return (new AppliedDiscount(discount, allocation), null);
     }
 }
 
@@ -109,11 +142,24 @@ internal sealed record CartItem(SellableProduct Product, int Quantity, int Avail
     public decimal LineTotal => Product.Price * Quantity;
 }
 
-internal sealed record CartContents(IReadOnlyList<CartItem> Items, bool Changed, IReadOnlyList<string> ShortNames)
-{
-    public decimal ItemsTotal => Items.Sum(item => item.LineTotal);
+internal sealed record AppliedDiscount(Discount Discount, DiscountResult Result);
 
-    public decimal VatTotal => Items.Sum(item => Money.VatOf(item.LineTotal, item.Product.VatRate));
+internal sealed record CartContents(
+    IReadOnlyList<CartItem> Items,
+    bool Changed,
+    IReadOnlyList<string> ShortNames,
+    AppliedDiscount? Discount = null,
+    DiscountProblem? DiscountProblem = null)
+{
+    public decimal ItemsTotal => Items.Sum(item => item.LineTotal) - DiscountTotal;
+
+    public decimal DiscountTotal => Discount?.Result.LineDiscounts.Sum() ?? 0m;
+
+    public decimal VatTotal => Items
+        .Select((item, index) => Money.VatOf(item.LineTotal - LineDiscount(index), item.Product.VatRate))
+        .Sum();
 
     public int Count => Items.Sum(item => item.Quantity);
+
+    public decimal LineDiscount(int index) => Discount?.Result.LineDiscounts[index] ?? 0m;
 }

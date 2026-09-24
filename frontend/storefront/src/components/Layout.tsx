@@ -14,8 +14,11 @@ export function Layout() {
 
   return (
     <>
+      <a href="#main-content" className="skip-link">
+        Skip to content
+      </a>
       <header className="store-header">
-        <div className="store-header-inner">
+        <div className="store-header-inner container">
           <Link to="/" className="store-brand">
             {store.logoUrl ? <img src={store.logoUrl} alt={store.name} className="store-logo" /> : store.name}
           </Link>
@@ -37,7 +40,7 @@ export function Layout() {
           </NavLink>
         </div>
       </header>
-      <main className="app">
+      <main id="main-content" className="app container" tabIndex={-1}>
         <Outlet context={categoryList} />
       </main>
     </>

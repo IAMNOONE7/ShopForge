@@ -46,16 +46,17 @@ internal sealed class Invoices(DbContext dbContext, IStoreContext storeContext, 
             order.BillingAddress,
             order.Email,
             order.PaymentMethodName,
+            order.DiscountCode,
             issuedAt);
 
         foreach (var line in order.Lines)
         {
-            invoice.AddLine(line.ProductName, line.Quantity, line.UnitPrice, line.VatRate);
+            invoice.AddLine(line.ProductName, line.Quantity, line.UnitPrice, line.VatRate, line.Discount);
         }
 
         if (order.ShippingPrice > 0)
         {
-            invoice.AddLine(order.ShippingMethodName, 1, order.ShippingPrice, order.ShippingVatRate);
+            invoice.AddLine(order.ShippingMethodName, 1, order.ShippingPrice, order.ShippingVatRate, order.ShippingDiscount);
         }
 
         dbContext.Add(invoice);
@@ -87,12 +88,14 @@ internal sealed class Invoices(DbContext dbContext, IStoreContext storeContext, 
                 RegistrationNumber: null,
                 VatNumber: null),
             invoice.PaymentMethodName,
+            invoice.DiscountCode,
             [
                 .. invoice.Lines.Select(line => new DocumentLine(
                     line.Description,
                     line.Quantity,
                     sign * line.UnitPrice,
                     line.VatRate,
+                    sign * line.Discount,
                     sign * line.LineTotal)),
             ],
             [.. invoice.VatSummary().Select(rate => new DocumentVatRate(rate.Rate, sign * rate.Net, sign * rate.Vat, sign * rate.Gross))],

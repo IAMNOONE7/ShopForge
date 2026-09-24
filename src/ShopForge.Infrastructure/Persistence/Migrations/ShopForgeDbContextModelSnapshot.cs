@@ -886,6 +886,11 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("DiscountCode")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("discount_code");
+
                     b.Property<Guid>("StoreId")
                         .HasColumnType("uuid")
                         .HasColumnName("store_id");
@@ -898,6 +903,128 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                         .HasName("pk_carts");
 
                     b.ToTable("carts", "orders");
+                });
+
+            modelBuilder.Entity("ShopForge.Orders.Domain.Discount", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTimeOffset?>("EndsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ends_at");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("kind");
+
+                    b.Property<int?>("MaxRedemptions")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_redemptions");
+
+                    b.Property<int?>("MaxRedemptionsPerCustomer")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_redemptions_per_customer");
+
+                    b.Property<decimal?>("MinimumOrderAmount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("minimum_order_amount");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("Redemptions")
+                        .HasColumnType("integer")
+                        .HasColumnName("redemptions");
+
+                    b.Property<DateTimeOffset?>("StartsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("starts_at");
+
+                    b.Property<Guid>("StoreId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("store_id");
+
+                    b.Property<decimal>("Value")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("value");
+
+                    b.HasKey("Id")
+                        .HasName("pk_discounts");
+
+                    b.HasIndex("StoreId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_discounts_store_id_code");
+
+                    b.ToTable("discounts", "orders", t =>
+                        {
+                            t.HasCheckConstraint("ck_discounts_value", "value >= 0 AND redemptions >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("ShopForge.Orders.Domain.DiscountRedemption", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<Guid>("DiscountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("discount_id");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)")
+                        .HasColumnName("email");
+
+                    b.Property<string>("OrderNumber")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("order_number");
+
+                    b.Property<DateTimeOffset>("RedeemedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("redeemed_at");
+
+                    b.Property<Guid>("StoreId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("store_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_discount_redemptions");
+
+                    b.HasIndex("DiscountId")
+                        .HasDatabaseName("ix_discount_redemptions_discount_id");
+
+                    b.HasIndex("StoreId", "DiscountId", "Email")
+                        .HasDatabaseName("ix_discount_redemptions_store_id_discount_id_email");
+
+                    b.ToTable("discount_redemptions", "orders");
                 });
 
             modelBuilder.Entity("ShopForge.Orders.Domain.Invoice", b =>
@@ -918,6 +1045,10 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("character(3)")
                         .HasColumnName("currency")
                         .IsFixedLength();
+
+                    b.Property<string>("DiscountCode")
+                        .HasColumnType("text")
+                        .HasColumnName("discount_code");
 
                     b.Property<DateTimeOffset>("IssuedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1094,6 +1225,21 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                         .HasColumnName("currency")
                         .IsFixedLength();
 
+                    b.Property<string>("DiscountCode")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("discount_code");
+
+                    b.Property<string>("DiscountName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("discount_name");
+
+                    b.Property<decimal>("DiscountTotal")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("discount_total");
+
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(254)
@@ -1150,6 +1296,11 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("ReservationExpiresAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("reservation_expires_at");
+
+                    b.Property<decimal>("ShippingDiscount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("shipping_discount");
 
                     b.Property<string>("ShippingMethodCode")
                         .IsRequired()
@@ -1865,6 +2016,16 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                     b.Navigation("Lines");
                 });
 
+            modelBuilder.Entity("ShopForge.Orders.Domain.DiscountRedemption", b =>
+                {
+                    b.HasOne("ShopForge.Orders.Domain.Discount", null)
+                        .WithMany()
+                        .HasForeignKey("DiscountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_discount_redemptions_discounts_discount_id");
+                });
+
             modelBuilder.Entity("ShopForge.Orders.Domain.Invoice", b =>
                 {
                     b.OwnsMany("ShopForge.Orders.Domain.InvoiceLine", "Lines", b1 =>
@@ -1885,6 +2046,11 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                                 .HasMaxLength(200)
                                 .HasColumnType("character varying(200)")
                                 .HasColumnName("description");
+
+                            b1.Property<decimal>("Discount")
+                                .HasPrecision(12, 2)
+                                .HasColumnType("numeric(12,2)")
+                                .HasColumnName("discount");
 
                             b1.Property<int>("Quantity")
                                 .HasColumnType("integer")
@@ -1978,6 +2144,11 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                                 .HasColumnName("id");
 
                             NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b1.Property<int>("Id"));
+
+                            b1.Property<decimal>("Discount")
+                                .HasPrecision(12, 2)
+                                .HasColumnType("numeric(12,2)")
+                                .HasColumnName("discount");
 
                             b1.Property<string>("ProductName")
                                 .IsRequired()

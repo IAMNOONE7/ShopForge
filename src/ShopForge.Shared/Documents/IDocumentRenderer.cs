@@ -16,6 +16,7 @@ public sealed record TaxDocument(
     DocumentParty Seller,
     DocumentParty Buyer,
     string PaymentMethod,
+    string? Discount,
     IReadOnlyList<DocumentLine> Lines,
     IReadOnlyList<DocumentVatRate> VatSummary,
     decimal Net,
@@ -24,6 +25,6 @@ public sealed record TaxDocument(
 
 public sealed record DocumentParty(string Name, IReadOnlyList<string> AddressLines, string? RegistrationNumber, string? VatNumber);
 
-public sealed record DocumentLine(string Description, int Quantity, decimal UnitPrice, decimal VatRate, decimal LineTotal);
+public sealed record DocumentLine(string Description, int Quantity, decimal UnitPrice, decimal VatRate, decimal Discount, decimal LineTotal);
 
 public sealed record DocumentVatRate(decimal Rate, decimal Net, decimal Vat, decimal Gross);

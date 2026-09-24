@@ -4,6 +4,7 @@ import { FilterPanel } from '../components/filters/FilterPanel'
 import { filterKey, withParam } from '../components/filters/filterParams'
 import { Message } from '../components/Message'
 import { ProductCard } from '../components/ProductCard'
+import { LoadingState } from '../components/ui/LoadingState'
 import { useRequest } from '../useRequest'
 
 export function ProductListPage() {
@@ -24,7 +25,7 @@ export function ProductListPage() {
 
   switch (products.status) {
     case 'loading':
-      return null
+      return <LoadingState label="Loading products…" lines={6} />
     case 'not-found':
       return <Message title="Category not found" text="This category does not exist." />
     case 'error':

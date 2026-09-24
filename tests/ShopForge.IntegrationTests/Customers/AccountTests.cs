@@ -54,8 +54,10 @@ public sealed class AccountTests(ShopForgeApiFactory factory)
         await VerifyAsync(shopper, email);
 
         using var second = await shopper.PostAsync("/api/storefront/account/register", Registration(email, firstName: "Someone"));
-        await factory.DispatchOutboxAsync(CancellationToken);
-        var subjects = factory.Emails.For(email).Select(message => message.Subject).ToList();
+        var subjects = await factory.EventuallyAsync(
+            () => Task.FromResult(factory.Emails.For(email).Select(message => message.Subject).ToList()),
+            messages => messages.Any(subject => subject.Contains("already have", StringComparison.Ordinal)),
+            CancellationToken);
         var profile = await shopper.GetJsonAsync<CustomerView>("/api/storefront/account/me");
 
         Assert.Equal(first.StatusCode, second.StatusCode);
@@ -154,8 +156,10 @@ public sealed class AccountTests(ShopForgeApiFactory factory)
         await VerifyAsync(shopper, email);
 
         using var asked = await shopper.PostAsync("/api/storefront/account/password/forgot", new { Email = email });
-        await factory.DispatchOutboxAsync(CancellationToken);
-        var token = factory.Emails.LatestLinkFor(email);
+        var token = await factory.EventuallyAsync(
+            () => Task.FromResult(factory.Emails.LatestLinkFor(email)),
+            link => link is not null,
+            CancellationToken);
         using var reset = await shopper.PostAsync("/api/storefront/account/password/reset", new { Token = token, Password = "New-password-2026" });
         using var reused = await shopper.PostAsync("/api/storefront/account/password/reset", new { Token = token, Password = "Another-password-2026" });
         using var oldPassword = await shopper.PostAsync("/api/storefront/account/login", new { Email = email, Password = Password });
@@ -226,9 +230,11 @@ public sealed class AccountTests(ShopForgeApiFactory factory)
 
     private async Task<CustomerView> VerifyAsync(StorefrontApi shopper, string email)
     {
-        // The link is in a message the outbox delivers; nothing waits for the worker's tick in a test.
-        await factory.DispatchOutboxAsync(CancellationToken);
-        var token = factory.Emails.LatestLinkFor(email);
+        // The link is in a message the outbox delivers.
+        var token = await factory.EventuallyAsync(
+            () => Task.FromResult(factory.Emails.LatestLinkFor(email)),
+            link => link is not null,
+            CancellationToken);
         using var response = await shopper.PostAsync("/api/storefront/account/verify", new { Token = token });
 
         return await shopper.ReadAsync<CustomerView>(response);

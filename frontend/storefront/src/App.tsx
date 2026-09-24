@@ -4,6 +4,7 @@ import { CartProvider } from './components/CartProvider'
 import { CustomerProvider } from './components/CustomerProvider'
 import { Layout } from './components/Layout'
 import { Message } from './components/Message'
+import { LoadingState } from './components/ui/LoadingState'
 import { AccountPage } from './pages/AccountPage'
 import { CartPage } from './pages/CartPage'
 import { CheckoutPage } from './pages/CheckoutPage'
@@ -50,16 +51,20 @@ function App() {
 
   switch (state.status) {
     case 'loading':
-      return null
+      return (
+        <main className="app container app-boot">
+          <LoadingState label="Loading store…" lines={4} />
+        </main>
+      )
     case 'not-found':
       return (
-        <main className="app">
+        <main className="app container app-boot">
           <Message title="Store not found" text="There is no store at this address." />
         </main>
       )
     case 'unavailable':
       return (
-        <main className="app">
+        <main className="app container app-boot">
           <Message title="Store unavailable" text="Please try again in a moment." />
         </main>
       )

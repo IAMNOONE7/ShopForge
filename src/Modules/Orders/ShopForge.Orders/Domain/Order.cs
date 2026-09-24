@@ -102,22 +102,41 @@ internal sealed class Order : IStoreOwned
 
     public Shipment? Shipment { get; private set; }
 
+    public string? DiscountCode { get; private set; }
+
+    public string? DiscountName { get; private set; }
+
+    // What the code actually took off, lines and shipping together (D-087).
+    public decimal DiscountTotal { get; private set; }
+
     public IReadOnlyList<OrderLine> Lines => _lines;
 
     public decimal ItemsTotal => _lines.Sum(line => line.LineTotal);
 
-    public decimal GrandTotal => ItemsTotal + ShippingPrice;
+    public decimal ShippingCharged => ShippingPrice - ShippingDiscount;
 
-    public decimal VatTotal => _lines.Sum(line => line.VatAmount) + Money.VatOf(ShippingPrice, ShippingVatRate);
+    public decimal GrandTotal => ItemsTotal + ShippingCharged;
 
-    public void AddLine(Guid storeProductId, string name, decimal unitPrice, decimal vatRate, int quantity)
+    public decimal VatTotal => _lines.Sum(line => line.VatAmount) + Money.VatOf(ShippingCharged, ShippingVatRate);
+
+    public decimal ShippingDiscount { get; private set; }
+
+    public void AddLine(Guid storeProductId, string name, decimal unitPrice, decimal vatRate, int quantity, decimal discount = 0m)
     {
         if (quantity < 1)
         {
             throw new ArgumentOutOfRangeException(nameof(quantity), "An order line needs at least one item.");
         }
 
-        _lines.Add(new OrderLine(storeProductId, name, unitPrice, vatRate, quantity));
+        _lines.Add(new OrderLine(storeProductId, name, unitPrice, vatRate, quantity, discount));
+    }
+
+    public void ApplyDiscount(string code, string name, decimal shippingDiscount)
+    {
+        DiscountCode = code;
+        DiscountName = name;
+        ShippingDiscount = shippingDiscount;
+        DiscountTotal = _lines.Sum(line => line.Discount) + shippingDiscount;
     }
 
     public void AssignTo(Guid storeCustomerId) => StoreCustomerId = storeCustomerId;
@@ -205,13 +224,14 @@ internal sealed class OrderLine
     {
     }
 
-    internal OrderLine(Guid storeProductId, string name, decimal unitPrice, decimal vatRate, int quantity)
+    internal OrderLine(Guid storeProductId, string name, decimal unitPrice, decimal vatRate, int quantity, decimal discount)
     {
         StoreProductId = storeProductId;
         ProductName = name;
         UnitPrice = unitPrice;
         VatRate = vatRate;
         Quantity = quantity;
+        Discount = discount;
     }
 
     public Guid StoreProductId { get; private set; }
@@ -224,7 +244,10 @@ internal sealed class OrderLine
 
     public int Quantity { get; private set; }
 
-    public decimal LineTotal => UnitPrice * Quantity;
+    // The share of the order's discount this line carried (D-085).
+    public decimal Discount { get; private set; }
+
+    public decimal LineTotal => (UnitPrice * Quantity) - Discount;
 
     public decimal VatAmount => Money.VatOf(LineTotal, VatRate);
 }
