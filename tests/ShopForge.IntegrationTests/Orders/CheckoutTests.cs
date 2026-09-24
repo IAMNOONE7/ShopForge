@@ -6,6 +6,36 @@ namespace ShopForge.IntegrationTests.Orders;
 
 public sealed class CheckoutTests(ShopForgeApiFactory factory)
 {
+    // A shopper who clicks "place order" twice must end up with one order, and be told they were second rather
+    // than shown a fault.
+    [Fact]
+    public async Task Submitting_the_same_cart_twice_places_one_order()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+        await furniture.Admin.StockAsync(furniture.ProductIds["oak-chair"], 10);
+        using var shopper = new StorefrontApi(factory, furniture.Store);
+        using var added = await shopper.PostAsync(
+            "/api/storefront/cart/items",
+            new { StoreProductId = furniture.Products["oak-chair"], Quantity = 1 });
+        Assert.Equal(HttpStatusCode.OK, added.StatusCode);
+
+        var answers = await Task.WhenAll(
+            shopper.PostAsync("/api/storefront/checkout", Checkout.Request()),
+            shopper.PostAsync("/api/storefront/checkout", Checkout.Request()));
+        var orders = await furniture.Admin.GetFromJsonAsync<List<PlacedOrderRow>>(
+            $"/api/admin/stores/{furniture.Store.StoreId}/orders", TestContext.Current.CancellationToken);
+
+        Assert.Equal([HttpStatusCode.Created, HttpStatusCode.Conflict], answers.Select(answer => answer.StatusCode).Order());
+        Assert.Single(orders!);
+
+        foreach (var answer in answers)
+        {
+            answer.Dispose();
+        }
+    }
+
+    private sealed record PlacedOrderRow(string Number, string Status);
+
     private static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
 
     [Fact]

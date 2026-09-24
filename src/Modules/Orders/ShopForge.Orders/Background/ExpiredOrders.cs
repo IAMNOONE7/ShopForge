@@ -41,26 +41,48 @@ internal sealed class ExpiredOrders(IServiceProvider services, TimeProvider cloc
         var now = clock.GetUtcNow();
 
         var expired = await dbContext.Set<Order>()
+            .AsNoTracking()
             .Where(order => order.Status == OrderStatus.AwaitingPayment && order.ReservationExpiresAt <= now)
             .ToListAsync(cancellationToken);
-
-        foreach (var order in expired)
-        {
-            order.Cancel();
-            await stock.ReleaseAsync(order.Number, cancellationToken);
-            outbox.Enqueue(new OrderCancelled(order.Number, order.Email, "The order was not paid in time."));
-            metrics.OrderCancelled("expired");
-        }
 
         if (expired.Count == 0)
         {
             return 0;
         }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Cancelled {Count} unpaid orders in store {StoreId} and released their stock.", expired.Count, store.StoreId);
+        // The cancellation, the stock behind it and the letter about it belong together, as they do everywhere else
+        // an order changes: a sweep that stops halfway leaves nothing applied.
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var cancelled = 0;
 
-        return expired.Count;
+        foreach (var order in expired)
+        {
+            // Every instance sweeps, so the order is claimed before anything follows from it; the run that does not
+            // get it leaves the stock and the letter to the run that did.
+            var claimed = await dbContext.Set<Order>()
+                .Where(candidate => candidate.Id == order.Id && candidate.Status == OrderStatus.AwaitingPayment)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(candidate => candidate.Status, OrderStatus.Cancelled), cancellationToken);
+
+            if (claimed == 0)
+            {
+                continue;
+            }
+
+            await stock.ReleaseAsync(order.Number, cancellationToken);
+            outbox.Enqueue(new OrderCancelled(order.Number, order.Email, "The order was not paid in time."));
+            metrics.OrderCancelled("expired");
+            cancelled++;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        if (cancelled > 0)
+        {
+            logger.LogInformation("Cancelled {Count} unpaid orders in store {StoreId} and released their stock.", cancelled, store.StoreId);
+        }
+
+        return cancelled;
     }
 }
 

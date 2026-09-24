@@ -236,6 +236,13 @@ internal sealed class InvoiceEntityConfiguration : IEntityTypeConfiguration<Invo
 
         // One credit note per return, whatever a retry or a second pair of hands tries (D-097).
         builder.HasIndex(invoice => invoice.ReturnId).IsUnique().HasFilter("return_id IS NOT NULL");
+
+        // And one invoice per order: the code looks for an existing one first, but two deliveries of the payment
+        // event at the same moment would both look and both find nothing.
+        builder.HasIndex(invoice => new { invoice.StoreId, invoice.OrderNumber, invoice.Kind })
+            .IsUnique()
+            .HasFilter("return_id IS NULL")
+            .HasDatabaseName("ix_invoices_store_id_order_number_kind");
     }
 }
 

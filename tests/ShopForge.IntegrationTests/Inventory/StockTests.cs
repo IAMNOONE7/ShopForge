@@ -140,6 +140,51 @@ public sealed class StockTests(ShopForgeApiFactory factory)
         Assert.Equal((1, 1, 0), (stock.OnHand, stock.Reserved, stock.Available));
     }
 
+    // Two runs releasing the same order at once — the expiry sweep on two instances, or a cancel racing the sweep —
+    // both read the reservation as held. Only one of them may give the items back.
+    [Fact]
+    public async Task Releasing_the_same_order_twice_at_once_gives_the_stock_back_once()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+        var productId = furniture.ProductIds["oak-chair"];
+        await furniture.Admin.StockAsync(productId, 10);
+        var expiry = DateTimeOffset.UtcNow.AddMinutes(30);
+
+        // A second order keeps its own items reserved, so a double release shows up as wrong numbers rather than as
+        // a check constraint stopping the quantity from going below zero.
+        await using var otherScope = TestStores.CreateScope(factory.Services, furniture.Store);
+        await otherScope.ServiceProvider.GetRequiredService<IStockLedger>()
+            .ReserveAsync([new StockRequest(productId, 4)], "other", expiry, CancellationToken);
+
+        await using var firstScope = TestStores.CreateScope(factory.Services, furniture.Store);
+        await firstScope.ServiceProvider.GetRequiredService<IStockLedger>()
+            .ReserveAsync([new StockRequest(productId, 3)], "expiring", expiry, CancellationToken);
+        var reserved = await StockAsync(furniture, productId);
+
+        var firstDbContext = firstScope.ServiceProvider.GetRequiredService<DbContext>();
+        await using var firstTransaction = await firstDbContext.Database.BeginTransactionAsync(CancellationToken);
+        await firstScope.ServiceProvider.GetRequiredService<IStockLedger>().ReleaseAsync("expiring", CancellationToken);
+
+        var second = Task.Run(async () =>
+        {
+            await using var scope = TestStores.CreateScope(factory.Services, furniture.Store);
+            var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(CancellationToken);
+            await scope.ServiceProvider.GetRequiredService<IStockLedger>().ReleaseAsync("expiring", CancellationToken);
+            await transaction.CommitAsync(CancellationToken);
+        }, CancellationToken);
+
+        // The second run has to read the reservation before the first one commits, which is the state two instances
+        // of the sweep are in; it then waits on the row the first run has locked.
+        await WaitForLockAsync();
+        await firstTransaction.CommitAsync(CancellationToken);
+        await second;
+        var released = await StockAsync(furniture, productId);
+
+        Assert.Equal((10, 7, 3), (reserved.OnHand, reserved.Reserved, reserved.Available));
+        Assert.Equal((10, 4, 6), (released.OnHand, released.Reserved, released.Available));
+    }
+
     [Fact]
     public async Task Stock_cannot_be_set_below_what_orders_reserve()
     {
@@ -177,6 +222,40 @@ public sealed class StockTests(ShopForgeApiFactory factory)
         Assert.Equal((6, 0, 6), (stock.OnHand, stock.Reserved, stock.Available));
     }
 
+    // Every instance runs the sweep, so two of them regularly meet over the same expired orders. Between them they
+    // must cancel each order once: one release of its stock, one letter to the customer.
+    [Fact]
+    public async Task Two_sweeps_at_once_cancel_each_expired_order_once()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+        var productId = furniture.ProductIds["oak-chair"];
+        await furniture.Admin.StockAsync(productId, 40);
+        var numbers = new List<string>();
+
+        for (var order = 0; order < 8; order++)
+        {
+            using var shopper = new StorefrontApi(factory, furniture.Store);
+            await AddToCartAsync(shopper, furniture.Products["oak-chair"], 2);
+            numbers.Add((await PlaceOrderAsync(shopper)).Number);
+        }
+
+        foreach (var number in numbers)
+        {
+            await ExpireAsync(furniture, number);
+        }
+
+        var sweeps = factory.Services.GetRequiredService<ExpiredOrders>();
+        var counts = await Task.WhenAll(
+            Task.Run(() => sweeps.SweepAsync(CancellationToken), CancellationToken),
+            Task.Run(() => sweeps.SweepAsync(CancellationToken), CancellationToken));
+        var stock = await StockAsync(furniture, productId);
+        var letters = await CancellationsAsync(furniture, numbers);
+
+        Assert.Equal(8, counts.Sum());
+        Assert.Equal((40, 0, 40), (stock.OnHand, stock.Reserved, stock.Available));
+        Assert.Equal(numbers.Count, letters);
+    }
+
     [Fact]
     public async Task Stock_of_a_product_from_another_tenant_cannot_be_changed()
     {
@@ -203,6 +282,38 @@ public sealed class StockTests(ShopForgeApiFactory factory)
         using var response = await shopper.PostAsync("/api/storefront/checkout", Checkout.Request());
 
         return await shopper.ReadAsync<PlacedOrder>(response, HttpStatusCode.Created);
+    }
+
+    private async Task<int> CancellationsAsync(FurnitureStore furniture, IReadOnlyCollection<string> numbers)
+    {
+        await using var scope = TestStores.CreateScope(factory.Services, furniture.Store);
+        var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
+        var payloads = await dbContext.Database
+            .SqlQuery<string>($"SELECT payload AS \"Value\" FROM messaging.outbox_messages WHERE store_id = {furniture.Store.StoreId} AND type = 'order.cancelled'")
+            .ToListAsync(CancellationToken);
+
+        return payloads.Count(payload => numbers.Any(number => payload.Contains(number, StringComparison.Ordinal)));
+    }
+
+    // Waits until another connection is blocked on a row lock, so an interleaving does not depend on timing.
+    private async Task WaitForLockAsync()
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
+
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            var waiting = await dbContext.Database
+                .SqlQuery<int>($"SELECT count(*)::int AS \"Value\" FROM pg_locks WHERE NOT granted")
+                .SingleAsync(CancellationToken);
+
+            if (waiting > 0)
+            {
+                return;
+            }
+
+            await Task.Delay(50, CancellationToken);
+        }
     }
 
     private async Task<StockView> StockAsync(FurnitureStore furniture, Guid productId)

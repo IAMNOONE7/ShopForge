@@ -35,11 +35,8 @@ internal sealed class StockReservation : ITenantOwned
 
     public DateTimeOffset ExpiresAt { get; private set; }
 
+    // Changed by the ledger with a conditional update rather than here, so only one run can act on it (D-047).
     public ReservationStatus Status { get; private set; }
-
-    public void Confirm() => Status = ReservationStatus.Confirmed;
-
-    public void Release() => Status = ReservationStatus.Released;
 }
 
 internal enum ReservationStatus

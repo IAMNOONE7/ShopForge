@@ -39,6 +39,7 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
 builder.Services.AddExceptionHandler<MalformedRequestExceptionHandler>();
 builder.Services.AddExceptionHandler<UniqueViolationExceptionHandler>();
+builder.Services.AddExceptionHandler<ConcurrentChangeExceptionHandler>();
 builder.Services.AddHttpLogging(options =>
 {
     options.LoggingFields = HttpLoggingFields.RequestMethod

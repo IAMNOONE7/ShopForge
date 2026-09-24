@@ -25,6 +25,7 @@ internal sealed class StockLedger(DbContext dbContext, IStoreContext storeContex
     {
         var warehouseId = await DefaultWarehouseIdAsync(cancellationToken);
         var unavailable = new List<Guid>();
+        var held = new List<StockReservation>();
 
         foreach (var request in requests)
         {
@@ -42,14 +43,17 @@ internal sealed class StockLedger(DbContext dbContext, IStoreContext storeContex
                 continue;
             }
 
-            dbContext.Add(new StockReservation(TenantId, warehouseId, request.ProductId, request.Quantity, reference, expiresAt));
+            held.Add(new StockReservation(TenantId, warehouseId, request.ProductId, request.Quantity, reference, expiresAt));
         }
 
+        // A refused reservation leaves nothing behind: the caller's transaction takes the quantities back, and rows
+        // for the products that did fit are never written.
         if (unavailable.Count > 0)
         {
             return new StockReservationResult(unavailable);
         }
 
+        dbContext.AddRange(held);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return StockReservationResult.Reserved;
@@ -59,6 +63,11 @@ internal sealed class StockLedger(DbContext dbContext, IStoreContext storeContex
     {
         foreach (var reservation in await HeldAsync(reference, cancellationToken))
         {
+            if (!await ClaimAsync(reservation, ReservationStatus.Confirmed, cancellationToken))
+            {
+                continue;
+            }
+
             await dbContext.Set<InventoryItem>()
                 .Where(item => item.WarehouseId == reservation.WarehouseId && item.ProductId == reservation.ProductId)
                 .ExecuteUpdateAsync(
@@ -75,8 +84,6 @@ internal sealed class StockLedger(DbContext dbContext, IStoreContext storeContex
                 StockMovementReason.Sale,
                 reference,
                 clock.GetUtcNow()));
-
-            reservation.Confirm();
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -86,13 +93,16 @@ internal sealed class StockLedger(DbContext dbContext, IStoreContext storeContex
     {
         foreach (var reservation in await HeldAsync(reference, cancellationToken))
         {
+            if (!await ClaimAsync(reservation, ReservationStatus.Released, cancellationToken))
+            {
+                continue;
+            }
+
             await dbContext.Set<InventoryItem>()
                 .Where(item => item.WarehouseId == reservation.WarehouseId && item.ProductId == reservation.ProductId)
                 .ExecuteUpdateAsync(
                     setters => setters.SetProperty(item => item.QuantityReserved, item => item.QuantityReserved - reservation.Quantity),
                     cancellationToken);
-
-            reservation.Release();
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -163,8 +173,17 @@ internal sealed class StockLedger(DbContext dbContext, IStoreContext storeContex
 
     private async Task<List<StockReservation>> HeldAsync(string reference, CancellationToken cancellationToken) =>
         await dbContext.Set<StockReservation>()
+            .AsNoTracking()
             .Where(reservation => reservation.Reference == reference && reservation.Status == ReservationStatus.Held)
             .ToListAsync(cancellationToken);
+
+    // Whoever takes the reservation out of Held is the one that moves the items. Two runs can reach the same
+    // reservation at once — the expiry sweep on two instances, a cancel racing the sweep, a payment racing both —
+    // and the loser of this update must not give the same items back or take them out twice (D-047).
+    private async Task<bool> ClaimAsync(StockReservation reservation, ReservationStatus outcome, CancellationToken cancellationToken) =>
+        await dbContext.Set<StockReservation>()
+            .Where(candidate => candidate.Id == reservation.Id && candidate.Status == ReservationStatus.Held)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(candidate => candidate.Status, outcome), cancellationToken) == 1;
 
     private async Task<InventoryItem> ItemAsync(Guid productId, CancellationToken cancellationToken)
     {
