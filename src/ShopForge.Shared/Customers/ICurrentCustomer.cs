@@ -4,5 +4,8 @@ namespace ShopForge.Shared.Customers;
 // guests, so the customer session is read on demand rather than by the authentication middleware.
 public interface ICurrentCustomer
 {
-    Task<Guid?> FindStoreCustomerIdAsync(CancellationToken cancellationToken);
+    Task<CurrentCustomerAccount?> FindAsync(CancellationToken cancellationToken);
 }
+
+// The relationship this store's data hangs off, and the address the shop writes to.
+public sealed record CurrentCustomerAccount(Guid StoreCustomerId, string Email);

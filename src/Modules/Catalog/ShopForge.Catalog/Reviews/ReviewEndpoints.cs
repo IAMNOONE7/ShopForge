@@ -62,7 +62,7 @@ internal static class ReviewEndpoints
         ICustomerPurchases purchases,
         CancellationToken cancellationToken)
     {
-        if (await currentCustomer.FindStoreCustomerIdAsync(cancellationToken) is not { } storeCustomerId)
+        if (await currentCustomer.FindAsync(cancellationToken) is not { StoreCustomerId: var storeCustomerId })
         {
             return false;
         }
@@ -100,7 +100,7 @@ internal static class ReviewEndpoints
             return TypedResults.NotFound();
         }
 
-        if (await currentCustomer.FindStoreCustomerIdAsync(cancellationToken) is not { } storeCustomerId)
+        if (await currentCustomer.FindAsync(cancellationToken) is not { StoreCustomerId: var storeCustomerId })
         {
             return TypedResults.Forbid();
         }

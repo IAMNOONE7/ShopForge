@@ -272,7 +272,7 @@ internal static class AccountEndpoints
     }
 
     private static async Task<StoreCustomer?> FindAsync(DbContext dbContext, ICurrentCustomer currentCustomer, CancellationToken cancellationToken) =>
-        await currentCustomer.FindStoreCustomerIdAsync(cancellationToken) is { } id
+        await currentCustomer.FindAsync(cancellationToken) is { StoreCustomerId: var id }
             ? await dbContext.Set<StoreCustomer>().SingleOrDefaultAsync(customer => customer.Id == id, cancellationToken)
             : null;
 

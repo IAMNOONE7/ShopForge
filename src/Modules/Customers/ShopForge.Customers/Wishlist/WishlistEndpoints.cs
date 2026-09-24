@@ -29,7 +29,7 @@ internal static class WishlistEndpoints
         ISellableProducts products,
         CancellationToken cancellationToken)
     {
-        if (await currentCustomer.FindStoreCustomerIdAsync(cancellationToken) is not { } storeCustomerId)
+        if (await currentCustomer.FindAsync(cancellationToken) is not { StoreCustomerId: var storeCustomerId })
         {
             return TypedResults.Unauthorized();
         }
@@ -60,7 +60,7 @@ internal static class WishlistEndpoints
         TimeProvider clock,
         CancellationToken cancellationToken)
     {
-        if (await currentCustomer.FindStoreCustomerIdAsync(cancellationToken) is not { } storeCustomerId)
+        if (await currentCustomer.FindAsync(cancellationToken) is not { StoreCustomerId: var storeCustomerId })
         {
             return TypedResults.Unauthorized();
         }
@@ -89,7 +89,7 @@ internal static class WishlistEndpoints
         ICurrentCustomer currentCustomer,
         CancellationToken cancellationToken)
     {
-        if (await currentCustomer.FindStoreCustomerIdAsync(cancellationToken) is not { } storeCustomerId)
+        if (await currentCustomer.FindAsync(cancellationToken) is not { StoreCustomerId: var storeCustomerId })
         {
             return TypedResults.Unauthorized();
         }

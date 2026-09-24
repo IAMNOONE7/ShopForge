@@ -51,7 +51,7 @@ internal static class DocumentEndpoints
         IDocumentRenderer renderer,
         CancellationToken cancellationToken)
     {
-        if (await currentCustomer.FindStoreCustomerIdAsync(cancellationToken) is not { } storeCustomerId)
+        if (await currentCustomer.FindAsync(cancellationToken) is not { StoreCustomerId: var storeCustomerId })
         {
             return TypedResults.NotFound();
         }

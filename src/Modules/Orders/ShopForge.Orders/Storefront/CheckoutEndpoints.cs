@@ -141,8 +141,13 @@ internal static class CheckoutEndpoints
                 detail: DiscountCodes.Explain(discountProblem));
         }
 
+        // An order of a signed-in customer is confirmed to the address the account was proved with, whatever the
+        // form sent: the shop must not be usable to write to an address its owner never gave it (D-101).
+        var account = await currentCustomer.FindAsync(cancellationToken);
+        var email = account?.Email ?? request.Email;
+
         var errors = new RequestErrors()
-            .Check(IsEmail(request.Email), "email", "A valid e-mail address is required.")
+            .Check(IsEmail(email), "email", "A valid e-mail address is required.")
             .Check(request.BillingAddress?.IsComplete == true, "billingAddress", "The billing address is incomplete.")
             .Check(request.ShippingAddress is null || request.ShippingAddress.IsComplete, "shippingAddress", "The shipping address is incomplete.")
             .Check(payment is not null, "paymentMethodCode", "Choose one of the store's payment methods.")
@@ -193,7 +198,7 @@ internal static class CheckoutEndpoints
 
         if (discount is not null)
         {
-            var refused = await discounts.FindProblemAsync(discount, contents.Items.Sum(item => item.LineTotal), request.Email, cancellationToken);
+            var refused = await discounts.FindProblemAsync(discount, contents.Items.Sum(item => item.LineTotal), email, cancellationToken);
 
             if (refused is not null || !await discounts.TryRedeemAsync(discount, cancellationToken))
             {
@@ -210,7 +215,7 @@ internal static class CheckoutEndpoints
             storeContext.StoreId!.Value,
             number,
             settings.Currency,
-            request.Email!,
+            email!,
             request.BillingAddress!.ToAddress(),
             (request.ShippingAddress ?? request.BillingAddress).ToAddress(),
             new ChosenMethods(
@@ -225,9 +230,9 @@ internal static class CheckoutEndpoints
             placedAt,
             reservationExpiresAt);
 
-        if (await currentCustomer.FindStoreCustomerIdAsync(cancellationToken) is { } storeCustomerId)
+        if (account is not null)
         {
-            order.AssignTo(storeCustomerId);
+            order.AssignTo(account.StoreCustomerId);
         }
 
         foreach (var (item, index) in contents.Items.Select((item, index) => (item, index)))

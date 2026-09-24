@@ -221,6 +221,27 @@ public sealed class AccountTests(ShopForgeApiFactory factory)
         Assert.Equal(2, cart.Count);
     }
 
+    // The address on a signed-in customer's order is the one they proved, not one typed into the form: the shop
+    // cannot be asked to write to somebody else (D-101).
+    [Fact]
+    public async Task An_order_of_a_signed_in_customer_goes_to_the_address_of_the_account()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+        var email = UniqueEmail();
+        using var shopper = new StorefrontApi(factory, furniture.Store);
+        await shopper.PostAsync("/api/storefront/account/register", Registration(email));
+        await VerifyAsync(shopper, email);
+        await AddToCartAsync(shopper, furniture.Products["oak-chair"], 1);
+
+        var order = await PlaceOrderAsync(shopper, email: "somebody.else@example.test");
+        var placed = await shopper.GetJsonAsync<OrderView>($"/api/storefront/orders/{order.Number}?token={order.Token}");
+        var orders = await shopper.GetJsonAsync<List<CustomerOrderView>>("/api/storefront/account/orders");
+
+        Assert.Equal(email, placed.Email);
+        Assert.Contains(orders, own => own.Number == order.Number);
+        Assert.Empty(factory.Emails.For("somebody.else@example.test"));
+    }
+
     private const string Password = "Shop-forge-2026";
 
     private static string UniqueEmail() => $"buyer-{Guid.NewGuid():N}@example.test";

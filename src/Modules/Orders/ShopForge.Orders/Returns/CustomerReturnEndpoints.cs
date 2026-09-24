@@ -27,7 +27,7 @@ internal static class CustomerReturnEndpoints
         OrderReturns returns,
         CancellationToken cancellationToken)
     {
-        if (await currentCustomer.FindStoreCustomerIdAsync(cancellationToken) is not { } storeCustomerId)
+        if (await currentCustomer.FindAsync(cancellationToken) is not { StoreCustomerId: var storeCustomerId })
         {
             return TypedResults.Unauthorized();
         }
@@ -49,7 +49,7 @@ internal static class CustomerReturnEndpoints
             OrderReturns returns,
             CancellationToken cancellationToken)
     {
-        if (await currentCustomer.FindStoreCustomerIdAsync(cancellationToken) is not { } storeCustomerId)
+        if (await currentCustomer.FindAsync(cancellationToken) is not { StoreCustomerId: var storeCustomerId })
         {
             return TypedResults.Unauthorized();
         }
