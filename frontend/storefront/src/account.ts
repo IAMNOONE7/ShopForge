@@ -66,3 +66,21 @@ export const requestPasswordReset = (email: string) => send<void>('POST', '/api/
 export const resetPassword = (token: string, password: string) => send<void>('POST', '/api/storefront/account/password/reset', { token, password })
 
 export const getOrders = () => send<CustomerOrder[]>('GET', '/api/storefront/account/orders')
+
+export type WishlistItem = {
+  storeProductId: string
+  name: string
+  slug: string
+  price: number
+  imageUrl: string | null
+}
+
+export const getWishlist = () => send<WishlistItem[]>('GET', '/api/storefront/account/wishlist')
+
+export const addToWishlist = (storeProductId: string) => send<void>('POST', '/api/storefront/account/wishlist', { storeProductId })
+
+export const removeFromWishlist = (storeProductId: string) =>
+  send<void>('DELETE', `/api/storefront/account/wishlist/${storeProductId}`)
+
+export const writeReview = (slug: string, review: { rating: number; text: string; author: string }) =>
+  send<void>('POST', `/api/storefront/products/${encodeURIComponent(slug)}/reviews`, review)

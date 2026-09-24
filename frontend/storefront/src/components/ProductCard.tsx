@@ -1,5 +1,6 @@
 import { Link } from 'react-router'
 import type { ProductSummary } from '../api'
+import { Stars } from './Stars'
 import { formatPrice, useStore } from '../storeContext'
 
 export function ProductCard({ product }: { product: ProductSummary }) {
@@ -14,6 +15,7 @@ export function ProductCard({ product }: { product: ProductSummary }) {
       )}
       <span className="product-name">{product.name}</span>
       <span className="product-price">{formatPrice(product.price, store)}</span>
+      {product.reviewCount > 0 && <Stars rating={product.rating} count={product.reviewCount} />}
       {product.available === 0 && <span className="hint">Out of stock</span>}
     </Link>
   )

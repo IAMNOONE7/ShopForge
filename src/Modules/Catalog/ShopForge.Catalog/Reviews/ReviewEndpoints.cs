@@ -26,9 +26,11 @@ internal static class ReviewEndpoints
         storeAdmin.MapPost("/reviews/{reviewId:guid}/reject", RejectAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
     }
 
-    private static async Task<Results<Ok<List<ReviewResponse>>, NotFound>> GetReviewsAsync(
+    private static async Task<Results<Ok<ReviewsResponse>, NotFound>> GetReviewsAsync(
         string slug,
         DbContext dbContext,
+        ICurrentCustomer currentCustomer,
+        ICustomerPurchases purchases,
         CancellationToken cancellationToken)
     {
         var storeProductId = await ListingIdAsync(dbContext, slug, cancellationToken);
@@ -46,7 +48,27 @@ internal static class ReviewEndpoints
             .Select(review => new ReviewResponse(review.Author, review.Rating, review.Text, review.WrittenAt))
             .ToListAsync(cancellationToken);
 
-        return TypedResults.Ok(reviews);
+        var canWrite = await CanWriteAsync(storeProductId.Value, dbContext, currentCustomer, purchases, cancellationToken);
+
+        return TypedResults.Ok(new ReviewsResponse(canWrite, reviews));
+    }
+
+    // The shop only offers the form to someone whose review would be taken, which is the same question the
+    // POST answers with 403 and 409.
+    private static async Task<bool> CanWriteAsync(
+        Guid storeProductId,
+        DbContext dbContext,
+        ICurrentCustomer currentCustomer,
+        ICustomerPurchases purchases,
+        CancellationToken cancellationToken)
+    {
+        if (await currentCustomer.FindStoreCustomerIdAsync(cancellationToken) is not { } storeCustomerId)
+        {
+            return false;
+        }
+
+        return await purchases.HasBoughtAsync(storeCustomerId, storeProductId, cancellationToken)
+            && !await HasReviewedAsync(dbContext, storeProductId, storeCustomerId, cancellationToken);
     }
 
     private static async Task<Results<Accepted, ValidationProblem, NotFound, ForbidHttpResult, ProblemHttpResult>> WriteReviewAsync(
@@ -91,9 +113,7 @@ internal static class ReviewEndpoints
                 detail: "Reviews come from orders, so that a rating means something.");
         }
 
-        if (await dbContext.Set<ProductReview>().AnyAsync(
-                review => review.StoreProductId == storeProductId && review.StoreCustomerId == storeCustomerId,
-                cancellationToken))
+        if (await HasReviewedAsync(dbContext, storeProductId.Value, storeCustomerId, cancellationToken))
         {
             return TypedResults.Problem(
                 statusCode: StatusCodes.Status409Conflict,
@@ -181,6 +201,14 @@ internal static class ReviewEndpoints
         return TypedResults.NoContent();
     }
 
+    private static Task<bool> HasReviewedAsync(
+        DbContext dbContext,
+        Guid storeProductId,
+        Guid storeCustomerId,
+        CancellationToken cancellationToken) =>
+        dbContext.Set<ProductReview>()
+            .AnyAsync(review => review.StoreProductId == storeProductId && review.StoreCustomerId == storeCustomerId, cancellationToken);
+
     private static Task<Guid?> ListingIdAsync(DbContext dbContext, string slug, CancellationToken cancellationToken) =>
         dbContext.Set<StoreProduct>()
             .Where(storeProduct => storeProduct.Slug == slug && storeProduct.IsVisible)
@@ -189,6 +217,8 @@ internal static class ReviewEndpoints
 }
 
 internal sealed record ReviewRequest(int Rating, string? Text, string? Author);
+
+internal sealed record ReviewsResponse(bool CanWrite, List<ReviewResponse> Reviews);
 
 internal sealed record ReviewResponse(string Author, int Rating, string Text, DateTimeOffset WrittenAt);
 

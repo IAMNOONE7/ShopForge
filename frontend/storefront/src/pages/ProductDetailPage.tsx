@@ -1,6 +1,9 @@
 import { Link, useParams } from 'react-router'
 import { getProduct, type ProductAttribute } from '../api'
 import { AddToCart } from '../components/AddToCart'
+import { ProductReviews } from '../components/ProductReviews'
+import { Stars } from '../components/Stars'
+import { WishlistButton } from '../components/WishlistButton'
 import { Message } from '../components/Message'
 import { LoadingState } from '../components/ui/LoadingState'
 import type { Store } from '../store'
@@ -20,7 +23,7 @@ export function ProductDetailPage() {
     case 'error':
       return <Message title="Something went wrong" text="The product could not be loaded. Please try again." />
     case 'ready': {
-      const { id, name, price, available, description, images, categories, attributes } = product.data
+      const { id, name, price, available, rating, reviewCount, description, images, categories, attributes } = product.data
 
       return (
         <article className="product-detail">
@@ -34,8 +37,10 @@ export function ProductDetailPage() {
           <div className="product-info">
             <h1>{name}</h1>
             <p className="product-price">{formatPrice(price, store)}</p>
+            <Stars rating={rating} count={reviewCount} />
             <p className="availability">{availability(available)}</p>
             {available > 0 && <AddToCart storeProductId={id} available={available} />}
+            <WishlistButton storeProductId={id} />
             {description && <p>{description}</p>}
             {attributes.length > 0 && (
               <table className="product-attributes">
@@ -58,6 +63,7 @@ export function ProductDetailPage() {
                 ))}
               </p>
             )}
+            <ProductReviews slug={product.data.slug} />
           </div>
         </article>
       )

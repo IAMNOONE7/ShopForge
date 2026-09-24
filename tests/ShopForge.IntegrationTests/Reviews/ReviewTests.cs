@@ -43,17 +43,17 @@ public sealed class ReviewTests(ShopForgeApiFactory factory)
         using var shopper = await BuyerOfAsync(furniture, "oak-chair");
         using var written = await shopper.PostAsync("/api/storefront/products/oak-chair/reviews", new { Rating = 4, Text = "Good chair." });
 
-        var beforeModeration = await shopper.GetJsonAsync<List<ReviewView>>("/api/storefront/products/oak-chair/reviews");
+        var beforeModeration = await shopper.GetJsonAsync<ReviewsView>("/api/storefront/products/oak-chair/reviews");
         var pending = await PendingAsync(furniture);
         using var published = await furniture.Admin.PostAsync(
             $"/api/admin/stores/{furniture.Store.StoreId}/reviews/{pending.Single().Id}/publish", null, CancellationToken);
-        var afterModeration = await shopper.GetJsonAsync<List<ReviewView>>("/api/storefront/products/oak-chair/reviews");
+        var afterModeration = await shopper.GetJsonAsync<ReviewsView>("/api/storefront/products/oak-chair/reviews");
         var product = await shopper.GetJsonAsync<ProductView>("/api/storefront/products/oak-chair");
 
         Assert.Equal(HttpStatusCode.Accepted, written.StatusCode);
-        Assert.Empty(beforeModeration);
+        Assert.Empty(beforeModeration.Reviews);
         Assert.Equal(HttpStatusCode.NoContent, published.StatusCode);
-        Assert.Equal(4, afterModeration.Single().Rating);
+        Assert.Equal(4, afterModeration.Reviews.Single().Rating);
         Assert.Equal((4m, 1), (product.Rating, product.ReviewCount));
     }
 
@@ -114,6 +114,25 @@ public sealed class ReviewTests(ShopForgeApiFactory factory)
         Assert.Equal(HttpStatusCode.BadRequest, unknownSort.StatusCode);
     }
 
+    [Fact]
+    public async Task Only_a_buyer_who_has_not_reviewed_yet_is_asked_for_one()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+        using var shopper = await BuyerOfAsync(furniture, "beech-stool");
+        using var passerby = new StorefrontApi(factory, furniture.Store);
+
+        var invited = await shopper.GetJsonAsync<ReviewsView>("/api/storefront/products/beech-stool/reviews");
+        var otherProduct = await shopper.GetJsonAsync<ReviewsView>("/api/storefront/products/oak-chair/reviews");
+        var anonymous = await passerby.GetJsonAsync<ReviewsView>("/api/storefront/products/beech-stool/reviews");
+        await shopper.PostAsync("/api/storefront/products/beech-stool/reviews", new { Rating = 5, Text = "Just right." });
+        var afterWriting = await shopper.GetJsonAsync<ReviewsView>("/api/storefront/products/beech-stool/reviews");
+
+        Assert.True(invited.CanWrite);
+        Assert.False(otherProduct.CanWrite);
+        Assert.False(anonymous.CanWrite);
+        Assert.False(afterWriting.CanWrite);
+    }
+
     private async Task<StorefrontApi> BuyerOfAsync(FurnitureStore furniture, string product)
     {
         var email = $"buyer-{Guid.NewGuid():N}@example.test";
@@ -146,6 +165,8 @@ public sealed class ReviewTests(ShopForgeApiFactory factory)
     private async Task<List<AdminReviewView>> PendingAsync(FurnitureStore furniture) =>
         (await furniture.Admin.GetFromJsonAsync<List<AdminReviewView>>(
             $"/api/admin/stores/{furniture.Store.StoreId}/reviews?status=pending", CancellationToken))!;
+
+    private sealed record ReviewsView(bool CanWrite, List<ReviewView> Reviews);
 
     private sealed record ReviewView(string Author, int Rating, string Text, DateTimeOffset WrittenAt);
 

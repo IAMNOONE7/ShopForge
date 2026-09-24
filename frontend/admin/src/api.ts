@@ -160,6 +160,17 @@ export type PickupPoint = {
 
 export type PickupPointInput = { name: string; line1: string; city: string; postalCode: string; country: string; isActive: boolean }
 
+export type Review = {
+  id: string
+  productName: string
+  productSlug: string
+  author: string
+  rating: number
+  text: string
+  writtenAt: string
+  status: string
+}
+
 export type FailedMessage = { id: string; type: string; attempts: number; createdAt: string; error: string | null }
 
 export type Shipment = { carrier: string; trackingNumber: string; trackingUrl: string | null; shippedAt: string }
@@ -268,6 +279,13 @@ export const api = {
   failedMessages: (storeId: string) => request<FailedMessage[]>('GET', `/api/admin/stores/${storeId}/failed-messages`),
   requeueMessage: (storeId: string, messageId: string) =>
     request<void>('POST', `/api/admin/stores/${storeId}/failed-messages/${messageId}/requeue`),
+
+  reviews: (storeId: string, status?: string) =>
+    request<Review[]>('GET', `/api/admin/stores/${storeId}/reviews${status ? `?status=${status}` : ''}`),
+  publishReview: (storeId: string, reviewId: string) =>
+    request<void>('POST', `/api/admin/stores/${storeId}/reviews/${reviewId}/publish`),
+  rejectReview: (storeId: string, reviewId: string) =>
+    request<void>('POST', `/api/admin/stores/${storeId}/reviews/${reviewId}/reject`),
 
   stock: () => request<Stock[]>('GET', '/api/admin/stock'),
   setStock: (productId: string, quantity: number) => request<Stock>('PUT', `/api/admin/stock/${productId}`, { quantity }),

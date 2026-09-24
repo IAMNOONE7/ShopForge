@@ -9,6 +9,8 @@ export type ProductSummary = {
   name: string
   price: number
   available: number
+  rating: number
+  reviewCount: number
   imageUrl: string | null
 }
 
@@ -52,6 +54,8 @@ export type ProductDetail = {
   description: string | null
   price: number
   available: number
+  rating: number
+  reviewCount: number
   images: { url: string; altText: string | null }[]
   categories: Category[]
   attributes: ProductAttribute[]
@@ -84,6 +88,22 @@ export function getProducts(category: string | undefined, query: URLSearchParams
     parameters.set('category', category)
   }
   return getJson<ProductPage>(`/api/storefront/products?${parameters}`, signal)
+}
+
+export type Review = {
+  author: string
+  rating: number
+  text: string
+  writtenAt: string
+}
+
+export type Reviews = {
+  canWrite: boolean
+  reviews: Review[]
+}
+
+export function getReviews(slug: string, signal: AbortSignal) {
+  return getJson<Reviews>(`/api/storefront/products/${encodeURIComponent(slug)}/reviews`, signal)
 }
 
 export function getProduct(slug: string, signal: AbortSignal) {

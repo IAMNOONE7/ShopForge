@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { getOrders, signOut, updateProfile } from '../account'
+import { getOrders, getWishlist, removeFromWishlist, signOut, updateProfile, type WishlistItem } from '../account'
 import { useCustomer } from '../customerContext'
 import { formatPrice, useStore } from '../storeContext'
 import { useRequest } from '../useRequest'
@@ -10,7 +10,14 @@ export function AccountPage() {
   const navigate = useNavigate()
   const { customer, apply } = useCustomer()
   const orders = useRequest('account-orders', getOrders)
+  const [wishlistVersion, setWishlistVersion] = useState(0)
+  const wishlist = useRequest(`account-wishlist:${wishlistVersion}`, getWishlist)
   const [saved, setSaved] = useState(false)
+
+  async function forget(item: WishlistItem) {
+    await removeFromWishlist(item.storeProductId)
+    setWishlistVersion((current) => current + 1)
+  }
 
   async function save(form: FormData) {
     const phone = String(form.get('phone')).trim()
@@ -70,6 +77,22 @@ export function AccountPage() {
             ))}
           </tbody>
         </table>
+      )}
+
+      <h2>Your wishlist</h2>
+      {wishlist.status === 'ready' && wishlist.data.length === 0 && <p className="hint">Nothing saved yet.</p>}
+      {wishlist.status === 'ready' && wishlist.data.length > 0 && (
+        <ul className="wishlist">
+          {wishlist.data.map((item) => (
+            <li key={item.storeProductId}>
+              <Link to={`/p/${item.slug}`}>{item.name}</Link>
+              <span>{formatPrice(item.price, store)}</span>
+              <button type="button" className="link-button" onClick={() => void forget(item)}>
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
 
       <h2>Your details</h2>
