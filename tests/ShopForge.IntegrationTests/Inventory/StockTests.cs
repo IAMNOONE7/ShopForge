@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ShopForge.IntegrationTests.Catalog;
 using ShopForge.IntegrationTests.Orders;
 using ShopForge.Orders.Background;
+using ShopForge.Orders.Domain;
 using ShopForge.Shared.Inventory;
 
 namespace ShopForge.IntegrationTests.Inventory;
@@ -245,13 +246,18 @@ public sealed class StockTests(ShopForgeApiFactory factory)
         }
 
         var sweeps = factory.Services.GetRequiredService<ExpiredOrders>();
-        var counts = await Task.WhenAll(
+
+        // The sweep walks every store, so its own count includes orders other tests left behind; what this test
+        // asserts is what happened to its own.
+        await Task.WhenAll(
             Task.Run(() => sweeps.SweepAsync(CancellationToken), CancellationToken),
             Task.Run(() => sweeps.SweepAsync(CancellationToken), CancellationToken));
         var stock = await StockAsync(furniture, productId);
         var letters = await CancellationsAsync(furniture, numbers);
+        var cancelled = await factory.QueryAsync(furniture.Store, async dbContext => await dbContext.Set<Order>()
+            .CountAsync(order => numbers.Contains(order.Number) && order.Status == OrderStatus.Cancelled, CancellationToken));
 
-        Assert.Equal(8, counts.Sum());
+        Assert.Equal(numbers.Count, cancelled);
         Assert.Equal((40, 0, 40), (stock.OnHand, stock.Reserved, stock.Available));
         Assert.Equal(numbers.Count, letters);
     }
