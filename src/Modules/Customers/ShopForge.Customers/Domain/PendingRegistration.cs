@@ -10,15 +10,20 @@ internal sealed class PendingRegistration : IStoreOwned
     {
     }
 
-    public PendingRegistration(Guid customerIdentityId, string firstName, string lastName, string? phone, Guid storeId, DateTimeOffset createdAt)
+    public PendingRegistration(
+        Guid customerIdentityId,
+        string firstName,
+        string lastName,
+        string? phone,
+        string passwordHash,
+        Guid storeId,
+        DateTimeOffset createdAt)
     {
         Id = Guid.CreateVersion7();
         StoreId = storeId;
         CustomerIdentityId = customerIdentityId;
-        FirstName = firstName;
-        LastName = lastName;
-        Phone = phone;
         CreatedAt = createdAt;
+        Replace(firstName, lastName, phone, passwordHash, createdAt);
     }
 
     public Guid Id { get; private set; }
@@ -33,5 +38,22 @@ internal sealed class PendingRegistration : IStoreOwned
 
     public string? Phone { get; private set; }
 
+    // Kept here rather than on the identity so that registering at one store cannot touch the password the customer
+    // uses at another; it only ever becomes a credential when the address is proved (D-102).
+    public string PasswordHash { get; private set; } = null!;
+
     public DateTimeOffset CreatedAt { get; private set; }
+
+    // Registering again before proving the address replaces what is waiting, the way the newest link replaces the
+    // previous one.
+    public void Replace(string firstName, string lastName, string? phone, string passwordHash, DateTimeOffset now)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(passwordHash);
+
+        FirstName = firstName;
+        LastName = lastName;
+        Phone = phone;
+        PasswordHash = passwordHash;
+        CreatedAt = now;
+    }
 }

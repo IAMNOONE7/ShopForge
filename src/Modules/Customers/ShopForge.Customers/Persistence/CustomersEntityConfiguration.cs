@@ -12,7 +12,6 @@ internal sealed class CustomerIdentityEntityConfiguration : IEntityTypeConfigura
         builder.ToTable("customer_identities", CustomersModule.Schema);
 
         builder.Property(identity => identity.Email).HasMaxLength(Emails.MaxLength);
-        builder.Property(identity => identity.PasswordHash).HasMaxLength(200);
 
         builder.HasIndex(identity => new { identity.TenantId, identity.Email }).IsUnique();
     }
@@ -27,6 +26,7 @@ internal sealed class StoreCustomerEntityConfiguration : IEntityTypeConfiguratio
         builder.Property(customer => customer.FirstName).HasMaxLength(StoreCustomer.MaxNameLength);
         builder.Property(customer => customer.LastName).HasMaxLength(StoreCustomer.MaxNameLength);
         builder.Property(customer => customer.Phone).HasMaxLength(30);
+        builder.Property(customer => customer.PasswordHash).HasMaxLength(200);
         builder.Ignore(customer => customer.FullName);
 
         builder.HasOne<CustomerIdentity>().WithMany().HasForeignKey(customer => customer.CustomerIdentityId);
@@ -43,6 +43,7 @@ internal sealed class PendingRegistrationEntityConfiguration : IEntityTypeConfig
         builder.Property(registration => registration.FirstName).HasMaxLength(StoreCustomer.MaxNameLength);
         builder.Property(registration => registration.LastName).HasMaxLength(StoreCustomer.MaxNameLength);
         builder.Property(registration => registration.Phone).HasMaxLength(30);
+        builder.Property(registration => registration.PasswordHash).HasMaxLength(200);
 
         builder.HasOne<CustomerIdentity>().WithMany().HasForeignKey(registration => registration.CustomerIdentityId);
         builder.HasIndex(registration => new { registration.StoreId, registration.CustomerIdentityId }).IsUnique();

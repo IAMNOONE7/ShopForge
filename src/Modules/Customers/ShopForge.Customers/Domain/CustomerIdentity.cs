@@ -2,6 +2,9 @@ using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Customers.Domain;
 
+// Who the person is inside the company: one row per e-mail address, shared by their relationships with the
+// company's stores. It says nothing about how they sign in — a password and a proved address belong to the store
+// the customer has them with (D-102).
 internal sealed class CustomerIdentity : ITenantOwned
 {
     private CustomerIdentity()
@@ -22,14 +25,6 @@ internal sealed class CustomerIdentity : ITenantOwned
     public Guid TenantId { get; private set; }
 
     public string Email { get; private set; } = null!;
-
-    public string PasswordHash { get; private set; } = null!;
-
-    public bool IsEmailVerified { get; private set; }
-
-    public void SetPasswordHash(string passwordHash) => PasswordHash = passwordHash;
-
-    public void VerifyEmail() => IsEmailVerified = true;
 
     public static string NormalizeEmail(string email) => email.Trim().ToLowerInvariant();
 }

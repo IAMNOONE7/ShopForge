@@ -40,7 +40,7 @@ internal static class AccountEndpoints
         RegisterRequest request,
         DbContext dbContext,
         IStoreContext storeContext,
-        IPasswordHasher<CustomerIdentity> passwordHasher,
+        IPasswordHasher<StoreCustomer> passwordHasher,
         CustomerMail mail,
         TimeProvider clock,
         CancellationToken cancellationToken)
@@ -57,7 +57,14 @@ internal static class AccountEndpoints
         }
 
         var email = CustomerIdentity.NormalizeEmail(request.Email!);
+
+        // Hashing is what makes a registration slow, so it happens on every path: an address that already has an
+        // account here must not be given away by a faster answer (D-052).
+        var passwordHash = passwordHasher.HashPassword(null!, request.Password!);
         var identity = await dbContext.Set<CustomerIdentity>().SingleOrDefaultAsync(candidate => candidate.Email == email, cancellationToken);
+
+        // Only this store's relationship counts. An address the company knows from another store is registered here
+        // from scratch, with its own password, and nothing of the other store's account is read or changed (D-102).
         var customer = identity is null
             ? null
             : await dbContext.Set<StoreCustomer>().SingleOrDefaultAsync(candidate => candidate.CustomerIdentityId == identity.Id, cancellationToken);
@@ -72,19 +79,26 @@ internal static class AccountEndpoints
         if (identity is null)
         {
             identity = new CustomerIdentity(storeContext.TenantId!.Value, email);
-            identity.SetPasswordHash(passwordHasher.HashPassword(identity, request.Password!));
             dbContext.Add(identity);
         }
 
-        dbContext.Add(new PendingRegistration(
-            identity.Id,
-            request.FirstName!.Trim(),
-            request.LastName!.Trim(),
-            string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim(),
-            storeContext.StoreId!.Value,
-            clock.GetUtcNow()));
+        var now = clock.GetUtcNow();
+        var firstName = request.FirstName!.Trim();
+        var lastName = request.LastName!.Trim();
+        var phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
+        var pending = await dbContext.Set<PendingRegistration>()
+            .SingleOrDefaultAsync(candidate => candidate.CustomerIdentityId == identity.Id, cancellationToken);
 
-        await mail.SendVerificationAsync(identity, clock.GetUtcNow(), cancellationToken);
+        if (pending is null)
+        {
+            dbContext.Add(new PendingRegistration(identity.Id, firstName, lastName, phone, passwordHash, storeContext.StoreId!.Value, now));
+        }
+        else
+        {
+            pending.Replace(firstName, lastName, phone, passwordHash, now);
+        }
+
+        await mail.SendVerificationAsync(identity, now, cancellationToken);
 
         return TypedResults.Accepted((string?)null);
     }
@@ -100,17 +114,19 @@ internal static class AccountEndpoints
         CancellationToken cancellationToken)
     {
         var now = clock.GetUtcNow();
+
+        // The token is owned by the store that sent it, so a link from another store of the company is not found
+        // here at all (D-102).
         var token = await UsableTokenAsync(dbContext, request.Token, CustomerTokenPurpose.EmailVerification, now, cancellationToken);
 
-        if (token is null || token.StoreId != storeContext.StoreId)
+        if (token is null)
         {
             return InvalidToken();
         }
 
         var identity = await dbContext.Set<CustomerIdentity>().SingleAsync(candidate => candidate.Id == token.CustomerIdentityId, cancellationToken);
         var pending = await dbContext.Set<PendingRegistration>()
-            .Where(registration => registration.CustomerIdentityId == identity.Id && registration.StoreId == storeContext.StoreId)
-            .SingleOrDefaultAsync(cancellationToken);
+            .SingleOrDefaultAsync(registration => registration.CustomerIdentityId == identity.Id, cancellationToken);
         var customer = await dbContext.Set<StoreCustomer>()
             .SingleOrDefaultAsync(candidate => candidate.CustomerIdentityId == identity.Id, cancellationToken);
 
@@ -121,7 +137,15 @@ internal static class AccountEndpoints
                 return InvalidToken();
             }
 
-            customer = new StoreCustomer(storeContext.StoreId!.Value, identity.Id, pending.FirstName, pending.LastName, pending.Phone);
+            // The password waiting in the registration becomes this store's credential, and only now: until the
+            // address is proved there is no account here to sign in to.
+            customer = new StoreCustomer(
+                storeContext.StoreId!.Value,
+                identity.Id,
+                pending.FirstName,
+                pending.LastName,
+                pending.Phone,
+                pending.PasswordHash);
             dbContext.Add(customer);
         }
 
@@ -130,7 +154,7 @@ internal static class AccountEndpoints
             dbContext.Remove(pending);
         }
 
-        identity.VerifyEmail();
+        customer.VerifyEmail();
         token.Use(now);
         await dbContext.SaveChangesAsync(cancellationToken);
         await orders.ClaimAsync(customer.Id, identity.Email, cancellationToken);
@@ -144,28 +168,29 @@ internal static class AccountEndpoints
         LoginRequest request,
         HttpContext httpContext,
         DbContext dbContext,
-        IPasswordHasher<CustomerIdentity> passwordHasher,
+        IPasswordHasher<StoreCustomer> passwordHasher,
         CancellationToken cancellationToken)
     {
         var email = CustomerIdentity.NormalizeEmail(request.Email ?? "");
         var identity = await dbContext.Set<CustomerIdentity>().SingleOrDefaultAsync(candidate => candidate.Email == email, cancellationToken);
-        var verification = identity is null
-            ? Passwords.VerifyAgainstDummyHash(passwordHasher, request.Password)
-            : passwordHasher.VerifyHashedPassword(identity, identity.PasswordHash, request.Password ?? "");
 
-        // A customer of another store of the same tenant looks exactly like a wrong password (D-050).
-        var customer = identity is null || verification == PasswordVerificationResult.Failed
+        // The password checked is the one held by this store's relationship: the store filter means an account of
+        // another store of the company is not even a candidate (D-102).
+        var customer = identity is null
             ? null
             : await dbContext.Set<StoreCustomer>().SingleOrDefaultAsync(candidate => candidate.CustomerIdentityId == identity.Id, cancellationToken);
+        var verification = customer is null
+            ? Passwords.VerifyAgainstDummyHash(passwordHasher, request.Password)
+            : passwordHasher.VerifyHashedPassword(customer, customer.PasswordHash, request.Password ?? "");
 
-        if (identity is null || customer is null || !identity.IsEmailVerified || verification == PasswordVerificationResult.Failed)
+        if (identity is null || customer is null || !customer.IsEmailVerified || verification == PasswordVerificationResult.Failed)
         {
             return TypedResults.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Invalid e-mail or password");
         }
 
         if (verification == PasswordVerificationResult.SuccessRehashNeeded)
         {
-            identity.SetPasswordHash(passwordHasher.HashPassword(identity, request.Password!));
+            customer.SetPasswordHash(passwordHasher.HashPassword(customer, request.Password!));
             await dbContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -186,9 +211,14 @@ internal static class AccountEndpoints
         var email = CustomerIdentity.NormalizeEmail(request.Email ?? "");
         var identity = await dbContext.Set<CustomerIdentity>().SingleOrDefaultAsync(candidate => candidate.Email == email, cancellationToken);
 
-        if (identity is not null)
+        // Only a customer of this store gets a link. An address the company knows from another store is a stranger
+        // here, and a shop a customer never registered with does not write to them (D-102).
+        var known = identity is not null
+            && await dbContext.Set<StoreCustomer>().AnyAsync(candidate => candidate.CustomerIdentityId == identity.Id, cancellationToken);
+
+        if (known)
         {
-            await mail.SendPasswordResetAsync(identity, clock.GetUtcNow(), cancellationToken);
+            await mail.SendPasswordResetAsync(identity!, clock.GetUtcNow(), cancellationToken);
         }
 
         return TypedResults.Accepted((string?)null);
@@ -198,7 +228,7 @@ internal static class AccountEndpoints
         ResetPasswordRequest request,
         HttpContext httpContext,
         DbContext dbContext,
-        IPasswordHasher<CustomerIdentity> passwordHasher,
+        IPasswordHasher<StoreCustomer> passwordHasher,
         TimeProvider clock,
         CancellationToken cancellationToken)
     {
@@ -218,8 +248,17 @@ internal static class AccountEndpoints
             return InvalidToken();
         }
 
-        var identity = await dbContext.Set<CustomerIdentity>().SingleAsync(candidate => candidate.Id == token.CustomerIdentityId, cancellationToken);
-        identity.SetPasswordHash(passwordHasher.HashPassword(identity, request.Password!));
+        // The token belongs to this store, so the password changed is this store's; another store's account keeps
+        // the password it has (D-102).
+        var customer = await dbContext.Set<StoreCustomer>()
+            .SingleOrDefaultAsync(candidate => candidate.CustomerIdentityId == token.CustomerIdentityId, cancellationToken);
+
+        if (customer is null)
+        {
+            return InvalidToken();
+        }
+
+        customer.SetPasswordHash(passwordHasher.HashPassword(customer, request.Password!));
         token.Use(now);
         await dbContext.SaveChangesAsync(cancellationToken);
 

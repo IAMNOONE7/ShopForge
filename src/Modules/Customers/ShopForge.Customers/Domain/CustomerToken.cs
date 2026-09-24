@@ -6,13 +6,15 @@ using ShopForge.Shared.Tenancy;
 namespace ShopForge.Customers.Domain;
 
 // Tokens travel by e-mail and are stored as hashes, so a leaked database row cannot be used to take over an account.
-internal sealed class CustomerToken : ITenantOwned
+// They are owned by the store that sent them: a link from one store is not a link at another, and the query filter
+// is what says so rather than a check somebody can forget (D-102).
+internal sealed class CustomerToken : IStoreOwned, ITenantOwned
 {
     private CustomerToken()
     {
     }
 
-    public CustomerToken(Guid tenantId, Guid customerIdentityId, Guid? storeId, CustomerTokenPurpose purpose, string tokenHash, DateTimeOffset expiresAt)
+    public CustomerToken(Guid tenantId, Guid customerIdentityId, Guid storeId, CustomerTokenPurpose purpose, string tokenHash, DateTimeOffset expiresAt)
     {
         Id = Guid.CreateVersion7();
         TenantId = tenantId;
@@ -30,7 +32,7 @@ internal sealed class CustomerToken : ITenantOwned
     public Guid CustomerIdentityId { get; private set; }
 
     // The store the link was sent from: verification creates the customer's relationship with that store.
-    public Guid? StoreId { get; private set; }
+    public Guid StoreId { get; private set; }
 
     public CustomerTokenPurpose Purpose { get; private set; }
 

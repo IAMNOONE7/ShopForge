@@ -242,12 +242,148 @@ public sealed class AccountTests(ShopForgeApiFactory factory)
         Assert.Empty(factory.Emails.For("somebody.else@example.test"));
     }
 
+    // Two stores of one company are two shops to the customer: the same address registers at each of them with its
+    // own password, and neither store's password is any use at the other (D-102).
+    [Fact]
+    public async Task The_same_address_registers_again_at_another_store_with_its_own_password()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+        var email = UniqueEmail();
+        const string otherPassword = "Other-store-2026";
+        using var first = new StorefrontApi(factory, furniture.Store);
+        using var second = new StorefrontApi(factory, furniture.OtherStore);
+        await first.PostAsync("/api/storefront/account/register", Registration(email));
+        await VerifyAsync(first, email);
+
+        using var registered = await second.PostAsync("/api/storefront/account/register", Registration(email, password: otherPassword));
+        await VerifyAsync(second, email);
+
+        Assert.Equal(HttpStatusCode.Accepted, registered.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, await SignInAsync(furniture.Store, email, Password));
+        Assert.Equal(HttpStatusCode.Unauthorized, await SignInAsync(furniture.Store, email, otherPassword));
+        Assert.Equal(HttpStatusCode.OK, await SignInAsync(furniture.OtherStore, email, otherPassword));
+        Assert.Equal(HttpStatusCode.Unauthorized, await SignInAsync(furniture.OtherStore, email, Password));
+    }
+
+    // Anyone can type somebody else's address into a registration form. Doing so at another store must leave the
+    // account they already have exactly as it was, whether or not the link is ever used.
+    [Fact]
+    public async Task Registering_somebody_else_s_address_at_another_store_changes_nothing_of_theirs()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+        var email = UniqueEmail();
+        using var owner = new StorefrontApi(factory, furniture.Store);
+        using var stranger = new StorefrontApi(factory, furniture.OtherStore);
+        await owner.PostAsync("/api/storefront/account/register", Registration(email));
+        await VerifyAsync(owner, email);
+
+        using var registered = await stranger.PostAsync("/api/storefront/account/register", Registration(email, password: "Chosen-by-a-stranger-2026"));
+
+        Assert.Equal(HttpStatusCode.Accepted, registered.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, await SignInAsync(furniture.Store, email, Password));
+        Assert.Equal(HttpStatusCode.Unauthorized, await SignInAsync(furniture.Store, email, "Chosen-by-a-stranger-2026"));
+        Assert.Equal(HttpStatusCode.Unauthorized, await SignInAsync(furniture.OtherStore, email, "Chosen-by-a-stranger-2026"));
+    }
+
+    [Fact]
+    public async Task A_verification_link_of_one_store_does_not_work_at_another()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+        var email = UniqueEmail();
+        using var shopper = new StorefrontApi(factory, furniture.Store);
+        using var other = new StorefrontApi(factory, furniture.OtherStore);
+        await shopper.PostAsync("/api/storefront/account/register", Registration(email));
+        var token = await LinkAsync(email);
+
+        using var elsewhere = await other.PostAsync("/api/storefront/account/verify", new { Token = token });
+        using var here = await shopper.PostAsync("/api/storefront/account/verify", new { Token = token });
+
+        Assert.Equal(HttpStatusCode.BadRequest, elsewhere.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, here.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, await SignInAsync(furniture.OtherStore, email, Password));
+    }
+
+    [Fact]
+    public async Task A_reset_link_of_one_store_does_not_work_at_another()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+        var email = UniqueEmail();
+        const string otherPassword = "Other-store-2026";
+        using var first = new StorefrontApi(factory, furniture.Store);
+        using var second = new StorefrontApi(factory, furniture.OtherStore);
+        await first.PostAsync("/api/storefront/account/register", Registration(email));
+        await VerifyAsync(first, email);
+        await second.PostAsync("/api/storefront/account/register", Registration(email, password: otherPassword));
+        await VerifyAsync(second, email);
+
+        await first.PostAsync("/api/storefront/account/password/forgot", new { Email = email });
+        var token = await LinkAsync(email);
+        using var elsewhere = await second.PostAsync("/api/storefront/account/password/reset", new { Token = token, Password = "Taken-over-2026" });
+        using var here = await first.PostAsync("/api/storefront/account/password/reset", new { Token = token, Password = "Chosen-again-2026" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, elsewhere.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, here.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, await SignInAsync(furniture.Store, email, "Chosen-again-2026"));
+        Assert.Equal(HttpStatusCode.OK, await SignInAsync(furniture.OtherStore, email, otherPassword));
+        Assert.Equal(HttpStatusCode.Unauthorized, await SignInAsync(furniture.OtherStore, email, "Chosen-again-2026"));
+    }
+
+    // A shop the customer never registered with does not write to them, however well the company knows the address.
+    [Fact]
+    public async Task Asking_to_reset_at_a_store_without_an_account_sends_nothing()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+        var email = UniqueEmail();
+        using var shopper = new StorefrontApi(factory, furniture.Store);
+        using var other = new StorefrontApi(factory, furniture.OtherStore);
+        await shopper.PostAsync("/api/storefront/account/register", Registration(email));
+        await VerifyAsync(shopper, email);
+        var before = factory.Emails.For(email).Count;
+
+        using var asked = await other.PostAsync("/api/storefront/account/password/forgot", new { Email = email });
+        await factory.DispatchOutboxAsync(CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Accepted, asked.StatusCode);
+        Assert.Equal(before, factory.Emails.For(email).Count);
+    }
+
+    [Fact]
+    public async Task Registering_again_before_verifying_keeps_the_newest_password()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+        var email = UniqueEmail();
+        using var shopper = new StorefrontApi(factory, furniture.Store);
+
+        using var first = await shopper.PostAsync("/api/storefront/account/register", Registration(email));
+        using var second = await shopper.PostAsync("/api/storefront/account/register", Registration(email, password: "Second-attempt-2026"));
+        await VerifyAsync(shopper, email);
+
+        Assert.Equal(HttpStatusCode.Accepted, first.StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, second.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, await SignInAsync(furniture.Store, email, "Second-attempt-2026"));
+        Assert.Equal(HttpStatusCode.Unauthorized, await SignInAsync(furniture.Store, email, Password));
+    }
+
     private const string Password = "Shop-forge-2026";
 
     private static string UniqueEmail() => $"buyer-{Guid.NewGuid():N}@example.test";
 
-    private static object Registration(string email, string firstName = "Ada") =>
-        new { Email = email, Password, FirstName = firstName, LastName = "Lovelace", Phone = (string?)null };
+    private static object Registration(string email, string firstName = "Ada", string password = Password) =>
+        new { Email = email, Password = password, FirstName = firstName, LastName = "Lovelace", Phone = (string?)null };
+
+    private async Task<HttpStatusCode> SignInAsync(TestStore store, string email, string password)
+    {
+        using var shopper = new StorefrontApi(factory, store);
+        using var response = await shopper.PostAsync("/api/storefront/account/login", new { Email = email, Password = password });
+
+        return response.StatusCode;
+    }
+
+    private Task<string?> LinkAsync(string email) =>
+        factory.EventuallyAsync(
+            () => Task.FromResult(factory.Emails.LatestLinkFor(email)),
+            link => link is not null,
+            CancellationToken);
 
     private async Task<CustomerView> VerifyAsync(StorefrontApi shopper, string email)
     {

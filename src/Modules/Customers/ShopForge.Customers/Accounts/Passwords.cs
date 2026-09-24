@@ -6,7 +6,7 @@ namespace ShopForge.Customers.Accounts;
 internal static class Passwords
 {
     // Hashing even for unknown e-mails keeps the response time from revealing which accounts exist.
-    public static PasswordVerificationResult VerifyAgainstDummyHash(IPasswordHasher<CustomerIdentity> passwordHasher, string? password)
+    public static PasswordVerificationResult VerifyAgainstDummyHash(IPasswordHasher<StoreCustomer> passwordHasher, string? password)
     {
         passwordHasher.VerifyHashedPassword(null!, DummyHash.Value, password ?? "");
 
@@ -15,6 +15,6 @@ internal static class Passwords
 
     private static class DummyHash
     {
-        public static readonly string Value = new PasswordHasher<CustomerIdentity>().HashPassword(null!, Guid.NewGuid().ToString());
+        public static readonly string Value = new PasswordHasher<StoreCustomer>().HashPassword(null!, Guid.NewGuid().ToString());
     }
 }

@@ -23,7 +23,7 @@ public static class CustomersModule
     public static IServiceCollection AddCustomersModule(this IServiceCollection services, bool requireSecureCookies)
     {
         services.AddHttpContextAccessor();
-        services.AddSingleton<IPasswordHasher<CustomerIdentity>, PasswordHasher<CustomerIdentity>>();
+        services.AddSingleton<IPasswordHasher<StoreCustomer>, PasswordHasher<StoreCustomer>>();
         services.AddScoped<ICurrentCustomer, CurrentCustomer>();
         services.AddScoped<CustomerMail>();
         services.AddScoped<IStoreMaintenance, RegistrationCleanup>();

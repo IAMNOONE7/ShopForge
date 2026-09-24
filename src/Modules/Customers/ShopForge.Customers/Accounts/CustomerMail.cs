@@ -62,7 +62,8 @@ internal sealed class CustomerMail(
         Func<string, string, (string Subject, string Body)> compose,
         CancellationToken cancellationToken)
     {
-        // Only the newest link of a kind works; asking again invalidates the previous one.
+        // Only the newest link of a kind works; asking again invalidates the previous one. The store filter keeps
+        // that to this store's links: asking here must not put out a link another store sent (D-102).
         var outstanding = await dbContext.Set<CustomerToken>()
             .Where(token => token.CustomerIdentityId == identity.Id && token.Purpose == purpose && token.UsedAt == null)
             .ToListAsync(cancellationToken);
@@ -70,7 +71,7 @@ internal sealed class CustomerMail(
         outstanding.ForEach(token => token.Use(now));
 
         var (value, hash) = TokenValues.Create();
-        dbContext.Add(new CustomerToken(identity.TenantId, identity.Id, storeContext.StoreId, purpose, hash, expiresAt));
+        dbContext.Add(new CustomerToken(identity.TenantId, identity.Id, storeContext.StoreId!.Value, purpose, hash, expiresAt));
 
         var store = (await storeSettings.GetAsync(cancellationToken)).Name;
         var (subject, body) = compose(store, Link(path, value));
