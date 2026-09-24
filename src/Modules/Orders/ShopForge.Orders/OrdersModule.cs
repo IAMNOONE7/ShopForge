@@ -8,6 +8,7 @@ using ShopForge.Orders.Invoicing;
 using ShopForge.Orders.Notifications;
 using ShopForge.Orders.Payments;
 using ShopForge.Orders.Publishing;
+using ShopForge.Orders.Returns;
 using ShopForge.Orders.Shipping;
 using ShopForge.Orders.Storefront;
 using ShopForge.Shared.Customers;
@@ -38,8 +39,11 @@ public static class OrdersModule
         services.AddScoped<IEventHandler<PaymentReceived>, InvoiceIssuing>();
         services.AddScoped<Invoices>();
         services.AddScoped<DiscountCodes>();
+        services.AddScoped<OrderReturns>();
         services.AddScoped<IEventHandler<OrderCancelled>, OrderNotifications>();
         services.AddScoped<IEventHandler<ShipmentCreated>, OrderNotifications>();
+        services.AddScoped<IEventHandler<ReturnDecided>, OrderNotifications>();
+        services.AddScoped<IEventHandler<ReturnRefunded>, OrderNotifications>();
         services.AddScoped<IStoreMaintenance, CartCleanup>();
         services.AddSingleton<ExpiredOrders>();
         services.AddHostedService<ExpiredOrderSweeper>();
@@ -52,6 +56,7 @@ public static class OrdersModule
         storefront.MapCart();
         storefront.MapCheckout();
         storefront.MapCustomerOrders();
+        storefront.MapCustomerReturns();
         storefront.MapStorefrontDocuments();
 
         return storefront;
@@ -70,6 +75,7 @@ public static class OrdersModule
         storeAdmin.MapAdminMethods();
         storeAdmin.MapAdminPickupPoints();
         storeAdmin.MapAdminDiscounts();
+        storeAdmin.MapAdminReturns();
         storeAdmin.MapAdminDocuments();
 
         return storeAdmin;

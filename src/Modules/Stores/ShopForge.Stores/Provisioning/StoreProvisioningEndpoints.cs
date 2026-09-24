@@ -78,6 +78,7 @@ internal static class StoreProvisioningEndpoints
     {
         var company = request.Company?.ToCompany();
         var errors = ValidateSettings(request.Name, request.Currency, request.Culture, request.Theme)
+            .Check(request.ReturnWindowDays is null or (>= 0 and <= 365), "returnWindowDays", "A return window is between zero and 365 days.")
             .Check(request.Company is null || company is not null, "company", "Legal name, address and registration number are required.");
 
         if (errors.Any)
@@ -89,7 +90,12 @@ internal static class StoreProvisioningEndpoints
 
         try
         {
-            store.UpdateSettings(request.Name!, request.Currency, request.Culture!, request.Theme!.ToTheme());
+            store.UpdateSettings(
+                request.Name!,
+                request.Currency,
+                request.Culture!,
+                request.Theme!.ToTheme(),
+                request.ReturnWindowDays ?? store.ReturnWindowDays);
 
             if (company is not null)
             {
@@ -206,7 +212,7 @@ internal static class StoreProvisioningEndpoints
 
 internal sealed record CreateStoreRequest(string? Name, string? HostName, string? Currency, string? Culture, ThemeRequest? Theme);
 
-internal sealed record UpdateStoreRequest(string? Name, string? Currency, string? Culture, ThemeRequest? Theme, CompanyRequest? Company);
+internal sealed record UpdateStoreRequest(string? Name, string? Currency, string? Culture, ThemeRequest? Theme, int? ReturnWindowDays, CompanyRequest? Company);
 
 internal sealed record CompanyRequest(
     string? LegalName,

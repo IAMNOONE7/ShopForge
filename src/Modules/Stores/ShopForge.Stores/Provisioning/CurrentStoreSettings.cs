@@ -14,6 +14,7 @@ internal sealed class CurrentStoreSettings(DbContext dbContext, IStoreContext st
                 store.Name,
                 store.Currency,
                 store.Culture,
+                store.ReturnWindowDays,
                 store.Company == null
                     ? null
                     : new SellerDetails(

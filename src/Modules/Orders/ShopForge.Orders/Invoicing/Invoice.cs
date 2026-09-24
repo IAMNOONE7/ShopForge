@@ -22,7 +22,8 @@ internal sealed class Invoice : IStoreOwned
         string buyerEmail,
         string paymentMethodName,
         string? discountCode,
-        DateTimeOffset issuedAt)
+        DateTimeOffset issuedAt,
+        Guid? returnId = null)
     {
         Id = Guid.CreateVersion7();
         StoreId = storeId;
@@ -36,6 +37,7 @@ internal sealed class Invoice : IStoreOwned
         PaymentMethodName = paymentMethodName;
         DiscountCode = discountCode;
         IssuedAt = issuedAt;
+        ReturnId = returnId;
     }
 
     public Guid Id { get; private set; }
@@ -47,6 +49,9 @@ internal sealed class Invoice : IStoreOwned
     public InvoiceKind Kind { get; private set; }
 
     public string OrderNumber { get; private set; } = null!;
+
+    // Which return this credit note pays back, so an order can have one per return and none is issued twice (D-097).
+    public Guid? ReturnId { get; private set; }
 
     public string Currency { get; private set; } = null!;
 

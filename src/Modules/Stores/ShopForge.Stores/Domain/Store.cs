@@ -6,6 +6,9 @@ namespace ShopForge.Stores.Domain;
 
 internal sealed class Store : ITenantOwned
 {
+    // The statutory minimum in the EU; a store that takes goods back for longer says so in its settings (D-099).
+    public const int DefaultReturnWindowDays = 14;
+
     private readonly List<StoreDomain> _domains = [];
 
     private Store()
@@ -23,6 +26,7 @@ internal sealed class Store : ITenantOwned
         Culture = CultureInfo.GetCultureInfo(culture, predefinedOnly: true).Name;
         Theme = theme;
         Status = StoreStatus.Draft;
+        ReturnWindowDays = DefaultReturnWindowDays;
     }
 
     public Guid Id { get; private set; }
@@ -44,6 +48,9 @@ internal sealed class Store : ITenantOwned
     // Null until the store fills it in; a store cannot be published without it, because an invoice names a seller.
     public StoreCompany? Company { get; private set; }
 
+    // How long after a delivery the store takes goods back.
+    public int ReturnWindowDays { get; private set; } = DefaultReturnWindowDays;
+
     public IReadOnlyCollection<StoreDomain> Domains => _domains;
 
     public StoreDomain AddDomain(string hostName)
@@ -61,9 +68,10 @@ internal sealed class Store : ITenantOwned
 
     public void SetCompany(StoreCompany company) => Company = company;
 
-    public void UpdateSettings(string name, string? currency, string culture, StoreTheme theme)
+    public void UpdateSettings(string name, string? currency, string culture, StoreTheme theme, int returnWindowDays)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentOutOfRangeException.ThrowIfNegative(returnWindowDays);
 
         if (currency is not null)
         {
@@ -78,6 +86,7 @@ internal sealed class Store : ITenantOwned
         Name = name.Trim();
         Culture = CultureInfo.GetCultureInfo(culture, predefinedOnly: true).Name;
         Theme = theme;
+        ReturnWindowDays = returnWindowDays;
     }
 
     public void Publish() => Status = StoreStatus.Published;

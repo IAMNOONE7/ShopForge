@@ -41,6 +41,7 @@ internal sealed class OrderEntityConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(order => order.ShippingPrice).HasPrecision(12, 2);
         builder.Property(order => order.ShippingDiscount).HasPrecision(12, 2);
         builder.Property(order => order.DiscountTotal).HasPrecision(12, 2);
+        builder.Property(order => order.RefundedTotal).HasPrecision(12, 2);
         builder.Property(order => order.DiscountCode).HasMaxLength(40);
         builder.Property(order => order.DiscountName).HasMaxLength(100);
         builder.Property(order => order.ShippingVatRate).HasPrecision(5, 2);
@@ -232,6 +233,37 @@ internal sealed class InvoiceEntityConfiguration : IEntityTypeConfiguration<Invo
 
         builder.HasIndex(invoice => new { invoice.StoreId, invoice.Number }).IsUnique();
         builder.HasIndex(invoice => new { invoice.StoreId, invoice.OrderNumber });
+
+        // One credit note per return, whatever a retry or a second pair of hands tries (D-097).
+        builder.HasIndex(invoice => invoice.ReturnId).IsUnique().HasFilter("return_id IS NOT NULL");
+    }
+}
+
+internal sealed class OrderReturnEntityConfiguration : IEntityTypeConfiguration<OrderReturn>
+{
+    public void Configure(EntityTypeBuilder<OrderReturn> builder)
+    {
+        builder.ToTable("order_returns", OrdersModule.Schema);
+
+        builder.Property(orderReturn => orderReturn.Number).HasMaxLength(30);
+        builder.Property(orderReturn => orderReturn.OrderNumber).HasMaxLength(20);
+        builder.Property(orderReturn => orderReturn.Status).HasConversion<string>().HasMaxLength(20);
+        builder.Property(orderReturn => orderReturn.Reason).HasMaxLength(OrderReturn.MaxReasonLength);
+        builder.Property(orderReturn => orderReturn.RefundedAmount).HasPrecision(12, 2);
+        builder.Ignore(orderReturn => orderReturn.HoldsGoods);
+
+        builder.OwnsMany(orderReturn => orderReturn.Lines, lines =>
+        {
+            lines.ToTable("order_return_lines", OrdersModule.Schema, table =>
+                table.HasCheckConstraint("ck_order_return_lines_quantity", "quantity > 0"));
+            lines.WithOwner().HasForeignKey("OrderReturnId");
+            lines.HasKey("OrderReturnId", nameof(OrderReturnLine.StoreProductId));
+            lines.Property(line => line.ProductName).HasMaxLength(200);
+        });
+
+        builder.HasIndex(orderReturn => new { orderReturn.StoreId, orderReturn.Number }).IsUnique();
+        builder.HasIndex(orderReturn => new { orderReturn.StoreId, orderReturn.OrderNumber });
+        builder.HasIndex(orderReturn => new { orderReturn.StoreId, orderReturn.Status });
     }
 }
 

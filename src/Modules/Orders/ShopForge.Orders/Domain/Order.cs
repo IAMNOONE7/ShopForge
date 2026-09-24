@@ -121,6 +121,9 @@ internal sealed class Order : IStoreOwned
 
     public decimal ShippingDiscount { get; private set; }
 
+    // What has gone back to the customer so far, across every return of this order.
+    public decimal RefundedTotal { get; private set; }
+
     public void AddLine(Guid storeProductId, string name, decimal unitPrice, decimal vatRate, int quantity, decimal discount = 0m)
     {
         if (quantity < 1)
@@ -155,15 +158,21 @@ internal sealed class Order : IStoreOwned
         return true;
     }
 
-    // Money and goods both go back, so an order that was never paid cannot be refunded (D-081).
-    public bool Refund()
+    // Money and goods both go back, so an order that was never paid cannot be refunded (D-081). A return gives back
+    // part of an order, so the order counts what it has paid back and is refunded only once that is everything (D-096).
+    public bool RecordRefund(decimal amount)
     {
         if (Status is not (OrderStatus.Paid or OrderStatus.Shipped))
         {
             return false;
         }
 
-        Status = OrderStatus.Refunded;
+        RefundedTotal += amount;
+
+        if (RefundedTotal >= GrandTotal)
+        {
+            Status = OrderStatus.Refunded;
+        }
 
         return true;
     }

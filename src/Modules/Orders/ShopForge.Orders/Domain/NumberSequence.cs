@@ -17,4 +17,5 @@ internal static class NumberSeries
     public const string Order = "order";
     public const string Invoice = "invoice";
     public const string CreditNote = "credit-note";
+    public const string Return = "return";
 }

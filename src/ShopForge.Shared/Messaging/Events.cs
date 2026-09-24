@@ -20,6 +20,16 @@ public sealed record ShipmentCreated(string OrderNumber, string Email, string Ca
     public static string EventType => "order.shipped";
 }
 
+public sealed record ReturnDecided(string OrderNumber, string Email, string ReturnNumber, bool Accepted) : IDomainEvent
+{
+    public static string EventType => "return.decided";
+}
+
+public sealed record ReturnRefunded(string OrderNumber, string Email, string ReturnNumber, decimal Amount, string Currency) : IDomainEvent
+{
+    public static string EventType => "return.refunded";
+}
+
 public sealed record EmailRequested(string To, string Subject, string Body) : IDomainEvent
 {
     public static string EventType => "email.requested";

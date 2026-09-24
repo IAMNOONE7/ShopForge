@@ -28,6 +28,7 @@ internal static class AdminStoreEndpoints
                 new AdminThemeResponse(store.Theme.PrimaryColor, store.Theme.SecondaryColor, store.Theme.BorderRadius),
                 store.LogoPath == null ? null : "/api/admin/stores/" + store.Id + "/logo",
                 store.Domains.Where(domain => domain.IsPrimary).Select(domain => domain.HostName).FirstOrDefault(),
+                store.ReturnWindowDays,
                 store.Company == null
                     ? null
                     : new AdminCompanyResponse(
@@ -53,6 +54,7 @@ internal sealed record AdminStoreResponse(
     AdminThemeResponse Theme,
     string? LogoUrl,
     string? PrimaryHostName,
+    int ReturnWindowDays,
     AdminCompanyResponse? Company)
 {
     public static AdminStoreResponse From(Store store, string? primaryHostName) => new(
@@ -64,6 +66,7 @@ internal sealed record AdminStoreResponse(
         new AdminThemeResponse(store.Theme.PrimaryColor, store.Theme.SecondaryColor, store.Theme.BorderRadius),
         store.LogoPath is null ? null : $"/api/admin/stores/{store.Id}/logo",
         primaryHostName,
+        store.ReturnWindowDays,
         store.Company is null
             ? null
             : new AdminCompanyResponse(

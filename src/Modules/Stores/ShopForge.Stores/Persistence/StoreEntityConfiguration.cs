@@ -9,12 +9,16 @@ internal sealed class StoreEntityConfiguration : IEntityTypeConfiguration<Store>
     public void Configure(EntityTypeBuilder<Store> builder)
     {
         builder.ToTable("stores", StoresModule.Schema, table =>
-            table.HasCheckConstraint("ck_stores_currency", "currency ~ '^[A-Z]{3}$'"));
+        {
+            table.HasCheckConstraint("ck_stores_currency", "currency ~ '^[A-Z]{3}$'");
+            table.HasCheckConstraint("ck_stores_return_window_days", "return_window_days >= 0");
+        });
 
         builder.Property(store => store.Name).HasMaxLength(200);
         builder.Property(store => store.Currency).HasMaxLength(3).IsFixedLength();
         builder.Property(store => store.Culture).HasMaxLength(35);
         builder.Property(store => store.LogoPath).HasMaxLength(300);
+        builder.Property(store => store.ReturnWindowDays).HasDefaultValue(Domain.Store.DefaultReturnWindowDays);
         builder.Property(store => store.Status).HasConversion<string>().HasMaxLength(20);
         builder.ComplexProperty(store => store.Theme, theme => theme.ToJson());
 

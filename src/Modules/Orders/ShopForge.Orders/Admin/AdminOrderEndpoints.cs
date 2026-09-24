@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Orders.Domain;
 using ShopForge.Orders.Invoicing;
+using ShopForge.Orders.Returns;
 using ShopForge.Orders.Shipping;
 using ShopForge.Orders.Storefront;
 using ShopForge.Shared.Catalog;
@@ -97,16 +98,13 @@ internal static class AdminOrderEndpoints
             "Only an order that is awaiting payment can be cancelled",
             cancellationToken);
 
-    // Money and goods go back together, and the credit note records it (D-081).
+    // The store taking everything back is a return it makes itself and receives at once, so money, goods and
+    // documents follow the one path a customer's return follows (D-098).
     private static async Task<Results<Ok<AdminOrderDetailResponse>, NotFound, ProblemHttpResult>> RefundAsync(
         string number,
         DbContext dbContext,
-        IStockLedger stock,
-        ISellableProducts products,
-        Invoices invoices,
-        IEnumerable<IPaymentRefunds> paymentRefunds,
-        IOutbox outbox,
-        IShopForgeMetrics metrics,
+        OrderReturns returns,
+        TimeProvider clock,
         CancellationToken cancellationToken)
     {
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
@@ -118,7 +116,28 @@ internal static class AdminOrderEndpoints
             return TypedResults.NotFound();
         }
 
-        if (!order.Refund())
+        var outstanding = await returns.ReturnableAsync(order, cancellationToken);
+        var refund = await returns.RequestAsync(
+            order,
+            storeCustomerId: null,
+            [.. outstanding.Select(line => new RequestedReturnLine(line.StoreProductId, line.Returnable))],
+            "Refunded by the store.",
+            cancellationToken);
+
+        if (refund.Created is not { } orderReturn)
+        {
+            return TypedResults.Problem(
+                statusCode: StatusCodes.Status409Conflict,
+                title: "There is nothing left to refund on this order",
+                detail: refund.Problem);
+        }
+
+        orderReturn.Accept(clock.GetUtcNow());
+
+        // Receiving claims the return's row, so the row has to exist before the parcel can be marked as arrived.
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        if (!await returns.ReceiveAsync(order, orderReturn, cancellationToken))
         {
             return TypedResults.Problem(
                 statusCode: StatusCodes.Status409Conflict,
@@ -126,26 +145,6 @@ internal static class AdminOrderEndpoints
                 detail: $"The order is {order.Status}.");
         }
 
-        var refunds = paymentRefunds.SingleOrDefault(candidate => candidate.Key == order.PaymentProviderKey);
-
-        if (refunds is not null && order.PaymentReference is { Length: > 0 } reference)
-        {
-            await refunds.RefundAsync(new RefundRequest(order.Number, reference, order.GrandTotal, order.Currency), cancellationToken);
-        }
-
-        var sold = await products.FindAsync([.. order.Lines.Select(line => line.StoreProductId)], cancellationToken);
-        var returned = order.Lines
-            .Join(sold, line => line.StoreProductId, product => product.StoreProductId, (line, product) => new StockRequest(product.ProductId, line.Quantity))
-            .ToList();
-
-        if (returned.Count > 0)
-        {
-            await stock.ReturnAsync(returned, order.Number, cancellationToken);
-        }
-
-        await invoices.IssueAsync(order, InvoiceKind.CreditNote, cancellationToken);
-        outbox.Enqueue(new OrderCancelled(order.Number, order.Email, "The order was refunded."));
-        metrics.OrderCancelled("refund");
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 

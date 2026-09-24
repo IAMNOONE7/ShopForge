@@ -10,6 +10,8 @@ public interface IShopForgeMetrics
 
     void OrderCancelled(string reason);
 
+    void OrderRefunded(string reason);
+
     void ShipmentCreated();
 
     void ReservationRefused();

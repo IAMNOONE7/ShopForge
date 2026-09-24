@@ -34,7 +34,12 @@ internal static class Numbers
         int year,
         CancellationToken cancellationToken)
     {
-        var prefix = series == NumberSeries.CreditNote ? "CN" : "INV";
+        var prefix = series switch
+        {
+            NumberSeries.CreditNote => "CN",
+            NumberSeries.Return => "RET",
+            _ => "INV",
+        };
 
         return $"{prefix}-{year}-{await NextAsync(dbContext, storeId, series, year, cancellationToken):00000}";
     }

@@ -12,6 +12,6 @@ internal sealed class InvoiceIssuing(DbContext dbContext, Invoices invoices) : I
         var order = await dbContext.Set<Order>().SingleOrDefaultAsync(candidate => candidate.Number == domainEvent.OrderNumber, cancellationToken)
             ?? throw new InvalidOperationException($"Order {domainEvent.OrderNumber} was paid but no longer exists.");
 
-        await invoices.IssueAsync(order, InvoiceKind.Invoice, cancellationToken);
+        await invoices.IssueInvoiceAsync(order, cancellationToken);
     }
 }
