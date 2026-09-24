@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Customers.Accounts;
 using ShopForge.Customers.Authentication;
 using ShopForge.Customers.Domain;
+using ShopForge.Customers.Wishlist;
 using ShopForge.Shared.Customers;
 using ShopForge.Shared.Maintenance;
 using ShopForge.Shared.Security;
@@ -52,6 +53,7 @@ public static class CustomersModule
     public static IEndpointRouteBuilder MapCustomersStorefrontEndpoints(this IEndpointRouteBuilder storefront)
     {
         storefront.MapCustomerAccounts();
+        storefront.MapWishlist();
 
         return storefront;
     }

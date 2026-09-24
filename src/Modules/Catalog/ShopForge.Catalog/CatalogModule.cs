@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Catalog.Admin;
 using ShopForge.Catalog.Import;
 using ShopForge.Catalog.Publishing;
+using ShopForge.Catalog.Reviews;
 using ShopForge.Catalog.Storefront;
 using ShopForge.Shared.Catalog;
 using ShopForge.Shared.Stores;
@@ -21,6 +22,7 @@ public static class CatalogModule
         services.AddScoped<IStorePublishCheck, CatalogPublishCheck>();
         services.AddScoped<ISellableProducts, SellableProductLookup>();
         services.AddScoped<ITenantProducts, TenantProductLookup>();
+        services.AddScoped<ProductRatings>();
 
         return services;
     }
@@ -35,6 +37,7 @@ public static class CatalogModule
     public static IEndpointRouteBuilder MapCatalogStoreAdminEndpoints(this IEndpointRouteBuilder storeAdmin)
     {
         storeAdmin.MapAdminStoreCatalog();
+        storeAdmin.MapAdminReviews();
         storeAdmin.MapAdminAttributes();
         storeAdmin.MapCatalogImport();
 
@@ -44,6 +47,7 @@ public static class CatalogModule
     public static IEndpointRouteBuilder MapCatalogStorefrontEndpoints(this IEndpointRouteBuilder storefront)
     {
         storefront.MapStorefrontCatalog();
+        storefront.MapStorefrontReviews();
 
         return storefront;
     }

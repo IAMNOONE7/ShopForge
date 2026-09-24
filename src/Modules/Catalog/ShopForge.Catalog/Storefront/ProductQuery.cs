@@ -24,6 +24,9 @@ internal sealed class ProductQuery(DbContext dbContext, Guid? categoryId, IReadO
         ("price", true) => products.OrderByDescending(product => product.Price).ThenBy(product => product.Id),
         ("name", false) => products.OrderBy(product => product.Name).ThenBy(product => product.Id),
         ("name", true) => products.OrderByDescending(product => product.Name).ThenBy(product => product.Id),
+        // Products nobody has reviewed sort last either way, rather than counting as zero stars.
+        ("rating", false) => products.OrderBy(product => product.RatingCount == 0).ThenBy(product => product.RatingAverage).ThenBy(product => product.Id),
+        ("rating", true) => products.OrderBy(product => product.RatingCount == 0).ThenByDescending(product => product.RatingAverage).ThenBy(product => product.Id),
         ("attribute", _) => ByAttribute(products, sort.Attribute!, sort.Descending),
         _ => products.OrderBy(product => product.SortOrder).ThenBy(product => product.Name).ThenBy(product => product.Id),
     };

@@ -35,6 +35,17 @@ internal sealed class StoreProduct : IStoreOwned
 
     public decimal VatRate { get; private set; }
 
+    // Kept on the listing so a page of products can be sorted and shown without a join per row (D-089).
+    public decimal RatingAverage { get; private set; }
+
+    public int RatingCount { get; private set; }
+
+    public void SetRating(decimal average, int count)
+    {
+        RatingAverage = average;
+        RatingCount = count;
+    }
+
     public bool IsVisible { get; private set; }
 
     public int SortOrder { get; private set; }

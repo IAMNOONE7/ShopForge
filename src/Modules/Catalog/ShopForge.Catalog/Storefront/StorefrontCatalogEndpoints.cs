@@ -81,7 +81,7 @@ internal static class StorefrontCatalogEndpoints
         }
 
         var productSort = ParseSort(sort, definitions);
-        errors.Check(productSort is not null, "sort", "Use price, name or attr.<code>, optionally prefixed with '-'.");
+        errors.Check(productSort is not null, "sort", "Use price, name, rating or attr.<code>, optionally prefixed with '-'.");
 
         if (errors.Any)
         {
@@ -101,6 +101,8 @@ internal static class StorefrontCatalogEndpoints
                 storeProduct.Slug,
                 storeProduct.Name,
                 storeProduct.Price,
+                storeProduct.RatingAverage,
+                storeProduct.RatingCount,
                 ImageId = dbContext.Set<Product>()
                     .Where(product => product.Id == storeProduct.ProductId)
                     .SelectMany(product => product.Images)
@@ -126,6 +128,8 @@ internal static class StorefrontCatalogEndpoints
                     item.Name,
                     item.Price,
                     available.GetValueOrDefault(item.ProductId),
+                    item.RatingAverage,
+                    item.RatingCount,
                     ImageUrl(item.Id, item.ImageId))),
             ],
             totalCount,
@@ -178,6 +182,8 @@ internal static class StorefrontCatalogEndpoints
             storeProduct.Description,
             storeProduct.Price,
             available.GetValueOrDefault(storeProduct.ProductId),
+            storeProduct.RatingAverage,
+            storeProduct.RatingCount,
             [.. product.Images.OrderBy(image => image.Position).Select(image => new ProductImageResponse(ImageUrl(storeProduct.Id, image.Id)!, image.AltText))],
             categories,
             [.. definitions.Select(definition => new ProductAttributeResponse(
@@ -312,7 +318,7 @@ internal static class StorefrontCatalogEndpoints
         var descending = sort.StartsWith('-');
         var key = descending ? sort[1..] : sort;
 
-        if (key is "price" or "name")
+        if (key is "price" or "name" or "rating")
         {
             return new ProductSort(key, descending, Attribute: null);
         }
@@ -335,7 +341,15 @@ internal sealed record StorefrontCategoryResponse(string Name, string Slug);
 
 internal sealed record ProductPageResponse(List<ProductSummaryResponse> Items, int TotalCount, int Page, int PageSize, List<ProductFacetResponse> Filters);
 
-internal sealed record ProductSummaryResponse(Guid Id, string Slug, string Name, decimal Price, int Available, string? ImageUrl);
+internal sealed record ProductSummaryResponse(
+    Guid Id,
+    string Slug,
+    string Name,
+    decimal Price,
+    int Available,
+    decimal Rating,
+    int ReviewCount,
+    string? ImageUrl);
 
 internal sealed record ProductFacetResponse(string Code, string Name, AttributeType Type, string? Unit)
 {
@@ -365,6 +379,8 @@ internal sealed record ProductDetailResponse(
     string? Description,
     decimal Price,
     int Available,
+    decimal Rating,
+    int ReviewCount,
     List<ProductImageResponse> Images,
     List<StorefrontCategoryResponse> Categories,
     List<ProductAttributeResponse> Attributes);

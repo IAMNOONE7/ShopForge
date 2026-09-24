@@ -41,5 +41,13 @@ internal sealed class StoreProductEntityConfiguration : IEntityTypeConfiguration
             .HasForeignKey(assignment => new { assignment.StoreId, assignment.StoreProductId })
             .HasPrincipalKey(storeProduct => new { storeProduct.StoreId, storeProduct.Id })
             .OnDelete(DeleteBehavior.Cascade);
+
+        // Declared from this side like the others, so it shares the alternate key they already use rather than
+        // asking for one under a slightly different name.
+        builder.HasMany<ProductReview>()
+            .WithOne()
+            .HasForeignKey(review => new { review.StoreId, review.StoreProductId })
+            .HasPrincipalKey(storeProduct => new { storeProduct.StoreId, storeProduct.Id })
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

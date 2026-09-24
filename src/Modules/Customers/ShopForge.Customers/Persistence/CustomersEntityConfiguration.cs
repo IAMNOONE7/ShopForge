@@ -62,3 +62,14 @@ internal sealed class CustomerTokenEntityConfiguration : IEntityTypeConfiguratio
         builder.HasIndex(token => token.TokenHash).IsUnique();
     }
 }
+
+internal sealed class WishlistItemEntityConfiguration : IEntityTypeConfiguration<WishlistItem>
+{
+    public void Configure(EntityTypeBuilder<WishlistItem> builder)
+    {
+        builder.ToTable("wishlist_items", CustomersModule.Schema);
+
+        builder.HasOne<StoreCustomer>().WithMany().HasForeignKey(item => item.StoreCustomerId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasIndex(item => new { item.StoreCustomerId, item.StoreProductId }).IsUnique();
+    }
+}

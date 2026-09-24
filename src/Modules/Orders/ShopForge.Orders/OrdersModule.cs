@@ -32,6 +32,7 @@ public static class OrdersModule
         services.AddScoped<IStorePublishCheck, OrdersPublishCheck>();
         services.AddScoped<IStoreInitializer, DefaultStoreMethods>();
         services.AddScoped<ICustomerOrders, GuestOrderClaim>();
+        services.AddScoped<ICustomerPurchases, CustomerPurchases>();
         services.AddScoped<IEventHandler<OrderPlaced>, OrderNotifications>();
         services.AddScoped<IEventHandler<PaymentReceived>, OrderNotifications>();
         services.AddScoped<IEventHandler<PaymentReceived>, InvoiceIssuing>();
