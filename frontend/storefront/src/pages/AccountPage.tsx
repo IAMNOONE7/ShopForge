@@ -68,7 +68,9 @@ export function AccountPage() {
           <tbody>
             {history.map((order) => (
               <tr key={order.number}>
-                <td>{order.number}</td>
+                <td>
+                  <Link to={`/account/orders/${order.number}`}>{order.number}</Link>
+                </td>
                 <td>{new Date(order.placedAt).toLocaleDateString(store.culture)}</td>
                 <td>{status(order.status)}</td>
                 <td>{order.items} items</td>

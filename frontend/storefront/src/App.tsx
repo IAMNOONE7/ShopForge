@@ -5,6 +5,7 @@ import { CustomerProvider } from './components/CustomerProvider'
 import { Layout } from './components/Layout'
 import { Message } from './components/Message'
 import { LoadingState } from './components/ui/LoadingState'
+import { AccountOrderPage } from './pages/AccountOrderPage'
 import { AccountPage } from './pages/AccountPage'
 import { CartPage } from './pages/CartPage'
 import { CheckoutPage } from './pages/CheckoutPage'
@@ -83,6 +84,7 @@ function App() {
                   <Route path="checkout" element={<CheckoutPage />} />
                   <Route path="order/:number" element={<OrderPage />} />
                   <Route path="account" element={<AccountPage />} />
+                  <Route path="account/orders/:number" element={<AccountOrderPage />} />
                   <Route path="account/sign-in" element={<SignInPage />} />
                   <Route path="account/register" element={<RegisterPage />} />
                   <Route path="account/verify" element={<VerifyEmailPage />} />

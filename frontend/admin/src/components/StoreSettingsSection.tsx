@@ -13,6 +13,7 @@ export function StoreSettingsSection({ store, theme, run }: StoreSettingsSection
         name: String(form.get('name')),
         currency: String(form.get('currency')).toUpperCase(),
         culture: String(form.get('culture')),
+        returnWindowDays: Number(form.get('returnWindowDays')),
         company: {
           legalName: String(form.get('legalName')),
           line1: String(form.get('line1')),
@@ -44,6 +45,9 @@ export function StoreSettingsSection({ store, theme, run }: StoreSettingsSection
         {store.status === 'published' && <p className="hint">A published store keeps its currency, because prices are stored in it.</p>}
         <label>
           Language <input name="culture" defaultValue={store.culture} required />
+        </label>
+        <label>
+          Days to send goods back <input name="returnWindowDays" type="number" min="0" max="365" defaultValue={store.returnWindowDays} required />
         </label>
         <label>
           Primary color <input name="primaryColor" type="color" defaultValue={theme.primaryColor} />

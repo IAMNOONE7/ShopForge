@@ -6,6 +6,7 @@ import { DiscountsSection } from '../components/DiscountsSection'
 import { FailedMessagesSection } from '../components/FailedMessagesSection'
 import { MethodsSection } from '../components/MethodsSection'
 import { OrdersSection } from '../components/OrdersSection'
+import { ReturnsSection } from '../components/ReturnsSection'
 import { ReviewsSection } from '../components/ReviewsSection'
 import { StoreSettingsSection } from '../components/StoreSettingsSection'
 import { ImportSection } from '../components/ImportSection'
@@ -208,6 +209,8 @@ export function StorePage() {
       </section>
 
       <OrdersSection storeId={storeId} money={money} culture={store.culture} />
+
+      <ReturnsSection storeId={storeId} money={money} culture={store.culture} />
 
       <ReviewsSection storeId={storeId} culture={store.culture} />
 

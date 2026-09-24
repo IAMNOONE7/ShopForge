@@ -1,5 +1,5 @@
 import { NotFoundError } from './api'
-import { RequestFailed } from './cart'
+import { RequestFailed, type Order } from './cart'
 
 export type Customer = {
   email: string
@@ -66,6 +66,34 @@ export const requestPasswordReset = (email: string) => send<void>('POST', '/api/
 export const resetPassword = (token: string, password: string) => send<void>('POST', '/api/storefront/account/password/reset', { token, password })
 
 export const getOrders = () => send<CustomerOrder[]>('GET', '/api/storefront/account/orders')
+
+export const getAccountOrder = (number: string) => send<Order>('GET', `/api/storefront/account/orders/${encodeURIComponent(number)}`)
+
+export type ReturnableLine = {
+  storeProductId: string
+  productName: string
+  quantity: number
+}
+
+export type CustomerReturn = {
+  number: string
+  status: string
+  requestedAt: string
+  refundedAmount: number
+  lines: { productName: string; quantity: number }[]
+}
+
+export type Returns = {
+  closesAt: string | null
+  returnable: ReturnableLine[]
+  returns: CustomerReturn[]
+}
+
+export const getReturns = (number: string) =>
+  send<Returns>('GET', `/api/storefront/account/orders/${encodeURIComponent(number)}/returns`)
+
+export const requestReturn = (number: string, lines: { storeProductId: string; quantity: number }[], reason: string | null) =>
+  send<Returns>('POST', `/api/storefront/account/orders/${encodeURIComponent(number)}/returns`, { lines, reason })
 
 export type WishlistItem = {
   storeProductId: string

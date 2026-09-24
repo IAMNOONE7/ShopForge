@@ -13,6 +13,7 @@ export type AdminStore = {
   theme: StoreTheme
   logoUrl: string | null
   primaryHostName: string | null
+  returnWindowDays: number
   company: Company | null
 }
 
@@ -26,7 +27,14 @@ export type Company = {
   vatNumber: string | null
 }
 
-export type StoreSettings = { name: string; currency: string; culture: string; theme: StoreTheme; company?: Company | null }
+export type StoreSettings = {
+  name: string
+  currency: string
+  culture: string
+  returnWindowDays?: number
+  theme: StoreTheme
+  company?: Company | null
+}
 
 export type NewStore = StoreSettings & { hostName: string }
 
@@ -160,6 +168,17 @@ export type PickupPoint = {
 
 export type PickupPointInput = { name: string; line1: string; city: string; postalCode: string; country: string; isActive: boolean }
 
+export type OrderReturn = {
+  id: string
+  number: string
+  orderNumber: string
+  status: string
+  requestedAt: string
+  refundedAmount: number
+  reason: string | null
+  lines: { productName: string; quantity: number }[]
+}
+
 export type Review = {
   id: string
   productName: string
@@ -279,6 +298,10 @@ export const api = {
   failedMessages: (storeId: string) => request<FailedMessage[]>('GET', `/api/admin/stores/${storeId}/failed-messages`),
   requeueMessage: (storeId: string, messageId: string) =>
     request<void>('POST', `/api/admin/stores/${storeId}/failed-messages/${messageId}/requeue`),
+
+  returns: (storeId: string) => request<OrderReturn[]>('GET', `/api/admin/stores/${storeId}/returns`),
+  decideReturn: (storeId: string, returnId: string, decision: 'accept' | 'refuse' | 'receive') =>
+    request<OrderReturn>('POST', `/api/admin/stores/${storeId}/returns/${returnId}/${decision}`),
 
   reviews: (storeId: string, status?: string) =>
     request<Review[]>('GET', `/api/admin/stores/${storeId}/reviews${status ? `?status=${status}` : ''}`),
