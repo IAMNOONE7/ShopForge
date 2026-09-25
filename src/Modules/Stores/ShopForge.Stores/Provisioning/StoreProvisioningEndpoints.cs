@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Shared.Http;
+using ShopForge.Shared.Platform;
 using ShopForge.Shared.Security;
 using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
@@ -30,6 +31,7 @@ internal static class StoreProvisioningEndpoints
         CreateStoreRequest request,
         DbContext dbContext,
         StoreContext storeContext,
+        ITenantLimits limits,
         IEnumerable<IStoreInitializer> initializers,
         CancellationToken cancellationToken)
     {
@@ -40,6 +42,23 @@ internal static class StoreProvisioningEndpoints
         if (errors.Any)
         {
             return errors.ToProblem();
+        }
+
+        // What the company's plan allows, counted against what it has. A cap never removes a store, so a tenant
+        // moved to a smaller plan keeps everything and simply cannot add more (D-108).
+        if (await limits.MaxAsync(TenantResource.Stores, cancellationToken) is { } maxStores)
+        {
+            var stores = await dbContext.Set<Store>()
+                .IgnoreQueryFilters([TenancyFilters.Store])
+                .CountAsync(cancellationToken);
+
+            if (stores >= maxStores)
+            {
+                return TypedResults.Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "This plan allows no more stores",
+                    detail: $"The plan covers {maxStores} {(maxStores == 1 ? "store" : "stores")} and the company has {stores}.");
+            }
         }
 
         if (await dbContext.Set<StoreDomain>().IgnoreQueryFilters().AnyAsync(domain => domain.HostName == hostName, cancellationToken))

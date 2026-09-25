@@ -385,13 +385,18 @@ public sealed class AccountTests(ShopForgeApiFactory factory)
             link => link is not null,
             CancellationToken);
 
+    private readonly Dictionary<string, string> _linksUsed = [];
+
     private async Task<CustomerView> VerifyAsync(StorefrontApi shopper, string email)
     {
-        // The link is in a message the outbox delivers.
+        // The link is in a message the outbox delivers. Where one address registers at two stores, the second link
+        // takes a moment to arrive, and the first one is no use at the second store (D-102) — so wait for a new one.
         var token = await factory.EventuallyAsync(
             () => Task.FromResult(factory.Emails.LatestLinkFor(email)),
-            link => link is not null,
+            link => link is not null && (!_linksUsed.TryGetValue(email, out var used) || link != used),
             CancellationToken);
+        _linksUsed[email] = token!;
+
         using var response = await shopper.PostAsync("/api/storefront/account/verify", new { Token = token });
 
         return await shopper.ReadAsync<CustomerView>(response);

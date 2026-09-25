@@ -8,6 +8,7 @@ using ShopForge.Catalog.Domain;
 using ShopForge.Catalog.Images;
 using ShopForge.Shared.Files;
 using ShopForge.Shared.Http;
+using ShopForge.Shared.Platform;
 using ShopForge.Shared.Security;
 using ShopForge.Shared.Tenancy;
 
@@ -42,6 +43,7 @@ internal static class AdminProductEndpoints
         CreateProductRequest request,
         DbContext dbContext,
         IStoreContext storeContext,
+        ITenantLimits limits,
         CancellationToken cancellationToken)
     {
         var errors = new RequestErrors()
@@ -52,6 +54,11 @@ internal static class AdminProductEndpoints
         if (errors.Any)
         {
             return errors.ToProblem();
+        }
+
+        if (await Plans.RefusedAsync(dbContext, limits, adding: 1, cancellationToken) is { } refusal)
+        {
+            return refusal;
         }
 
         var product = new Product(storeContext.TenantId!.Value, request.Sku!, request.Ean, request.WeightGrams);

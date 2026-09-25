@@ -29,6 +29,8 @@ public static class StoresModule
         services.AddScoped<IStoreDirectory, StoreDirectory>();
         services.AddScoped<ITenantDirectory, TenantDirectory>();
         services.AddScoped<ITenantUsage, StoreUsage>();
+        services.AddScoped<TenantPlans>();
+        services.AddScoped<ITenantLimits>(provider => provider.GetRequiredService<TenantPlans>());
 
         return services;
     }
@@ -51,6 +53,7 @@ public static class StoresModule
     public static IEndpointRouteBuilder MapStoresAdminEndpoints(this IEndpointRouteBuilder tenantAdmin)
     {
         tenantAdmin.MapAdminStores();
+        tenantAdmin.MapAdminPlan();
         tenantAdmin.MapStoreProvisioning();
 
         return tenantAdmin;
@@ -67,6 +70,7 @@ public static class StoresModule
     public static IEndpointRouteBuilder MapStoresPlatformEndpoints(this IEndpointRouteBuilder platform)
     {
         platform.MapPlatformTenants();
+        platform.MapPlatformPlans();
 
         return platform;
     }

@@ -34,14 +34,19 @@ internal static class PlatformTenantEndpoints
         CancellationToken cancellationToken)
     {
         var tenants = await dbContext.Set<Tenant>().AsNoTracking().OrderBy(tenant => tenant.Name).ToListAsync(cancellationToken);
+        var plans = await dbContext.Set<Plan>().AsNoTracking().ToListAsync(cancellationToken);
+        var fallback = plans.SingleOrDefault(plan => plan.IsDefault);
         var answer = new List<PlatformTenantResponse>(tenants.Count);
 
         foreach (var tenant in tenants)
         {
+            var plan = plans.SingleOrDefault(candidate => candidate.Id == tenant.PlanId) ?? fallback;
+
             answer.Add(new PlatformTenantResponse(
                 tenant.Id,
                 tenant.Name,
                 tenant.Status.ToString(),
+                plan?.Code,
                 await UsageOfAsync(services, tenant.Id, cancellationToken)));
         }
 
@@ -50,6 +55,13 @@ internal static class PlatformTenantEndpoints
 
     // Each module counts its own rows inside the tenant's scope, so the filters stay on and nothing here knows what
     // a product or an order even is (D-105).
+    // A company that has not been put on a plan of its own is on the default one (D-108).
+    private static Task<string?> PlanCodeOfAsync(DbContext dbContext, Tenant tenant, CancellationToken cancellationToken) =>
+        dbContext.Set<Plan>()
+            .Where(plan => tenant.PlanId == null ? plan.IsDefault : plan.Id == tenant.PlanId)
+            .Select(plan => plan.Code)
+            .SingleOrDefaultAsync(cancellationToken);
+
     private static async Task<List<UsageCount>> UsageOfAsync(IServiceProvider services, Guid tenantId, CancellationToken cancellationToken)
     {
         await using var scope = services.CreateAsyncScope();
@@ -104,7 +116,12 @@ internal static class PlatformTenantEndpoints
 
         return TypedResults.Created(
             $"/api/platform/tenants/{tenant.Id}",
-            new PlatformTenantResponse(tenant.Id, tenant.Name, tenant.Status.ToString(), []));
+            new PlatformTenantResponse(
+                tenant.Id,
+                tenant.Name,
+                tenant.Status.ToString(),
+                await PlanCodeOfAsync(dbContext, tenant, cancellationToken),
+                []));
     }
 
     private static Task<Results<Ok<PlatformTenantResponse>, NotFound, ProblemHttpResult>> SuspendAsync(
@@ -146,10 +163,15 @@ internal static class PlatformTenantEndpoints
         // Host lookups are cached, so a company going dark (or coming back) has to drop its cached entries.
         await resolver.ForgetTenantAsync(tenant.Id, cancellationToken);
 
-        return TypedResults.Ok(new PlatformTenantResponse(tenant.Id, tenant.Name, tenant.Status.ToString(), []));
+        return TypedResults.Ok(new PlatformTenantResponse(
+            tenant.Id,
+            tenant.Name,
+            tenant.Status.ToString(),
+            await PlanCodeOfAsync(dbContext, tenant, cancellationToken),
+            []));
     }
 }
 
 internal sealed record NewTenantRequest(string? Name, string? OwnerEmail, string? OwnerPassword);
 
-internal sealed record PlatformTenantResponse(Guid Id, string Name, string Status, List<UsageCount> Usage);
+internal sealed record PlatformTenantResponse(Guid Id, string Name, string Status, string? PlanCode, List<UsageCount> Usage);

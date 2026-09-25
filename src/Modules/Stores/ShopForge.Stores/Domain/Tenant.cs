@@ -23,6 +23,11 @@ internal sealed class Tenant
 
     public TenantStatus Status { get; private set; }
 
+    // Null while the company has not been put on a plan of its own: the default plan applies (D-108).
+    public Guid? PlanId { get; private set; }
+
+    public void MoveTo(Plan plan) => PlanId = plan.Id;
+
     public bool Suspend()
     {
         if (Status == TenantStatus.Suspended)

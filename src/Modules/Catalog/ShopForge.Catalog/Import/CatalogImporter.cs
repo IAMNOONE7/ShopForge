@@ -1,11 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Catalog.Domain;
 using ShopForge.Shared.Inventory;
+using ShopForge.Shared.Platform;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Catalog.Import;
 
-internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeContext, IStockLedger stock)
+internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeContext, IStockLedger stock, ITenantLimits limits)
 {
     private const int MaxIssues = 200;
 
@@ -33,6 +34,17 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
 
         var failed = 0;
 
+        // A file that would take the company past what its plan covers is not imported at all: half a catalog is
+        // worse than a clear refusal (D-108).
+        if (await Plans.RefusedAsync(dbContext, limits, NewProducts(), cancellationToken) is not null)
+        {
+            var wouldHaveChanged = outcomes.Count(outcome => outcome is RowOutcome.Created or RowOutcome.Updated);
+            outcomes.RemoveAll(outcome => outcome is RowOutcome.Created or RowOutcome.Updated);
+            issues.Add(new ImportIssue(0, null, $"Nothing was imported: the plan does not cover {NewProducts()} more products."));
+
+            return Report(file, catalog, outcomes, wouldHaveChanged, issues);
+        }
+
         if (outcomes.Any(outcome => outcome is RowOutcome.Created or RowOutcome.Updated))
         {
             try
@@ -48,7 +60,13 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
             }
         }
 
-        return new ImportReport(
+        return Report(file, catalog, outcomes, failed, issues);
+    }
+
+    private int NewProducts() => dbContext.ChangeTracker.Entries<Product>().Count(entry => entry.State == EntityState.Added);
+
+    private static ImportReport Report(ImportFile file, CatalogData catalog, List<RowOutcome> outcomes, int failed, List<ImportIssue> issues) =>
+        new(
             outcomes.Count(outcome => outcome == RowOutcome.Created),
             outcomes.Count(outcome => outcome == RowOutcome.Updated),
             outcomes.Count(outcome => outcome == RowOutcome.Unchanged),
@@ -56,7 +74,6 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
             failed,
             [.. file.Columns.Where(column => !ImportColumns.All.Contains(column) && !catalog.Definitions.ContainsKey(column))],
             [.. issues.Take(MaxIssues)]);
-    }
 
     // Products only have their ids once the catalog is saved, so stock is written afterwards, from the rows that were valid.
     private async Task ApplyStockAsync(List<ImportIssue> issues, CancellationToken cancellationToken)

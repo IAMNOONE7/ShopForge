@@ -26,7 +26,9 @@ public sealed class OutboxTests(ShopForgeApiFactory factory)
         await factory.DispatchOutboxAsync(CancellationToken);
         var subjects = factory.Emails.For(email).Select(message => message.Subject).ToList();
 
-        Assert.Equal(["order.placed"], queued.Select(message => message.Type));
+        // The worker shares this host, so it may already have turned the order's event into an e-mail request;
+        // what this asserts is that placing the order wrote its event with it.
+        Assert.Contains("order.placed", queued.Select(message => message.Type));
         Assert.Contains(subjects, subject => subject.Contains($"Your order {order.Number}", StringComparison.Ordinal));
     }
 
