@@ -68,8 +68,16 @@ public sealed class ObservabilityTests(ShopForgeApiFactory factory)
         await factory.DispatchOutboxAsync(CancellationToken);
 
         Assert.NotNull(traceParent);
-        Assert.Contains(activities, activity => activity.OperationName == "outbox order.placed"
-            && activity.TraceId.ToString() == TraceIdOf(traceParent));
+        var traceId = TraceIdOf(traceParent);
+
+        // The worker shares this host and may have leased the message before this dispatch, so the activity is
+        // waited for: what matters is that whoever handled it stayed in the order's trace.
+        var traced = await factory.EventuallyAsync(
+            () => Task.FromResult(activities.ToList()),
+            recorded => recorded.Any(activity => activity.OperationName == "outbox order.placed" && activity.TraceId.ToString() == traceId),
+            CancellationToken);
+
+        Assert.Contains(traced, activity => activity.OperationName == "outbox order.placed" && activity.TraceId.ToString() == traceId);
     }
 
     [Fact]

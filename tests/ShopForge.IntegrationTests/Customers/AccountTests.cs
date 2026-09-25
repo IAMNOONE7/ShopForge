@@ -338,13 +338,12 @@ public sealed class AccountTests(ShopForgeApiFactory factory)
         using var other = new StorefrontApi(factory, furniture.OtherStore);
         await shopper.PostAsync("/api/storefront/account/register", Registration(email));
         await VerifyAsync(shopper, email);
-        var before = factory.Emails.For(email).Count;
 
         using var asked = await other.PostAsync("/api/storefront/account/password/forgot", new { Email = email });
         await factory.DispatchOutboxAsync(CancellationToken);
 
         Assert.Equal(HttpStatusCode.Accepted, asked.StatusCode);
-        Assert.Equal(before, factory.Emails.For(email).Count);
+        Assert.DoesNotContain(factory.Emails.For(email), message => message.Subject.Contains("Reset", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

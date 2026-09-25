@@ -23,11 +23,16 @@ public sealed class OutboxTests(ShopForgeApiFactory factory)
         var order = await PlaceOrderAsync(shopper, email);
         var queued = await MessagesAsync(furniture, order.Number);
         await factory.DispatchOutboxAsync(CancellationToken);
-        await factory.DispatchOutboxAsync(CancellationToken);
-        var subjects = factory.Emails.For(email).Select(message => message.Subject).ToList();
 
-        // The worker shares this host, so it may already have turned the order's event into an e-mail request;
-        // what this asserts is that placing the order wrote its event with it.
+        // The worker shares this host and can lease the message before this test's dispatch does, so the letter is
+        // waited for rather than expected by the next line.
+        var subjects = await factory.EventuallyAsync(
+            () => Task.FromResult(factory.Emails.For(email).Select(message => message.Subject).ToList()),
+            delivered => delivered.Any(subject => subject.Contains($"Your order {order.Number}", StringComparison.Ordinal)),
+            CancellationToken);
+
+        // For the same reason the order's event may already have become an e-mail request; what this asserts is
+        // that placing the order wrote its event with it.
         Assert.Contains("order.placed", queued.Select(message => message.Type));
         Assert.Contains(subjects, subject => subject.Contains($"Your order {order.Number}", StringComparison.Ordinal));
     }
@@ -92,9 +97,13 @@ public sealed class OutboxTests(ShopForgeApiFactory factory)
             null,
             CancellationToken);
         await factory.DispatchOutboxAsync(CancellationToken);
+        var delivered = await factory.EventuallyAsync(
+            () => Task.FromResult(factory.Emails.For(email)),
+            messages => messages.Count > 0,
+            CancellationToken);
 
         Assert.Equal(HttpStatusCode.NoContent, requeued.StatusCode);
-        Assert.NotEmpty(factory.Emails.For(email));
+        Assert.NotEmpty(delivered);
     }
 
     [Fact]
