@@ -49,11 +49,22 @@ internal sealed class OutboxDispatcher(IServiceProvider services, OutboxEventTyp
     private async Task<bool> HandleAsync(OutboxMessage claimed, CancellationToken cancellationToken)
     {
         await using var scope = services.CreateAsyncScope();
-        scope.ServiceProvider.GetRequiredService<StoreContext>().Set(claimed.StoreId, claimed.TenantId);
+        var storeContext = scope.ServiceProvider.GetRequiredService<StoreContext>();
+
+        // The message says how much scope it has: a shop's, a company's, or none at all (D-111).
+        if (claimed is { StoreId: { } storeId, TenantId: { } tenantId })
+        {
+            storeContext.Set(storeId, tenantId);
+        }
+        else if (claimed.TenantId is { } ownerTenantId)
+        {
+            storeContext.SetTenant(ownerTenantId);
+        }
 
         var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
         var now = clock.GetUtcNow();
         var leased = await dbContext.Set<OutboxMessage>()
+            .IgnoreQueryFilters()
             .Where(candidate => candidate.Id == claimed.Id && candidate.Status == OutboxStatus.Pending && candidate.DueAt <= now)
             .ExecuteUpdateAsync(setters => setters.SetProperty(candidate => candidate.DueAt, now + Lease), cancellationToken);
 
@@ -62,7 +73,9 @@ internal sealed class OutboxDispatcher(IServiceProvider services, OutboxEventTyp
             return false;
         }
 
-        var message = await dbContext.Set<OutboxMessage>().SingleAsync(candidate => candidate.Id == claimed.Id, cancellationToken);
+        var message = await dbContext.Set<OutboxMessage>()
+            .IgnoreQueryFilters()
+            .SingleAsync(candidate => candidate.Id == claimed.Id, cancellationToken);
 
         using var activity = ShopForgeMetrics.ActivitySource.StartActivity($"outbox {message.Type}", ActivityKind.Consumer, message.TraceParent);
         activity?.SetTag("shopforge.store_id", message.StoreId);

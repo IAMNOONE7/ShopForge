@@ -31,6 +31,13 @@ internal sealed class OutboxEmailSender(IOutbox outbox) : IEmailSender
 
         return Task.CompletedTask;
     }
+
+    public Task SendOutsideStoreAsync(EmailMessage message, CancellationToken cancellationToken)
+    {
+        outbox.EnqueueOutsideStore(new EmailRequested(message.To, message.Subject, message.Body));
+
+        return Task.CompletedTask;
+    }
 }
 
 internal sealed class EmailRequestedHandler(IEmailDelivery delivery) : IEventHandler<EmailRequested>

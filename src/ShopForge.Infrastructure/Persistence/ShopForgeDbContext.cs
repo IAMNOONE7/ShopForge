@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
+using ShopForge.Infrastructure.Messaging;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Infrastructure.Persistence;
@@ -61,6 +62,13 @@ public sealed class ShopForgeDbContext(
                     TenancyFilters.Tenant, OwnershipFilter(clrType, nameof(ITenantOwned.TenantId), nameof(CurrentTenantId)));
             }
         }
+
+        // The outbox owns its rows loosely (D-111), so it cannot join the loop above: a message that belongs to no
+        // store must not surface in a store's admin, which the null check says outright rather than leaving to how
+        // a null parameter compares in SQL. Whoever wants the rest lifts the filter and says which ones it wants.
+        modelBuilder.Entity<OutboxMessage>().HasQueryFilter(
+            TenancyFilters.Store,
+            message => message.StoreId != null && message.StoreId == CurrentStoreId);
     }
 
     // Builds entity => entity.<Owner> == this.<CurrentOwner>. EF Core evaluates the context property
@@ -92,14 +100,28 @@ public sealed class ShopForgeDbContext(
             {
                 throw new TenancyViolationException($"{entry.Metadata.DisplayName()} does not belong to the current tenant.");
             }
+
+            // An outbox message may name no owner at all, but one it does name is held to just as tightly (D-111).
+            if (entry.Entity is OutboxMessage message)
+            {
+                if (message.StoreId is not null && !BelongsTo(entry, nameof(OutboxMessage.StoreId), CurrentStoreId))
+                {
+                    throw new TenancyViolationException("The message does not belong to the current store.");
+                }
+
+                if (message.TenantId is not null && !BelongsTo(entry, nameof(OutboxMessage.TenantId), CurrentTenantId))
+                {
+                    throw new TenancyViolationException("The message does not belong to the current tenant.");
+                }
+            }
         }
     }
 
     private static bool BelongsTo(EntityEntry entry, string ownerProperty, Guid? currentOwner)
     {
         var property = entry.Property(ownerProperty);
-        var owner = (Guid)property.CurrentValue!;
-        var originalOwner = entry.State == EntityState.Added ? owner : (Guid)property.OriginalValue!;
+        var owner = (Guid?)property.CurrentValue;
+        var originalOwner = entry.State == EntityState.Added ? owner : (Guid?)property.OriginalValue;
 
         return currentOwner is not null && owner == currentOwner && originalOwner == currentOwner;
     }

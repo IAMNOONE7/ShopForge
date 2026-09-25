@@ -1,8 +1,8 @@
-using ShopForge.Shared.Tenancy;
-
 namespace ShopForge.Infrastructure.Messaging;
 
-internal sealed class OutboxMessage : IStoreOwned
+// The one table whose rows need not belong to a store: most messages are a shop's, but an invitation belongs to a
+// company and a platform operator's mail to neither, so both owners are optional here (D-111).
+internal sealed class OutboxMessage
 {
     // 1, 5, 15, 60 and 360 minutes: a handler that fails because something else is down gets a few chances before the
     // message is put aside for a person to look at (D-068).
@@ -19,7 +19,7 @@ internal sealed class OutboxMessage : IStoreOwned
     {
     }
 
-    public OutboxMessage(Guid storeId, Guid tenantId, string type, string payload, string? traceParent, DateTimeOffset createdAt)
+    public OutboxMessage(Guid? storeId, Guid? tenantId, string type, string payload, string? traceParent, DateTimeOffset createdAt)
     {
         Id = Guid.CreateVersion7();
         StoreId = storeId;
@@ -34,9 +34,9 @@ internal sealed class OutboxMessage : IStoreOwned
 
     public Guid Id { get; private set; }
 
-    public Guid StoreId { get; private set; }
+    public Guid? StoreId { get; private set; }
 
-    public Guid TenantId { get; private set; }
+    public Guid? TenantId { get; private set; }
 
     public string Type { get; private set; } = null!;
 

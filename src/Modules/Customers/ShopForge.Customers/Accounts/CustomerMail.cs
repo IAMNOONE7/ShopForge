@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Customers.Domain;
 using ShopForge.Shared.Email;
+using ShopForge.Shared.Security;
 using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
 

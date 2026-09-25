@@ -118,7 +118,9 @@ app.MapGroup("/api/payments").MapPaymentWebhookEndpoints();
 // Administering ShopForge itself: outside tenancy, behind its own cookie (D-103).
 var platform = app.MapGroup("/api/platform");
 platform.MapPlatformAuthEndpoints();
-platform.MapGroup(string.Empty).RequireAuthorization(PlatformPolicies.PlatformUser).MapStoresPlatformEndpoints();
+var platformOperator = platform.MapGroup(string.Empty).RequireAuthorization(PlatformPolicies.PlatformUser);
+platformOperator.MapStoresPlatformEndpoints();
+platformOperator.MapPlatformOutboxEndpoints();
 
 var admin = app.MapGroup("/api/admin");
 admin.MapAccessAdminEndpoints();
@@ -126,6 +128,7 @@ admin.MapAccessAdminEndpoints();
 var tenantAdmin = app.MapGroup("/api/admin")
     .RequireAuthorization(AdminPolicies.TenantUser)
     .RequireAdminTenant();
+tenantAdmin.MapAccessTenantAdminEndpoints();
 tenantAdmin.MapStoresAdminEndpoints();
 tenantAdmin.MapCatalogTenantAdminEndpoints();
 tenantAdmin.MapInventoryTenantAdminEndpoints();

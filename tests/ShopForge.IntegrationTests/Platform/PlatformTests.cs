@@ -1,11 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using ShopForge.IntegrationTests.Catalog;
 using ShopForge.IntegrationTests.Orders;
-using ShopForge.Platform.Domain;
 
 namespace ShopForge.IntegrationTests.Platform;
 
@@ -168,27 +166,7 @@ public sealed class PlatformTests(ShopForgeApiFactory factory)
     private static int Usage(PlatformTenantView tenant, string name) =>
         tenant.Usage.Single(count => count.Name == name).Value;
 
-    private async Task<HttpClient> SignInAsync()
-    {
-        var email = $"operator-{Guid.NewGuid():N}@shopforge.test";
-        const string password = "Runs-the-platform-2026";
-
-        await using (var scope = factory.Services.CreateAsyncScope())
-        {
-            var user = new PlatformUser(email);
-            user.SetPasswordHash(scope.ServiceProvider.GetRequiredService<IPasswordHasher<PlatformUser>>().HashPassword(user, password));
-
-            var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
-            dbContext.Add(user);
-            await dbContext.SaveChangesAsync(CancellationToken);
-        }
-
-        var client = factory.CreateClient();
-        using var response = await client.PostAsJsonAsync("/api/platform/auth/login", new { Email = email, Password = password }, CancellationToken);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-
-        return client;
-    }
+    private Task<HttpClient> SignInAsync() => TestPlatformUsers.SignInAsync(factory, CancellationToken);
 
     private async Task<HttpResponseMessage> SignInToAdminAsync(TestUser user)
     {

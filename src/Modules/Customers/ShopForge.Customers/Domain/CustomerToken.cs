@@ -1,6 +1,3 @@
-using System.Buffers.Text;
-using System.Security.Cryptography;
-using System.Text;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Customers.Domain;
@@ -51,16 +48,4 @@ internal enum CustomerTokenPurpose
 {
     EmailVerification,
     PasswordReset,
-}
-
-internal static class TokenValues
-{
-    public static (string Value, string Hash) Create()
-    {
-        var value = Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(32));
-
-        return (value, Hash(value));
-    }
-
-    public static string Hash(string value) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
 }

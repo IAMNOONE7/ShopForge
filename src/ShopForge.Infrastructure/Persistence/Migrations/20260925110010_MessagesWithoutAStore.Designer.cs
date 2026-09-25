@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using ShopForge.Infrastructure.Persistence;
@@ -12,9 +13,11 @@ using ShopForge.Infrastructure.Persistence;
 namespace ShopForge.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ShopForgeDbContext))]
-    partial class ShopForgeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260925110010_MessagesWithoutAStore")]
+    partial class MessagesWithoutAStore
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -22,62 +25,6 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
-
-            modelBuilder.Entity("ShopForge.Access.Domain.TenantInvitation", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTimeOffset?>("AcceptedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("accepted_at");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("Email")
-                        .IsRequired()
-                        .HasMaxLength(254)
-                        .HasColumnType("character varying(254)")
-                        .HasColumnName("email");
-
-                    b.Property<DateTimeOffset>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("expires_at");
-
-                    b.Property<string>("Role")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("role");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.Property<string>("TokenHash")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("token_hash");
-
-                    b.HasKey("Id")
-                        .HasName("pk_tenant_invitations");
-
-                    b.HasIndex("TokenHash")
-                        .IsUnique()
-                        .HasDatabaseName("ix_tenant_invitations_token_hash");
-
-                    b.HasIndex("TenantId", "Email")
-                        .HasDatabaseName("ix_tenant_invitations_tenant_id_email");
-
-                    b.ToTable("tenant_invitations", "access", t =>
-                        {
-                            t.HasCheckConstraint("ck_tenant_invitations_email_normalized", "email = lower(btrim(email))");
-                        });
-                });
 
             modelBuilder.Entity("ShopForge.Access.Domain.TenantUser", b =>
                 {

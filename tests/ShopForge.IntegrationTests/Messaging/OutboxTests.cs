@@ -106,6 +106,53 @@ public sealed class OutboxTests(ShopForgeApiFactory factory)
         Assert.NotEmpty(delivered);
     }
 
+    // An invitation belongs to a company, not to one of its shops, so it is the one kind of message with no store
+    // behind it: it must still be delivered, must not turn up in any shop's dead letters, and is the platform's to
+    // requeue (D-111).
+    [Fact]
+    public async Task A_message_with_no_store_is_delivered_and_is_the_platform_s_to_look_after()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+        var invited = $"colleague-{Guid.NewGuid():N}@example.test";
+        factory.EmailDelivery.FailFor(invited);
+        using var operatorClient = await TestPlatformUsers.SignInAsync(factory, CancellationToken);
+
+        try
+        {
+            using var invitation = await furniture.Admin.PostAsJsonAsync(
+                "/api/admin/users/invitations", new { Email = invited, Role = "Support" }, CancellationToken);
+            Assert.Equal(HttpStatusCode.OK, invitation.StatusCode);
+
+            for (var run = 0; run < 10 && !await HasDeadLetterOutsideStoresAsync(invited); run++)
+            {
+                await factory.DispatchOutboxAsync(CancellationToken);
+                await MakeEverythingDueAsync();
+            }
+        }
+        finally
+        {
+            factory.EmailDelivery.StopFailingFor(invited);
+        }
+
+        var atThePlatform = await operatorClient.GetFromJsonAsync<List<FailedMessageView>>(
+            "/api/platform/failed-messages", CancellationToken);
+        var atTheStore = await furniture.Admin.GetFromJsonAsync<List<FailedMessageView>>(
+            $"/api/admin/stores/{furniture.Store.StoreId}/failed-messages", CancellationToken);
+        var failedId = await FailedIdAsync(invited);
+        var dead = atThePlatform!.Single(message => message.Id == failedId);
+
+        using var requeued = await operatorClient.PostAsync($"/api/platform/failed-messages/{dead.Id}/requeue", null, CancellationToken);
+        var delivered = await factory.EventuallyAsync(
+            () => Task.FromResult(factory.Emails.For(invited)),
+            messages => messages.Count > 0,
+            CancellationToken);
+
+        Assert.Equal(6, dead.Attempts);
+        Assert.DoesNotContain(atTheStore!, message => message.Id == dead.Id);
+        Assert.Equal(HttpStatusCode.NoContent, requeued.StatusCode);
+        Assert.Contains(delivered, message => message.Subject.Contains("invited", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task Maintenance_clears_abandoned_carts_and_unconfirmed_sign_ups()
     {
@@ -155,6 +202,29 @@ public sealed class OutboxTests(ShopForgeApiFactory factory)
         await factory.QueryAsync(furniture.Store, dbContext => dbContext.Database
             .SqlQuery<int>($"SELECT count(*)::int AS \"Value\" FROM messaging.outbox_messages WHERE store_id = {furniture.Store.StoreId} AND status = 'Failed'")
             .SingleAsync(CancellationToken)) > 0;
+
+    private Task<bool> HasDeadLetterOutsideStoresAsync(string recipient) =>
+        OutsideStoresAsync(async dbContext => await dbContext.Database
+            .SqlQuery<int>($"SELECT count(*)::int AS \"Value\" FROM messaging.outbox_messages WHERE store_id IS NULL AND status = 'Failed' AND payload LIKE {'%' + recipient + '%'}")
+            .SingleAsync(CancellationToken) > 0);
+
+    private Task<Guid> FailedIdAsync(string recipient) =>
+        OutsideStoresAsync(dbContext => dbContext.Database
+            .SqlQuery<Guid>($"SELECT id AS \"Value\" FROM messaging.outbox_messages WHERE store_id IS NULL AND status = 'Failed' AND payload LIKE {'%' + recipient + '%'}")
+            .SingleAsync(CancellationToken));
+
+    private Task MakeEverythingDueAsync() =>
+        OutsideStoresAsync(dbContext => dbContext.Database.ExecuteSqlAsync(
+            $"UPDATE messaging.outbox_messages SET due_at = now() WHERE store_id IS NULL AND status = 'Pending'",
+            CancellationToken));
+
+    // Nothing is in scope for a message belonging to no store, which is the point of the case.
+    private async Task<T> OutsideStoresAsync<T>(Func<DbContext, Task<T>> query)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+
+        return await query(scope.ServiceProvider.GetRequiredService<DbContext>());
+    }
 
     private async Task DeliverEverythingAsync()
     {

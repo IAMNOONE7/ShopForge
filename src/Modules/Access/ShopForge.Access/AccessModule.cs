@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Access.Authentication;
 using ShopForge.Access.Domain;
+using ShopForge.Access.Users;
 using ShopForge.Shared.Access;
 using ShopForge.Shared.Platform;
 using ShopForge.Shared.Security;
@@ -24,6 +25,7 @@ public static class AccessModule
         services.AddSingleton<IPasswordHasher<TenantUser>, PasswordHasher<TenantUser>>();
         services.AddScoped<ITenantInitializer, TenantOwners>();
         services.AddScoped<ITenantUsage, TenantUserUsage>();
+        services.AddScoped<InvitationMail>();
 
         services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
             .AddCookie(options =>
@@ -58,8 +60,16 @@ public static class AccessModule
     public static IEndpointRouteBuilder MapAccessAdminEndpoints(this IEndpointRouteBuilder admin)
     {
         admin.MapGroup("/auth").MapAuthEndpoints();
+        admin.MapInvitationEndpoints();
 
         return admin;
+    }
+
+    public static IEndpointRouteBuilder MapAccessTenantAdminEndpoints(this IEndpointRouteBuilder tenantAdmin)
+    {
+        tenantAdmin.MapColleagueEndpoints();
+
+        return tenantAdmin;
     }
 
     private static Task SetStatusCode(HttpResponse response, int statusCode)

@@ -6,6 +6,11 @@ public interface IOutbox
 {
     void Enqueue<TEvent>(TEvent domainEvent)
         where TEvent : IDomainEvent;
+
+    // For work that belongs to a company or to the platform rather than to one of its shops: inviting a colleague
+    // into a company that may not have opened a shop yet, resetting an operator's password (D-111).
+    void EnqueueOutsideStore<TEvent>(TEvent domainEvent)
+        where TEvent : IDomainEvent;
 }
 
 public interface IDomainEvent

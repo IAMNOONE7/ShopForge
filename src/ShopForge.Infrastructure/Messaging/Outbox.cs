@@ -8,11 +8,24 @@ namespace ShopForge.Infrastructure.Messaging;
 
 internal sealed class Outbox(DbContext dbContext, IStoreContext storeContext, TimeProvider clock) : IOutbox
 {
+    // A shop's event still insists on a shop: enqueueing one with nothing in scope would deliver it to nobody, and
+    // failing here is how that mistake gets found.
     public void Enqueue<TEvent>(TEvent domainEvent)
         where TEvent : IDomainEvent =>
-        dbContext.Add(new OutboxMessage(
+        Add(
             storeContext.StoreId ?? throw new InvalidOperationException("Events belong to a store; none is in scope."),
             storeContext.TenantId!.Value,
+            domainEvent);
+
+    public void EnqueueOutsideStore<TEvent>(TEvent domainEvent)
+        where TEvent : IDomainEvent =>
+        Add(null, storeContext.TenantId, domainEvent);
+
+    private void Add<TEvent>(Guid? storeId, Guid? tenantId, TEvent domainEvent)
+        where TEvent : IDomainEvent =>
+        dbContext.Add(new OutboxMessage(
+            storeId,
+            tenantId,
             TEvent.EventType,
             JsonSerializer.Serialize(domainEvent, OutboxJson.Options),
             Activity.Current?.Id,

@@ -33,5 +33,9 @@ internal sealed class TenantUser : ITenantOwned
 
     public void SetPasswordHash(string passwordHash) => PasswordHash = passwordHash;
 
+    public void ChangeRole(TenantRole role) => Role = role;
+
+    public void SetActive(bool isActive) => IsActive = isActive;
+
     public static string NormalizeEmail(string email) => email.Trim().ToLowerInvariant();
 }
