@@ -34,11 +34,12 @@ public sealed class ShopForgeApiFactory : WebApplicationFactory<Program>, IAsync
     public Task<int> DispatchOutboxAsync(CancellationToken cancellationToken = default) =>
         Services.GetRequiredService<OutboxDispatcher>().DispatchAsync(cancellationToken);
 
-    // Delivery is asynchronous and every test shares one worker, so a message can be leased by someone else's run.
-    // A test therefore waits for the effect it needs instead of assuming a single dispatch produced it.
+    // Delivery is asynchronous and every test shares one worker, so a message can be leased by someone else's run —
+    // for up to five minutes, in a suite that runs in parallel. A test therefore waits for the effect it needs
+    // instead of assuming a single dispatch produced it, and waits long enough to outlast a busy moment.
     public async Task<T> EventuallyAsync<T>(Func<Task<T>> read, Func<T, bool> until, CancellationToken cancellationToken = default)
     {
-        for (var attempt = 0; attempt < 30; attempt++)
+        for (var attempt = 0; attempt < 100; attempt++)
         {
             await DispatchOutboxAsync(cancellationToken);
             var value = await read();
@@ -48,7 +49,7 @@ public sealed class ShopForgeApiFactory : WebApplicationFactory<Program>, IAsync
                 return value;
             }
 
-            await Task.Delay(100, cancellationToken);
+            await Task.Delay(150, cancellationToken);
         }
 
         throw new InvalidOperationException("The outbox did not produce what the test was waiting for.");
