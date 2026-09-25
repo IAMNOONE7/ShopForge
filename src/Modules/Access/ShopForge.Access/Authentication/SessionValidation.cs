@@ -10,6 +10,20 @@ using ShopForge.Shared.Stores;
 
 namespace ShopForge.Access.Authentication;
 
+internal static class Sessions
+{
+    public static ClaimsPrincipal PrincipalFor(TenantUser user) =>
+        new(new ClaimsIdentity(
+            [
+                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                new Claim(ClaimTypes.Email, user.Email),
+                new Claim(ClaimTypes.Role, user.Role.ToString()),
+                new Claim(ShopForgeClaimTypes.TenantId, user.TenantId.ToString()),
+                new Claim(ShopForgeClaimTypes.SecurityStamp, user.SecurityStamp.ToString()),
+            ],
+            CookieAuthenticationDefaults.AuthenticationScheme));
+}
+
 internal static class SessionValidation
 {
     // The cookie carries tenant and role for hours; checking them against the database on every admin request makes
@@ -33,12 +47,14 @@ internal static class SessionValidation
         var current = await httpContext.RequestServices.GetRequiredService<DbContext>().Set<TenantUser>()
             .IgnoreQueryFilters()
             .Where(user => user.Id == userId && user.IsActive)
-            .Select(user => new { user.TenantId, user.Role })
+            .Select(user => new { user.TenantId, user.Role, user.SecurityStamp })
             .SingleOrDefaultAsync(httpContext.RequestAborted);
 
+        // A cookie from before a password change or a "sign out everywhere" carries the previous stamp (D-113).
         if (current is null
             || principal.FindFirstValue(ShopForgeClaimTypes.TenantId) != current.TenantId.ToString()
-            || principal.FindFirstValue(ClaimTypes.Role) != current.Role.ToString())
+            || principal.FindFirstValue(ClaimTypes.Role) != current.Role.ToString()
+            || principal.FindFirstValue(ShopForgeClaimTypes.SecurityStamp) != current.SecurityStamp.ToString())
         {
             return false;
         }

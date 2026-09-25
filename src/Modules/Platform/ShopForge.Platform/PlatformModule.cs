@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Platform.Authentication;
 using ShopForge.Platform.Domain;
+using ShopForge.Platform.Users;
 using ShopForge.Shared.Security;
 
 namespace ShopForge.Platform;
@@ -19,6 +20,7 @@ public static class PlatformModule
     public static IServiceCollection AddPlatformModule(this IServiceCollection services, bool requireSecureCookies)
     {
         services.AddSingleton<IPasswordHasher<PlatformUser>, PasswordHasher<PlatformUser>>();
+        services.AddScoped<PlatformMail>();
 
         services.AddAuthentication().AddCookie(PlatformPolicies.Scheme, options =>
         {
@@ -45,8 +47,16 @@ public static class PlatformModule
     public static IEndpointRouteBuilder MapPlatformAuthEndpoints(this IEndpointRouteBuilder platform)
     {
         platform.MapPlatformAuth();
+        platform.MapPlatformOpenEndpoints();
 
         return platform;
+    }
+
+    public static IEndpointRouteBuilder MapPlatformOperatorEndpoints(this IEndpointRouteBuilder platformOperator)
+    {
+        platformOperator.MapOperatorEndpoints();
+
+        return platformOperator;
     }
 
     private static Task SetStatusCode(HttpResponse response, int statusCode)

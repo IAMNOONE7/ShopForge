@@ -72,8 +72,10 @@ public sealed class PlatformTests(ShopForgeApiFactory factory)
         Assert.Equal(4, Usage(withOne, "listings"));
     }
 
+    // The operator never knows the owner's password: taking a company on invites its first owner, who chooses one
+    // when they accept (D-114).
     [Fact]
-    public async Task A_tenant_taken_on_by_the_platform_can_be_used_at_once()
+    public async Task A_tenant_taken_on_by_the_platform_is_reached_by_inviting_its_owner()
     {
         using var operatorClient = await SignInAsync();
         var email = $"owner-{Guid.NewGuid():N}@example.test";
@@ -81,16 +83,24 @@ public sealed class PlatformTests(ShopForgeApiFactory factory)
 
         using var created = await operatorClient.PostAsJsonAsync(
             "/api/platform/tenants",
-            new { Name = "Newcomer Ltd", OwnerEmail = email, OwnerPassword = password },
+            new { Name = "Newcomer Ltd", OwnerEmail = email },
             CancellationToken);
         var tenant = (await created.Content.ReadFromJsonAsync<PlatformTenantView>(CancellationToken))!;
 
+        var token = await factory.EventuallyAsync(
+            () => Task.FromResult(factory.Emails.LatestLinkFor(email)),
+            link => link is not null,
+            CancellationToken);
+
         using var owner = factory.CreateClient();
+        using var accepted = await owner.PostAsJsonAsync(
+            "/api/admin/invitations/accept", new { Token = token, Password = password }, CancellationToken);
         using var signedIn = await owner.PostAsJsonAsync("/api/admin/auth/login", new { Email = email, Password = password }, CancellationToken);
         using var stores = await owner.GetAsync("/api/admin/stores", CancellationToken);
 
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         Assert.Equal(("Newcomer Ltd", "Active"), (tenant.Name, tenant.Status));
+        Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
         Assert.Equal(HttpStatusCode.OK, signedIn.StatusCode);
         Assert.Equal(HttpStatusCode.OK, stores.StatusCode);
         Assert.Empty((await stores.Content.ReadFromJsonAsync<List<AdminStoreRow>>(CancellationToken))!);
@@ -147,20 +157,30 @@ public sealed class PlatformTests(ShopForgeApiFactory factory)
     }
 
     [Fact]
-    public async Task Taking_on_a_tenant_needs_a_name_and_an_owner_who_can_sign_in()
+    public async Task Taking_on_a_tenant_needs_a_name_and_an_owner_who_can_be_reached()
     {
+        var (store, _) = await TestStores.CreateTwoStoresOfOneTenantAsync(factory.Services);
+        var elsewhere = await TestUsers.CreateAsync(factory.Services, store.TenantId);
         using var operatorClient = await SignInAsync();
 
         using var response = await operatorClient.PostAsJsonAsync(
             "/api/platform/tenants",
-            new { Name = " ", OwnerEmail = "not-an-address", OwnerPassword = "short" },
+            new { Name = " ", OwnerEmail = "not-an-address" },
             CancellationToken);
         var problem = await response.Content.ReadAsStringAsync(CancellationToken);
+
+        // An address that already works on ShopForge would be invited to a company nobody could then reach.
+        using var taken = await operatorClient.PostAsJsonAsync(
+            "/api/platform/tenants",
+            new { Name = "Second Job Ltd", OwnerEmail = elsewhere.Email },
+            CancellationToken);
+        var tenants = await operatorClient.GetFromJsonAsync<List<PlatformTenantView>>("/api/platform/tenants", CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Contains("name", problem, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("ownerEmail", problem, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("ownerPassword", problem, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(HttpStatusCode.Conflict, taken.StatusCode);
+        Assert.DoesNotContain(tenants!, candidate => candidate.Name == "Second Job Ltd");
     }
 
     private static int Usage(PlatformTenantView tenant, string name) =>

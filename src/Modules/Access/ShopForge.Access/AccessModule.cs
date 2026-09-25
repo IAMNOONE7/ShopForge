@@ -26,6 +26,7 @@ public static class AccessModule
         services.AddScoped<ITenantInitializer, TenantOwners>();
         services.AddScoped<ITenantUsage, TenantUserUsage>();
         services.AddScoped<InvitationMail>();
+        services.AddScoped<PasswordMail>();
 
         services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
             .AddCookie(options =>
@@ -59,7 +60,9 @@ public static class AccessModule
 
     public static IEndpointRouteBuilder MapAccessAdminEndpoints(this IEndpointRouteBuilder admin)
     {
-        admin.MapGroup("/auth").MapAuthEndpoints();
+        var auth = admin.MapGroup("/auth");
+        auth.MapAuthEndpoints();
+        auth.MapPasswordEndpoints();
         admin.MapInvitationEndpoints();
 
         return admin;
@@ -68,6 +71,7 @@ public static class AccessModule
     public static IEndpointRouteBuilder MapAccessTenantAdminEndpoints(this IEndpointRouteBuilder tenantAdmin)
     {
         tenantAdmin.MapColleagueEndpoints();
+        tenantAdmin.MapMyAccountEndpoints();
 
         return tenantAdmin;
     }

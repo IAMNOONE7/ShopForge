@@ -16,6 +16,7 @@ internal static class PlatformSessions
             [
                 new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
                 new Claim(ClaimTypes.Email, user.Email),
+                new Claim(ShopForgeClaimTypes.SecurityStamp, user.SecurityStamp.ToString()),
             ],
             PlatformPolicies.Scheme));
 
@@ -37,7 +38,12 @@ internal static class PlatformSessions
             return false;
         }
 
-        return await httpContext.RequestServices.GetRequiredService<DbContext>().Set<PlatformUser>()
-            .AnyAsync(user => user.Id == userId && user.IsActive, httpContext.RequestAborted);
+        // A cookie from before a password change or a "sign out everywhere" carries the previous stamp (D-113).
+        var stamp = await httpContext.RequestServices.GetRequiredService<DbContext>().Set<PlatformUser>()
+            .Where(user => user.Id == userId && user.IsActive)
+            .Select(user => (Guid?)user.SecurityStamp)
+            .SingleOrDefaultAsync(httpContext.RequestAborted);
+
+        return stamp is not null && principal.FindFirstValue(ShopForgeClaimTypes.SecurityStamp) == stamp.ToString();
     }
 }

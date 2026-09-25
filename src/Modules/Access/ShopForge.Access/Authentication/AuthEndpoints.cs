@@ -66,15 +66,7 @@ internal static class AuthEndpoints
             await dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        var principal = new ClaimsPrincipal(new ClaimsIdentity(
-            [
-                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new Claim(ClaimTypes.Email, user.Email),
-                new Claim(ClaimTypes.Role, user.Role.ToString()),
-                new Claim(ShopForgeClaimTypes.TenantId, user.TenantId.ToString()),
-            ],
-            CookieAuthenticationDefaults.AuthenticationScheme));
-
+        var principal = Sessions.PrincipalFor(user);
         await httpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
 
         return TypedResults.Ok(CurrentUserResponse.From(principal));

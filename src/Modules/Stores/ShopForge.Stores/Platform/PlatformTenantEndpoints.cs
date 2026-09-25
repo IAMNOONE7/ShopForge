@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -86,6 +87,7 @@ internal static class PlatformTenantEndpoints
 
     private static async Task<Results<Created<PlatformTenantResponse>, ValidationProblem, ProblemHttpResult>> CreateTenantAsync(
         NewTenantRequest request,
+        ClaimsPrincipal caller,
         DbContext dbContext,
         IServiceProvider services,
         IEnumerable<ITenantInitializer> initializers,
@@ -93,25 +95,35 @@ internal static class PlatformTenantEndpoints
     {
         var errors = new RequestErrors()
             .Check(!string.IsNullOrWhiteSpace(request.Name) && request.Name.Trim().Length <= 200, "name", "Name is required (up to 200 characters).")
-            .Check(Emails.IsValid(request.OwnerEmail), "ownerEmail", "A valid e-mail address is required for the owner.")
-            .Check(request.OwnerPassword is { Length: >= 10 and <= 128 }, "ownerPassword", "The owner's password needs at least 10 characters.");
+            .Check(Emails.IsValid(request.OwnerEmail), "ownerEmail", "A valid e-mail address is required for the owner.");
 
         if (errors.Any)
         {
             return errors.ToProblem();
         }
 
+        var owner = new NewTenantOwner(request.OwnerEmail!, caller.FindFirstValue(ClaimTypes.Email)!);
+
+        // Asked before the company exists, so nothing is left behind by an owner who cannot be invited (D-114).
+        foreach (var initializer in initializers)
+        {
+            if (await initializer.FindProblemAsync(owner, cancellationToken) is { } problem)
+            {
+                return TypedResults.Problem(statusCode: StatusCodes.Status409Conflict, title: problem);
+            }
+        }
+
         var tenant = new Tenant(request.Name!);
         dbContext.Add(tenant);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        // The owner is created inside the new tenant's scope: the save guard would refuse it under any other (D-106).
+        // The invitation is written inside the new tenant's scope: the save guard would refuse it under any other (D-106).
         await using var scope = services.CreateAsyncScope();
         scope.ServiceProvider.GetRequiredService<StoreContext>().SetTenant(tenant.Id);
 
         foreach (var initializer in scope.ServiceProvider.GetServices<ITenantInitializer>())
         {
-            await initializer.InitializeAsync(tenant.Id, new NewTenantOwner(request.OwnerEmail!, request.OwnerPassword!), cancellationToken);
+            await initializer.InitializeAsync(tenant.Id, owner, cancellationToken);
         }
 
         return TypedResults.Created(
@@ -172,6 +184,6 @@ internal static class PlatformTenantEndpoints
     }
 }
 
-internal sealed record NewTenantRequest(string? Name, string? OwnerEmail, string? OwnerPassword);
+internal sealed record NewTenantRequest(string? Name, string? OwnerEmail);
 
 internal sealed record PlatformTenantResponse(Guid Id, string Name, string Status, string? PlanCode, List<UsageCount> Usage);

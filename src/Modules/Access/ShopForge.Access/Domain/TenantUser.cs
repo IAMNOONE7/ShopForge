@@ -17,6 +17,7 @@ internal sealed class TenantUser : ITenantOwned
         Email = NormalizeEmail(email);
         Role = role;
         IsActive = true;
+        SecurityStamp = Guid.CreateVersion7();
     }
 
     public Guid Id { get; private set; }
@@ -31,7 +32,12 @@ internal sealed class TenantUser : ITenantOwned
 
     public bool IsActive { get; private set; }
 
+    // Changed whenever every session of theirs should end: a new password, or asking to be signed out everywhere.
+    public Guid SecurityStamp { get; private set; }
+
     public void SetPasswordHash(string passwordHash) => PasswordHash = passwordHash;
+
+    public void EndEverySession() => SecurityStamp = Guid.CreateVersion7();
 
     public void ChangeRole(TenantRole role) => Role = role;
 

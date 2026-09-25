@@ -120,6 +120,7 @@ var platform = app.MapGroup("/api/platform");
 platform.MapPlatformAuthEndpoints();
 var platformOperator = platform.MapGroup(string.Empty).RequireAuthorization(PlatformPolicies.PlatformUser);
 platformOperator.MapStoresPlatformEndpoints();
+platformOperator.MapPlatformOperatorEndpoints();
 platformOperator.MapPlatformOutboxEndpoints();
 
 var admin = app.MapGroup("/api/admin");

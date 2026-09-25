@@ -15,6 +15,7 @@ internal sealed class PlatformUser
         Id = Guid.CreateVersion7();
         Email = NormalizeEmail(email);
         IsActive = true;
+        SecurityStamp = Guid.CreateVersion7();
     }
 
     public Guid Id { get; private set; }
@@ -25,12 +26,19 @@ internal sealed class PlatformUser
 
     public bool IsActive { get; private set; }
 
+    // Changed whenever every session of theirs should end: a new password, or asking to be signed out everywhere.
+    public Guid SecurityStamp { get; private set; }
+
     public void SetPasswordHash(string passwordHash)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(passwordHash);
 
         PasswordHash = passwordHash;
     }
+
+    public void EndEverySession() => SecurityStamp = Guid.CreateVersion7();
+
+    public void SetActive(bool isActive) => IsActive = isActive;
 
     public static string NormalizeEmail(string email) => email.Trim().ToLowerInvariant();
 }

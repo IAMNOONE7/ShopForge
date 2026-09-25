@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using ShopForge.Infrastructure.Persistence;
@@ -12,9 +13,11 @@ using ShopForge.Infrastructure.Persistence;
 namespace ShopForge.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ShopForgeDbContext))]
-    partial class ShopForgeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260925113123_StaffPasswords")]
+    partial class StaffPasswords
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1965,90 +1968,6 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                     b.ToTable("pickup_points", "orders");
                 });
 
-            modelBuilder.Entity("ShopForge.Platform.Domain.PlatformInvitation", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTimeOffset?>("AcceptedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("accepted_at");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("Email")
-                        .IsRequired()
-                        .HasMaxLength(254)
-                        .HasColumnType("character varying(254)")
-                        .HasColumnName("email");
-
-                    b.Property<DateTimeOffset>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("expires_at");
-
-                    b.Property<string>("TokenHash")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("token_hash");
-
-                    b.HasKey("Id")
-                        .HasName("pk_platform_invitations");
-
-                    b.HasIndex("Email")
-                        .HasDatabaseName("ix_platform_invitations_email");
-
-                    b.HasIndex("TokenHash")
-                        .IsUnique()
-                        .HasDatabaseName("ix_platform_invitations_token_hash");
-
-                    b.ToTable("platform_invitations", "platform");
-                });
-
-            modelBuilder.Entity("ShopForge.Platform.Domain.PlatformPasswordReset", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<DateTimeOffset>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("expires_at");
-
-                    b.Property<Guid>("PlatformUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("platform_user_id");
-
-                    b.Property<string>("TokenHash")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("token_hash");
-
-                    b.Property<DateTimeOffset?>("UsedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("used_at");
-
-                    b.HasKey("Id")
-                        .HasName("pk_platform_password_resets");
-
-                    b.HasIndex("PlatformUserId")
-                        .HasDatabaseName("ix_platform_password_resets_platform_user_id");
-
-                    b.HasIndex("TokenHash")
-                        .IsUnique()
-                        .HasDatabaseName("ix_platform_password_resets_token_hash");
-
-                    b.ToTable("platform_password_resets", "platform");
-                });
-
             modelBuilder.Entity("ShopForge.Platform.Domain.PlatformUser", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2070,10 +1989,6 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
                         .HasColumnName("password_hash");
-
-                    b.Property<Guid>("SecurityStamp")
-                        .HasColumnType("uuid")
-                        .HasColumnName("security_stamp");
 
                     b.HasKey("Id")
                         .HasName("pk_platform_users");
