@@ -27,12 +27,17 @@ internal static class AccountEndpoints
 
         account.MapPost("/register", RegisterAsync).RequireRateLimiting(RateLimits.Authentication);
         account.MapPost("/verify", VerifyAsync).RequireRateLimiting(RateLimits.Authentication);
+        account.MapPost("/verification/resend", ResendVerificationAsync).RequireRateLimiting(RateLimits.Authentication);
         account.MapPost("/login", LoginAsync).RequireRateLimiting(RateLimits.Authentication);
         account.MapPost("/logout", Logout);
         account.MapPost("/password/forgot", ForgotPasswordAsync).RequireRateLimiting(RateLimits.Authentication);
         account.MapPost("/password/reset", ResetPasswordAsync).RequireRateLimiting(RateLimits.Authentication);
         account.MapGet("/me", GetProfileAsync).RequireAuthorization(CustomerPolicies.Customer);
         account.MapPut("/me", UpdateProfileAsync).RequireAuthorization(CustomerPolicies.Customer);
+        account.MapPost("/email", ChangeEmailAsync)
+            .RequireAuthorization(CustomerPolicies.Customer)
+            .RequireRateLimiting(RateLimits.Authentication);
+        account.MapPost("/email/confirm", ConfirmEmailAsync).RequireRateLimiting(RateLimits.Authentication);
     }
 
     // The answer never says whether the address is already known (D-052); only the e-mail that follows differs.
@@ -159,6 +164,148 @@ internal static class AccountEndpoints
         await dbContext.SaveChangesAsync(cancellationToken);
         await orders.ClaimAsync(customer.Id, identity.Email, cancellationToken);
 
+        await httpContext.SignInAsync(CustomerPolicies.Scheme, CustomerSessions.PrincipalFor(identity, customer));
+
+        return TypedResults.Ok(CustomerResponse.From(identity, customer));
+    }
+
+    // A link that expired or never arrived is asked for again here, rather than by registering a second time.
+    // As everywhere else, the answer says nothing about which addresses this store knows (D-052).
+    private static async Task<Accepted> ResendVerificationAsync(
+        EmailRequest request,
+        DbContext dbContext,
+        CustomerMail mail,
+        TimeProvider clock,
+        CancellationToken cancellationToken)
+    {
+        var email = CustomerIdentity.NormalizeEmail(request.Email ?? "");
+        var identity = await dbContext.Set<CustomerIdentity>().SingleOrDefaultAsync(candidate => candidate.Email == email, cancellationToken);
+
+        if (identity is not null)
+        {
+            // Only this store's sign-up is resent; a registration waiting at another store of the company is not
+            // this store's business (D-102).
+            var waiting = await dbContext.Set<PendingRegistration>()
+                .AnyAsync(registration => registration.CustomerIdentityId == identity.Id, cancellationToken);
+
+            if (waiting)
+            {
+                await mail.SendVerificationAsync(identity, clock.GetUtcNow(), cancellationToken);
+            }
+            else if (await dbContext.Set<StoreCustomer>().AnyAsync(candidate => candidate.CustomerIdentityId == identity.Id, cancellationToken))
+            {
+                await mail.SendAccountExistsAsync(identity, cancellationToken);
+            }
+        }
+
+        return TypedResults.Accepted((string?)null);
+    }
+
+    // Asking is not changing: the address moves only when the link sent to it is followed (D-115).
+    private static async Task<Results<Accepted, ValidationProblem, ProblemHttpResult, UnauthorizedHttpResult>> ChangeEmailAsync(
+        ChangeEmailRequest request,
+        DbContext dbContext,
+        ICurrentCustomer currentCustomer,
+        IPasswordHasher<StoreCustomer> passwordHasher,
+        CustomerMail mail,
+        TimeProvider clock,
+        CancellationToken cancellationToken)
+    {
+        var errors = new RequestErrors().Check(Emails.IsValid(request.NewEmail), "newEmail", "A valid e-mail address is required.");
+
+        if (errors.Any)
+        {
+            return errors.ToProblem();
+        }
+
+        var account = await currentCustomer.FindAsync(cancellationToken);
+        var customer = account is null
+            ? null
+            : await dbContext.Set<StoreCustomer>().SingleOrDefaultAsync(candidate => candidate.Id == account.StoreCustomerId, cancellationToken);
+
+        if (account is null || customer is null)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        // An open session is not enough to move where the account's mail goes.
+        if (passwordHasher.VerifyHashedPassword(customer, customer.PasswordHash, request.Password ?? "") == PasswordVerificationResult.Failed)
+        {
+            return TypedResults.Problem(statusCode: StatusCodes.Status403Forbidden, title: "That is not your password");
+        }
+
+        var newEmail = CustomerIdentity.NormalizeEmail(request.NewEmail!);
+
+        if (newEmail == account.Email)
+        {
+            return TypedResults.Accepted((string?)null);
+        }
+
+        var taken = await dbContext.Set<CustomerIdentity>().SingleOrDefaultAsync(candidate => candidate.Email == newEmail, cancellationToken);
+
+        // An address with an account at this store is told so at the address itself, exactly as registering with it
+        // would be: the person asking learns nothing either way (D-052).
+        if (taken is not null && await dbContext.Set<StoreCustomer>().AnyAsync(candidate => candidate.CustomerIdentityId == taken.Id, cancellationToken))
+        {
+            await mail.SendAccountExistsAsync(taken, cancellationToken);
+
+            return TypedResults.Accepted((string?)null);
+        }
+
+        await mail.SendEmailChangeAsync(customer, newEmail, clock.GetUtcNow(), cancellationToken);
+
+        return TypedResults.Accepted((string?)null);
+    }
+
+    private static async Task<Results<Ok<CustomerResponse>, ProblemHttpResult>> ConfirmEmailAsync(
+        TokenRequest request,
+        HttpContext httpContext,
+        DbContext dbContext,
+        IStoreContext storeContext,
+        TimeProvider clock,
+        CancellationToken cancellationToken)
+    {
+        var now = clock.GetUtcNow();
+        var hash = string.IsNullOrWhiteSpace(request.Token) ? null : TokenValues.Hash(request.Token);
+
+        // The store filter is what keeps a link from one shop from moving an account at another (D-102).
+        var change = hash is null
+            ? null
+            : await dbContext.Set<EmailChange>().SingleOrDefaultAsync(candidate => candidate.TokenHash == hash, cancellationToken);
+
+        if (change?.IsUsable(now) != true)
+        {
+            return InvalidToken();
+        }
+
+        var customer = await dbContext.Set<StoreCustomer>().SingleOrDefaultAsync(candidate => candidate.Id == change.StoreCustomerId, cancellationToken);
+
+        if (customer is null)
+        {
+            return InvalidToken();
+        }
+
+        var identity = await dbContext.Set<CustomerIdentity>().SingleOrDefaultAsync(candidate => candidate.Email == change.NewEmail, cancellationToken);
+
+        // Somebody may have taken the address here between the asking and the confirming.
+        if (identity is not null && await dbContext.Set<StoreCustomer>().AnyAsync(candidate => candidate.CustomerIdentityId == identity.Id, cancellationToken))
+        {
+            return TypedResults.Problem(statusCode: StatusCodes.Status409Conflict, title: "That address already has an account here");
+        }
+
+        if (identity is null)
+        {
+            identity = new CustomerIdentity(storeContext.TenantId!.Value, change.NewEmail);
+            dbContext.Add(identity);
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        customer.MoveTo(identity.Id);
+        change.Use(now);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        // Sessions carry the identity they were issued for, so every other one is already out; this browser proved
+        // the new address, so it is signed in again with it.
         await httpContext.SignInAsync(CustomerPolicies.Scheme, CustomerSessions.PrincipalFor(identity, customer));
 
         return TypedResults.Ok(CustomerResponse.From(identity, customer));
@@ -357,6 +504,8 @@ internal sealed record TokenRequest(string? Token);
 internal sealed record ResetPasswordRequest(string? Token, string? Password);
 
 internal sealed record ProfileRequest(string? FirstName, string? LastName, string? Phone);
+
+internal sealed record ChangeEmailRequest(string? NewEmail, string? Password);
 
 internal sealed record CustomerResponse(string Email, string FirstName, string LastName, string? Phone)
 {

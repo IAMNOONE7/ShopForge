@@ -17,6 +17,7 @@ internal sealed class CustomerMail(
 {
     private static readonly TimeSpan VerificationLifetime = TimeSpan.FromHours(24);
     private static readonly TimeSpan ResetLifetime = TimeSpan.FromHours(1);
+    private static readonly TimeSpan ChangeLifetime = TimeSpan.FromHours(24);
 
     public Task SendVerificationAsync(CustomerIdentity identity, DateTimeOffset now, CancellationToken cancellationToken) =>
         SendWithTokenAsync(
@@ -39,6 +40,38 @@ internal sealed class CustomerMail(
             (store, link) => ($"Reset your {store} password",
                 $"Use this link within an hour to choose a new password: {link}. If you did not ask for it, you can ignore this e-mail."),
             cancellationToken);
+
+    // The link goes to the address being moved to, because following it is what proves the customer has it.
+    public async Task SendEmailChangeAsync(StoreCustomer customer, string newEmail, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var outstanding = await dbContext.Set<EmailChange>()
+            .Where(change => change.StoreCustomerId == customer.Id && change.UsedAt == null)
+            .ToListAsync(cancellationToken);
+
+        outstanding.ForEach(change => change.Use(now));
+
+        var (value, hash) = TokenValues.Create();
+        dbContext.Add(new EmailChange(
+            storeContext.TenantId!.Value,
+            storeContext.StoreId!.Value,
+            customer.Id,
+            newEmail,
+            hash,
+            now,
+            now + ChangeLifetime));
+
+        var store = (await storeSettings.GetAsync(cancellationToken)).Name;
+
+        await emailSender.SendAsync(
+            new EmailMessage(
+                newEmail,
+                $"Confirm your new e-mail address for {store}",
+                $"Confirm this address to start using it for your {store} account: {Link("account/confirm-email", value)}. "
+                + "Until then nothing changes, and your old address still signs you in."),
+            cancellationToken);
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
 
     public async Task SendAccountExistsAsync(CustomerIdentity identity, CancellationToken cancellationToken)
     {

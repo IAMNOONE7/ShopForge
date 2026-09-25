@@ -64,6 +64,20 @@ internal sealed class CustomerTokenEntityConfiguration : IEntityTypeConfiguratio
     }
 }
 
+internal sealed class EmailChangeEntityConfiguration : IEntityTypeConfiguration<EmailChange>
+{
+    public void Configure(EntityTypeBuilder<EmailChange> builder)
+    {
+        builder.ToTable("email_changes", CustomersModule.Schema);
+
+        builder.Property(change => change.NewEmail).HasMaxLength(Emails.MaxLength);
+        builder.Property(change => change.TokenHash).HasMaxLength(64).IsFixedLength();
+
+        builder.HasOne<StoreCustomer>().WithMany().HasForeignKey(change => change.StoreCustomerId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasIndex(change => change.TokenHash).IsUnique();
+    }
+}
+
 internal sealed class WishlistItemEntityConfiguration : IEntityTypeConfiguration<WishlistItem>
 {
     public void Configure(EntityTypeBuilder<WishlistItem> builder)

@@ -50,6 +50,10 @@ internal sealed class StoreCustomer : IStoreOwned
 
     public void VerifyEmail() => IsEmailVerified = true;
 
+    // Moving to a proved new address means this relationship now belongs to the identity carrying it. Only this
+    // store's relationship moves; the same person's account at another store keeps the address it has (D-115).
+    public void MoveTo(Guid customerIdentityId) => CustomerIdentityId = customerIdentityId;
+
     public void SetDetails(string firstName, string lastName, string? phone)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(firstName);
