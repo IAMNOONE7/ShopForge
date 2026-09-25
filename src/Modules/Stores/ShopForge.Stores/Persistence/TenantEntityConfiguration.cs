@@ -11,5 +11,6 @@ internal sealed class TenantEntityConfiguration : IEntityTypeConfiguration<Tenan
         builder.ToTable("tenants", StoresModule.Schema);
 
         builder.Property(tenant => tenant.Name).HasMaxLength(200);
+        builder.Property(tenant => tenant.Status).HasConversion<string>().HasMaxLength(20);
     }
 }

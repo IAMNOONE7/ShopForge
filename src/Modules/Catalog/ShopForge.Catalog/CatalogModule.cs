@@ -7,6 +7,7 @@ using ShopForge.Catalog.Publishing;
 using ShopForge.Catalog.Reviews;
 using ShopForge.Catalog.Storefront;
 using ShopForge.Shared.Catalog;
+using ShopForge.Shared.Platform;
 using ShopForge.Shared.Stores;
 
 namespace ShopForge.Catalog;
@@ -22,6 +23,7 @@ public static class CatalogModule
         services.AddScoped<IStorePublishCheck, CatalogPublishCheck>();
         services.AddScoped<ISellableProducts, SellableProductLookup>();
         services.AddScoped<ITenantProducts, TenantProductLookup>();
+        services.AddScoped<ITenantUsage, ProductUsage>();
         services.AddScoped<ProductRatings>();
 
         return services;

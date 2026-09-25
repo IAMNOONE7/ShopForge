@@ -27,7 +27,10 @@ internal sealed class StoreResolver(DbContext dbContext, IMemoryCache cache)
         store = await (
                 from domain in dbContext.Set<StoreDomain>().IgnoreQueryFilters()
                 join owner in dbContext.Set<Store>().IgnoreQueryFilters() on domain.StoreId equals owner.Id
-                where domain.HostName == hostName && owner.Status == StoreStatus.Published
+                join tenant in dbContext.Set<Tenant>() on owner.TenantId equals tenant.Id
+                where domain.HostName == hostName
+                    && owner.Status == StoreStatus.Published
+                    && tenant.Status == TenantStatus.Active
                 select new ResolvedStore(owner.Id, owner.TenantId))
             .SingleOrDefaultAsync(cancellationToken);
 
@@ -46,6 +49,19 @@ internal sealed class StoreResolver(DbContext dbContext, IMemoryCache cache)
             .Where(store => store.Id == storeId && store.TenantId == tenantId)
             .Select(store => new ResolvedStore(store.Id, store.TenantId))
             .SingleOrDefaultAsync(cancellationToken);
+
+    // Every host of a company, so suspending or resuming it can drop what the cache still believes.
+    public async Task ForgetTenantAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var hostNames = await (
+                from domain in dbContext.Set<StoreDomain>().IgnoreQueryFilters()
+                join owner in dbContext.Set<Store>().IgnoreQueryFilters() on domain.StoreId equals owner.Id
+                where owner.TenantId == tenantId
+                select domain.HostName)
+            .ToListAsync(cancellationToken);
+
+        Forget(hostNames);
+    }
 
     public void Forget(IEnumerable<string> hostNames)
     {

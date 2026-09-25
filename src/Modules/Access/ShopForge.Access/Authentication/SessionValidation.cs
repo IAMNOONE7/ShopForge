@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Access.Domain;
 using ShopForge.Shared.Security;
+using ShopForge.Shared.Stores;
 
 namespace ShopForge.Access.Authentication;
 
@@ -35,8 +36,15 @@ internal static class SessionValidation
             .Select(user => new { user.TenantId, user.Role })
             .SingleOrDefaultAsync(httpContext.RequestAborted);
 
-        return current is not null
-            && principal.FindFirstValue(ShopForgeClaimTypes.TenantId) == current.TenantId.ToString()
-            && principal.FindFirstValue(ClaimTypes.Role) == current.Role.ToString();
+        if (current is null
+            || principal.FindFirstValue(ShopForgeClaimTypes.TenantId) != current.TenantId.ToString()
+            || principal.FindFirstValue(ClaimTypes.Role) != current.Role.ToString())
+        {
+            return false;
+        }
+
+        // A suspended company's staff are out on their next request, not when their cookie happens to expire (D-104).
+        return await httpContext.RequestServices.GetRequiredService<ITenantDirectory>()
+            .IsActiveAsync(current.TenantId, httpContext.RequestAborted);
     }
 }

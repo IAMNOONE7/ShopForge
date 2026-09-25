@@ -1,7 +1,10 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
+using ShopForge.Customers.Domain;
 using ShopForge.Shared.Customers;
+using ShopForge.Shared.Platform;
 using ShopForge.Shared.Security;
 using ShopForge.Shared.Tenancy;
 
@@ -29,4 +32,14 @@ internal sealed class CurrentCustomer(IHttpContextAccessor httpContextAccessor, 
 
         return storeId == storeContext.StoreId ? new CurrentCustomerAccount(storeCustomerId, email) : null;
     }
+}
+
+internal sealed class CustomerUsage(DbContext dbContext) : ITenantUsage
+{
+    public async Task<IReadOnlyList<UsageCount>> CountAsync(IReadOnlyCollection<Guid> storeIds, CancellationToken cancellationToken) =>
+    [
+        new UsageCount("customers", await dbContext.Set<StoreCustomer>()
+            .IgnoreQueryFilters([TenancyFilters.Store])
+            .CountAsync(customer => storeIds.Contains(customer.StoreId), cancellationToken)),
+    ];
 }

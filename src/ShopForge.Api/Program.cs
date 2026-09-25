@@ -18,6 +18,8 @@ using ShopForge.Infrastructure.Persistence;
 using ShopForge.Inventory;
 using ShopForge.Orders;
 using ShopForge.Orders.Development;
+using ShopForge.Platform;
+using ShopForge.Platform.Development;
 using ShopForge.Shared.Security;
 using ShopForge.Shared.Tenancy;
 using ShopForge.Stores;
@@ -74,6 +76,7 @@ builder.Services.AddInfrastructure(
         CustomersModule.Assembly,
         InventoryModule.Assembly,
         OrdersModule.Assembly,
+        PlatformModule.Assembly,
     ]);
 builder.Services.AddStoresModule();
 // Outside Development the browser always reaches the platform over TLS terminated at the edge (D-075). The setting
@@ -84,6 +87,7 @@ builder.Services.AddCatalogModule();
 builder.Services.AddCustomersModule(requireSecureCookies);
 builder.Services.AddInventoryModule();
 builder.Services.AddOrdersModule();
+builder.Services.AddPlatformModule(requireSecureCookies);
 
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<ShopForgeDbContext>("database", tags: [HealthEndpoints.ReadinessTag])
@@ -111,6 +115,11 @@ storefront.MapOrdersStorefrontEndpoints();
 
 app.MapGroup("/api/payments").MapPaymentWebhookEndpoints();
 
+// Administering ShopForge itself: outside tenancy, behind its own cookie (D-103).
+var platform = app.MapGroup("/api/platform");
+platform.MapPlatformAuthEndpoints();
+platform.MapGroup(string.Empty).RequireAuthorization(PlatformPolicies.PlatformUser).MapStoresPlatformEndpoints();
+
 var admin = app.MapGroup("/api/admin");
 admin.MapAccessAdminEndpoints();
 
@@ -134,6 +143,7 @@ if (app.Environment.IsDevelopment())
     await app.Services.CreateFileStorageContainerAsync();
     var demo = await app.Services.SeedDevelopmentStoresAsync();
     await app.Services.SeedDevelopmentUsersAsync(demo.TenantId);
+    await app.Services.SeedDevelopmentPlatformUsersAsync();
     await app.Services.SeedDevelopmentCatalogAsync(demo.TenantId, demo.WoodenHomeStoreId, demo.VoltElectronicsStoreId);
     await app.Services.SeedDevelopmentMethodsAsync(demo.TenantId, [demo.WoodenHomeStoreId, demo.VoltElectronicsStoreId]);
 }

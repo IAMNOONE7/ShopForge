@@ -15,6 +15,7 @@ using ShopForge.Shared.Customers;
 using ShopForge.Shared.Maintenance;
 using ShopForge.Shared.Messaging;
 using ShopForge.Shared.Payments;
+using ShopForge.Shared.Platform;
 using ShopForge.Shared.Shipping;
 using ShopForge.Shared.Stores;
 
@@ -34,6 +35,7 @@ public static class OrdersModule
         services.AddScoped<IStoreInitializer, DefaultStoreMethods>();
         services.AddScoped<ICustomerOrders, GuestOrderClaim>();
         services.AddScoped<ICustomerPurchases, CustomerPurchases>();
+        services.AddScoped<ITenantUsage, OrderUsage>();
         services.AddScoped<IEventHandler<OrderPlaced>, OrderNotifications>();
         services.AddScoped<IEventHandler<PaymentReceived>, OrderNotifications>();
         services.AddScoped<IEventHandler<PaymentReceived>, InvoiceIssuing>();

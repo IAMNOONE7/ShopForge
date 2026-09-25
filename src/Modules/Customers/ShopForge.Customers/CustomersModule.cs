@@ -10,6 +10,7 @@ using ShopForge.Customers.Domain;
 using ShopForge.Customers.Wishlist;
 using ShopForge.Shared.Customers;
 using ShopForge.Shared.Maintenance;
+using ShopForge.Shared.Platform;
 using ShopForge.Shared.Security;
 
 namespace ShopForge.Customers;
@@ -25,6 +26,7 @@ public static class CustomersModule
         services.AddHttpContextAccessor();
         services.AddSingleton<IPasswordHasher<StoreCustomer>, PasswordHasher<StoreCustomer>>();
         services.AddScoped<ICurrentCustomer, CurrentCustomer>();
+        services.AddScoped<ITenantUsage, CustomerUsage>();
         services.AddScoped<CustomerMail>();
         services.AddScoped<IStoreMaintenance, RegistrationCleanup>();
 

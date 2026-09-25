@@ -10,6 +10,7 @@
     <Project Path="src/Modules/Customers/ShopForge.Customers/ShopForge.Customers.csproj" />
     <Project Path="src/Modules/Inventory/ShopForge.Inventory/ShopForge.Inventory.csproj" />
     <Project Path="src/Modules/Orders/ShopForge.Orders/ShopForge.Orders.csproj" />
+    <Project Path="src/Modules/Platform/ShopForge.Platform/ShopForge.Platform.csproj" />
     <Project Path="src/Modules/Stores/ShopForge.Stores/ShopForge.Stores.csproj" />
   </Folder>
   <Folder Name="/tests/">

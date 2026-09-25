@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Access.Authentication;
 using ShopForge.Access.Domain;
+using ShopForge.Shared.Access;
+using ShopForge.Shared.Platform;
 using ShopForge.Shared.Security;
 
 namespace ShopForge.Access;
@@ -20,6 +22,8 @@ public static class AccessModule
     public static IServiceCollection AddAccessModule(this IServiceCollection services, bool requireSecureCookies)
     {
         services.AddSingleton<IPasswordHasher<TenantUser>, PasswordHasher<TenantUser>>();
+        services.AddScoped<ITenantInitializer, TenantOwners>();
+        services.AddScoped<ITenantUsage, TenantUserUsage>();
 
         services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
             .AddCookie(options =>

@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Access.Domain;
 using ShopForge.Shared.Security;
+using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Access.Authentication;
@@ -29,6 +30,7 @@ internal static class AuthEndpoints
         DbContext dbContext,
         IPasswordHasher<TenantUser> passwordHasher,
         StoreContext storeContext,
+        ITenantDirectory tenants,
         CancellationToken cancellationToken)
     {
         var email = TenantUser.NormalizeEmail(request.Email ?? "");
@@ -45,6 +47,16 @@ internal static class AuthEndpoints
         if (user is null || verification == PasswordVerificationResult.Failed)
         {
             return TypedResults.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Invalid e-mail or password");
+        }
+
+        // A suspended company cannot be administered either, and its staff are told what is wrong rather than
+        // being left to think they mistyped (D-104).
+        if (!await tenants.IsActiveAsync(user.TenantId, cancellationToken))
+        {
+            return TypedResults.Problem(
+                statusCode: StatusCodes.Status403Forbidden,
+                title: "This account is suspended",
+                detail: "Get in touch with ShopForge to have it opened again.");
         }
 
         if (verification == PasswordVerificationResult.SuccessRehashNeeded)

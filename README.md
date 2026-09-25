@@ -16,6 +16,7 @@ A multi-store e-commerce platform. One ASP.NET Core backend and one React storef
 - **Invoices that stand on their own.** Paying an order issues an invoice with the store's legal identity, its own per-store number series and a VAT summary per rate, copied at issue time rather than read back from the order. A refund goes through the provider that took the money, returns the goods to stock and issues a credit note. Both download as PDFs.
 - **Reviews that come from orders.** Only a customer whose paid order contains the product can review it, once, and nothing reaches the shop until the store publishes it. The average and the number of reviews are kept on the listing as they change, so a page of products shows them and can sort by them without counting reviews per row. A signed-in customer also keeps a wishlist, which reads its products from the catalog, so anything that stops being sold drops out of it.
 - **Returns that move money, goods and paperwork together.** A customer sends part of an order back within the store's return window; the store accepts it, and when the parcel arrives the returned lines are refunded with their share of the discount, the stock goes back and a credit note is issued for exactly what came back. The delivery is refunded only when nothing is left with the customer, and a store refunding an order outright is the same operation with everything outstanding in it.
+- **The platform itself has an operator.** A third kind of user, outside any company: it signs in with its own cookie, sees every tenant with what it uses (stores, products, orders, customers), takes a new one on together with its first owner, and suspends one when it has to. Suspension closes that company's shops and its admin within the request, keeps every row, and is undone by resuming it.
 - **Customer accounts, per store.** One authentication identity inside a company, one relationship per store: an account created in one store cannot sign in to another, and each store sees only its own customers and their orders. Registration confirms the address by e-mail, and orders placed as a guest are handed over once that address is proven.
 - **Stock that cannot oversell.** Warehouses hold the tenant's stock, shared by its stores. Checkout reserves with a conditional update, so two shoppers racing for the last item cannot both get it; paying turns the reservation into a stock movement and an unpaid order releases it when it expires.
 - **Bulk import.** Store staff upload an .xlsx file; rows are matched by SKU and update products, listings, categories and attribute values, with a per-row report of what changed and what was rejected.
@@ -51,6 +52,8 @@ In development the API applies database migrations on startup and seeds two demo
 - http://shop-b.localhost:5173 — Volt Electronics
 
 The admin app (http://localhost:5174) signs in with the development account `owner@demo.local` / `ShopForge-demo-1`.
+Administering the platform itself has no UI yet; its API signs in at `/api/platform/auth/login` with
+`platform@demo.local` / `ShopForge-platform-1`.
 
 Telemetry is off unless an OTLP endpoint is configured. Compose brings a collector that prints what it receives:
 
@@ -111,6 +114,7 @@ src/
     Customers                 customer identities, store customers, sign-in, verification, password reset
     Inventory                 warehouses, stock levels, movements, reservations
     Orders                    carts, checkout, orders, payment and shipping methods, payment webhooks
+    Platform                  platform operators: the users who administer ShopForge itself
 tests/
   ShopForge.UnitTests
   ShopForge.IntegrationTests
@@ -122,4 +126,4 @@ frontend/
 
 ## Status
 
-Early development. Multi-store support, the product catalog, attribute-based filtering, bulk import, store provisioning, guest checkout, stock reservations, customer accounts, card payments, shipping, background processing, telemetry, an Azure deployment (written, not yet run), invoicing, discount codes, reviews, wishlists and returns are in place.
+Early development. Multi-store support, the product catalog, attribute-based filtering, bulk import, store provisioning, guest checkout, stock reservations, customer accounts, card payments, shipping, background processing, telemetry, an Azure deployment (written, not yet run), invoicing, discount codes, reviews, wishlists, returns and platform administration are in place.
