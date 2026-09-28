@@ -28,6 +28,13 @@ internal sealed class MailgunEmailDelivery(
             { new StringContent(message.Body), "text" },
         };
 
+        // The store rides along so a bounce arriving hours later can be filed against the right shop (D-123);
+        // an address alone does not say whose customer it is.
+        if (storeContext.StoreId is { } storeId)
+        {
+            content.Add(new StringContent(storeId.ToString()), $"v:{MailgunVariables.Store}");
+        }
+
         // Both parts travel: a client that will not show the HTML falls back to the words.
         if (message.HtmlBody is { Length: > 0 } html)
         {

@@ -57,6 +57,7 @@ public sealed class EmailAttachmentResolutionTests
             new NoStore(),
             new UnusedStoreSettings(),
             [source],
+            new NothingSuppressed(),
             new EmailOptions { SenderName = "ShopForge" },
             NullLogger<EmailRequestedHandler>.Instance);
 
@@ -87,6 +88,11 @@ public sealed class EmailAttachmentResolutionTests
                 ? new EmailAttachment($"{reference.Split(':')[1]}.pdf", "application/pdf", [1, 2, 3])
                 : null);
         }
+    }
+
+    private sealed class NothingSuppressed : IEmailSuppression
+    {
+        public Task<bool> IsSuppressedAsync(string email, CancellationToken cancellationToken) => Task.FromResult(false);
     }
 
     private sealed class NoStore : IStoreContext

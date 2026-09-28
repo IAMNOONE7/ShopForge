@@ -52,6 +52,9 @@ public static class DependencyInjection
         services.AddSingleton<OutboxDispatcher>();
         services.AddHostedService<OutboxWorker>();
         services.AddScoped<OutboxAdmin>();
+        services.AddScoped<EmailSuppression>();
+        services.AddScoped<IEmailSuppression>(provider => provider.GetRequiredService<EmailSuppression>());
+        services.AddScoped<MailgunWebhook>();
         services.AddScoped<IAuditLog, AuditLog>();
         services.AddScoped<AuditReader>();
         services.AddScoped<IMaintenanceOutsideStores, OutboxCleanup>();

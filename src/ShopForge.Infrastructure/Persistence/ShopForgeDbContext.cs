@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
 using ShopForge.Infrastructure.Auditing;
+using ShopForge.Infrastructure.Email;
 using ShopForge.Infrastructure.Messaging;
 using ShopForge.Shared.Tenancy;
 
@@ -72,6 +73,12 @@ public sealed class ShopForgeDbContext(
         modelBuilder.Entity<OutboxMessage>().HasQueryFilter(
             TenancyFilters.Store,
             message => message.StoreId != null && message.StoreId == CurrentStoreId);
+
+        // An address a store may not write to is the store's own business, and a bounce on mail that belonged to
+        // no store belongs to none either (D-123).
+        modelBuilder.Entity<SuppressedAddress>().HasQueryFilter(
+            TenancyFilters.Store,
+            address => address.StoreId != null && address.StoreId == CurrentStoreId);
 
         // The record belongs to a company loosely for the same reason (D-116): the platform's own actions belong to
         // no company, and what it does to one is written from outside that company's scope. A company reads its own.

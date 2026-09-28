@@ -7,6 +7,7 @@ using ShopForge.Access;
 using ShopForge.Access.Development;
 using ShopForge.Api.Auditing;
 using ShopForge.Api.Diagnostics;
+using ShopForge.Api.Email;
 using ShopForge.Api.Errors;
 using ShopForge.Api.Health;
 using ShopForge.Api.Messaging;
@@ -115,6 +116,7 @@ storefront.MapCustomersStorefrontEndpoints();
 storefront.MapOrdersStorefrontEndpoints();
 
 app.MapGroup("/api/payments").MapPaymentWebhookEndpoints();
+app.MapEmailWebhookEndpoints();
 
 // Administering ShopForge itself: outside tenancy, behind its own cookie (D-103).
 var platform = app.MapGroup("/api/platform");
@@ -142,6 +144,7 @@ storeAdmin.MapStoresStoreAdminEndpoints();
 storeAdmin.MapCatalogStoreAdminEndpoints();
 storeAdmin.MapOrdersStoreAdminEndpoints();
 storeAdmin.MapAdminOutboxEndpoints();
+storeAdmin.MapAdminSuppressionEndpoints();
 
 // Outside Development the schema is migrated by the pipeline before a new revision starts (D-074).
 if (app.Environment.IsDevelopment())

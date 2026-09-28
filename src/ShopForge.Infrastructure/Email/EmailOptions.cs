@@ -2,7 +2,7 @@ namespace ShopForge.Infrastructure.Email;
 
 // Which provider carries the mail, and who it comes from. A provider is a class behind `IEmailDelivery` and a
 // name in here; swapping one for another is configuration, not a rewrite (D-120).
-internal sealed class EmailOptions
+public sealed class EmailOptions
 {
     public const string Section = "Email";
 
@@ -22,7 +22,7 @@ internal sealed class EmailOptions
     public MailgunOptions Mailgun { get; init; } = new();
 }
 
-internal sealed class MailgunOptions
+public sealed class MailgunOptions
 {
     public string ApiKey { get; init; } = string.Empty;
 
@@ -31,6 +31,9 @@ internal sealed class MailgunOptions
     // Mailgun keeps European and American accounts on different hosts, and sending to the wrong one fails in a
     // way that reads like a bad key.
     public string BaseUrl { get; init; } = "https://api.eu.mailgun.net";
+
+    // Webhooks are signed with a key of their own, separate from the sending key.
+    public string WebhookSigningKey { get; init; } = string.Empty;
 
     public bool IsConfigured => ApiKey.Length > 0 && Domain.Length > 0;
 }

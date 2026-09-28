@@ -57,11 +57,21 @@ internal sealed class EmailRequestedHandler(
     IStoreContext storeContext,
     ICurrentStoreSettings storeSettings,
     IEnumerable<IEmailAttachments> attachmentSources,
+    IEmailSuppression suppression,
     EmailOptions options,
     ILogger<EmailRequestedHandler> logger) : IEventHandler<EmailRequested>
 {
     public async Task HandleAsync(EmailRequested domainEvent, CancellationToken cancellationToken)
     {
+        // An address that hard-bounced or complained is not written to again. The message is finished rather than
+        // failed: nothing went wrong, we chose not to send it (D-123).
+        if (await suppression.IsSuppressedAsync(domainEvent.To, cancellationToken))
+        {
+            logger.LogInformation("Not writing to {Recipient}: the address is suppressed.", domainEvent.To);
+
+            return;
+        }
+
         var settings = storeContext.StoreId is null ? null : await storeSettings.GetAsync(cancellationToken);
         var senderName = settings?.Name ?? options.SenderName;
 
