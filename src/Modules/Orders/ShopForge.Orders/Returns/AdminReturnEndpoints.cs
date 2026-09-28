@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Orders.Domain;
+using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Messaging;
 using ShopForge.Shared.Security;
 
@@ -85,6 +86,7 @@ internal static class AdminReturnEndpoints
         Guid returnId,
         DbContext dbContext,
         OrderReturns returns,
+        IAuditLog audit,
         CancellationToken cancellationToken)
     {
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
@@ -104,6 +106,7 @@ internal static class AdminReturnEndpoints
                 detail: $"The return is {orderReturn.Status} and the order is {order.Status}.");
         }
 
+        audit.Record("return.received", orderReturn.Number, new { amount = orderReturn.RefundedAmount });
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 

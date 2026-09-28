@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.HttpLogging;
 using Microsoft.AspNetCore.RateLimiting;
 using ShopForge.Access;
 using ShopForge.Access.Development;
+using ShopForge.Api.Auditing;
 using ShopForge.Api.Diagnostics;
 using ShopForge.Api.Errors;
 using ShopForge.Api.Health;
@@ -122,6 +123,7 @@ var platformOperator = platform.MapGroup(string.Empty).RequireAuthorization(Plat
 platformOperator.MapStoresPlatformEndpoints();
 platformOperator.MapPlatformOperatorEndpoints();
 platformOperator.MapPlatformOutboxEndpoints();
+platformOperator.MapPlatformAuditEndpoints();
 
 var admin = app.MapGroup("/api/admin");
 admin.MapAccessAdminEndpoints();
@@ -130,6 +132,7 @@ var tenantAdmin = app.MapGroup("/api/admin")
     .RequireAuthorization(AdminPolicies.TenantUser)
     .RequireAdminTenant();
 tenantAdmin.MapAccessTenantAdminEndpoints();
+tenantAdmin.MapAdminAuditEndpoints();
 tenantAdmin.MapStoresAdminEndpoints();
 tenantAdmin.MapCatalogTenantAdminEndpoints();
 tenantAdmin.MapInventoryTenantAdminEndpoints();

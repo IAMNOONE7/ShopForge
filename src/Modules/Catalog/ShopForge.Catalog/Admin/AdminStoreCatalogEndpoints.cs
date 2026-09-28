@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Catalog.Domain;
+using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Security;
 using ShopForge.Shared.Tenancy;
@@ -89,6 +90,7 @@ internal static class AdminStoreCatalogEndpoints
         Guid storeProductId,
         UpdateStoreProductRequest request,
         DbContext dbContext,
+        IAuditLog audit,
         CancellationToken cancellationToken)
     {
         var storeProduct = await dbContext.Set<StoreProduct>()
@@ -116,7 +118,16 @@ internal static class AdminStoreCatalogEndpoints
             return SlugTaken();
         }
 
+        var wasPriced = storeProduct.Price;
         storeProduct.Update(details);
+
+        // Only the price is worth a line of its own: the rest of an edit is visible in the listing itself, while
+        // what something used to cost is not (D-116).
+        if (storeProduct.Price != wasPriced)
+        {
+            audit.Record("listing.price-changed", storeProduct.Name, new { from = wasPriced, to = storeProduct.Price });
+        }
+
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var product = await dbContext.Set<Product>().AsNoTracking().SingleAsync(product => product.Id == storeProduct.ProductId, cancellationToken);

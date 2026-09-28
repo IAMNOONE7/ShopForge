@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Http;
 using ShopForge.Stores.Domain;
 
@@ -86,6 +87,7 @@ internal static class PlatformPlanEndpoints
         Guid tenantId,
         MoveTenantRequest request,
         DbContext dbContext,
+        IAuditLog audit,
         CancellationToken cancellationToken)
     {
         var tenant = await dbContext.Set<Tenant>().SingleOrDefaultAsync(candidate => candidate.Id == tenantId, cancellationToken);
@@ -97,6 +99,7 @@ internal static class PlatformPlanEndpoints
         }
 
         tenant.MoveTo(plan);
+        audit.RecordForTenant(tenant.Id, "tenant.plan-changed", tenant.Name, new { plan = plan.Code });
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return TypedResults.Ok(PlanResponse.From(plan));

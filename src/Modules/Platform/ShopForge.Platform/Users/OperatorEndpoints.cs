@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Platform.Authentication;
 using ShopForge.Platform.Domain;
+using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Email;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Security;
@@ -59,6 +60,7 @@ internal static class OperatorEndpoints
         ClaimsPrincipal caller,
         DbContext dbContext,
         PlatformMail mail,
+        IAuditLog audit,
         TimeProvider clock,
         CancellationToken cancellationToken)
     {
@@ -77,6 +79,10 @@ internal static class OperatorEndpoints
         }
 
         var invitation = await mail.InviteAsync(email, caller.FindFirstValue(ClaimTypes.Email)!, clock.GetUtcNow(), cancellationToken);
+
+        // Nothing about a company, so it belongs to no company: the platform's own record (D-116).
+        audit.Record("operator.invited", email);
+        await dbContext.SaveChangesAsync(cancellationToken);
 
         return TypedResults.Ok(new OperatorInvitationResponse(invitation.Id, invitation.Email, invitation.ExpiresAt));
     }
@@ -101,21 +107,24 @@ internal static class OperatorEndpoints
         Guid userId,
         ClaimsPrincipal caller,
         DbContext dbContext,
+        IAuditLog audit,
         CancellationToken cancellationToken) =>
-        SetActiveAsync(userId, isActive: false, caller, dbContext, cancellationToken);
+        SetActiveAsync(userId, isActive: false, caller, dbContext, audit, cancellationToken);
 
     private static Task<Results<Ok<OperatorResponse>, NotFound, ProblemHttpResult>> ActivateAsync(
         Guid userId,
         ClaimsPrincipal caller,
         DbContext dbContext,
+        IAuditLog audit,
         CancellationToken cancellationToken) =>
-        SetActiveAsync(userId, isActive: true, caller, dbContext, cancellationToken);
+        SetActiveAsync(userId, isActive: true, caller, dbContext, audit, cancellationToken);
 
     private static async Task<Results<Ok<OperatorResponse>, NotFound, ProblemHttpResult>> SetActiveAsync(
         Guid userId,
         bool isActive,
         ClaimsPrincipal caller,
         DbContext dbContext,
+        IAuditLog audit,
         CancellationToken cancellationToken)
     {
         var user = await dbContext.Set<PlatformUser>().SingleOrDefaultAsync(candidate => candidate.Id == userId, cancellationToken);
@@ -138,6 +147,7 @@ internal static class OperatorEndpoints
             user.EndEverySession();
         }
 
+        audit.Record(isActive ? "operator.activated" : "operator.deactivated", user.Email);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return TypedResults.Ok(new OperatorResponse(user.Id, user.Email, user.IsActive));

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Platform;
 using ShopForge.Shared.Security;
@@ -136,6 +137,7 @@ internal static class StoreProvisioningEndpoints
         DbContext dbContext,
         IStoreContext storeContext,
         StoreResolver resolver,
+        IAuditLog audit,
         CancellationToken cancellationToken)
     {
         var problems = new List<string>();
@@ -156,20 +158,22 @@ internal static class StoreProvisioningEndpoints
                 extensions: new Dictionary<string, object?> { ["problems"] = problems });
         }
 
-        return TypedResults.Ok(await ChangeStatusAsync(dbContext, storeContext, resolver, publish: true, cancellationToken));
+        return TypedResults.Ok(await ChangeStatusAsync(dbContext, storeContext, resolver, audit, publish: true, cancellationToken));
     }
 
     private static async Task<Ok<AdminStoreResponse>> UnpublishAsync(
         DbContext dbContext,
         IStoreContext storeContext,
         StoreResolver resolver,
+        IAuditLog audit,
         CancellationToken cancellationToken) =>
-        TypedResults.Ok(await ChangeStatusAsync(dbContext, storeContext, resolver, publish: false, cancellationToken));
+        TypedResults.Ok(await ChangeStatusAsync(dbContext, storeContext, resolver, audit, publish: false, cancellationToken));
 
     private static async Task<AdminStoreResponse> ChangeStatusAsync(
         DbContext dbContext,
         IStoreContext storeContext,
         StoreResolver resolver,
+        IAuditLog audit,
         bool publish,
         CancellationToken cancellationToken)
     {
@@ -184,6 +188,7 @@ internal static class StoreProvisioningEndpoints
             store.Unpublish();
         }
 
+        audit.Record(publish ? "store.published" : "store.unpublished", store.Name);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         // Host lookups are cached, so a store going live (or offline) has to drop its cached entries.

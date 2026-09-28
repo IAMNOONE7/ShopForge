@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
+using ShopForge.Infrastructure.Auditing;
 using ShopForge.Infrastructure.Messaging;
 using ShopForge.Shared.Tenancy;
 
@@ -19,12 +20,14 @@ public sealed class ShopForgeDbContext(
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
         EnsureChangesStayWithinCurrentStore();
+        EnsureTheRecordIsOnlyAddedTo();
         return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
     public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
         EnsureChangesStayWithinCurrentStore();
+        EnsureTheRecordIsOnlyAddedTo();
         return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
 
@@ -69,6 +72,12 @@ public sealed class ShopForgeDbContext(
         modelBuilder.Entity<OutboxMessage>().HasQueryFilter(
             TenancyFilters.Store,
             message => message.StoreId != null && message.StoreId == CurrentStoreId);
+
+        // The record belongs to a company loosely for the same reason (D-116): the platform's own actions belong to
+        // no company, and what it does to one is written from outside that company's scope. A company reads its own.
+        modelBuilder.Entity<AuditEntry>().HasQueryFilter(
+            TenancyFilters.Tenant,
+            entry => entry.TenantId != null && entry.TenantId == CurrentTenantId);
     }
 
     // Builds entity => entity.<Owner> == this.<CurrentOwner>. EF Core evaluates the context property
@@ -113,6 +122,19 @@ public sealed class ShopForgeDbContext(
                 {
                     throw new TenancyViolationException("The message does not belong to the current tenant.");
                 }
+            }
+        }
+    }
+
+    // What was done cannot be undone in the telling (D-116). Endpoints could simply never write one, but a record
+    // that depends on everybody remembering that is not a record.
+    private void EnsureTheRecordIsOnlyAddedTo()
+    {
+        foreach (var entry in ChangeTracker.Entries<AuditEntry>())
+        {
+            if (entry.State is EntityState.Modified or EntityState.Deleted)
+            {
+                throw new InvalidOperationException("An audit entry is a record of what happened; it is never changed or removed.");
             }
         }
     }

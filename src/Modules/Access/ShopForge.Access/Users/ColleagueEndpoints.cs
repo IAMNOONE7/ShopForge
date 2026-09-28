@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Access.Domain;
+using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Email;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Security;
@@ -58,6 +59,7 @@ internal static class ColleagueEndpoints
         DbContext dbContext,
         IStoreContext storeContext,
         InvitationMail mail,
+        IAuditLog audit,
         TimeProvider clock,
         CancellationToken cancellationToken)
     {
@@ -96,6 +98,9 @@ internal static class ColleagueEndpoints
             clock.GetUtcNow(),
             cancellationToken);
 
+        audit.Record("colleague.invited", email, new { role = role!.Value.ToString() });
+        await dbContext.SaveChangesAsync(cancellationToken);
+
         return TypedResults.Ok(new InvitationResponse(invitation.Id, invitation.Email, invitation.Role.ToString(), invitation.ExpiresAt));
     }
 
@@ -124,6 +129,7 @@ internal static class ColleagueEndpoints
         RoleRequest request,
         ClaimsPrincipal caller,
         DbContext dbContext,
+        IAuditLog audit,
         CancellationToken cancellationToken)
     {
         var role = ParseRole(request.Role);
@@ -151,7 +157,9 @@ internal static class ColleagueEndpoints
             return TypedResults.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Only an owner changes an owner");
         }
 
+        var was = user.Role;
         user.ChangeRole(role!.Value);
+        audit.Record("colleague.role-changed", user.Email, new { from = was.ToString(), to = user.Role.ToString() });
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return TypedResults.Ok(new ColleagueResponse(user.Id, user.Email, user.Role.ToString(), user.IsActive));
@@ -161,21 +169,24 @@ internal static class ColleagueEndpoints
         Guid userId,
         ClaimsPrincipal caller,
         DbContext dbContext,
+        IAuditLog audit,
         CancellationToken cancellationToken) =>
-        SetActiveAsync(userId, isActive: false, caller, dbContext, cancellationToken);
+        SetActiveAsync(userId, isActive: false, caller, dbContext, audit, cancellationToken);
 
     private static Task<Results<Ok<ColleagueResponse>, NotFound, ProblemHttpResult>> ActivateAsync(
         Guid userId,
         ClaimsPrincipal caller,
         DbContext dbContext,
+        IAuditLog audit,
         CancellationToken cancellationToken) =>
-        SetActiveAsync(userId, isActive: true, caller, dbContext, cancellationToken);
+        SetActiveAsync(userId, isActive: true, caller, dbContext, audit, cancellationToken);
 
     private static async Task<Results<Ok<ColleagueResponse>, NotFound, ProblemHttpResult>> SetActiveAsync(
         Guid userId,
         bool isActive,
         ClaimsPrincipal caller,
         DbContext dbContext,
+        IAuditLog audit,
         CancellationToken cancellationToken)
     {
         var user = await FindAsync(dbContext, userId, cancellationToken);
@@ -197,6 +208,7 @@ internal static class ColleagueEndpoints
 
         // People are kept and switched off, never deleted: orders, invoices and shipments name them (D-112).
         user.SetActive(isActive);
+        audit.Record(isActive ? "colleague.activated" : "colleague.deactivated", user.Email);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return TypedResults.Ok(new ColleagueResponse(user.Id, user.Email, user.Role.ToString(), user.IsActive));

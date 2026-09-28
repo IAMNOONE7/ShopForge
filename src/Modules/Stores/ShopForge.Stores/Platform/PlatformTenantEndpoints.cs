@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Shared.Access;
+using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Email;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Platform;
@@ -91,6 +92,7 @@ internal static class PlatformTenantEndpoints
         DbContext dbContext,
         IServiceProvider services,
         IEnumerable<ITenantInitializer> initializers,
+        IAuditLog audit,
         CancellationToken cancellationToken)
     {
         var errors = new RequestErrors()
@@ -115,6 +117,7 @@ internal static class PlatformTenantEndpoints
 
         var tenant = new Tenant(request.Name!);
         dbContext.Add(tenant);
+        audit.RecordForTenant(tenant.Id, "tenant.created", tenant.Name, new { owner = request.OwnerEmail });
         await dbContext.SaveChangesAsync(cancellationToken);
 
         // The invitation is written inside the new tenant's scope: the save guard would refuse it under any other (D-106).
@@ -140,22 +143,26 @@ internal static class PlatformTenantEndpoints
         Guid tenantId,
         DbContext dbContext,
         StoreResolver resolver,
+        IAuditLog audit,
         CancellationToken cancellationToken) =>
-        ChangeAsync(tenantId, tenant => tenant.Suspend(), "The tenant is already suspended", dbContext, resolver, cancellationToken);
+        ChangeAsync(tenantId, tenant => tenant.Suspend(), "The tenant is already suspended", "tenant.suspended", dbContext, resolver, audit, cancellationToken);
 
     private static Task<Results<Ok<PlatformTenantResponse>, NotFound, ProblemHttpResult>> ResumeAsync(
         Guid tenantId,
         DbContext dbContext,
         StoreResolver resolver,
+        IAuditLog audit,
         CancellationToken cancellationToken) =>
-        ChangeAsync(tenantId, tenant => tenant.Resume(), "The tenant is already active", dbContext, resolver, cancellationToken);
+        ChangeAsync(tenantId, tenant => tenant.Resume(), "The tenant is already active", "tenant.resumed", dbContext, resolver, audit, cancellationToken);
 
     private static async Task<Results<Ok<PlatformTenantResponse>, NotFound, ProblemHttpResult>> ChangeAsync(
         Guid tenantId,
         Func<Tenant, bool> change,
         string rejection,
+        string action,
         DbContext dbContext,
         StoreResolver resolver,
+        IAuditLog audit,
         CancellationToken cancellationToken)
     {
         var tenant = await dbContext.Set<Tenant>().SingleOrDefaultAsync(candidate => candidate.Id == tenantId, cancellationToken);
@@ -170,6 +177,7 @@ internal static class PlatformTenantEndpoints
             return TypedResults.Problem(statusCode: StatusCodes.Status409Conflict, title: rejection);
         }
 
+        audit.RecordForTenant(tenant.Id, action, tenant.Name);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         // Host lookups are cached, so a company going dark (or coming back) has to drop its cached entries.

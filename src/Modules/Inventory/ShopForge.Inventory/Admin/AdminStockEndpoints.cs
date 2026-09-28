@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Inventory.Domain;
+using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Catalog;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Inventory;
@@ -45,6 +46,7 @@ internal static class AdminStockEndpoints
         DbContext dbContext,
         IStockLedger stock,
         ITenantProducts products,
+        IAuditLog audit,
         CancellationToken cancellationToken)
     {
         var errors = new RequestErrors().Check(request.Quantity >= 0, "quantity", "Quantity cannot be negative.");
@@ -69,6 +71,8 @@ internal static class AdminStockEndpoints
                 detail: "Cancel or fulfil the open orders for this product first.");
         }
 
+        audit.Record("stock.set", productId.ToString(), new { request.Quantity });
+        await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
         var item = await dbContext.Set<InventoryItem>().AsNoTracking().SingleAsync(candidate => candidate.ProductId == productId, cancellationToken);

@@ -3,6 +3,7 @@ using Azure.Storage.Blobs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using ShopForge.Infrastructure.Auditing;
 using ShopForge.Infrastructure.Diagnostics;
 using ShopForge.Infrastructure.Documents;
 using ShopForge.Infrastructure.Email;
@@ -10,6 +11,7 @@ using ShopForge.Infrastructure.Files;
 using ShopForge.Infrastructure.Messaging;
 using ShopForge.Infrastructure.Payments;
 using ShopForge.Infrastructure.Persistence;
+using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Documents;
 using ShopForge.Shared.Email;
 using ShopForge.Shared.Files;
@@ -50,6 +52,8 @@ public static class DependencyInjection
         services.AddSingleton<OutboxDispatcher>();
         services.AddHostedService<OutboxWorker>();
         services.AddScoped<OutboxAdmin>();
+        services.AddScoped<IAuditLog, AuditLog>();
+        services.AddScoped<AuditReader>();
         services.AddSingleton<StoreMaintenance>();
         services.AddHostedService<MaintenanceWorker>();
 

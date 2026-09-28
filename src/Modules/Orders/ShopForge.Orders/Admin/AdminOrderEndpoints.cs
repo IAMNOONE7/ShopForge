@@ -8,6 +8,7 @@ using ShopForge.Orders.Invoicing;
 using ShopForge.Orders.Returns;
 using ShopForge.Orders.Shipping;
 using ShopForge.Orders.Storefront;
+using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Catalog;
 using ShopForge.Shared.Diagnostics;
 using ShopForge.Shared.Http;
@@ -104,6 +105,7 @@ internal static class AdminOrderEndpoints
         string number,
         DbContext dbContext,
         OrderReturns returns,
+        IAuditLog audit,
         TimeProvider clock,
         CancellationToken cancellationToken)
     {
@@ -145,6 +147,7 @@ internal static class AdminOrderEndpoints
                 detail: $"The order is {order.Status}.");
         }
 
+        audit.Record("order.refunded", order.Number, new { orderReturn.Number, amount = orderReturn.RefundedAmount });
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
