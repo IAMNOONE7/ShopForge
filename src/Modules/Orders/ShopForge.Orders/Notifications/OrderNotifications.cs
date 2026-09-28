@@ -1,4 +1,5 @@
 using System.Globalization;
+using ShopForge.Orders.Invoicing;
 using ShopForge.Shared.Email;
 using ShopForge.Shared.Messaging;
 using ShopForge.Shared.Stores;
@@ -26,8 +27,10 @@ internal sealed class OrderNotifications(IEmailSender email, ICurrentStoreSettin
         await SendAsync(
             domainEvent.Email,
             $"Payment received for order {domainEvent.OrderNumber}",
-            store => $"We received {Amount(domainEvent.GrandTotal, domainEvent.Currency, store)} for order {domainEvent.OrderNumber}. It is now being prepared.",
-            cancellationToken);
+            store => $"We received {Amount(domainEvent.GrandTotal, domainEvent.Currency, store)} for order {domainEvent.OrderNumber}. It is now being prepared."
+                + "\nThe invoice is attached.",
+            cancellationToken,
+            OrderAttachments.InvoiceForOrder + domainEvent.OrderNumber);
 
     public async Task HandleAsync(OrderCancelled domainEvent, CancellationToken cancellationToken) =>
         await SendAsync(
@@ -57,8 +60,10 @@ internal sealed class OrderNotifications(IEmailSender email, ICurrentStoreSettin
         await SendAsync(
             domainEvent.Email,
             $"Refund for order {domainEvent.OrderNumber}",
-            store => $"Your return {domainEvent.ReturnNumber} arrived and {Amount(domainEvent.Amount, domainEvent.Currency, store)} is on its way back to you.",
-            cancellationToken);
+            store => $"Your return {domainEvent.ReturnNumber} arrived and {Amount(domainEvent.Amount, domainEvent.Currency, store)} is on its way back to you."
+                + "\nThe credit note is attached.",
+            cancellationToken,
+            OrderAttachments.CreditNoteForReturn + domainEvent.ReturnNumber);
 
     // Written the way the store's own customers read money, rather than the way the server happens to be set up.
     // A culture that does not know the currency still gets the amount and the code, which beats a wrong symbol.
@@ -72,10 +77,17 @@ internal sealed class OrderNotifications(IEmailSender email, ICurrentStoreSettin
             : $"{total.ToString("N2", culture)} {currency}";
     }
 
-    private async Task SendAsync(string recipient, string subject, Func<StoreSettings, string> body, CancellationToken cancellationToken)
+    private async Task SendAsync(
+        string recipient,
+        string subject,
+        Func<StoreSettings, string> body,
+        CancellationToken cancellationToken,
+        string? attachmentReference = null)
     {
         var store = await storeSettings.GetAsync(cancellationToken);
 
-        await email.SendAsync(new EmailMessage(recipient, $"{store.Name}: {subject}", body(store)), cancellationToken);
+        await email.SendAsync(
+            new EmailMessage(recipient, $"{store.Name}: {subject}", body(store), AttachmentReference: attachmentReference),
+            cancellationToken);
     }
 }

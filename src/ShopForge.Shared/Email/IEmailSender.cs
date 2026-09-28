@@ -11,4 +11,9 @@ public interface IEmailSender
 
 // The text is what is written; the HTML is the same thing in the store's livery, added on the way out (D-121).
 // A client that cannot show the HTML still has something to read.
-public sealed record EmailMessage(string To, string Subject, string Body, string? HtmlBody = null);
+//
+// A document is named rather than carried: the message waits in the outbox, and a PDF has no business sitting in
+// a queue row (D-122). It is fetched when the message is finally sent.
+public sealed record EmailMessage(string To, string Subject, string Body, string? HtmlBody = null, string? AttachmentReference = null);
+
+public sealed record EmailAttachment(string FileName, string ContentType, byte[] Content);

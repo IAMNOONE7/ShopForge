@@ -10,17 +10,21 @@ namespace ShopForge.Infrastructure.Email;
 // what development and tests read.
 internal interface IEmailDelivery
 {
-    Task DeliverAsync(EmailMessage message, CancellationToken cancellationToken);
+    Task DeliverAsync(EmailMessage message, IReadOnlyList<EmailAttachment> attachments, CancellationToken cancellationToken);
 }
 
 internal sealed class LoggingEmailDelivery(ILogger<LoggingEmailDelivery> logger) : IEmailDelivery
 {
-    public Task DeliverAsync(EmailMessage message, CancellationToken cancellationToken)
+    public Task DeliverAsync(EmailMessage message, IReadOnlyList<EmailAttachment> attachments, CancellationToken cancellationToken)
     {
         // A body holds reset links, invitation tokens and whatever else was written to somebody, which is not
         // something to leave lying in an ordinary log (D-119). Development turns Debug on for this one category,
         // because there the log is how a link is read.
-        logger.LogInformation("E-mail to {Recipient}: {Subject}", message.To, message.Subject);
+        logger.LogInformation(
+            "E-mail to {Recipient}: {Subject}{Attached}",
+            message.To,
+            message.Subject,
+            attachments.Count == 0 ? string.Empty : $" (with {string.Join(", ", attachments.Select(attachment => attachment.FileName))})");
         logger.LogDebug("E-mail body for {Recipient}: {Body}", message.To, message.Body);
 
         return Task.CompletedTask;
@@ -33,14 +37,14 @@ internal sealed class OutboxEmailSender(IOutbox outbox) : IEmailSender
 {
     public Task SendAsync(EmailMessage message, CancellationToken cancellationToken)
     {
-        outbox.Enqueue(new EmailRequested(message.To, message.Subject, message.Body));
+        outbox.Enqueue(new EmailRequested(message.To, message.Subject, message.Body, message.AttachmentReference));
 
         return Task.CompletedTask;
     }
 
     public Task SendOutsideStoreAsync(EmailMessage message, CancellationToken cancellationToken)
     {
-        outbox.EnqueueOutsideStore(new EmailRequested(message.To, message.Subject, message.Body));
+        outbox.EnqueueOutsideStore(new EmailRequested(message.To, message.Subject, message.Body, message.AttachmentReference));
 
         return Task.CompletedTask;
     }
@@ -52,7 +56,9 @@ internal sealed class EmailRequestedHandler(
     IEmailDelivery delivery,
     IStoreContext storeContext,
     ICurrentStoreSettings storeSettings,
-    EmailOptions options) : IEventHandler<EmailRequested>
+    IEnumerable<IEmailAttachments> attachmentSources,
+    EmailOptions options,
+    ILogger<EmailRequestedHandler> logger) : IEventHandler<EmailRequested>
 {
     public async Task HandleAsync(EmailRequested domainEvent, CancellationToken cancellationToken)
     {
@@ -65,7 +71,30 @@ internal sealed class EmailRequestedHandler(
                 domainEvent.Subject,
                 domainEvent.Body,
                 EmailLayout.Render(Title(domainEvent.Subject, senderName), domainEvent.Body, senderName, settings?.Branding)),
+            await AttachmentsAsync(domainEvent.AttachmentReference, cancellationToken),
             cancellationToken);
+    }
+
+    // The document is fetched now rather than carried through the queue (D-122). One that cannot be found does not
+    // hold up the message: the words are what the customer is waiting for.
+    private async Task<IReadOnlyList<EmailAttachment>> AttachmentsAsync(string? reference, CancellationToken cancellationToken)
+    {
+        if (reference is not { Length: > 0 })
+        {
+            return [];
+        }
+
+        foreach (var source in attachmentSources)
+        {
+            if (await source.FindAsync(reference, cancellationToken) is { } attachment)
+            {
+                return [attachment];
+            }
+        }
+
+        logger.LogWarning("Nothing answered for attachment {Reference}; the message goes without it.", reference);
+
+        return [];
     }
 
     // Subjects are already written as "Store: what happened", and repeating the store's name under its own logo

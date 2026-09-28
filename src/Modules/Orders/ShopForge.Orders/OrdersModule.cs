@@ -13,6 +13,7 @@ using ShopForge.Orders.Returns;
 using ShopForge.Orders.Shipping;
 using ShopForge.Orders.Storefront;
 using ShopForge.Shared.Customers;
+using ShopForge.Shared.Email;
 using ShopForge.Shared.Maintenance;
 using ShopForge.Shared.Messaging;
 using ShopForge.Shared.Payments;
@@ -39,6 +40,7 @@ public static class OrdersModule
         services.AddScoped<ICustomerPurchases, CustomerPurchases>();
         services.AddScoped<ITenantUsage, OrderUsage>();
         services.AddScoped<ICustomerData, CustomerOrderData>();
+        services.AddScoped<IEmailAttachments, OrderAttachments>();
         services.AddScoped<IEventHandler<OrderPlaced>, OrderNotifications>();
         services.AddScoped<IEventHandler<PaymentReceived>, OrderNotifications>();
         services.AddScoped<IEventHandler<PaymentReceived>, InvoiceIssuing>();

@@ -95,17 +95,28 @@ public sealed class ShopForgeApiFactory : WebApplicationFactory<Program>, IAsync
 // Messages normally go to the log (D-053); tests read them here to follow the links a customer would click.
 public sealed class RecordedEmails
 {
-    private readonly ConcurrentQueue<EmailMessage> _messages = new();
+    private readonly ConcurrentQueue<DeliveredEmail> _messages = new();
 
-    public void Add(EmailMessage message) => _messages.Enqueue(message);
+    public void Add(EmailMessage message, IReadOnlyList<EmailAttachment> attachments) =>
+        _messages.Enqueue(new DeliveredEmail(message, attachments));
 
-    public IReadOnlyList<EmailMessage> For(string recipient) => [.. _messages.Where(message => message.To == recipient)];
+    public IReadOnlyList<EmailMessage> For(string recipient) =>
+        [.. _messages.Where(delivered => delivered.Message.To == recipient).Select(delivered => delivered.Message)];
+
+    public IReadOnlyList<EmailAttachment> AttachmentsFor(string recipient, string subjectContains) =>
+        _messages
+            .Where(delivered => delivered.Message.To == recipient
+                && delivered.Message.Subject.Contains(subjectContains, StringComparison.Ordinal))
+            .SelectMany(delivered => delivered.Attachments)
+            .ToList();
 
     // The newest message that actually carries a link, not the newest message. Plenty of what a shop sends has no
     // link in it — an order confirmation, "you already have an account" — and reading only the last one made a
     // test wait for a link that had already arrived.
     public string? LatestLinkFor(string recipient) =>
         For(recipient).Select(TokenIn).OfType<string>().LastOrDefault();
+
+    private sealed record DeliveredEmail(EmailMessage Message, IReadOnlyList<EmailAttachment> Attachments);
 
     private static string? TokenIn(EmailMessage message) =>
         message.Body.Split("token=").ElementAtOrDefault(1)?.Split(' ')[0].TrimEnd('.');
@@ -120,14 +131,14 @@ internal sealed class RecordingEmailDelivery(RecordedEmails recorded) : IEmailDe
 
     public void StopFailingFor(string recipient) => _failing.TryRemove(recipient, out _);
 
-    public Task DeliverAsync(EmailMessage message, CancellationToken cancellationToken)
+    public Task DeliverAsync(EmailMessage message, IReadOnlyList<EmailAttachment> attachments, CancellationToken cancellationToken)
     {
         if (_failing.ContainsKey(message.To))
         {
             return Task.FromException(new InvalidOperationException("The mail server is not answering."));
         }
 
-        recorded.Add(message);
+        recorded.Add(message, attachments);
 
         return Task.CompletedTask;
     }

@@ -16,6 +16,7 @@ public sealed class LoggingEmailDeliveryTests
 
         await delivery.DeliverAsync(
             new EmailMessage("someone@example.test", "Reset your password", "Use this link: https://shop.test/reset?token=SECRET-VALUE"),
+            [],
             TestContext.Current.CancellationToken);
 
         var information = recorded.Lines.Where(line => line.Level == LogLevel.Information).Select(line => line.Message).ToList();

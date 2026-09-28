@@ -18,7 +18,7 @@ public sealed class MailgunEmailDeliveryTests
         var calls = new RecordingHandler(HttpStatusCode.OK);
         var delivery = DeliveryFor(calls, storeId: Guid.CreateVersion7(), storeName: "Wooden Home");
 
-        await delivery.DeliverAsync(new EmailMessage("buyer@example.test", "Your order", "Thank you."), CancellationToken);
+        await delivery.DeliverAsync(new EmailMessage("buyer@example.test", "Your order", "Thank you."), [], CancellationToken);
 
         Assert.Equal("https://api.eu.mailgun.net/v3/mg.shopforge.test/messages", calls.Url);
         Assert.Equal("Basic YXBpOmtleS0xMjM=", calls.Authorization);
@@ -35,7 +35,7 @@ public sealed class MailgunEmailDeliveryTests
         var calls = new RecordingHandler(HttpStatusCode.OK);
         var delivery = DeliveryFor(calls, storeId: null, storeName: "Never asked for");
 
-        await delivery.DeliverAsync(new EmailMessage("colleague@example.test", "You are invited", "Join."), CancellationToken);
+        await delivery.DeliverAsync(new EmailMessage("colleague@example.test", "You are invited", "Join."), [], CancellationToken);
 
         Assert.Equal("\"ShopForge\" <no-reply@mg.shopforge.test>", calls.Form["from"]);
     }
@@ -48,7 +48,7 @@ public sealed class MailgunEmailDeliveryTests
         var delivery = DeliveryFor(calls, storeId: null, storeName: "Wooden Home");
 
         var problem = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => delivery.DeliverAsync(new EmailMessage("buyer@example.test", "Your order", "Thank you."), CancellationToken));
+            () => delivery.DeliverAsync(new EmailMessage("buyer@example.test", "Your order", "Thank you."), [], CancellationToken));
 
         Assert.Contains("500", problem.Message, StringComparison.Ordinal);
         Assert.Contains("unwell", problem.Message, StringComparison.Ordinal);
@@ -60,9 +60,24 @@ public sealed class MailgunEmailDeliveryTests
         var calls = new RecordingHandler(HttpStatusCode.OK);
         var delivery = DeliveryFor(calls, storeId: Guid.CreateVersion7(), storeName: "The \"Best\" Shop <evil@example.test>");
 
-        await delivery.DeliverAsync(new EmailMessage("buyer@example.test", "Hello", "Hello."), CancellationToken);
+        await delivery.DeliverAsync(new EmailMessage("buyer@example.test", "Hello", "Hello."), [], CancellationToken);
 
         Assert.Equal("\"The Best Shop <evil@example.test>\" <no-reply@mg.shopforge.test>", calls.Form["from"]);
+    }
+
+    [Fact]
+    public async Task A_document_travels_as_a_file_beside_the_message()
+    {
+        var calls = new RecordingHandler(HttpStatusCode.OK);
+        var delivery = DeliveryFor(calls, storeId: Guid.CreateVersion7(), storeName: "Wooden Home");
+
+        await delivery.DeliverAsync(
+            new EmailMessage("buyer@example.test", "Payment received", "Thank you."),
+            [new EmailAttachment("INV-2026-00010.pdf", "application/pdf", [1, 2, 3, 4, 5])],
+            CancellationToken);
+
+        Assert.Equal("Thank you.", calls.Form["text"]);
+        Assert.Equal("INV-2026-00010.pdf:application/pdf:5", calls.Files.Single());
     }
 
     private static MailgunEmailDelivery DeliveryFor(RecordingHandler handler, Guid? storeId, string storeName)
@@ -93,15 +108,26 @@ public sealed class MailgunEmailDeliveryTests
 
         public Dictionary<string, string> Form { get; } = [];
 
+        public List<string> Files { get; } = [];
+
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Url = request.RequestUri?.ToString();
             Authorization = request.Headers.Authorization?.ToString();
 
-            foreach (var pair in (await request.Content!.ReadAsStringAsync(cancellationToken)).Split('&'))
+            foreach (var part in (MultipartFormDataContent)request.Content!)
             {
-                var parts = pair.Split('=', 2);
-                Form[Uri.UnescapeDataString(parts[0])] = Uri.UnescapeDataString(parts[1].Replace('+', ' '));
+                var disposition = part.Headers.ContentDisposition!;
+                var name = disposition.Name!.Trim('"');
+
+                if (disposition.FileName is { } fileName)
+                {
+                    Files.Add($"{fileName.Trim('"')}:{part.Headers.ContentType}:{(await part.ReadAsByteArrayAsync(cancellationToken)).Length}");
+                }
+                else
+                {
+                    Form[name] = await part.ReadAsStringAsync(cancellationToken);
+                }
             }
 
             return new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8) };

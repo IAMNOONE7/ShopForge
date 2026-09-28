@@ -30,7 +30,7 @@ public sealed record ReturnRefunded(string OrderNumber, string Email, string Ret
     public static string EventType => "return.refunded";
 }
 
-public sealed record EmailRequested(string To, string Subject, string Body) : IDomainEvent
+public sealed record EmailRequested(string To, string Subject, string Body, string? AttachmentReference = null) : IDomainEvent
 {
     public static string EventType => "email.requested";
 }

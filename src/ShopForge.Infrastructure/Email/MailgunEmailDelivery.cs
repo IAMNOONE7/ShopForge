@@ -17,23 +17,29 @@ internal sealed class MailgunEmailDelivery(
     ICurrentStoreSettings storeSettings,
     ILogger<MailgunEmailDelivery> logger) : IEmailDelivery
 {
-    public async Task DeliverAsync(EmailMessage message, CancellationToken cancellationToken)
+    public async Task DeliverAsync(EmailMessage message, IReadOnlyList<EmailAttachment> attachments, CancellationToken cancellationToken)
     {
-        var fields = new Dictionary<string, string>
+        // Multipart either way: a form that sometimes changes shape is a form with two ways to be wrong.
+        using var content = new MultipartFormDataContent
         {
-            ["from"] = await FromAsync(cancellationToken),
-            ["to"] = message.To,
-            ["subject"] = message.Subject,
-            ["text"] = message.Body,
+            { new StringContent(await FromAsync(cancellationToken)), "from" },
+            { new StringContent(message.To), "to" },
+            { new StringContent(message.Subject), "subject" },
+            { new StringContent(message.Body), "text" },
         };
 
         // Both parts travel: a client that will not show the HTML falls back to the words.
         if (message.HtmlBody is { Length: > 0 } html)
         {
-            fields["html"] = html;
+            content.Add(new StringContent(html), "html");
         }
 
-        using var content = new FormUrlEncodedContent(fields);
+        foreach (var attachment in attachments)
+        {
+            var file = new ByteArrayContent(attachment.Content);
+            file.Headers.ContentType = new MediaTypeHeaderValue(attachment.ContentType);
+            content.Add(file, "attachment", attachment.FileName);
+        }
 
         using var response = await httpClient.PostAsync($"v3/{options.Mailgun.Domain}/messages", content, cancellationToken);
 
