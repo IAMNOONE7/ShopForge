@@ -15,6 +15,7 @@ using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Documents;
 using ShopForge.Shared.Email;
 using ShopForge.Shared.Files;
+using ShopForge.Shared.Maintenance;
 using ShopForge.Shared.Messaging;
 using ShopForge.Shared.Payments;
 
@@ -54,6 +55,8 @@ public static class DependencyInjection
         services.AddScoped<OutboxAdmin>();
         services.AddScoped<IAuditLog, AuditLog>();
         services.AddScoped<AuditReader>();
+        services.AddScoped<IMaintenanceOutsideStores, OutboxCleanup>();
+        services.AddScoped<IMaintenanceOutsideStores, AuditCleanup>();
         services.AddSingleton<StoreMaintenance>();
         services.AddHostedService<MaintenanceWorker>();
 

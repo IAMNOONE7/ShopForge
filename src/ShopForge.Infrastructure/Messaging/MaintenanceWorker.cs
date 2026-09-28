@@ -20,6 +20,30 @@ internal sealed class StoreMaintenance(IServiceProvider services, ILogger<StoreM
             removed += await RunForStoreAsync(store, cancellationToken);
         }
 
+        removed += await RunOutsideStoresAsync(cancellationToken);
+        logger.LogInformation("Maintenance removed {Count} rows in total.", removed);
+
+        return removed;
+    }
+
+    // Rows no store owns are swept once, with nothing in scope, rather than once per store (D-118).
+    private async Task<int> RunOutsideStoresAsync(CancellationToken cancellationToken)
+    {
+        await using var scope = services.CreateAsyncScope();
+        var removed = 0;
+
+        foreach (var maintenance in scope.ServiceProvider.GetServices<IMaintenanceOutsideStores>())
+        {
+            var count = await maintenance.RunAsync(cancellationToken);
+
+            if (count > 0)
+            {
+                logger.LogInformation("{Maintenance} removed {Count} rows outside any store.", maintenance.Name, count);
+            }
+
+            removed += count;
+        }
+
         return removed;
     }
 

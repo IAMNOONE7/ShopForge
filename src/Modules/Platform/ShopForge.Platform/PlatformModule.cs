@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Platform.Authentication;
 using ShopForge.Platform.Domain;
 using ShopForge.Platform.Users;
+using ShopForge.Shared.Maintenance;
 using ShopForge.Shared.Security;
 
 namespace ShopForge.Platform;
@@ -21,6 +22,7 @@ public static class PlatformModule
     {
         services.AddSingleton<IPasswordHasher<PlatformUser>, PasswordHasher<PlatformUser>>();
         services.AddScoped<PlatformMail>();
+        services.AddScoped<IMaintenanceOutsideStores, PlatformCleanup>();
 
         services.AddAuthentication().AddCookie(PlatformPolicies.Scheme, options =>
         {

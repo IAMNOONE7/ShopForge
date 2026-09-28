@@ -9,6 +9,7 @@ using ShopForge.Access.Authentication;
 using ShopForge.Access.Domain;
 using ShopForge.Access.Users;
 using ShopForge.Shared.Access;
+using ShopForge.Shared.Maintenance;
 using ShopForge.Shared.Platform;
 using ShopForge.Shared.Security;
 
@@ -27,6 +28,7 @@ public static class AccessModule
         services.AddScoped<ITenantUsage, TenantUserUsage>();
         services.AddScoped<InvitationMail>();
         services.AddScoped<PasswordMail>();
+        services.AddScoped<IMaintenanceOutsideStores, AccessCleanup>();
 
         services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
             .AddCookie(options =>
