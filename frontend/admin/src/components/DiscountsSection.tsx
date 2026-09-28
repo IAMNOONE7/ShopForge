@@ -1,18 +1,46 @@
-import { api, type Discount } from '../api'
-import { useAction } from '../useAction'
-import { useRequest } from '../useRequest'
-
-export function DiscountsSection({ storeId, money }: { storeId: string; money: Intl.NumberFormat }) {
-  const [discounts, reload] = useRequest(`discounts:${storeId}`, () => api.discounts(storeId))
-  const [error, run] = useAction(reload)
-  const codes: Discount[] = discounts.status === 'ready' ? discounts.data : []
-
+import { useTranslation } from "react-i18next";
+import { api, type Discount } from "../api";
+import { useAction } from "../useAction";
+import { useRequest } from "../useRequest";
+import { RequestError } from "./ui/RequestError";
+export function DiscountsSection({
+  storeId,
+  money,
+}: {
+  storeId: string;
+  money: Intl.NumberFormat;
+}) {
+  const { t } = useTranslation(["discounts", "common", "errors"]);
+  const [discounts, reload] = useRequest(`discounts:${storeId}`, (signal) =>
+    api.discounts(storeId, signal),
+  );
+  const [error, run] = useAction(reload);
+  const codes: Discount[] = discounts.status === "ready" ? discounts.data : [];
+  const kindLabel = (discount: Discount) =>
+    discount.kind === "Percentage"
+      ? t("discounts:percentageLabel", { value: discount.value })
+      : discount.kind === "Amount"
+        ? t("discounts:amountLabel", { value: discount.value })
+        : t("discounts:kinds.FreeShipping");
   return (
     <section>
-      <h2>Discount codes</h2>
-      <p className="hint">A code is taken off the products in the cart, so every VAT rate keeps its share of it.</p>
-      {error && <p className="error">{error}</p>}
-
+      <h2>{t("discounts:title")}</h2>
+      <p className="hint">{t("discounts:hint")}</p>
+      {discounts.status === "error" && (
+        <RequestError
+          error={discounts.error}
+          operation="read"
+          onRetry={reload}
+        />
+      )}
+      {discounts.status === "ready" && discounts.refreshError !== null && (
+        <RequestError
+          error={discounts.refreshError}
+          operation="read"
+          onRetry={reload}
+        />
+      )}
+      {error !== null && <RequestError error={error} operation="write" />}
       {codes.map((discount) => (
         <form
           key={discount.code}
@@ -21,109 +49,173 @@ export function DiscountsSection({ storeId, money }: { storeId: string; money: I
             run(async () => {
               await api.updateDiscount(storeId, discount.code, {
                 code: discount.code,
-                name: String(form.get('name')),
+                name: String(form.get("name")),
                 kind: discount.kind,
-                value: Number(form.get('value')),
-                minimumOrderAmount: optionalNumber(form.get('minimumOrderAmount')),
+                value: Number(form.get("value")),
+                minimumOrderAmount: optionalNumber(
+                  form.get("minimumOrderAmount"),
+                ),
                 startsAt: null,
-                endsAt: optionalDate(form.get('endsAt')),
-                maxRedemptions: optionalNumber(form.get('maxRedemptions')),
-                maxRedemptionsPerCustomer: optionalNumber(form.get('maxRedemptionsPerCustomer')),
-                isActive: form.get('isActive') === 'on',
-              })
-              reload()
+                endsAt: optionalDate(form.get("endsAt")),
+                maxRedemptions: optionalNumber(form.get("maxRedemptions")),
+                maxRedemptionsPerCustomer: optionalNumber(
+                  form.get("maxRedemptionsPerCustomer"),
+                ),
+                isActive: form.get("isActive") === "on",
+              });
+              reload();
             })
           }
         >
           <strong className="chip">{discount.code}</strong>
           <input name="name" defaultValue={discount.name} required />
-          <span className="chip">{label(discount)}</span>
-          {discount.kind !== 'FreeShipping' && (
+          <span className="chip">{kindLabel(discount)}</span>
+          {discount.kind !== "FreeShipping" && (
             <label>
-              Value <input name="value" type="number" min="0" step="0.01" defaultValue={discount.value} required />
+              {t("discounts:value")}{" "}
+              <input
+                name="value"
+                type="number"
+                min="0"
+                step="0.01"
+                defaultValue={discount.value}
+                required
+              />
             </label>
           )}
           <label>
-            Minimum <input name="minimumOrderAmount" type="number" min="0" step="0.01" defaultValue={discount.minimumOrderAmount ?? ''} />
+            {t("discounts:minimum")}{" "}
+            <input
+              name="minimumOrderAmount"
+              type="number"
+              min="0"
+              step="0.01"
+              defaultValue={discount.minimumOrderAmount ?? ""}
+            />
           </label>
           <label>
-            Ends <input name="endsAt" type="date" defaultValue={discount.endsAt?.slice(0, 10) ?? ''} />
+            {t("discounts:ends")}{" "}
+            <input
+              name="endsAt"
+              type="date"
+              defaultValue={discount.endsAt?.slice(0, 10) ?? ""}
+            />
           </label>
           <label>
-            Uses <input name="maxRedemptions" type="number" min="1" defaultValue={discount.maxRedemptions ?? ''} />
+            {t("discounts:uses")}{" "}
+            <input
+              name="maxRedemptions"
+              type="number"
+              min="1"
+              defaultValue={discount.maxRedemptions ?? ""}
+            />
           </label>
           <label>
-            Per customer <input name="maxRedemptionsPerCustomer" type="number" min="1" defaultValue={discount.maxRedemptionsPerCustomer ?? ''} />
+            {t("discounts:perCustomer")}{" "}
+            <input
+              name="maxRedemptionsPerCustomer"
+              type="number"
+              min="1"
+              defaultValue={discount.maxRedemptionsPerCustomer ?? ""}
+            />
           </label>
           <span className="hint">
-            used {discount.redemptions}
-            {discount.maxRedemptions === null ? '' : ` of ${discount.maxRedemptions}`}
+            {discount.maxRedemptions === null
+              ? t("discounts:used", { count: discount.redemptions })
+              : t("discounts:usedOf", {
+                  count: discount.redemptions,
+                  maximum: discount.maxRedemptions,
+                })}
           </span>
           <label>
-            <input name="isActive" type="checkbox" defaultChecked={discount.isActive} /> Usable
+            <input
+              name="isActive"
+              type="checkbox"
+              defaultChecked={discount.isActive}
+            />{" "}
+            {t("discounts:usable")}
           </label>
-          <button type="submit">Save</button>
+          <button type="submit">{t("common:save")}</button>
         </form>
       ))}
-
       <form
         className="inline-form"
         action={(form) =>
           run(async () => {
             await api.createDiscount(storeId, {
-              code: String(form.get('code')),
-              name: String(form.get('name')),
-              kind: String(form.get('kind')),
-              value: Number(form.get('value')),
-              minimumOrderAmount: optionalNumber(form.get('minimumOrderAmount')),
+              code: String(form.get("code")),
+              name: String(form.get("name")),
+              kind: String(form.get("kind")),
+              value: Number(form.get("value")),
+              minimumOrderAmount: optionalNumber(
+                form.get("minimumOrderAmount"),
+              ),
               startsAt: null,
-              endsAt: optionalDate(form.get('endsAt')),
-              maxRedemptions: optionalNumber(form.get('maxRedemptions')),
-              maxRedemptionsPerCustomer: optionalNumber(form.get('maxRedemptionsPerCustomer')),
+              endsAt: optionalDate(form.get("endsAt")),
+              maxRedemptions: optionalNumber(form.get("maxRedemptions")),
+              maxRedemptionsPerCustomer: optionalNumber(
+                form.get("maxRedemptionsPerCustomer"),
+              ),
               isActive: true,
-            })
-            reload()
+            });
+            reload();
           })
         }
       >
         <input name="code" placeholder="NEWCODE" maxLength={40} required />
-        <input name="name" placeholder="What it is called" required />
+        <input
+          name="name"
+          placeholder={t("discounts:namePlaceholder")}
+          required
+        />
         <select name="kind" defaultValue="Percentage">
-          <option value="Percentage">Percentage off</option>
-          <option value="Amount">Amount off</option>
-          <option value="FreeShipping">Free shipping</option>
+          <option value="Percentage">{t("discounts:kinds.Percentage")}</option>
+          <option value="Amount">{t("discounts:kinds.Amount")}</option>
+          <option value="FreeShipping">
+            {t("discounts:kinds.FreeShipping")}
+          </option>
         </select>
-        <input name="value" type="number" min="0" step="0.01" placeholder="Value" defaultValue="10" />
-        <input name="minimumOrderAmount" type="number" min="0" step="0.01" placeholder="Minimum order" />
+        <input
+          name="value"
+          type="number"
+          min="0"
+          step="0.01"
+          placeholder={t("discounts:valuePlaceholder")}
+          defaultValue="10"
+        />
+        <input
+          name="minimumOrderAmount"
+          type="number"
+          min="0"
+          step="0.01"
+          placeholder={t("discounts:minimumOrder")}
+        />
         <input name="endsAt" type="date" />
-        <input name="maxRedemptions" type="number" min="1" placeholder="Total uses" />
-        <input name="maxRedemptionsPerCustomer" type="number" min="1" placeholder="Per customer" />
-        <button type="submit">Add code</button>
+        <input
+          name="maxRedemptions"
+          type="number"
+          min="1"
+          placeholder={t("discounts:totalUses")}
+        />
+        <input
+          name="maxRedemptionsPerCustomer"
+          type="number"
+          min="1"
+          placeholder={t("discounts:perCustomer")}
+        />
+        <button type="submit">{t("discounts:addCode")}</button>
       </form>
-      <p className="hint">Example: 10 % off with a minimum of {money.format(50)}.</p>
+      <p className="hint">
+        {t("discounts:example", { amount: money.format(50) })}
+      </p>
     </section>
-  )
+  );
 }
-
-function label(discount: Discount) {
-  switch (discount.kind) {
-    case 'Percentage':
-      return `${discount.value} % off`
-    case 'Amount':
-      return `${discount.value} off`
-    default:
-      return 'Free shipping'
-  }
-}
-
 function optionalNumber(value: FormDataEntryValue | null) {
-  const text = String(value ?? '').trim()
-
-  return text.length === 0 ? null : Number(text)
+  const text = String(value ?? "").trim();
+  return text ? Number(text) : null;
 }
-
 function optionalDate(value: FormDataEntryValue | null) {
-  const text = String(value ?? '').trim()
-
-  return text.length === 0 ? null : new Date(`${text}T23:59:59Z`).toISOString()
+  const text = String(value ?? "").trim();
+  return text ? new Date(`${text}T23:59:59Z`).toISOString() : null;
 }

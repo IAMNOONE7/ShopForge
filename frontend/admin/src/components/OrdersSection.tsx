@@ -1,37 +1,52 @@
-import { useState } from 'react'
-import { api, type AdminAddress, type AdminOrder } from '../api'
-import { useAction } from '../useAction'
-import { useRequest } from '../useRequest'
-
-type OrdersSectionProps = {
-  storeId: string
-  money: Intl.NumberFormat
-  culture: string
-}
-
-export function OrdersSection({ storeId, money, culture }: OrdersSectionProps) {
-  const [orders, reload] = useRequest(`orders:${storeId}`, () => api.orders(storeId))
-  const [error, run] = useAction(reload)
-  const [open, setOpen] = useState<string | null>(null)
-  const list: AdminOrder[] = orders.status === 'ready' ? orders.data : []
-
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { api, type AdminAddress, type AdminOrder } from "../api";
+import { useAction } from "../useAction";
+import { useRequest } from "../useRequest";
+import { RequestError } from "./ui/RequestError";
+import { DownloadButton } from "./ui/DownloadButton";
+import {
+  currencyFormatter,
+  formatDateTime,
+  formatNumber,
+} from "../utils/format";
+type Props = { storeId: string; canManage: boolean };
+export function OrdersSection({ storeId, canManage }: Props) {
+  const { t } = useTranslation(["orders", "errors"]);
+  const [orders, reload] = useRequest(`orders:${storeId}`, (signal) =>
+    api.orders(storeId, signal),
+  );
+  const [error, run] = useAction(reload);
+  const [open, setOpen] = useState<string | null>(null);
+  const list: AdminOrder[] = orders.status === "ready" ? orders.data : [];
   return (
     <section>
-      <h2>Orders</h2>
-      <p className="hint">An order holds its stock until it is paid; unpaid orders are cancelled automatically after 30 minutes.</p>
-      {error && <p className="error">{error}</p>}
-      {orders.status === 'error' && <p className="error">{orders.message}</p>}
-      {orders.status === 'ready' && list.length === 0 && <p className="hint">No orders yet.</p>}
+      <h2>{t("orders:title")}</h2>
+      <p className="hint">{t("orders:hint")}</p>
+      {error !== null && <RequestError error={error} operation="write" />}
+      {orders.status === "error" && (
+        <RequestError error={orders.error} operation="read" onRetry={reload} />
+      )}
+      {orders.status === "ready" && orders.refreshError !== null && (
+        <RequestError
+          error={orders.refreshError}
+          operation="read"
+          onRetry={reload}
+        />
+      )}
+      {orders.status === "ready" && list.length === 0 && (
+        <p className="hint">{t("orders:empty")}</p>
+      )}
       {list.length > 0 && (
         <table>
           <thead>
             <tr>
-              <th>Number</th>
-              <th>Placed</th>
-              <th>Customer</th>
-              <th>Status</th>
-              <th>Items</th>
-              <th>Total</th>
+              <th>{t("orders:number")}</th>
+              <th>{t("orders:placed")}</th>
+              <th>{t("orders:customer")}</th>
+              <th>{t("orders:statusHeading")}</th>
+              <th>{t("orders:items")}</th>
+              <th>{t("orders:total")}</th>
               <th />
             </tr>
           </thead>
@@ -41,73 +56,98 @@ export function OrdersSection({ storeId, money, culture }: OrdersSectionProps) {
                 key={order.number}
                 storeId={storeId}
                 order={order}
-                money={money}
-                culture={culture}
                 isOpen={open === order.number}
-                onToggle={() => setOpen(open === order.number ? null : order.number)}
+                onToggle={() =>
+                  setOpen(open === order.number ? null : order.number)
+                }
                 run={run}
+                canManage={canManage}
               />
             ))}
           </tbody>
         </table>
       )}
     </section>
-  )
+  );
 }
-
 type RowsProps = {
-  storeId: string
-  order: AdminOrder
-  money: Intl.NumberFormat
-  culture: string
-  isOpen: boolean
-  onToggle: () => void
-  run: (change: () => Promise<unknown>) => Promise<void>
-}
-
-function Rows({ storeId, order, money, culture, isOpen, onToggle, run }: RowsProps) {
-  const awaitingPayment = order.status === 'AwaitingPayment'
-  const paid = order.status === 'Paid'
-  const refundable = order.status === 'Paid' || order.status === 'Shipped'
-
+  storeId: string;
+  order: AdminOrder;
+  isOpen: boolean;
+  onToggle: () => void;
+  run: (change: () => Promise<unknown>) => Promise<void>;
+  canManage: boolean;
+};
+function Rows({ storeId, order, isOpen, onToggle, run, canManage }: RowsProps) {
+  const { t, i18n } = useTranslation(["orders", "common"]);
+  const awaitingPayment = order.status === "AwaitingPayment";
+  const paid = order.status === "Paid";
+  const refundable = order.status === "Paid" || order.status === "Shipped";
   return (
     <>
       <tr>
         <td>{order.number}</td>
-        <td>{new Date(order.placedAt).toLocaleString(culture)}</td>
+        <td>{formatDateTime(order.placedAt, i18n.resolvedLanguage)}</td>
         <td>
           {order.email}
-          {!order.hasAccount && <span className="hint"> (guest)</span>}
+          {!order.hasAccount && (
+            <span className="hint"> ({t("orders:guest")})</span>
+          )}
         </td>
-        <td>{statusLabel(order.status)}</td>
+        <td>{t(`orders:status.${knownStatus(order.status)}`)}</td>
         <td>{order.items}</td>
-        <td>{money.format(order.grandTotal)}</td>
+        <td>{formatNumber(order.grandTotal, i18n.resolvedLanguage)}</td>
         <td className="inline-form compact">
           <button type="button" onClick={onToggle}>
-            {isOpen ? 'Hide' : 'Details'}
+            {isOpen ? t("common:hide") : t("common:details")}
           </button>
-          {awaitingPayment && (
+          {canManage && awaitingPayment && (
             <>
-              <button type="button" onClick={() => run(() => api.confirmOrderPayment(storeId, order.number))}>
-                Mark as paid
+              <button
+                type="button"
+                onClick={() =>
+                  run(() => api.confirmOrderPayment(storeId, order.number))
+                }
+              >
+                {t("orders:markPaid")}
               </button>
-              <button type="button" onClick={() => run(() => api.cancelOrder(storeId, order.number))}>
-                Cancel
+              <button
+                type="button"
+                onClick={() =>
+                  run(() => api.cancelOrder(storeId, order.number))
+                }
+              >
+                {t("orders:cancel")}
               </button>
             </>
           )}
-          {refundable && (
-            <button type="button" onClick={() => run(() => api.refundOrder(storeId, order.number))}>
-              Refund
+          {canManage && refundable && (
+            <button
+              type="button"
+              onClick={() => run(() => api.refundOrder(storeId, order.number))}
+            >
+              {t("orders:refund")}
             </button>
           )}
-          {paid && (
+          {canManage && paid && (
             <form
               className="inline-form compact"
-              action={(form) => run(() => api.createShipment(storeId, order.number, String(form.get('trackingNumber'))))}
+              action={(form) =>
+                run(() =>
+                  api.createShipment(
+                    storeId,
+                    order.number,
+                    String(form.get("trackingNumber")),
+                  ),
+                )
+              }
             >
-              <input name="trackingNumber" placeholder="Tracking number" required />
-              <button type="submit">Ship</button>
+              <input
+                name="trackingNumber"
+                placeholder={t("orders:trackingNumber")}
+                required
+              />
+              <button type="submit">{t("orders:ship")}</button>
             </form>
           )}
         </td>
@@ -115,38 +155,48 @@ function Rows({ storeId, order, money, culture, isOpen, onToggle, run }: RowsPro
       {isOpen && (
         <tr>
           <td colSpan={7}>
-            <OrderDetail storeId={storeId} number={order.number} money={money} />
+            <OrderDetail storeId={storeId} number={order.number} />
           </td>
         </tr>
       )}
     </>
-  )
+  );
 }
-
-function statusLabel(status: string) {
-  switch (status) {
-    case 'AwaitingPayment':
-      return 'Awaiting payment'
-    case 'Paid':
-      return 'Paid'
-    case 'Shipped':
-      return 'Shipped'
-    case 'Refunded':
-      return 'Refunded'
-    default:
-      return 'Cancelled'
-  }
+function knownStatus(
+  status: string,
+):
+  | "AwaitingPayment"
+  | "Paid"
+  | "Shipped"
+  | "Refunded"
+  | "Cancelled"
+  | "unknown" {
+  return [
+    "AwaitingPayment",
+    "Paid",
+    "Shipped",
+    "Refunded",
+    "Cancelled",
+  ].includes(status)
+    ? (status as
+        | "AwaitingPayment"
+        | "Paid"
+        | "Shipped"
+        | "Refunded"
+        | "Cancelled")
+    : "unknown";
 }
-
-function OrderDetail({ storeId, number, money }: { storeId: string; number: string; money: Intl.NumberFormat }) {
-  const [detail] = useRequest(`order:${storeId}:${number}`, () => api.order(storeId, number))
-
-  if (detail.status !== 'ready') {
-    return <p className={detail.status === 'error' ? 'error' : 'hint'}>{detail.status === 'error' ? detail.message : 'Loading…'}</p>
-  }
-
-  const order = detail.data
-
+function OrderDetail({ storeId, number }: { storeId: string; number: string }) {
+  const { t, i18n } = useTranslation(["orders", "documents", "errors"]);
+  const [detail] = useRequest(`order:${storeId}:${number}`, (signal) =>
+    api.order(storeId, number, signal),
+  );
+  if (detail.status === "error")
+    return <RequestError error={detail.error} operation="read" />;
+  if (detail.status !== "ready")
+    return <p className="hint">{t("orders:loading")}</p>;
+  const order = detail.data;
+  const money = currencyFormatter(order.currency, i18n.resolvedLanguage);
   return (
     <div className="order-detail">
       <table>
@@ -156,8 +206,7 @@ function OrderDetail({ storeId, number, money }: { storeId: string; number: stri
               <td>{line.productName}</td>
               <td>{line.quantity} ×</td>
               <td>{money.format(line.unitPrice)}</td>
-              <td>{line.vatRate}% VAT</td>
-              {/* Before the discount, which is its own row below. */}
+              <td>{t("orders:vat", { rate: line.vatRate })}</td>
               <td>{money.format(line.unitPrice * line.quantity)}</td>
             </tr>
           ))}
@@ -174,7 +223,9 @@ function OrderDetail({ storeId, number, money }: { storeId: string; number: stri
             <td>{money.format(order.shippingPrice)}</td>
           </tr>
           <tr>
-            <td colSpan={4}>Total, including {money.format(order.vatTotal)} VAT</td>
+            <td colSpan={4}>
+              {t("orders:totalWithVat", { vat: money.format(order.vatTotal) })}
+            </td>
             <td>
               <strong>{money.format(order.grandTotal)}</strong>
             </td>
@@ -184,25 +235,49 @@ function OrderDetail({ storeId, number, money }: { storeId: string; number: stri
       {order.documents.length > 0 && (
         <p className="inline-form compact">
           {order.documents.map((document) => (
-            <a key={document.number} href={api.documentUrl(storeId, order.number, document.number)}>
-              {document.kind === 'CreditNote' ? 'Credit note' : 'Invoice'} {document.number}
-            </a>
+            <DownloadButton
+              key={document.number}
+              download={() =>
+                api.downloadDocument(storeId, order.number, document.number)
+              }
+            >
+              {t(
+                `documents:${document.kind === "CreditNote" ? "CreditNote" : "Invoice"}`,
+              )}{" "}
+              {document.number}
+            </DownloadButton>
           ))}
         </p>
       )}
       <p className="hint">
-        Paying by {order.paymentMethod}.{order.pickupPoint && ` Collection at ${order.pickupPoint}.`}
-        {order.shipment && ` Sent with ${order.shipment.carrier}, tracking ${order.shipment.trackingNumber}.`}
+        {t("orders:payment", { method: order.paymentMethod })}{" "}
+        {order.pickupPoint && t("orders:pickup", { point: order.pickupPoint })}{" "}
+        {order.shipment &&
+          t("orders:shipment", {
+            carrier: order.shipment.carrier,
+            trackingNumber: order.shipment.trackingNumber,
+          })}
       </p>
       <div className="chips">
-        <AddressBlock title="Billing" address={order.billingAddress} />
-        <AddressBlock title="Shipping" address={order.shippingAddress} />
+        <AddressBlock
+          title={t("orders:billing")}
+          address={order.billingAddress}
+        />
+        <AddressBlock
+          title={t("orders:shipping")}
+          address={order.shippingAddress}
+        />
       </div>
     </div>
-  )
+  );
 }
-
-function AddressBlock({ title, address }: { title: string; address: AdminAddress }) {
+function AddressBlock({
+  title,
+  address,
+}: {
+  title: string;
+  address: AdminAddress;
+}) {
   return (
     <address>
       <strong>{title}</strong>
@@ -221,5 +296,5 @@ function AddressBlock({ title, address }: { title: string; address: AdminAddress
       <br />
       {address.country}
     </address>
-  )
+  );
 }

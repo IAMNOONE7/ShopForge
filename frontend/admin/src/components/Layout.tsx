@@ -1,42 +1,79 @@
-import { NavLink, Outlet } from 'react-router'
-import { api } from '../api'
-import { useSession } from '../session'
-import { useRequest } from '../useRequest'
+import { useTranslation } from "react-i18next";
+import { Link, Outlet, useLocation } from "react-router";
+import { api } from "../api";
+import type { AdminOutletContext } from "../adminContext";
+import { knownRole, useSession } from "../session";
+import { useRequest } from "../useRequest";
+import { AdminNavigation, MobileAdminNavigation } from "./AdminNavigation";
+import { AdminRouteEffects } from "./AdminRouteEffects";
+import { RequestError } from "./ui/RequestError";
 
 export function Layout() {
-  const { user, logout } = useSession()
-  const [stores, reloadStores] = useRequest('stores', api.stores)
+  const { t } = useTranslation(["navigation", "auth"]);
+  const { user, logout, logoutPending, logoutError } = useSession();
+  const [stores, reloadStores] = useRequest("stores", api.stores);
+  const location = useLocation();
+  const storeId = storeIdFromPath(location.pathname);
+  const selectedStore =
+    stores.status === "ready"
+      ? (stores.data.find((store) => store.id === storeId) ?? null)
+      : null;
+  const outletContext: AdminOutletContext = { stores, reloadStores };
+  const navigation = {
+    stores,
+    reloadStores,
+    selectedStore,
+    role: user.role,
+  };
 
   return (
-    <>
+    <div className="admin-frame">
+      <AdminRouteEffects />
       <a href="#main-content" className="skip-link">
-        Skip to content
+        {t("navigation:skipToContent")}
       </a>
       <header className="admin-header">
         <div className="admin-header-inner container">
-          <strong>ShopForge Admin</strong>
-          <nav aria-label="Administration">
-            <NavLink to="/products">Products</NavLink>
-            <NavLink to="/stores/new">New store</NavLink>
-            {stores.status === 'ready' &&
-              stores.data.map((store) => (
-                <NavLink key={store.id} to={`/stores/${store.id}`}>
-                  {store.name}
-                  {store.status === 'draft' && <span className="badge">draft</span>}
-                </NavLink>
-              ))}
-          </nav>
-          <span className="admin-user">
-            {user.email} ({user.role})
-            <button type="button" onClick={logout}>
-              Sign out
+          <Link to="/products" className="admin-brand">
+            {t("auth:title")}
+          </Link>
+          <MobileAdminNavigation key={location.pathname} {...navigation} />
+          <div className="admin-user">
+            <span>
+              <strong>{user.email}</strong>
+              <span>{t(`auth:roles.${knownRole(user.role)}`)}</span>
+            </span>
+            <button
+              type="button"
+              disabled={logoutPending}
+              onClick={() => void logout()}
+            >
+              {t("navigation:signOut")}
             </button>
-          </span>
+          </div>
         </div>
       </header>
-      <main id="main-content" className="app container" tabIndex={-1}>
-        <Outlet context={{ stores: stores.status === 'ready' ? stores.data : [], reloadStores }} />
-      </main>
-    </>
-  )
+      <div className="admin-shell container">
+        <aside className="admin-sidebar">
+          <AdminNavigation {...navigation} />
+        </aside>
+        <main id="main-content" className="admin-main" tabIndex={-1}>
+          {logoutError !== null && (
+            <RequestError error={logoutError} operation="session" />
+          )}
+          <Outlet context={outletContext} />
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function storeIdFromPath(pathname: string) {
+  const match = /^\/stores\/([^/]+)(?:\/|$)/.exec(pathname);
+  if (!match || match[1] === "new") return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
 }

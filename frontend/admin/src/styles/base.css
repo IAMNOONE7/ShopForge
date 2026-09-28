@@ -41,7 +41,11 @@ button,
   border-radius: var(--radius-control);
   box-shadow: var(--shadow-sm);
   cursor: pointer;
-  transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
 }
 
 button:hover:not(:disabled),
@@ -66,7 +70,9 @@ button:disabled,
   opacity: 1;
 }
 
-input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
+input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not(
+    [type="file"]
+  ),
 select,
 textarea {
   width: 100%;

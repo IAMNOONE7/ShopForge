@@ -1,6 +1,12 @@
-import styles from './ui.module.css'
+import styles from "./ui.module.css";
 
-export function LoadingState({ label = 'Loading…', lines = 3 }: { label?: string; lines?: number }) {
+export function LoadingState({
+  label,
+  lines = 3,
+}: {
+  label: string;
+  lines?: number;
+}) {
   return (
     <div className={styles.loadingState} role="status" aria-live="polite">
       <span className="sr-only">{label}</span>
@@ -10,5 +16,5 @@ export function LoadingState({ label = 'Loading…', lines = 3 }: { label?: stri
         ))}
       </div>
     </div>
-  )
+  );
 }

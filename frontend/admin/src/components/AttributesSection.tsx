@@ -1,51 +1,49 @@
-import { api, type AttributeDefinition, type AttributeType } from '../api'
-
-const types: [AttributeType, string][] = [
-  ['select', 'Select (one option)'],
-  ['multiSelect', 'Multi-select'],
-  ['decimal', 'Decimal number'],
-  ['integer', 'Whole number'],
-  ['boolean', 'Yes / no'],
-  ['date', 'Date'],
-  ['text', 'Text'],
-]
-
-type AttributesSectionProps = {
-  storeId: string
-  attributes: AttributeDefinition[]
-  run: (change: () => Promise<unknown>) => Promise<void>
-}
-
-export function AttributesSection({ storeId, attributes, run }: AttributesSectionProps) {
+import { useTranslation } from "react-i18next";
+import { api, type AttributeDefinition, type AttributeType } from "../api";
+const types: AttributeType[] = [
+  "select",
+  "multiSelect",
+  "decimal",
+  "integer",
+  "boolean",
+  "date",
+  "text",
+];
+type Props = {
+  storeId: string;
+  attributes: AttributeDefinition[];
+  run: (change: () => Promise<unknown>) => Promise<void>;
+};
+export function AttributesSection({ storeId, attributes, run }: Props) {
+  const { t } = useTranslation(["attributes", "common"]);
   async function create(form: FormData) {
-    const type = String(form.get('type')) as AttributeType
+    const type = String(form.get("type")) as AttributeType;
     await run(() =>
       api.createAttribute(storeId, {
-        name: String(form.get('name')),
+        name: String(form.get("name")),
         type,
-        unit: String(form.get('unit')) || null,
-        isFilterable: type !== 'text' && form.get('isFilterable') === 'on',
-        isVisibleOnProductPage: form.get('isVisibleOnProductPage') === 'on',
-        options: String(form.get('options') ?? '')
-          .split(',')
+        unit: String(form.get("unit")) || null,
+        isFilterable: type !== "text" && form.get("isFilterable") === "on",
+        isVisibleOnProductPage: form.get("isVisibleOnProductPage") === "on",
+        options: String(form.get("options") ?? "")
+          .split(",")
           .map((option) => option.trim())
           .filter(Boolean),
       }),
-    )
+    );
   }
-
   return (
     <section>
-      <h2>Attributes</h2>
+      <h2>{t("attributes:title")}</h2>
       <table>
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Code</th>
-            <th>Type</th>
-            <th>Filter</th>
-            <th>Shown</th>
-            <th>Options</th>
+            <th>{t("attributes:name")}</th>
+            <th>{t("attributes:code")}</th>
+            <th>{t("attributes:type")}</th>
+            <th>{t("attributes:filter")}</th>
+            <th>{t("attributes:shown")}</th>
+            <th>{t("attributes:options")}</th>
           </tr>
         </thead>
         <tbody>
@@ -56,15 +54,33 @@ export function AttributesSection({ storeId, attributes, run }: AttributesSectio
                 {attribute.unit && ` (${attribute.unit})`}
               </td>
               <td>{attribute.code}</td>
-              <td>{types.find(([type]) => type === attribute.type)?.[1]}</td>
-              <td>{attribute.isFilterable ? 'Yes' : '—'}</td>
-              <td>{attribute.isVisibleOnProductPage ? 'Yes' : '—'}</td>
+              <td>{t(`attributes:types.${attribute.type}`)}</td>
+              <td>{attribute.isFilterable ? t("common:yes") : "—"}</td>
               <td>
-                {attribute.options.map((option) => option.name).join(', ')}
-                {(attribute.type === 'select' || attribute.type === 'multiSelect') && (
-                  <form action={(form) => run(() => api.addOption(storeId, attribute.id, String(form.get('name'))))} className="inline-form compact">
-                    <input name="name" placeholder="New option" required />
-                    <button type="submit">Add</button>
+                {attribute.isVisibleOnProductPage ? t("common:yes") : "—"}
+              </td>
+              <td>
+                {attribute.options.map((option) => option.name).join(", ")}
+                {(attribute.type === "select" ||
+                  attribute.type === "multiSelect") && (
+                  <form
+                    action={(form) =>
+                      run(() =>
+                        api.addOption(
+                          storeId,
+                          attribute.id,
+                          String(form.get("name")),
+                        ),
+                      )
+                    }
+                    className="inline-form compact"
+                  >
+                    <input
+                      name="name"
+                      placeholder={t("attributes:newOption")}
+                      required
+                    />
+                    <button type="submit">{t("common:add")}</button>
                   </form>
                 )}
               </td>
@@ -72,26 +88,35 @@ export function AttributesSection({ storeId, attributes, run }: AttributesSectio
           ))}
         </tbody>
       </table>
-
       <form action={create} className="inline-form">
-        <input name="name" placeholder="Attribute name" required />
+        <input
+          name="name"
+          placeholder={t("attributes:attributeName")}
+          required
+        />
         <select name="type" defaultValue="select">
-          {types.map(([type, label]) => (
+          {types.map((type) => (
             <option key={type} value={type}>
-              {label}
+              {t(`attributes:types.${type}`)}
             </option>
           ))}
         </select>
-        <input name="unit" placeholder="Unit (optional)" size={8} />
-        <input name="options" placeholder="Options, comma separated" />
+        <input
+          name="unit"
+          placeholder={t("attributes:unitOptional")}
+          size={8}
+        />
+        <input name="options" placeholder={t("attributes:optionsComma")} />
         <label>
-          <input name="isFilterable" type="checkbox" defaultChecked /> Filter
+          <input name="isFilterable" type="checkbox" defaultChecked />{" "}
+          {t("attributes:filter")}
         </label>
         <label>
-          <input name="isVisibleOnProductPage" type="checkbox" defaultChecked /> Show on product page
+          <input name="isVisibleOnProductPage" type="checkbox" defaultChecked />{" "}
+          {t("attributes:showOnProduct")}
         </label>
-        <button type="submit">Add attribute</button>
+        <button type="submit">{t("attributes:addAttribute")}</button>
       </form>
     </section>
-  )
+  );
 }
