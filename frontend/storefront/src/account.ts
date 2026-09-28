@@ -1,114 +1,155 @@
-import { NotFoundError } from './api'
-import { RequestFailed, type Order } from './cart'
+import { requestJson } from "./api/http";
+import type { Order } from "./cart";
 
 export type Customer = {
-  email: string
-  firstName: string
-  lastName: string
-  phone: string | null
-}
+  email: string;
+  firstName: string;
+  lastName: string;
+  phone: string | null;
+};
 
 export type Registration = {
-  email: string
-  password: string
-  firstName: string
-  lastName: string
-  phone: string | null
-}
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  phone: string | null;
+};
 
 export type CustomerOrder = {
-  number: string
-  placedAt: string
-  status: string
-  grandTotal: number
-  items: number
-}
+  number: string;
+  placedAt: string;
+  status: string;
+  grandTotal: number;
+  items: number;
+};
 
-async function send<T>(method: string, url: string, body?: unknown): Promise<T> {
-  const response = await fetch(url, {
-    method,
-    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
+export const register = (registration: Registration) =>
+  requestJson<void>("/api/storefront/account/register", {
+    method: "POST",
+    body: registration,
+    notifyUnauthorized: false,
+  });
 
-  if (response.status === 404) {
-    throw new NotFoundError(url)
-  }
+export const verifyEmail = (token: string) =>
+  requestJson<Customer>("/api/storefront/account/verify", {
+    method: "POST",
+    body: { token },
+    notifyUnauthorized: false,
+  });
 
-  if (!response.ok) {
-    const problem = response.headers.get('Content-Type')?.includes('json')
-      ? ((await response.json()) as { title?: string; detail?: string; errors?: Record<string, string[]> })
-      : null
-    const messages = Object.values(problem?.errors ?? {}).flat()
+export const signIn = (email: string, password: string) =>
+  requestJson<Customer>("/api/storefront/account/login", {
+    method: "POST",
+    body: { email, password },
+    notifyUnauthorized: false,
+  });
 
-    throw new RequestFailed(messages.length > 0 ? messages : [problem?.detail ?? problem?.title ?? 'The request failed.'])
-  }
+export const signOut = () =>
+  requestJson<void>("/api/storefront/account/logout", { method: "POST" });
 
-  // Registration and password endpoints answer without a body.
-  return (response.headers.get('Content-Type')?.includes('json') ? await response.json() : undefined) as T
-}
+export const getProfile = (signal?: AbortSignal) =>
+  requestJson<Customer>("/api/storefront/account/me", {
+    signal,
+    notifyUnauthorized: false,
+  });
 
-export const register = (registration: Registration) => send<void>('POST', '/api/storefront/account/register', registration)
+export const updateProfile = (profile: {
+  firstName: string;
+  lastName: string;
+  phone: string | null;
+}) =>
+  requestJson<Customer>("/api/storefront/account/me", {
+    method: "PUT",
+    body: profile,
+  });
 
-export const verifyEmail = (token: string) => send<Customer>('POST', '/api/storefront/account/verify', { token })
+export const requestPasswordReset = (email: string) =>
+  requestJson<void>("/api/storefront/account/password/forgot", {
+    method: "POST",
+    body: { email },
+    notifyUnauthorized: false,
+  });
 
-export const signIn = (email: string, password: string) => send<Customer>('POST', '/api/storefront/account/login', { email, password })
+export const resetPassword = (token: string, password: string) =>
+  requestJson<void>("/api/storefront/account/password/reset", {
+    method: "POST",
+    body: { token, password },
+    notifyUnauthorized: false,
+  });
 
-export const signOut = () => send<void>('POST', '/api/storefront/account/logout')
+export const getOrders = (signal?: AbortSignal) =>
+  requestJson<CustomerOrder[]>("/api/storefront/account/orders", { signal });
 
-export const getProfile = () => send<Customer>('GET', '/api/storefront/account/me')
-
-export const updateProfile = (profile: { firstName: string; lastName: string; phone: string | null }) =>
-  send<Customer>('PUT', '/api/storefront/account/me', profile)
-
-export const requestPasswordReset = (email: string) => send<void>('POST', '/api/storefront/account/password/forgot', { email })
-
-export const resetPassword = (token: string, password: string) => send<void>('POST', '/api/storefront/account/password/reset', { token, password })
-
-export const getOrders = () => send<CustomerOrder[]>('GET', '/api/storefront/account/orders')
-
-export const getAccountOrder = (number: string) => send<Order>('GET', `/api/storefront/account/orders/${encodeURIComponent(number)}`)
+export const getAccountOrder = (number: string, signal?: AbortSignal) =>
+  requestJson<Order>(
+    `/api/storefront/account/orders/${encodeURIComponent(number)}`,
+    { signal },
+  );
 
 export type ReturnableLine = {
-  storeProductId: string
-  productName: string
-  quantity: number
-}
+  storeProductId: string;
+  productName: string;
+  quantity: number;
+};
 
 export type CustomerReturn = {
-  number: string
-  status: string
-  requestedAt: string
-  refundedAmount: number
-  lines: { productName: string; quantity: number }[]
-}
+  number: string;
+  status: string;
+  requestedAt: string;
+  refundedAmount: number;
+  lines: { productName: string; quantity: number }[];
+};
 
 export type Returns = {
-  closesAt: string | null
-  returnable: ReturnableLine[]
-  returns: CustomerReturn[]
-}
+  closesAt: string | null;
+  returnable: ReturnableLine[];
+  returns: CustomerReturn[];
+};
 
-export const getReturns = (number: string) =>
-  send<Returns>('GET', `/api/storefront/account/orders/${encodeURIComponent(number)}/returns`)
+export const getReturns = (number: string, signal?: AbortSignal) =>
+  requestJson<Returns>(
+    `/api/storefront/account/orders/${encodeURIComponent(number)}/returns`,
+    { signal },
+  );
 
-export const requestReturn = (number: string, lines: { storeProductId: string; quantity: number }[], reason: string | null) =>
-  send<Returns>('POST', `/api/storefront/account/orders/${encodeURIComponent(number)}/returns`, { lines, reason })
+export const requestReturn = (
+  number: string,
+  lines: { storeProductId: string; quantity: number }[],
+  reason: string | null,
+) =>
+  requestJson<Returns>(
+    `/api/storefront/account/orders/${encodeURIComponent(number)}/returns`,
+    { method: "POST", body: { lines, reason } },
+  );
 
 export type WishlistItem = {
-  storeProductId: string
-  name: string
-  slug: string
-  price: number
-  imageUrl: string | null
-}
+  storeProductId: string;
+  name: string;
+  slug: string;
+  price: number;
+  imageUrl: string | null;
+};
 
-export const getWishlist = () => send<WishlistItem[]>('GET', '/api/storefront/account/wishlist')
+export const getWishlist = (signal?: AbortSignal) =>
+  requestJson<WishlistItem[]>("/api/storefront/account/wishlist", { signal });
 
-export const addToWishlist = (storeProductId: string) => send<void>('POST', '/api/storefront/account/wishlist', { storeProductId })
+export const addToWishlist = (storeProductId: string) =>
+  requestJson<void>("/api/storefront/account/wishlist", {
+    method: "POST",
+    body: { storeProductId },
+  });
 
 export const removeFromWishlist = (storeProductId: string) =>
-  send<void>('DELETE', `/api/storefront/account/wishlist/${storeProductId}`)
+  requestJson<void>(`/api/storefront/account/wishlist/${storeProductId}`, {
+    method: "DELETE",
+  });
 
-export const writeReview = (slug: string, review: { rating: number; text: string; author: string }) =>
-  send<void>('POST', `/api/storefront/products/${encodeURIComponent(slug)}/reviews`, review)
+export const writeReview = (
+  slug: string,
+  review: { rating: number; text: string; author: string },
+) =>
+  requestJson<void>(
+    `/api/storefront/products/${encodeURIComponent(slug)}/reviews`,
+    { method: "POST", body: review },
+  );

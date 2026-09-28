@@ -1,106 +1,300 @@
-import { useOutletContext, useParams, useSearchParams } from 'react-router'
-import { getProducts, type Category, type Facet } from '../api'
-import { FilterPanel } from '../components/filters/FilterPanel'
-import { filterKey, withParam } from '../components/filters/filterParams'
-import { Message } from '../components/Message'
-import { ProductCard } from '../components/ProductCard'
-import { LoadingState } from '../components/ui/LoadingState'
-import { useRequest } from '../useRequest'
+import { useId } from "react";
+import { useTranslation } from "react-i18next";
+import { Link, useOutletContext, useParams, useSearchParams } from "react-router";
+import { getProducts, type Category, type Facet } from "../api";
+import { statusOf } from "../api/errors";
+import { ActiveFilters } from "../components/filters/ActiveFilters";
+import { FilterPanel } from "../components/filters/FilterPanel";
+import { MobileFilterDialog } from "../components/filters/MobileFilterDialog";
+import {
+  activeFilterCount,
+  facetsForQuery,
+  filterKey,
+  hasFilters,
+  withParam,
+  withoutCatalogQuery,
+  withoutFilters,
+} from "../components/filters/filterParams";
+import { CatalogLoading } from "../components/catalog/CatalogLoading";
+import { Pagination } from "../components/catalog/Pagination";
+import { ProductCard } from "../components/ProductCard";
+import { EmptyState } from "../components/ui/EmptyState";
+import { InlineMessage } from "../components/ui/InlineMessage";
+import { RequestError } from "../components/ui/RequestError";
+import { useRequest } from "../useRequest";
 
 export function ProductListPage() {
-  const { slug } = useParams()
-  const categories = useOutletContext<Category[]>()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const products = useRequest(`products:${slug ?? ''}?${searchParams}`, (signal) => getProducts(slug, searchParams, signal))
-  const title = slug ? (categories.find((category) => category.slug === slug)?.name ?? '') : 'All products'
+  const { t } = useTranslation(["catalog", "errors", "navigation"]);
+  const { slug } = useParams();
+  const categories = useOutletContext<Category[]>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sortId = useId();
+  const scope = slug ?? "";
+  const products = useRequest(
+    `products:${scope}?${searchParams}`,
+    (signal) => getProducts(slug, searchParams, signal),
+    {
+      retainPrevious: (previousKey) =>
+        previousKey.startsWith(`products:${scope}?`),
+    },
+  );
+  const retainedData = products.transitionData ?? null;
+
+  const displayTitle = slug
+    ? (categories.find((category) => category.slug === slug)?.name ??
+      t("navigation:products"))
+    : t("navigation:allProducts");
+
+  function changeFilter(code: string, value: string | null) {
+    setSearchParams(withParam(searchParams, filterKey(code), value));
+  }
 
   function clearFilters() {
-    const next = new URLSearchParams(searchParams)
-    for (const key of [...next.keys()].filter((key) => key.startsWith('f.'))) {
-      next.delete(key)
-    }
-    next.delete('page')
-    setSearchParams(next)
+    setSearchParams(withoutFilters(searchParams));
   }
 
-  switch (products.status) {
-    case 'loading':
-      return <LoadingState label="Loading products…" lines={6} />
-    case 'not-found':
-      return <Message title="Category not found" text="This category does not exist." />
-    case 'error':
-      return <Message title="Something went wrong" text="Products could not be loaded. Please try again." />
-    case 'ready': {
-      const { items, filters, totalCount, page, pageSize } = products.data
-      const pageCount = Math.max(Math.ceil(totalCount / pageSize), 1)
+  function sortOptions(facets: Facet[]): [string, string][] {
+    const attributeSorts = facets
+      .filter(
+        (facet) =>
+          facet.type === "integer" ||
+          facet.type === "decimal" ||
+          facet.type === "date",
+      )
+      .flatMap((facet): [string, string][] => [
+        [
+          `attr.${facet.code}`,
+          t("catalog:attributeLowHigh", { name: facet.name }),
+        ],
+        [
+          `-attr.${facet.code}`,
+          t("catalog:attributeHighLow", { name: facet.name }),
+        ],
+      ]);
+    return [
+      ["", t("catalog:defaultOrder")],
+      ["price", t("catalog:priceLowHigh")],
+      ["-price", t("catalog:priceHighLow")],
+      ["name", t("catalog:nameAZ")],
+      ["-name", t("catalog:nameZA")],
+      ["-rating", t("catalog:ratingHighLow")],
+      ...attributeSorts,
+    ];
+  }
 
-      return (
-        <>
-          <h1>{title}</h1>
-          <div className="catalog">
-            <FilterPanel
-              facets={filters}
-              onChange={(code, value) => setSearchParams(withParam(searchParams, filterKey(code), value))}
-              onClear={clearFilters}
-            />
-            <div className="catalog-results">
-              <div className="catalog-toolbar">
-                <span>
-                  {totalCount} {totalCount === 1 ? 'product' : 'products'}
-                </span>
-                <select
-                  aria-label="Sort by"
-                  value={searchParams.get('sort') ?? ''}
-                  onChange={(event) => setSearchParams(withParam(searchParams, 'sort', event.target.value))}
-                >
-                  {sortOptions(filters).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {items.length === 0 ? (
-                <p>No products match these filters.</p>
-              ) : (
-                <div className="product-grid">
-                  {items.map((product) => (
-                    <ProductCard key={product.id} product={product} />
-                  ))}
-                </div>
-              )}
-              {pageCount > 1 && (
-                <nav className="pagination" aria-label="Pages">
-                  <button type="button" disabled={page <= 1} onClick={() => setSearchParams(withParam(searchParams, 'page', String(page - 1)))}>
-                    Previous
-                  </button>
-                  <span>
-                    Page {page} of {pageCount}
+  if (products.status === "loading" && retainedData === null) {
+    return (
+      <>
+        <h1>{displayTitle}</h1>
+        <CatalogLoading label={t("catalog:loadingProducts")} />
+      </>
+    );
+  }
+
+  if (products.status === "not-found") {
+    return (
+      <EmptyState title={t("catalog:categoryNotFoundTitle")}>
+        <p>{t("catalog:categoryNotFoundBody")}</p>
+        <p>
+          <Link to="/">{t("catalog:browseAll")}</Link>
+        </p>
+      </EmptyState>
+    );
+  }
+
+  if (products.status === "error") {
+    const invalidQuery = statusOf(products.error) === 400;
+    return (
+      <>
+        <h1>{displayTitle}</h1>
+        {invalidQuery && (
+          <InlineMessage tone="error" title={t("catalog:invalidQueryTitle")}>
+            <p>{t("catalog:invalidQueryBody")}</p>
+            <button
+              type="button"
+              onClick={() => setSearchParams(withoutCatalogQuery(searchParams))}
+            >
+              {t("catalog:removeInvalidQuery")}
+            </button>
+          </InlineMessage>
+        )}
+        <RequestError
+          error={products.error}
+          operation="read"
+          onRetry={invalidQuery ? undefined : products.reload}
+        />
+      </>
+    );
+  }
+
+  const data =
+    products.status === "ready" ? products.data : retainedData!;
+  const isRefreshing =
+    products.status === "loading" ||
+    (products.status === "ready" && products.refreshing);
+  const refreshError =
+    products.status === "ready" ? products.refreshError : null;
+  const facets = facetsForQuery(data.filters, searchParams);
+  const selectedCount = activeFilterCount(facets);
+  const pageCount = Math.max(Math.ceil(data.totalCount / data.pageSize), 1);
+  const outOfRange = data.page > pageCount && data.page > 1;
+  const filtered = hasFilters(searchParams);
+
+  return (
+    <>
+      <h1>{displayTitle}</h1>
+      {refreshError !== null && (
+        <RequestError
+          error={refreshError}
+          operation="read"
+          onRetry={products.reload}
+        />
+      )}
+      <ActiveFilters
+        facets={facets}
+        onChange={changeFilter}
+        onClear={clearFilters}
+      />
+      <div className="catalog">
+        <aside className="catalog-filter-rail">
+          <FilterPanel
+            facets={facets}
+            onChange={changeFilter}
+            onClear={clearFilters}
+          />
+        </aside>
+        <section
+          className="catalog-results"
+          aria-labelledby="catalog-result-summary"
+          aria-busy={isRefreshing || undefined}
+        >
+          <div className="catalog-toolbar">
+            <div className="catalog-result-summary">
+              <span
+                id="catalog-result-summary"
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                {t("catalog:productCount", { count: data.totalCount })}
+                {isRefreshing && (
+                  <span className="refreshing-label">
+                    {" "}
+                    {t("catalog:refreshing")}
                   </span>
+                )}
+              </span>
+              <MobileFilterDialog
+                facets={facets}
+                activeCount={selectedCount}
+                onChange={changeFilter}
+                onClear={clearFilters}
+              />
+            </div>
+            <label className="catalog-sort" htmlFor={sortId}>
+              <span>{t("catalog:sortBy")}</span>
+              <select
+                id={sortId}
+                value={searchParams.get("sort") ?? ""}
+                onChange={(event) =>
+                  setSearchParams(
+                    withParam(searchParams, "sort", event.target.value),
+                  )
+                }
+              >
+                {sortOptions(facets).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className={isRefreshing ? "catalog-content refreshing" : "catalog-content"}>
+            {outOfRange ? (
+              <EmptyState
+                title={t("catalog:pageOutOfRangeTitle")}
+                headingLevel={2}
+                action={
                   <button
                     type="button"
-                    disabled={page >= pageCount}
-                    onClick={() => setSearchParams(withParam(searchParams, 'page', String(page + 1)))}
+                    onClick={() =>
+                      setSearchParams(withParam(searchParams, "page", null))
+                    }
                   >
-                    Next
+                    {t("catalog:returnToFirstPage")}
                   </button>
-                </nav>
-              )}
-            </div>
+                }
+              >
+                <p>{t("catalog:pageOutOfRangeBody")}</p>
+              </EmptyState>
+            ) : data.items.length === 0 ? (
+              <CatalogEmptyState
+                category={Boolean(slug)}
+                filtered={filtered}
+                clearFilters={clearFilters}
+              />
+            ) : (
+              <div className="product-grid">
+                {data.items.map((product) => (
+                  <ProductCard key={product.id} product={product} />
+                ))}
+              </div>
+            )}
           </div>
-        </>
-      )
-    }
-  }
+
+          {!outOfRange && data.items.length > 0 && (
+            <Pagination
+              page={data.page}
+              pageCount={pageCount}
+              searchParams={searchParams}
+            />
+          )}
+        </section>
+      </div>
+    </>
+  );
 }
 
-function sortOptions(facets: Facet[]): [string, string][] {
-  const attributeSorts = facets
-    .filter((facet) => facet.type === 'integer' || facet.type === 'decimal' || facet.type === 'date')
-    .flatMap((facet): [string, string][] => [
-      [`attr.${facet.code}`, `${facet.name}: low to high`],
-      [`-attr.${facet.code}`, `${facet.name}: high to low`],
-    ])
-
-  return [['', 'Recommended'], ['price', 'Price: low to high'], ['-price', 'Price: high to low'], ['name', 'Name'], ...attributeSorts]
+function CatalogEmptyState({
+  category,
+  filtered,
+  clearFilters,
+}: {
+  category: boolean;
+  filtered: boolean;
+  clearFilters: () => void;
+}) {
+  const { t } = useTranslation("catalog");
+  if (filtered) {
+    return (
+      <EmptyState
+        title={t("noMatchesTitle")}
+        headingLevel={2}
+        action={
+          <button type="button" onClick={clearFilters}>
+            {t("clearFilters")}
+          </button>
+        }
+      >
+        <p>{t("noMatches")}</p>
+      </EmptyState>
+    );
+  }
+  if (category) {
+    return (
+      <EmptyState title={t("emptyCategoryTitle")} headingLevel={2}>
+        <p>{t("emptyCategoryBody")}</p>
+        <p>
+          <Link to="/">{t("browseAll")}</Link>
+        </p>
+      </EmptyState>
+    );
+  }
+  return (
+    <EmptyState title={t("emptyCatalogTitle")} headingLevel={2}>
+      <p>{t("emptyCatalogBody")}</p>
+    </EmptyState>
+  );
 }

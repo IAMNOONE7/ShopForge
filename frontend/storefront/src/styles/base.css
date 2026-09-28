@@ -41,7 +41,11 @@ button,
   border-radius: var(--radius-control);
   box-shadow: var(--shadow-sm);
   cursor: pointer;
-  transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
 }
 
 button:hover:not(:disabled),

@@ -1,85 +1,112 @@
-import { useState } from 'react'
-import { getReviews } from '../api'
-import { writeReview } from '../account'
-import { RequestFailed } from '../cart'
-import { useCustomer } from '../customerContext'
-import { useStore } from '../storeContext'
-import { useRequest } from '../useRequest'
-import { Stars } from './Stars'
+import { useRef, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
+import { writeReview } from "../account";
+import { getReviews } from "../api";
+import { useCustomer } from "../customerContext";
+import { useStore } from "../storeContext";
+import { useRequest } from "../useRequest";
+import { formatDate } from "../utils/format";
+import { Stars } from "./Stars";
+import { RequestError } from "./ui/RequestError";
 
 export function ProductReviews({ slug }: { slug: string }) {
-  const store = useStore()
-  const { customer } = useCustomer()
-  const [attempt, setAttempt] = useState(0)
-  const [sent, setSent] = useState(false)
-  const [problem, setProblem] = useState<string | null>(null)
-  const answer = useRequest(`reviews:${slug}:${attempt}`, (signal) => getReviews(slug, signal))
+  const { t } = useTranslation(["catalog", "auth"]);
+  const store = useStore();
+  const { customer } = useCustomer();
+  const [attempt, setAttempt] = useState(0);
+  const [sent, setSent] = useState(false);
+  const [problem, setProblem] = useState<unknown | null>(null);
+  const [pending, setPending] = useState(false);
+  const lock = useRef(false);
+  const answer = useRequest(`reviews:${slug}:${attempt}`, (signal) =>
+    getReviews(slug, signal),
+  );
 
-  async function submit(form: FormData) {
-    setProblem(null)
-
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (lock.current) return;
+    lock.current = true;
+    setProblem(null);
+    setPending(true);
+    const form = new FormData(event.currentTarget);
     try {
       await writeReview(slug, {
-        rating: Number(form.get('rating')),
-        text: String(form.get('text')).trim(),
-        author: customer ? `${customer.firstName} ${customer.lastName.slice(0, 1)}.` : 'A customer',
-      })
-      setSent(true)
-      setAttempt((current) => current + 1)
-    } catch (exception) {
-      setProblem(exception instanceof RequestFailed ? exception.message : 'The review could not be sent.')
+        rating: Number(form.get("rating")),
+        text: String(form.get("text")).trim(),
+        author: customer
+          ? `${customer.firstName} ${customer.lastName.slice(0, 1)}.`
+          : t("auth:anonymousReviewAuthor"),
+      });
+      setSent(true);
+      setAttempt((current) => current + 1);
+    } catch (error) {
+      setProblem(error);
+    } finally {
+      setPending(false);
+      lock.current = false;
     }
   }
 
-  if (answer.status !== 'ready') {
-    return null
-  }
-
-  const { canWrite, reviews } = answer.data
-
-  if (reviews.length === 0 && !canWrite && !sent) {
-    return null
-  }
+  if (answer.status === "error")
+    return (
+      <RequestError
+        error={answer.error}
+        operation="read"
+        onRetry={answer.reload}
+      />
+    );
+  if (answer.status !== "ready") return null;
+  const { canWrite, reviews } = answer.data;
+  if (reviews.length === 0 && !canWrite && !sent) return null;
 
   return (
     <section className="reviews">
-      <h2>What customers say</h2>
-
+      <h2>{t("catalog:customerReviews")}</h2>
       {reviews.map((review) => (
-        <article key={`${review.author}-${review.writtenAt}`} className="review">
+        <article
+          key={`${review.author}-${review.writtenAt}`}
+          className="review"
+        >
           <p className="review-head">
             <Stars rating={review.rating} />
             <span className="hint">
-              {review.author} · {new Date(review.writtenAt).toLocaleDateString(store.culture)}
+              {review.author} · {formatDate(review.writtenAt, store.culture)}
             </span>
           </p>
           <p>{review.text}</p>
         </article>
       ))}
-
       {canWrite && !sent && (
-        <form action={submit} className="review-form">
-          <h3>Write a review</h3>
-          <p className="hint">You bought this, so you can say what it is like.</p>
+        <form
+          onSubmit={(event) => void submit(event)}
+          className="review-form"
+          aria-busy={pending}
+        >
+          <h3>{t("catalog:writeReview")}</h3>
+          <p className="hint">{t("catalog:reviewEligibility")}</p>
           <label>
-            Rating
+            {t("catalog:ratingLabel")}
             <select name="rating" defaultValue="5">
               {[5, 4, 3, 2, 1].map((value) => (
                 <option key={value} value={value}>
-                  {value} {value === 1 ? 'star' : 'stars'}
+                  {t("catalog:starCount", { count: value })}
                 </option>
               ))}
             </select>
           </label>
           <label>
-            Your review <textarea name="text" rows={3} maxLength={2000} required />
+            {t("catalog:reviewLabel")}{" "}
+            <textarea name="text" rows={3} maxLength={2000} required />
           </label>
-          <button type="submit">Send review</button>
-          {problem && <p className="error">{problem}</p>}
+          <button type="submit" disabled={pending}>
+            {t("catalog:sendReview")}
+          </button>
+          {problem !== null && (
+            <RequestError error={problem} operation="write" />
+          )}
         </form>
       )}
-
-      {sent && <p className="notice">Thank you — your review will appear once the store has read it.</p>}
+      {sent && <p className="notice">{t("catalog:reviewSent")}</p>}
     </section>
-  )
+  );
 }

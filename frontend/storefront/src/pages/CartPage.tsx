@@ -1,71 +1,120 @@
-import { Link } from 'react-router'
-import { removeFromCart, setCartQuantity, type Cart } from '../cart'
-import { useCart } from '../cartContext'
-import { DiscountField } from '../components/DiscountField'
-import { Message } from '../components/Message'
-import { LoadingState } from '../components/ui/LoadingState'
-import { formatPrice, useStore } from '../storeContext'
+import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { Link } from "react-router";
+import type { Cart } from "../cart";
+import { useCart } from "../cartContext";
+import { readCheckoutRecovery } from "../checkoutRecovery";
+import { CartLine } from "../components/cart/CartLine";
+import { CartSummary } from "../components/cart/CartSummary";
+import { DiscountField } from "../components/DiscountField";
+import { LoadingState } from "../components/ui/LoadingState";
+import { RequestError } from "../components/ui/RequestError";
 
 export function CartPage() {
-  const store = useStore()
-  const { cart, apply, reload } = useCart()
+  const { t } = useTranslation(["cart", "catalog", "navigation"]);
+  const {
+    status,
+    cart,
+    error,
+    pending,
+    adjusted,
+    acknowledgeAdjustment,
+    reload,
+  } = useCart();
+  const [announcement, setAnnouncement] = useState("");
+  const [checkoutRecovery] = useState(readCheckoutRecovery);
+  const [focusTarget, setFocusTarget] = useState<string | null>(null);
+  const focusedTarget = useRef<string | null>(null);
 
-  function change(request: Promise<Cart>) {
-    request.then(apply).catch(reload)
+  useEffect(() => {
+    if (!focusTarget || focusedTarget.current === focusTarget) return;
+    focusedTarget.current = focusTarget;
+    document.getElementById(focusTarget)?.focus();
+  }, [cart, focusTarget]);
+
+  function removed(updated: Cart, index: number, name: string) {
+    const next = updated.items[Math.min(index, updated.items.length - 1)];
+    setFocusTarget(
+      next ? `cart-line-link-${next.storeProductId}` : "cart-empty-heading",
+    );
+    setAnnouncement(t("cart:removedAnnouncement", { name }));
   }
 
+  if (status === "error") {
+    return (
+      <section className="cart cart-load-state">
+        <h1>{t("navigation:cart")}</h1>
+        <RequestError error={error} operation="read" onRetry={reload} />
+      </section>
+    );
+  }
   if (!cart) {
-    return <LoadingState label="Loading cart…" lines={4} />
-  }
-
-  if (cart.items.length === 0) {
-    return <Message title="Your cart is empty" text="Add a product to start an order." />
+    return (
+      <section className="cart cart-load-state">
+        <h1>{t("navigation:cart")}</h1>
+        <LoadingState label={t("cart:loading")} lines={4} />
+      </section>
+    );
   }
 
   return (
-    <section className="cart">
-      <h1>Cart</h1>
-      {cart.changed && <p className="notice">Your cart was updated: some products are no longer available in the quantity you picked.</p>}
-      <ul className="cart-lines">
-        {cart.items.map((line) => (
-          <li key={line.storeProductId} className="cart-line">
-            {line.imageUrl ? (
-              <img src={line.imageUrl} alt="" className="cart-thumbnail" />
-            ) : (
-              <div className="cart-thumbnail" aria-hidden="true" />
-            )}
-            <Link to={`/p/${line.slug}`} className="cart-line-name">
-              {line.name}
-            </Link>
-            <span className="cart-unit-price">{formatPrice(line.unitPrice, store)}</span>
-            <input
-              type="number"
-              min="1"
-              max={Math.min(line.available, 99)}
-              value={line.quantity}
-              aria-label={`Quantity of ${line.name}`}
-              onChange={(event) => {
-                const quantity = Number(event.target.value)
-                if (quantity >= 1) {
-                  change(setCartQuantity(line.storeProductId, quantity))
-                }
-              }}
-            />
-            <span className="cart-line-total">{formatPrice(line.lineTotal, store)}</span>
-            <button type="button" className="link-button" onClick={() => change(removeFromCart(line.storeProductId))}>
-              Remove
-            </button>
-          </li>
-        ))}
-      </ul>
-      <DiscountField />
-      <p className="cart-total">
-        Total <strong>{formatPrice(cart.itemsTotal, store)}</strong>
+    <section className="cart" aria-labelledby="cart-heading">
+      <h1 id="cart-heading">{t("navigation:cart")}</h1>
+      <p className="sr-only" aria-live="polite" aria-atomic="true">
+        {announcement}
       </p>
-      <p className="hint">Includes {formatPrice(cart.vatTotal, store)} VAT. Shipping is added at checkout.</p>
-      <Link to="/checkout" className="button">
-        Proceed to checkout
-      </Link>
+      {checkoutRecovery && (
+        <div className="cart-order-recovery notice" role="status">
+          <div>
+            <strong>{t("cart:orderRecoveryTitle")}</strong>
+            <p>{t("cart:orderRecoveryBody")}</p>
+          </div>
+          <Link to={checkoutRecovery.orderPath} className="button">
+            {t("cart:orderRecoveryAction")}
+          </Link>
+        </div>
+      )}
+      {error !== null && <RequestError error={error} operation="write" />}
+      {adjusted && (
+        <div className="cart-adjusted notice" role="status">
+          <p>{t("cart:changed")}</p>
+          <button
+            type="button"
+            className="link-button"
+            onClick={acknowledgeAdjustment}
+          >
+            {t("cart:reviewed")}
+          </button>
+        </div>
+      )}
+      {cart.items.length === 0 ? (
+        <div className="cart-empty" aria-labelledby="cart-empty-heading">
+          <h2 id="cart-empty-heading" tabIndex={-1}>
+            {t("cart:emptyTitle")}
+          </h2>
+          <p>{t("cart:emptyBody")}</p>
+          <Link to="/" className="button">
+            {t("catalog:browseAll")}
+          </Link>
+        </div>
+      ) : (
+        <div className="cart-layout">
+          <div className="cart-items">
+            <ul className="cart-lines">
+              {cart.items.map((line, index) => (
+                <CartLine
+                  key={line.storeProductId}
+                  line={line}
+                  index={index}
+                  onRemoved={removed}
+                />
+              ))}
+            </ul>
+            <DiscountField />
+          </div>
+          <CartSummary cart={cart} pending={pending} />
+        </div>
+      )}
     </section>
-  )
+  );
 }

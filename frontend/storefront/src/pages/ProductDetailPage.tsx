@@ -1,100 +1,122 @@
-import { Link, useParams } from 'react-router'
-import { getProduct, type ProductAttribute } from '../api'
-import { AddToCart } from '../components/AddToCart'
-import { ProductReviews } from '../components/ProductReviews'
-import { Stars } from '../components/Stars'
-import { WishlistButton } from '../components/WishlistButton'
-import { Message } from '../components/Message'
-import { LoadingState } from '../components/ui/LoadingState'
-import type { Store } from '../store'
-import { formatPrice, useStore } from '../storeContext'
-import { useRequest } from '../useRequest'
+import { useTranslation } from "react-i18next";
+import { Link, useParams } from "react-router";
+import { getProduct } from "../api";
+import { AddToCart } from "../components/AddToCart";
+import { Message } from "../components/Message";
+import { ProductReviews } from "../components/ProductReviews";
+import { Stars } from "../components/Stars";
+import { ProductAttributes } from "../components/product/ProductAttributes";
+import { ProductDetailLoading } from "../components/product/ProductDetailLoading";
+import { ProductGallery } from "../components/product/ProductGallery";
+import { RequestError } from "../components/ui/RequestError";
+import { WishlistButton } from "../components/WishlistButton";
+import { formatPrice, useStore } from "../storeContext";
+import { useRequest } from "../useRequest";
 
 export function ProductDetailPage() {
-  const { slug = '' } = useParams()
-  const store = useStore()
-  const product = useRequest(`product:${slug}`, (signal) => getProduct(slug, signal))
+  const { t } = useTranslation(["catalog", "errors"]);
+  const { slug = "" } = useParams();
+  const store = useStore();
+  const product = useRequest(`product:${slug}`, (signal) =>
+    getProduct(slug, signal),
+  );
 
   switch (product.status) {
-    case 'loading':
-      return <LoadingState label="Loading product…" lines={6} />
-    case 'not-found':
-      return <Message title="Product not found" text="This product is not available." />
-    case 'error':
-      return <Message title="Something went wrong" text="The product could not be loaded. Please try again." />
-    case 'ready': {
-      const { id, name, price, available, rating, reviewCount, description, images, categories, attributes } = product.data
+    case "loading":
+      return <ProductDetailLoading label={t("catalog:loadingProduct")} />;
+    case "not-found":
+      return (
+        <Message
+          title={t("catalog:productNotFoundTitle")}
+          text={t("catalog:productNotFoundBody")}
+        />
+      );
+    case "error":
+      return (
+        <section className="product-load-error">
+          <h1>{t("catalog:productUnavailableTitle")}</h1>
+          <RequestError
+            error={product.error}
+            operation="read"
+            onRetry={product.reload}
+          />
+        </section>
+      );
+    case "ready": {
+      const {
+        id,
+        name,
+        price,
+        available,
+        rating,
+        reviewCount,
+        description,
+        images,
+        categories,
+        attributes,
+      } = product.data;
+      const availability =
+        available === 0
+          ? t("catalog:outOfStock")
+          : available <= 5
+            ? t("catalog:onlyLeft", { count: available })
+            : t("catalog:inStockCount", { count: available });
 
       return (
-        <article className="product-detail">
-          <div className="product-gallery">
-            {images.length === 0 ? (
-              <div className="product-image product-image-placeholder" aria-hidden="true" />
-            ) : (
-              images.map((image) => <img key={image.url} src={image.url} alt={image.altText ?? name} className="product-image" />)
-            )}
-          </div>
-          <div className="product-info">
-            <h1>{name}</h1>
-            <p className="product-price">{formatPrice(price, store)}</p>
-            <Stars rating={rating} count={reviewCount} />
-            <p className="availability">{availability(available)}</p>
-            {available > 0 && <AddToCart storeProductId={id} available={available} />}
-            <WishlistButton storeProductId={id} />
-            {description && <p>{description}</p>}
-            {attributes.length > 0 && (
-              <table className="product-attributes">
-                <tbody>
-                  {attributes.map((attribute) => (
-                    <tr key={attribute.code}>
-                      <th scope="row">{attribute.name}</th>
-                      <td>{formatAttribute(attribute, store)}</td>
-                    </tr>
+        <>
+          {product.refreshError !== null && (
+            <RequestError
+              error={product.refreshError}
+              operation="read"
+              onRetry={product.reload}
+            />
+          )}
+          <article className="product-detail">
+            <ProductGallery key={id} images={images} productName={name} />
+            <div className="product-info">
+              {categories.length > 0 && (
+                <nav
+                  className="product-categories"
+                  aria-label={t("catalog:productCategories")}
+                >
+                  {categories.map((category) => (
+                    <Link
+                      key={category.slug}
+                      to={`/c/${category.slug}`}
+                      lang={store.culture}
+                    >
+                      {category.name}
+                    </Link>
                   ))}
-                </tbody>
-              </table>
-            )}
-            {categories.length > 0 && (
-              <p className="product-categories">
-                {categories.map((category) => (
-                  <Link key={category.slug} to={`/c/${category.slug}`}>
-                    {category.name}
-                  </Link>
-                ))}
+                </nav>
+              )}
+              <h1 lang={store.culture}>{name}</h1>
+              <p className="product-price">{formatPrice(price, store)}</p>
+              <Stars rating={rating} count={reviewCount} />
+              <p className={`availability ${available === 0 ? "unavailable" : "available"}`}>
+                {availability}
               </p>
-            )}
-            <ProductReviews slug={product.data.slug} />
-          </div>
-        </article>
-      )
+              <div className="product-actions">
+                <AddToCart
+                  key={`${id}:${available}`}
+                  storeProductId={id}
+                  productName={name}
+                  available={available}
+                />
+                <WishlistButton storeProductId={id} />
+              </div>
+              {description && (
+                <section className="product-section" aria-labelledby="product-description-heading">
+                  <h2 id="product-description-heading">{t("catalog:description")}</h2>
+                  <p lang={store.culture}>{description}</p>
+                </section>
+              )}
+              <ProductAttributes attributes={attributes} store={store} />
+            </div>
+          </article>
+          <ProductReviews slug={product.data.slug} />
+        </>
+      );
     }
-  }
-}
-
-function availability(available: number) {
-  if (available === 0) {
-    return 'Out of stock'
-  }
-
-  return available <= 5 ? `Only ${available} left in stock` : 'In stock'
-}
-
-function formatAttribute(attribute: ProductAttribute, store: Store) {
-  const { value, unit } = attribute
-
-  if (Array.isArray(value)) {
-    return value.join(', ')
-  }
-
-  switch (attribute.type) {
-    case 'boolean':
-      return value ? 'Yes' : 'No'
-    case 'date':
-      return new Date(`${value}T00:00:00`).toLocaleDateString(store.culture)
-    case 'integer':
-    case 'decimal':
-      return `${Number(value).toLocaleString(store.culture)}${unit ? ` ${unit}` : ''}`
-    default:
-      return String(value)
   }
 }

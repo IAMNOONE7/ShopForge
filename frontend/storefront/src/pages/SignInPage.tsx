@@ -1,46 +1,68 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router'
-import { signIn } from '../account'
-import { RequestFailed } from '../cart'
-import { Button } from '../components/ui/Button'
-import { Field } from '../components/ui/Field'
-import { InlineMessage } from '../components/ui/InlineMessage'
-import { useCustomer } from '../customerContext'
+import { useRef, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
+import { Link, useNavigate } from "react-router";
+import { signIn } from "../account";
+import { Button } from "../components/ui/Button";
+import { Field } from "../components/ui/Field";
+import { RequestError } from "../components/ui/RequestError";
+import { useCustomer } from "../customerContext";
 
 export function SignInPage() {
-  const navigate = useNavigate()
-  const { apply } = useCustomer()
-  const [problem, setProblem] = useState<string | null>(null)
-  const [pending, setPending] = useState(false)
-
-  async function submit(form: FormData) {
-    setProblem(null)
-    setPending(true)
-
+  const { t } = useTranslation(["auth", "errors"]);
+  const navigate = useNavigate();
+  const { apply } = useCustomer();
+  const [problem, setProblem] = useState<unknown | null>(null);
+  const [pending, setPending] = useState(false);
+  const lock = useRef(false);
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (lock.current) return;
+    lock.current = true;
+    setProblem(null);
+    setPending(true);
+    const form = new FormData(event.currentTarget);
     try {
-      apply(await signIn(String(form.get('email')).trim(), String(form.get('password'))))
-      void navigate('/account')
-    } catch (exception) {
-      setProblem(exception instanceof RequestFailed ? exception.message : 'Signing in failed. Please try again.')
+      apply(
+        await signIn(
+          String(form.get("email")).trim(),
+          String(form.get("password")),
+        ),
+      );
+      void navigate("/account");
+    } catch (error) {
+      setProblem(error);
     } finally {
-      setPending(false)
+      setPending(false);
+      lock.current = false;
     }
   }
-
   return (
     <section className="account-form">
-      <h1>Sign in</h1>
-      <form action={submit}>
-        <Field label="E-mail" name="email" type="email" autoComplete="email" required />
-        <Field label="Password" name="password" type="password" autoComplete="current-password" required />
-        <Button type="submit" busy={pending} busyLabel="Signing in…">
-          Sign in
+      <h1>{t("signIn")}</h1>
+      <form onSubmit={(event) => void submit(event)} aria-busy={pending}>
+        <Field
+          label={t("email")}
+          name="email"
+          type="email"
+          autoComplete="email"
+          required
+        />
+        <Field
+          label={t("password")}
+          name="password"
+          type="password"
+          autoComplete="current-password"
+          required
+        />
+        <Button type="submit" busy={pending} busyLabel={t("signingIn")}>
+          {t("signIn")}
         </Button>
-        {problem && <InlineMessage tone="error">{problem}</InlineMessage>}
+        {problem !== null && <RequestError error={problem} operation="login" />}
       </form>
       <p className="hint">
-        <Link to="/account/register">Create an account</Link> · <Link to="/account/forgot-password">Forgotten password</Link>
+        <Link to="/account/register">{t("createAccount")}</Link> ·{" "}
+        <Link to="/account/forgot-password">{t("forgottenPassword")}</Link>
       </p>
     </section>
-  )
+  );
 }

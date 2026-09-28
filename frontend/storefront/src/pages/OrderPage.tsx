@@ -1,114 +1,152 @@
-import { useEffect, useState } from 'react'
-import { useLocation, useParams, useSearchParams } from 'react-router'
-import { getOrder } from '../cart'
-import { Message } from '../components/Message'
-import { LoadingState } from '../components/ui/LoadingState'
-import { formatPrice, useStore } from '../storeContext'
-import { useRequest } from '../useRequest'
+import { useEffect } from "react";
+import { Trans, useTranslation } from "react-i18next";
+import { Link, useLocation, useParams, useSearchParams } from "react-router";
+import { downloadGuestDocument } from "../api/documents";
+import { getOrder } from "../cart";
+import { clearCheckoutRecovery, orderPath, readCheckoutRecovery } from "../checkoutRecovery";
+import { OrderReceipt } from "../components/orders/OrderReceipt";
+import { useOrderRefresh } from "../components/orders/useOrderRefresh";
+import { EmptyState } from "../components/ui/EmptyState";
+import { LoadingState } from "../components/ui/LoadingState";
+import { RequestError } from "../components/ui/RequestError";
+import { useStore } from "../storeContext";
 
 export function OrderPage() {
-  const { number = '' } = useParams()
-  const [parameters] = useSearchParams()
-  const token = parameters.get('token') ?? ''
-  const store = useStore()
-  const { state } = useLocation()
-  const instructions = (state as { instructions?: string } | null)?.instructions
-  // A hosted payment is confirmed by the provider calling us, which can land a moment after the shopper is back.
-  const [attempt, setAttempt] = useState(0)
-  const order = useRequest(`order:${number}:${token}:${attempt}`, (signal) => getOrder(number, token, signal))
-  const awaitingPayment = order.status === 'ready' && order.data.status === 'AwaitingPayment'
+  const { t } = useTranslation(["orders", "catalog"]);
+  const { number = "" } = useParams();
+  const [parameters] = useSearchParams();
+  const token = parameters.get("token") ?? "";
+  const location = useLocation();
+  const suppliedInstructions = (
+    location.state &&
+    typeof location.state === "object" &&
+    "instructions" in location.state &&
+    typeof location.state.instructions === "string"
+      ? location.state.instructions
+      : undefined
+  );
+  const instructions = suppliedInstructions?.trim() || undefined;
+
+  if (!number.trim() || !isOrderToken(token)) {
+    return (
+      <EmptyState
+        title={t("orders:invalidLinkTitle")}
+        action={
+          <Link to="/" className="button">
+            {t("catalog:browseAll")}
+          </Link>
+        }
+      >
+        <p>{t("orders:invalidLink")}</p>
+      </EmptyState>
+    );
+  }
+
+  return (
+    <GuestOrder
+      number={number}
+      token={token}
+      instructions={instructions}
+    />
+  );
+}
+
+function GuestOrder({
+  number,
+  token,
+  instructions,
+}: {
+  number: string;
+  token: string;
+  instructions?: string;
+}) {
+  const { t } = useTranslation(["orders", "catalog"]);
+  const store = useStore();
+  const { request, waiting, timedOut, refresh } = useOrderRefresh(
+    "guest-order:" + number + ":" + token,
+    (signal) => getOrder(number, token, signal),
+  );
+  const data = request.status === "ready" ? request.data : null;
 
   useEffect(() => {
-    if (!awaitingPayment || attempt >= 5) {
-      return
-    }
+    if (!data) return;
+    const recovery = readCheckoutRecovery();
+    const currentPath = orderPath({ number, token });
+    if (recovery?.orderPath === currentPath) clearCheckoutRecovery();
+  }, [data, number, token]);
 
-    const timer = setTimeout(() => setAttempt((current) => current + 1), 3000)
-
-    return () => clearTimeout(timer)
-  }, [awaitingPayment, attempt])
-
-  switch (order.status) {
-    case 'loading':
-      return <LoadingState label="Loading order…" lines={6} />
-    case 'not-found':
-      return <Message title="Order not found" text="Check the link from your confirmation e-mail." />
-    case 'error':
-      return <Message title="Something went wrong" text="The order could not be loaded. Please try again." />
-    case 'ready': {
-      const { lines, shippingMethod, shippingPrice, itemsTotal, vatTotal, grandTotal, email, paymentMethod, status } = order.data
-      const { pickupPoint, shipment, documents } = order.data
-
-      return (
-        <section className="order">
-          <h1>Thank you for your order</h1>
-          <p>
-            Order <strong>{order.data.number}</strong> was placed. A confirmation goes to {email}.
-          </p>
-          {instructions && <p className="notice">{instructions}</p>}
-          {status === 'AwaitingPayment' && !instructions && <p className="notice">We are waiting for your payment to be confirmed.</p>}
-          {status === 'Paid' && <p className="notice">Your payment was received. Thank you.</p>}
-          {status === 'Cancelled' && <p className="notice">This order was cancelled because it was not paid in time.</p>}
-          {shipment && (
-            <p className="notice">
-              On its way with {shipment.carrier}, tracking number {shipment.trackingNumber}
-              {shipment.trackingUrl && (
-                <>
-                  {' '}
-                  (<a href={shipment.trackingUrl}>track it</a>)
-                </>
-              )}
-              .
-            </p>
-          )}
-          <table className="order-lines">
-            <tbody>
-              {lines.map((line) => (
-                <tr key={line.productName}>
-                  <td>{line.productName}</td>
-                  <td>{line.quantity} ×</td>
-                  <td>{formatPrice(line.unitPrice, store)}</td>
-                  <td className="order-amount">{formatPrice(line.unitPrice * line.quantity, store)}</td>
-                </tr>
-              ))}
-              <tr>
-                <td colSpan={3}>Items</td>
-                {/* The discount has its own row below, so the subtotal is shown before it is taken off. */}
-                <td className="order-amount">{formatPrice(itemsTotal + (order.data.discount?.amount ?? 0), store)}</td>
-              </tr>
-              {order.data.discount && (
-                <tr>
-                  <td colSpan={3}>
-                    {order.data.discount.name} ({order.data.discount.code})
-                  </td>
-                  <td className="order-amount">−{formatPrice(order.data.discount.amount, store)}</td>
-                </tr>
-              )}
-              <tr>
-                <td colSpan={3}>{shippingMethod}</td>
-                <td className="order-amount">{formatPrice(shippingPrice, store)}</td>
-              </tr>
-              <tr className="order-total">
-                <td colSpan={3}>Total</td>
-                <td className="order-amount">{formatPrice(grandTotal, store)}</td>
-              </tr>
-            </tbody>
-          </table>
-          {documents.length > 0 && (
-            <p className="documents">
-              {documents.map((document) => (
-                <a key={document.number} href={`/api/storefront/orders/${order.data.number}/documents/${document.number}?token=${token}`}>
-                  {document.kind === 'CreditNote' ? 'Credit note' : 'Invoice'} {document.number} (PDF)
-                </a>
-              ))}
-            </p>
-          )}
-          <p className="hint">
-            Includes {formatPrice(vatTotal, store)} VAT. Paying by {paymentMethod}.
-            {pickupPoint && ` Collect at ${pickupPoint}.`}
-          </p>
-        </section>
-      )
-    }
+  if (request.status === "loading") {
+    return (
+      <section className="order-load-state">
+        <h1>{t("orders:orderTitle", { number })}</h1>
+        <LoadingState label={t("orders:loading")} lines={7} />
+      </section>
+    );
   }
+
+  if (request.status === "not-found") {
+    return (
+      <EmptyState
+        title={t("orders:notFoundTitle")}
+        action={
+          <Link to="/" className="button">
+            {t("catalog:browseAll")}
+          </Link>
+        }
+      >
+        <p>{t("orders:guestNotFound")}</p>
+      </EmptyState>
+    );
+  }
+
+  if (request.status === "error") {
+    return (
+      <section className="order-load-state">
+        <h1>{t("orders:orderTitle", { number })}</h1>
+        <RequestError
+          error={request.error}
+          operation="read"
+          onRetry={refresh}
+        />
+      </section>
+    );
+  }
+
+  return (
+    <OrderReceipt
+      order={request.data}
+      store={store}
+      heading={t("orders:thankYou")}
+      introduction={
+        <p>
+          <Trans
+            ns="orders"
+            i18nKey="placed"
+            values={{
+              number: request.data.number,
+              email: request.data.email,
+            }}
+            components={{ strong: <strong /> }}
+          />
+        </p>
+      }
+      instructions={instructions}
+      refresh={{
+        waiting,
+        refreshing: request.refreshing,
+        error: request.refreshError,
+        timedOut,
+        onRefresh: refresh,
+      }}
+      downloadDocument={(document) =>
+        downloadGuestDocument(request.data.number, document.number, token)
+      }
+    />
+  );
+}
+
+function isOrderToken(value: string) {
+  return /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
 }

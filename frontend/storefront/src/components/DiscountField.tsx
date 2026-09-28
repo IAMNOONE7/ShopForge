@@ -1,58 +1,77 @@
-import { useState } from 'react'
-import { applyDiscount, removeDiscount, RequestFailed } from '../cart'
-import { useCart } from '../cartContext'
-import { formatPrice, useStore } from '../storeContext'
+import { useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
+import { applyDiscount, removeDiscount } from "../cart";
+import { useCart } from "../cartContext";
+import { formatPrice, useStore } from "../storeContext";
 
 export function DiscountField() {
-  const store = useStore()
-  const { cart, apply } = useCart()
-  const [problem, setProblem] = useState<string | null>(null)
-
-  async function submit(form: FormData) {
-    setProblem(null)
-
-    try {
-      apply(await applyDiscount(String(form.get('code')).trim()))
-    } catch (exception) {
-      setProblem(exception instanceof RequestFailed ? exception.message : 'The code could not be applied.')
-    }
+  const { t } = useTranslation("cart");
+  const store = useStore();
+  const { cart, mutate, pending } = useCart();
+  const [problem, setProblem] = useState(false);
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setProblem(false);
+    const form = new FormData(event.currentTarget);
+    const result = await mutate(() =>
+      applyDiscount(String(form.get("code")).trim()),
+    );
+    setProblem(result === null);
   }
-
   async function remove() {
-    setProblem(null)
-    apply(await removeDiscount())
+    setProblem(false);
+    const result = await mutate(removeDiscount);
+    setProblem(result === null);
   }
-
-  if (!cart) {
-    return null
-  }
-
-  if (cart.discount) {
+  if (!cart) return null;
+  if (cart.discount)
     return (
       <p className="discount applied">
         <span>
-          {cart.discount.name} (<strong>{cart.discount.code}</strong>) −{formatPrice(cart.discount.amount, store)}
+          {cart.discount.name} (<strong>{cart.discount.code}</strong>) −
+          {formatPrice(cart.discount.amount, store)}
         </span>
-        <button type="button" className="link-button" onClick={() => void remove()}>
-          Remove
+        <button
+          type="button"
+          className="link-button"
+          disabled={pending}
+          onClick={() => void remove()}
+        >
+          {t("discountRemove")}
         </button>
+        {problem && <span className="error">{t("discountFailed")}</span>}
       </p>
-    )
-  }
-
+    );
+  const failed = problem || Boolean(cart.discountProblem);
   return (
-    <form action={submit} className="discount">
+    <form
+      onSubmit={(event) => void submit(event)}
+      className="discount"
+      aria-busy={pending}
+    >
       <label>
-        <span className="visually-hidden">Discount code</span>
-        <input name="code" placeholder="Discount code" autoComplete="off" required />
+        <span className="visually-hidden">{t("discountCode")}</span>
+        <input
+          name="code"
+          placeholder={t("discountCode")}
+          autoComplete="off"
+          required
+        />
       </label>
-      <button type="submit">Apply</button>
-      {(problem ?? cart.discountProblem) && <span className="error">{problem ?? cart.discountProblem}</span>}
+      <button type="submit" disabled={pending}>
+        {t("discountApply")}
+      </button>
+      {failed && <span className="error">{t("discountFailed")}</span>}
       {cart.discountProblem && !problem && (
-        <button type="button" className="link-button" onClick={() => void remove()}>
-          Remove code
+        <button
+          type="button"
+          className="link-button"
+          disabled={pending}
+          onClick={() => void remove()}
+        >
+          {t("discountRemove")}
         </button>
       )}
     </form>
-  )
+  );
 }

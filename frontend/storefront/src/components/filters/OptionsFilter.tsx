@@ -1,11 +1,21 @@
-import type { Facet } from '../../api'
+import type { Facet } from "../../api";
 
-export function OptionsFilter({ facet, onChange }: { facet: Facet; onChange: (value: string | null) => void }) {
-  const selected = (facet.options ?? []).filter((option) => option.selected).map((option) => option.code)
+export function OptionsFilter({
+  facet,
+  onChange,
+}: {
+  facet: Facet;
+  onChange: (value: string | null) => void;
+}) {
+  const selected = (facet.options ?? [])
+    .filter((option) => option.selected)
+    .map((option) => option.code);
 
   function toggle(code: string, checked: boolean) {
-    const next = checked ? [...selected, code] : selected.filter((item) => item !== code)
-    onChange(next.length > 0 ? next.join(',') : null)
+    const next = checked
+      ? [...selected, code]
+      : selected.filter((item) => item !== code);
+    onChange(next.length > 0 ? next.join(",") : null);
   }
 
   return (
@@ -22,5 +32,5 @@ export function OptionsFilter({ facet, onChange }: { facet: Facet; onChange: (va
         </label>
       ))}
     </>
-  )
+  );
 }
