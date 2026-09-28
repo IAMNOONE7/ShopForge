@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Customers.Authentication;
 using ShopForge.Customers.Domain;
+using ShopForge.Customers.Privacy;
 using ShopForge.Shared.Customers;
 using ShopForge.Shared.Email;
 using ShopForge.Shared.Http;
@@ -38,6 +39,7 @@ internal static class AccountEndpoints
             .RequireAuthorization(CustomerPolicies.Customer)
             .RequireRateLimiting(RateLimits.Authentication);
         account.MapPost("/email/confirm", ConfirmEmailAsync).RequireRateLimiting(RateLimits.Authentication);
+        account.MapPrivacyEndpoints();
     }
 
     // The answer never says whether the address is already known (D-052); only the e-mail that follows differs.

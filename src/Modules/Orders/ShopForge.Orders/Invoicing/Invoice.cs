@@ -76,6 +76,14 @@ internal sealed class Invoice : IStoreOwned
 
     public decimal NetTotal => Total - VatTotal;
 
+    // A credit note and an invoice keep their numbers, their lines and their VAT; the buyer on them does not
+    // outlive the buyer's right to be forgotten (D-117).
+    public void Anonymise()
+    {
+        Buyer = PersonalData.ErasedAddress;
+        BuyerEmail = PersonalData.Erased;
+    }
+
     public void AddLine(string description, int quantity, decimal unitPrice, decimal vatRate, decimal discount = 0m) =>
         _lines.Add(new InvoiceLine(description, quantity, unitPrice, vatRate, discount));
 

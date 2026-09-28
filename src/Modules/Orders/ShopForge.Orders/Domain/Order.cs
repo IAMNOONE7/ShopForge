@@ -144,6 +144,17 @@ internal sealed class Order : IStoreOwned
 
     public void AssignTo(Guid storeCustomerId) => StoreCustomerId = storeCustomerId;
 
+    // What the order is worth, what VAT it carried and which documents it produced are the accounting record and
+    // stay exactly as they were. Who bought it does not (D-117).
+    public void Anonymise()
+    {
+        Email = PersonalData.Erased;
+        BillingAddress = PersonalData.ErasedAddress;
+        ShippingAddress = PersonalData.ErasedAddress;
+        PickupPointAddress = PickupPointAddress is null ? null : PersonalData.ErasedAddress;
+        StoreCustomerId = null;
+    }
+
     public bool ConfirmPayment(DateTimeOffset paidAt, string? paymentReference = null)
     {
         if (Status != OrderStatus.AwaitingPayment)

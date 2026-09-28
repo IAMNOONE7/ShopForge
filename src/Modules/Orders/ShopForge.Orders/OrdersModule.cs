@@ -7,6 +7,7 @@ using ShopForge.Orders.Discounts;
 using ShopForge.Orders.Invoicing;
 using ShopForge.Orders.Notifications;
 using ShopForge.Orders.Payments;
+using ShopForge.Orders.Privacy;
 using ShopForge.Orders.Publishing;
 using ShopForge.Orders.Returns;
 using ShopForge.Orders.Shipping;
@@ -16,6 +17,7 @@ using ShopForge.Shared.Maintenance;
 using ShopForge.Shared.Messaging;
 using ShopForge.Shared.Payments;
 using ShopForge.Shared.Platform;
+using ShopForge.Shared.Privacy;
 using ShopForge.Shared.Shipping;
 using ShopForge.Shared.Stores;
 
@@ -36,6 +38,7 @@ public static class OrdersModule
         services.AddScoped<ICustomerOrders, GuestOrderClaim>();
         services.AddScoped<ICustomerPurchases, CustomerPurchases>();
         services.AddScoped<ITenantUsage, OrderUsage>();
+        services.AddScoped<ICustomerData, CustomerOrderData>();
         services.AddScoped<IEventHandler<OrderPlaced>, OrderNotifications>();
         services.AddScoped<IEventHandler<PaymentReceived>, OrderNotifications>();
         services.AddScoped<IEventHandler<PaymentReceived>, InvoiceIssuing>();

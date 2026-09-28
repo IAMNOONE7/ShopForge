@@ -3,11 +3,13 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Catalog.Admin;
 using ShopForge.Catalog.Import;
+using ShopForge.Catalog.Privacy;
 using ShopForge.Catalog.Publishing;
 using ShopForge.Catalog.Reviews;
 using ShopForge.Catalog.Storefront;
 using ShopForge.Shared.Catalog;
 using ShopForge.Shared.Platform;
+using ShopForge.Shared.Privacy;
 using ShopForge.Shared.Stores;
 
 namespace ShopForge.Catalog;
@@ -25,6 +27,7 @@ public static class CatalogModule
         services.AddScoped<ITenantProducts, TenantProductLookup>();
         services.AddScoped<ITenantUsage, ProductUsage>();
         services.AddScoped<ProductRatings>();
+        services.AddScoped<ICustomerData, CustomerReviewData>();
 
         return services;
     }

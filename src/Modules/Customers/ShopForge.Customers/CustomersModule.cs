@@ -7,10 +7,12 @@ using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Customers.Accounts;
 using ShopForge.Customers.Authentication;
 using ShopForge.Customers.Domain;
+using ShopForge.Customers.Privacy;
 using ShopForge.Customers.Wishlist;
 using ShopForge.Shared.Customers;
 using ShopForge.Shared.Maintenance;
 using ShopForge.Shared.Platform;
+using ShopForge.Shared.Privacy;
 using ShopForge.Shared.Security;
 
 namespace ShopForge.Customers;
@@ -29,6 +31,7 @@ public static class CustomersModule
         services.AddScoped<ITenantUsage, CustomerUsage>();
         services.AddScoped<CustomerMail>();
         services.AddScoped<IStoreMaintenance, RegistrationCleanup>();
+        services.AddScoped<ICustomerData, CustomerAccountData>();
 
         services.AddAuthentication().AddCookie(CustomerPolicies.Scheme, options =>
         {

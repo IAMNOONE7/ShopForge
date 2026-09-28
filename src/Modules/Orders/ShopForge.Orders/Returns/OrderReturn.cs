@@ -104,7 +104,16 @@ internal sealed class OrderReturn : IStoreOwned
 
         return true;
     }
+
+    // The goods coming back are the store's record; who sent them, and what they wrote about themselves, are not.
+    public void Anonymise()
+    {
+        StoreCustomerId = null;
+        Reason = null;
+    }
 }
+
+
 
 internal sealed class OrderReturnLine
 {
