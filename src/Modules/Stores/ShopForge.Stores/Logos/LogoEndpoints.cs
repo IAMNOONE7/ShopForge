@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Shared.Files;
@@ -17,6 +18,7 @@ internal static class LogoEndpoints
         // Cookie auth is SameSite=Strict, so cross-site form posts never carry the session; antiforgery tokens add nothing.
         storeAdmin.MapPut("/logo", ReplaceLogoAsync)
             .RequireAuthorization(AdminPolicies.StoreManagement)
+            .WithMetadata(new RequestSizeLimitAttribute(ImageFormats.MaxBytes))
             .DisableAntiforgery();
         storeAdmin.MapGet("/logo", GetLogoAsync);
     }

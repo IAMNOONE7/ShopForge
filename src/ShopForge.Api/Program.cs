@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
@@ -11,6 +12,7 @@ using ShopForge.Api.Email;
 using ShopForge.Api.Errors;
 using ShopForge.Api.Health;
 using ShopForge.Api.Messaging;
+using ShopForge.Api.Security;
 using ShopForge.Catalog;
 using ShopForge.Catalog.Development;
 using ShopForge.Customers;
@@ -53,17 +55,44 @@ builder.Services.AddHttpLogging(options =>
     options.CombineLogs = true;
 });
 
-// Sign-in and password endpoints are the cheapest thing to brute-force, so they get a window of their own.
+// Three named windows and a ceiling under all of them. The ceiling is the important one: an endpoint nobody
+// remembered to limit is still limited, which is the failure this stage exists to prevent (D-126).
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.AddPolicy(RateLimits.Authentication, context => RateLimitPartition.GetFixedWindowLimiter(
-        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-        _ => new FixedWindowRateLimiterOptions
-        {
-            PermitLimit = builder.Configuration.GetValue("RateLimiting:Authentication:PermitLimit", 10),
-            Window = TimeSpan.FromMinutes(1),
-        }));
+
+    options.AddPolicy(RateLimits.Authentication, context =>
+        Window(context, "auth", builder.Configuration.GetValue("RateLimiting:Authentication:PermitLimit", 10)));
+    options.AddPolicy(RateLimits.Writes, context =>
+        Window(context, "writes", builder.Configuration.GetValue("RateLimiting:Writes:PermitLimit", 120)));
+    options.AddPolicy(RateLimits.Expensive, context =>
+        Window(context, "expensive", builder.Configuration.GetValue("RateLimiting:Expensive:PermitLimit", 10)));
+
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+        context.Request.Path.StartsWithSegments("/health")
+            ? RateLimitPartition.GetNoLimiter("health")
+            : Window(context, "all", builder.Configuration.GetValue("RateLimiting:Global:PermitLimit", 600)));
+
+    static RateLimitPartition<string> Window(HttpContext context, string bucket, int permitLimit) =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            $"{bucket}:{Caller(context)}",
+            _ => new FixedWindowRateLimiterOptions { PermitLimit = permitLimit, Window = TimeSpan.FromMinutes(1) });
+
+    // Per account where there is one, per address otherwise. An address is a poor identity — a household or an
+    // office shares one — and somebody signed in is the thing actually worth counting (D-126).
+    static string Caller(HttpContext context) =>
+        context.User.FindFirstValue(ShopForgeClaimTypes.StoreCustomerId)
+            ?? context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? context.Connection.RemoteIpAddress?.ToString()
+            ?? "unknown";
+});
+
+// A body larger than this is refused by the server before a handler sees it; the two endpoints that take a file
+// raise it to what they actually accept.
+builder.WebHost.ConfigureKestrel(kestrel =>
+{
+    kestrel.AddServerHeader = false;
+    kestrel.Limits.MaxRequestBodySize = 1024 * 1024;
 });
 
 builder.Services.AddScoped<StoreContext>();
@@ -98,18 +127,19 @@ builder.Services.AddHealthChecks()
 var app = builder.Build();
 
 app.UseEdgeHeaders();
+app.UseSecurityHeaders();
 app.UseMiddleware<CorrelationMiddleware>();
 app.UseHttpLogging();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
-app.UseRateLimiter();
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
 app.UseStoreResolution();
 
 app.MapHealthEndpoints();
 
-var storefront = app.MapGroup("/api/storefront").RequireStore();
+var storefront = app.MapGroup("/api/storefront").RequireStore().RequireRateLimiting(RateLimits.Writes);
 storefront.MapStoresStorefrontEndpoints();
 storefront.MapCatalogStorefrontEndpoints();
 storefront.MapCustomersStorefrontEndpoints();
@@ -119,7 +149,7 @@ app.MapGroup("/api/payments").MapPaymentWebhookEndpoints();
 app.MapEmailWebhookEndpoints();
 
 // Administering ShopForge itself: outside tenancy, behind its own cookie (D-103).
-var platform = app.MapGroup("/api/platform");
+var platform = app.MapGroup("/api/platform").RequireRateLimiting(RateLimits.Writes);
 platform.MapPlatformAuthEndpoints();
 var platformOperator = platform.MapGroup(string.Empty).RequireAuthorization(PlatformPolicies.PlatformUser);
 platformOperator.MapStoresPlatformEndpoints();
@@ -127,12 +157,13 @@ platformOperator.MapPlatformOperatorEndpoints();
 platformOperator.MapPlatformOutboxEndpoints();
 platformOperator.MapPlatformAuditEndpoints();
 
-var admin = app.MapGroup("/api/admin");
+var admin = app.MapGroup("/api/admin").RequireRateLimiting(RateLimits.Writes);
 admin.MapAccessAdminEndpoints();
 
 var tenantAdmin = app.MapGroup("/api/admin")
     .RequireAuthorization(AdminPolicies.TenantUser)
-    .RequireAdminTenant();
+    .RequireAdminTenant()
+    .RequireRateLimiting(RateLimits.Writes);
 tenantAdmin.MapAccessTenantAdminEndpoints();
 tenantAdmin.MapAdminAuditEndpoints();
 tenantAdmin.MapStoresAdminEndpoints();

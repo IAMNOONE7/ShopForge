@@ -253,11 +253,22 @@ public sealed class EmailChangeTests(ShopForgeApiFactory factory)
         return await shopper.PostAsync("/api/storefront/account/login", new { Email = email, Password = password });
     }
 
-    private Task<string?> TokenAsync(string email, string? notThisOne = null) =>
-        factory.EventuallyAsync(
+    private readonly Dictionary<string, string> _linksUsed = [];
+
+    // An address here can be sent a verification link and then a change link, and the newest one delivered is not
+    // always the newest one issued, so a test asks for a link it has not already used.
+    private async Task<string?> TokenAsync(string email, string? notThisOne = null)
+    {
+        var link = await factory.EventuallyAsync(
             () => Task.FromResult(factory.Emails.LatestLinkFor(email)),
-            link => link is not null && link != notThisOne,
+            candidate => candidate is not null
+                && candidate != notThisOne
+                && (!_linksUsed.TryGetValue(email, out var used) || candidate != used),
             CancellationToken);
+        _linksUsed[email] = link!;
+
+        return link;
+    }
 
     private sealed record CustomerView(string Email, string FirstName, string LastName, string? Phone);
 }

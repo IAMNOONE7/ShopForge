@@ -2,6 +2,8 @@ using ClosedXML.Excel;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Catalog.Domain;
@@ -19,8 +21,12 @@ internal static class ImportEndpoints
     public static void MapCatalogImport(this IEndpointRouteBuilder storeAdmin)
     {
         // Cookie auth is SameSite=Strict, so cross-site form posts never carry the session; antiforgery tokens add nothing.
+        // A whole catalogue costs real work to read, so it gets the narrow window; the body limit is raised to
+        // what the handler already accepts, so the server refuses anything bigger before reading it (D-126).
         storeAdmin.MapPost("/import", ImportAsync)
             .RequireAuthorization(AdminPolicies.CatalogManagement)
+            .RequireRateLimiting(RateLimits.Expensive)
+            .WithMetadata(new RequestSizeLimitAttribute(ImportFile.MaxBytes))
             .DisableAntiforgery();
         storeAdmin.MapGet("/import/template", GetTemplateAsync);
     }

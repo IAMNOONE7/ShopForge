@@ -82,8 +82,12 @@ public sealed class ShopForgeApiFactory : WebApplicationFactory<Program>, IAsync
         builder.UseSetting("ConnectionStrings:ShopForge", _database.GetConnectionString());
         builder.UseSetting("ConnectionStrings:FileStorage", _fileStorage.GetConnectionString());
 
-        // The suite signs in far more often than a person would; the limiter is exercised by its own test instead.
+        // The suite is one caller doing in a minute what a crowd would do in a day, so every window is opened
+        // wide here; each limit is exercised by a test of its own that closes the one it cares about.
         builder.UseSetting("RateLimiting:Authentication:PermitLimit", "10000");
+        builder.UseSetting("RateLimiting:Writes:PermitLimit", "100000");
+        builder.UseSetting("RateLimiting:Expensive:PermitLimit", "100000");
+        builder.UseSetting("RateLimiting:Global:PermitLimit", "1000000");
 
         // The test host speaks plain HTTP, so cookies cannot be marked Secure the way a deployment marks them.
         builder.UseSetting("Security:RequireSecureCookies", "false");
