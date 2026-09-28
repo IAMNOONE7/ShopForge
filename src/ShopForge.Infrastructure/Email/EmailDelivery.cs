@@ -15,7 +15,11 @@ internal sealed class LoggingEmailDelivery(ILogger<LoggingEmailDelivery> logger)
 {
     public Task DeliverAsync(EmailMessage message, CancellationToken cancellationToken)
     {
-        logger.LogInformation("E-mail to {Recipient}: {Subject}\n{Body}", message.To, message.Subject, message.Body);
+        // A body holds reset links, invitation tokens and whatever else was written to somebody, which is not
+        // something to leave lying in an ordinary log (D-119). Development turns Debug on for this one category,
+        // because there the log is how a link is read.
+        logger.LogInformation("E-mail to {Recipient}: {Subject}", message.To, message.Subject);
+        logger.LogDebug("E-mail body for {Recipient}: {Body}", message.To, message.Body);
 
         return Task.CompletedTask;
     }

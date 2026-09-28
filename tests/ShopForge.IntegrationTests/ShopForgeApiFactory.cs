@@ -101,13 +101,14 @@ public sealed class RecordedEmails
 
     public IReadOnlyList<EmailMessage> For(string recipient) => [.. _messages.Where(message => message.To == recipient)];
 
-    public string? LatestLinkFor(string recipient)
-    {
-        var body = For(recipient).LastOrDefault()?.Body;
-        var token = body?.Split("token=").ElementAtOrDefault(1)?.Split(' ')[0];
+    // The newest message that actually carries a link, not the newest message. Plenty of what a shop sends has no
+    // link in it — an order confirmation, "you already have an account" — and reading only the last one made a
+    // test wait for a link that had already arrived.
+    public string? LatestLinkFor(string recipient) =>
+        For(recipient).Select(TokenIn).OfType<string>().LastOrDefault();
 
-        return token?.TrimEnd('.');
-    }
+    private static string? TokenIn(EmailMessage message) =>
+        message.Body.Split("token=").ElementAtOrDefault(1)?.Split(' ')[0].TrimEnd('.');
 }
 
 // Tests run side by side against one host, so a test that needs delivery to fail says for whom.

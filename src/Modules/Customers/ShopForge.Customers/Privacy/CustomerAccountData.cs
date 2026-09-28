@@ -32,12 +32,19 @@ internal sealed class CustomerAccountData(DbContext dbContext) : ICustomerData
             .Select(item => new WishlistExport(item.StoreProductId, item.AddedAt))
             .ToListAsync(cancellationToken);
 
+        var consents = await dbContext.Set<CustomerConsent>()
+            .AsNoTracking()
+            .Where(consent => consent.StoreCustomerId == storeCustomerId)
+            .Select(consent => new ConsentExport(consent.Purpose.ToString(), consent.IsGranted, consent.Statement, consent.DecidedAt, consent.IpAddress))
+            .ToListAsync(cancellationToken);
+
         return
         [
             new CustomerDataSection(
                 "account",
                 [new AccountExport(email, customer.FirstName, customer.LastName, customer.Phone, customer.IsEmailVerified)]),
             new CustomerDataSection("wishlist", [.. wishlist]),
+            new CustomerDataSection("consents", [.. consents]),
         ];
     }
 
@@ -53,11 +60,17 @@ internal sealed class CustomerAccountData(DbContext dbContext) : ICustomerData
 
         var identityId = customer.CustomerIdentityId;
 
+        // Each of these would also go with the customer's row, which the database cascades. Erasure says what it
+        // erases anyway: this is the list somebody checks against the law, not a consequence of a foreign key
+        // declared in another file (D-117).
         dbContext.RemoveRange(await dbContext.Set<WishlistItem>()
             .Where(item => item.StoreCustomerId == storeCustomerId)
             .ToListAsync(cancellationToken));
         dbContext.RemoveRange(await dbContext.Set<EmailChange>()
             .Where(change => change.StoreCustomerId == storeCustomerId)
+            .ToListAsync(cancellationToken));
+        dbContext.RemoveRange(await dbContext.Set<CustomerConsent>()
+            .Where(consent => consent.StoreCustomerId == storeCustomerId)
             .ToListAsync(cancellationToken));
 
         // Links this store sent them, and a sign-up they never finished.
@@ -86,4 +99,6 @@ internal sealed class CustomerAccountData(DbContext dbContext) : ICustomerData
     private sealed record AccountExport(string Email, string FirstName, string LastName, string? Phone, bool IsEmailVerified);
 
     private sealed record WishlistExport(Guid StoreProductId, DateTimeOffset AddedAt);
+
+    private sealed record ConsentExport(string Purpose, bool IsGranted, string Statement, DateTimeOffset DecidedAt, string? IpAddress);
 }

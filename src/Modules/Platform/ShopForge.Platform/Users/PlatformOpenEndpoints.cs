@@ -19,7 +19,7 @@ internal static class PlatformOpenEndpoints
     {
         var invitations = platform.MapGroup("/invitations").RequireRateLimiting(RateLimits.Authentication);
 
-        invitations.MapGet("/{token}", GetInvitationAsync);
+        invitations.MapPost("/details", GetInvitationAsync);
         invitations.MapPost("/accept", AcceptAsync);
 
         var password = platform.MapGroup("/auth/password").RequireRateLimiting(RateLimits.Authentication);
@@ -28,13 +28,14 @@ internal static class PlatformOpenEndpoints
         password.MapPost("/reset", ResetAsync);
     }
 
+    // The token travels in the body, not the route, so it never reaches a log line or a span (D-119).
     private static async Task<Results<Ok<OpenOperatorInvitationResponse>, NotFound>> GetInvitationAsync(
-        string token,
+        OperatorInvitationLookupRequest request,
         DbContext dbContext,
         TimeProvider clock,
         CancellationToken cancellationToken)
     {
-        var invitation = await FindInvitationAsync(dbContext, token, clock, cancellationToken);
+        var invitation = await FindInvitationAsync(dbContext, request.Token ?? "", clock, cancellationToken);
 
         return invitation is null ? TypedResults.NotFound() : TypedResults.Ok(new OpenOperatorInvitationResponse(invitation.Email));
     }
@@ -146,6 +147,8 @@ internal static class PlatformOpenEndpoints
         return invitation?.IsUsable(clock.GetUtcNow()) == true ? invitation : null;
     }
 }
+
+internal sealed record OperatorInvitationLookupRequest(string? Token);
 
 internal sealed record AcceptOperatorInvitationRequest(string? Token, string? Password);
 

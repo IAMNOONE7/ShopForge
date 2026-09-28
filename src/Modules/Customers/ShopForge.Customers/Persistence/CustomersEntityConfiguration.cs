@@ -78,6 +78,21 @@ internal sealed class EmailChangeEntityConfiguration : IEntityTypeConfiguration<
     }
 }
 
+internal sealed class CustomerConsentEntityConfiguration : IEntityTypeConfiguration<CustomerConsent>
+{
+    public void Configure(EntityTypeBuilder<CustomerConsent> builder)
+    {
+        builder.ToTable("customer_consents", CustomersModule.Schema);
+
+        builder.Property(consent => consent.Purpose).HasConversion<string>().HasMaxLength(20);
+        builder.Property(consent => consent.Statement).HasMaxLength(CustomerConsent.MaxStatementLength);
+        builder.Property(consent => consent.IpAddress).HasMaxLength(45);
+
+        builder.HasOne<StoreCustomer>().WithMany().HasForeignKey(consent => consent.StoreCustomerId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasIndex(consent => new { consent.StoreCustomerId, consent.Purpose }).IsUnique();
+    }
+}
+
 internal sealed class WishlistItemEntityConfiguration : IEntityTypeConfiguration<WishlistItem>
 {
     public void Configure(EntityTypeBuilder<WishlistItem> builder)

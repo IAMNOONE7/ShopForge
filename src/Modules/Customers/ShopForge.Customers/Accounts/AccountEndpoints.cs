@@ -40,6 +40,7 @@ internal static class AccountEndpoints
             .RequireRateLimiting(RateLimits.Authentication);
         account.MapPost("/email/confirm", ConfirmEmailAsync).RequireRateLimiting(RateLimits.Authentication);
         account.MapPrivacyEndpoints();
+        account.MapConsentEndpoints();
     }
 
     // The answer never says whether the address is already known (D-052); only the e-mail that follows differs.

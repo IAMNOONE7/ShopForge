@@ -17,7 +17,8 @@ public sealed class ColleagueTests(ShopForgeApiFactory factory)
 
         var invitation = await InviteAsync(owner, email, TenantRole.Support);
         var token = await TokenAsync(email);
-        var open = await owner.GetFromJsonAsync<OpenInvitationView>($"/api/admin/invitations/{token}", CancellationToken);
+        using var looked = await owner.PostAsJsonAsync("/api/admin/invitations/details", new { Token = token }, CancellationToken);
+        var open = await looked.Content.ReadFromJsonAsync<OpenInvitationView>(CancellationToken);
         using var accepted = await owner.PostAsJsonAsync(
             "/api/admin/invitations/accept", new { Token = token, Password = "Joins-the-company-2026" }, CancellationToken);
 

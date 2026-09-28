@@ -17,7 +17,8 @@ public sealed class OperatorTests(ShopForgeApiFactory factory)
 
         var invitation = await InviteAsync(operatorClient, email);
         var token = await TokenAsync(email);
-        var open = await operatorClient.GetFromJsonAsync<OpenInvitationView>($"/api/platform/invitations/{token}", CancellationToken);
+        using var looked = await operatorClient.PostAsJsonAsync("/api/platform/invitations/details", new { Token = token }, CancellationToken);
+        var open = await looked.Content.ReadFromJsonAsync<OpenInvitationView>(CancellationToken);
         using var accepted = await AcceptAsync(token);
 
         using var newcomer = factory.CreateClient();

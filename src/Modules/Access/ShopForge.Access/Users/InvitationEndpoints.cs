@@ -21,17 +21,19 @@ internal static class InvitationEndpoints
     {
         var invitations = endpoints.MapGroup("/invitations").RequireRateLimiting(RateLimits.Authentication);
 
-        invitations.MapGet("/{token}", GetInvitationAsync);
+        invitations.MapPost("/details", GetInvitationAsync);
         invitations.MapPost("/accept", AcceptAsync);
     }
 
+    // Asked for with the token in the body rather than in the route: the path is logged and traced, and an
+    // invitation token in a log is an invitation anybody reading that log can accept (D-119).
     private static async Task<Results<Ok<OpenInvitationResponse>, NotFound>> GetInvitationAsync(
-        string token,
+        InvitationLookupRequest request,
         DbContext dbContext,
         TimeProvider clock,
         CancellationToken cancellationToken)
     {
-        var invitation = await FindAsync(dbContext, token, clock, cancellationToken);
+        var invitation = await FindAsync(dbContext, request.Token ?? "", clock, cancellationToken);
 
         return invitation is null
             ? TypedResults.NotFound()
@@ -100,6 +102,8 @@ internal static class InvitationEndpoints
         return invitation?.IsUsable(clock.GetUtcNow()) == true ? invitation : null;
     }
 }
+
+internal sealed record InvitationLookupRequest(string? Token);
 
 internal sealed record AcceptInvitationRequest(string? Token, string? Password);
 
