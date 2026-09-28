@@ -123,6 +123,7 @@ internal sealed class FakeDnsTxtRecords : IDnsTxtRecords
 public sealed class RecordedEmails
 {
     private readonly ConcurrentQueue<DeliveredEmail> _messages = new();
+    private readonly HashSet<string> _taken = new(StringComparer.Ordinal);
 
     public void Add(EmailMessage message, IReadOnlyList<EmailAttachment> attachments) =>
         _messages.Enqueue(new DeliveredEmail(message, attachments));
@@ -142,6 +143,27 @@ public sealed class RecordedEmails
     // test wait for a link that had already arrived.
     public string? LatestLinkFor(string recipient) =>
         For(recipient).Select(TokenIn).OfType<string>().LastOrDefault();
+
+    // The next link this address has been sent that no test has taken yet. Links are spent when they are used,
+    // two of them can be in flight at once, and the newest delivered is not always the newest issued — so asking
+    // for "the latest" hands back a spent one often enough to have broken four tests in different weeks.
+    public string? NextLinkFor(string recipient)
+    {
+        lock (_taken)
+        {
+            var link = For(recipient)
+                .Select(TokenIn)
+                .OfType<string>()
+                .FirstOrDefault(candidate => !_taken.Contains(candidate));
+
+            if (link is not null)
+            {
+                _taken.Add(link);
+            }
+
+            return link;
+        }
+    }
 
     private sealed record DeliveredEmail(EmailMessage Message, IReadOnlyList<EmailAttachment> Attachments);
 

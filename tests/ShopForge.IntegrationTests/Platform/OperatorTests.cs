@@ -163,7 +163,7 @@ public sealed class OperatorTests(ShopForgeApiFactory factory)
         using var theirSession = await AcceptAndSignInAsync(invitationToken, email);
 
         using var asked = await AnonymousPostAsync("/api/platform/auth/password/forgot", new { Email = email });
-        var token = await TokenAsync(email, notThisOne: invitationToken);
+        var token = await TokenAsync(email);
         using var reset = await AnonymousPostAsync("/api/platform/auth/password/reset", new { Token = token, Password = "Chosen-again-2026" });
         using var reused = await AnonymousPostAsync("/api/platform/auth/password/reset", new { Token = token, Password = "Taken-over-2026" });
 
@@ -267,10 +267,10 @@ public sealed class OperatorTests(ShopForgeApiFactory factory)
         return await client.PostAsJsonAsync(path, body, CancellationToken);
     }
 
-    private Task<string?> TokenAsync(string email, string? notThisOne = null) =>
+    private Task<string?> TokenAsync(string email) =>
         factory.EventuallyAsync(
-            () => Task.FromResult(factory.Emails.LatestLinkFor(email)),
-            link => link is not null && link != notThisOne,
+            () => Task.FromResult(factory.Emails.NextLinkFor(email)),
+            link => link is not null,
             CancellationToken);
 
     private sealed record OperatorsView(List<OperatorView> Operators, List<InvitationView> Invitations);

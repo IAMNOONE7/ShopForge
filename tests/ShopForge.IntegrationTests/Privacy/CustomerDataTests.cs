@@ -200,7 +200,7 @@ public sealed class CustomerDataTests(ShopForgeApiFactory factory)
         Assert.Equal(HttpStatusCode.Accepted, registered.StatusCode);
 
         var token = await factory.EventuallyAsync(
-            () => Task.FromResult(factory.Emails.LatestLinkFor(email)),
+            () => Task.FromResult(factory.Emails.NextLinkFor(email)),
             link => link is not null,
             CancellationToken);
         using var verified = await shopper.PostAsync("/api/storefront/account/verify", new { Token = token });

@@ -102,7 +102,7 @@ public sealed class StaffPasswordTests(ShopForgeApiFactory factory)
         await AnonymousPostAsync("/api/admin/auth/password/forgot", new { user.Email });
         var first = await TokenAsync(user.Email);
         await AnonymousPostAsync("/api/admin/auth/password/forgot", new { user.Email });
-        var second = await TokenAsync(user.Email, notThisOne: first);
+        var second = await TokenAsync(user.Email);
 
         using var theOldLink = await AnonymousPostAsync("/api/admin/auth/password/reset", new { Token = first, Password = NewPassword });
         using var theNewOne = await AnonymousPostAsync("/api/admin/auth/password/reset", new { Token = second, Password = NewPassword });
@@ -170,9 +170,9 @@ public sealed class StaffPasswordTests(ShopForgeApiFactory factory)
     }
 
     // The mail is an outbox message with no store behind it, so the link exists once the worker has delivered it.
-    private Task<string?> TokenAsync(string email, string? notThisOne = null) =>
+    private Task<string?> TokenAsync(string email) =>
         factory.EventuallyAsync(
-            () => Task.FromResult(factory.Emails.LatestLinkFor(email)),
-            link => link is not null && link != notThisOne,
+            () => Task.FromResult(factory.Emails.NextLinkFor(email)),
+            link => link is not null,
             CancellationToken);
 }

@@ -347,7 +347,7 @@ public sealed class ReturnTests(ShopForgeApiFactory factory)
             "/api/storefront/account/register",
             new { Email = email, Password = "Shop-forge-2026", FirstName = "Robin", LastName = "Sender", Phone = (string?)null });
         var token = await factory.EventuallyAsync(
-            () => Task.FromResult(factory.Emails.LatestLinkFor(email)),
+            () => Task.FromResult(factory.Emails.NextLinkFor(email)),
             link => link is not null,
             CancellationToken);
         using var verified = await buyer.PostAsync("/api/storefront/account/verify", new { Token = token });

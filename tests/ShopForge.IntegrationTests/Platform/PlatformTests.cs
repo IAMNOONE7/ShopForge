@@ -88,7 +88,7 @@ public sealed class PlatformTests(ShopForgeApiFactory factory)
         var tenant = (await created.Content.ReadFromJsonAsync<PlatformTenantView>(CancellationToken))!;
 
         var token = await factory.EventuallyAsync(
-            () => Task.FromResult(factory.Emails.LatestLinkFor(email)),
+            () => Task.FromResult(factory.Emails.NextLinkFor(email)),
             link => link is not null,
             CancellationToken);
 

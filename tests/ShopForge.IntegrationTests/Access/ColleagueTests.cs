@@ -216,7 +216,7 @@ public sealed class ColleagueTests(ShopForgeApiFactory factory)
     // has delivered it (D-111).
     private async Task<string?> TokenAsync(string email) =>
         await factory.EventuallyAsync(
-            () => Task.FromResult(factory.Emails.LatestLinkFor(email)),
+            () => Task.FromResult(factory.Emails.NextLinkFor(email)),
             link => link is not null,
             CancellationToken);
 

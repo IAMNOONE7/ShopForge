@@ -380,20 +380,11 @@ public sealed class AccountTests(ShopForgeApiFactory factory)
         return response.StatusCode;
     }
 
-    // Links are spent as they are used, and the newest one delivered is not always the newest one issued, so a
-    // test asks for a link it has not already used rather than for whatever arrived last.
-    private async Task<string?> LinkAsync(string email)
-    {
-        var link = await factory.EventuallyAsync(
-            () => Task.FromResult(factory.Emails.LatestLinkFor(email)),
-            candidate => candidate is not null && (!_linksUsed.TryGetValue(email, out var used) || candidate != used),
+    private Task<string?> LinkAsync(string email) =>
+        factory.EventuallyAsync(
+            () => Task.FromResult(factory.Emails.NextLinkFor(email)),
+            link => link is not null,
             CancellationToken);
-        _linksUsed[email] = link!;
-
-        return link;
-    }
-
-    private readonly Dictionary<string, string> _linksUsed = [];
 
     private async Task<CustomerView> VerifyAsync(StorefrontApi shopper, string email)
     {

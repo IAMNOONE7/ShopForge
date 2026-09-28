@@ -142,7 +142,7 @@ public sealed class ReviewTests(ShopForgeApiFactory factory)
             "/api/storefront/account/register",
             new { Email = email, Password = "Shop-forge-2026", FirstName = "Rea", LastName = "Viewer", Phone = (string?)null });
         var token = await factory.EventuallyAsync(
-            () => Task.FromResult(factory.Emails.LatestLinkFor(email)),
+            () => Task.FromResult(factory.Emails.NextLinkFor(email)),
             link => link is not null,
             CancellationToken);
         using var verified = await shopper.PostAsync("/api/storefront/account/verify", new { Token = token });
