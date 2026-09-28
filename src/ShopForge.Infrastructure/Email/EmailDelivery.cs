@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging;
 using ShopForge.Shared.Email;
 using ShopForge.Shared.Messaging;
+using ShopForge.Shared.Stores;
+using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Infrastructure.Email;
 
@@ -44,8 +46,30 @@ internal sealed class OutboxEmailSender(IOutbox outbox) : IEmailSender
     }
 }
 
-internal sealed class EmailRequestedHandler(IEmailDelivery delivery) : IEventHandler<EmailRequested>
+// Where a message picks up the livery of whichever store it belongs to. Handlers write words; the look is put on
+// once, here, and a message that belongs to no store goes out in the platform's plain clothes (D-111, D-121).
+internal sealed class EmailRequestedHandler(
+    IEmailDelivery delivery,
+    IStoreContext storeContext,
+    ICurrentStoreSettings storeSettings,
+    EmailOptions options) : IEventHandler<EmailRequested>
 {
-    public Task HandleAsync(EmailRequested domainEvent, CancellationToken cancellationToken) =>
-        delivery.DeliverAsync(new EmailMessage(domainEvent.To, domainEvent.Subject, domainEvent.Body), cancellationToken);
+    public async Task HandleAsync(EmailRequested domainEvent, CancellationToken cancellationToken)
+    {
+        var settings = storeContext.StoreId is null ? null : await storeSettings.GetAsync(cancellationToken);
+        var senderName = settings?.Name ?? options.SenderName;
+
+        await delivery.DeliverAsync(
+            new EmailMessage(
+                domainEvent.To,
+                domainEvent.Subject,
+                domainEvent.Body,
+                EmailLayout.Render(Title(domainEvent.Subject, senderName), domainEvent.Body, senderName, settings?.Branding)),
+            cancellationToken);
+    }
+
+    // Subjects are already written as "Store: what happened", and repeating the store's name under its own logo
+    // reads badly, so the heading is what is left once the name is taken off.
+    private static string Title(string subject, string senderName) =>
+        subject.StartsWith($"{senderName}: ", StringComparison.Ordinal) ? subject[(senderName.Length + 2)..] : subject;
 }

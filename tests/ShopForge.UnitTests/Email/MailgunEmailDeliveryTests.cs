@@ -118,6 +118,6 @@ public sealed class MailgunEmailDeliveryTests
     private sealed class FixedStoreSettings(string name) : ICurrentStoreSettings
     {
         public Task<StoreSettings> GetAsync(CancellationToken cancellationToken) =>
-            Task.FromResult(new StoreSettings(name, "EUR", "en-IE", 14, null));
+            Task.FromResult(new StoreSettings(name, "EUR", "en-IE", 14, null, new StoreBranding("#112233", null)));
     }
 }

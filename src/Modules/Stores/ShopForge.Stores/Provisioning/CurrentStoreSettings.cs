@@ -24,6 +24,15 @@ internal sealed class CurrentStoreSettings(DbContext dbContext, IStoreContext st
                         store.Company.PostalCode,
                         store.Company.Country,
                         store.Company.RegistrationNumber,
-                        store.Company.VatNumber)))
+                        store.Company.VatNumber),
+                new StoreBranding(
+                    store.Theme.PrimaryColor,
+
+                    // Mail is read away from the site, so the logo needs somewhere real to be fetched from: the
+                    // store's own primary host (D-121).
+                    store.LogoPath == null
+                        ? null
+                        : "https://" + store.Domains.Where(domain => domain.IsPrimary).Select(domain => domain.HostName).FirstOrDefault()
+                            + "/api/storefront/store/logo")))
             .SingleAsync(cancellationToken);
 }

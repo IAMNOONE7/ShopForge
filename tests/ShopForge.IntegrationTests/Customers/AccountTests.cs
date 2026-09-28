@@ -354,6 +354,11 @@ public sealed class AccountTests(ShopForgeApiFactory factory)
         using var shopper = new StorefrontApi(factory, furniture.Store);
 
         using var first = await shopper.PostAsync("/api/storefront/account/register", Registration(email));
+
+        // Waiting for the first letter before asking for the second is what makes "the newest link" mean
+        // anything here: two messages in flight at once can be delivered either way round.
+        _linksUsed[email] = (await LinkAsync(email))!;
+
         using var second = await shopper.PostAsync("/api/storefront/account/register", Registration(email, password: "Second-attempt-2026"));
         await VerifyAsync(shopper, email);
 

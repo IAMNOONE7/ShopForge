@@ -83,6 +83,10 @@ public static class DependencyInjection
     {
         var email = configuration.GetSection(EmailOptions.Section).Get<EmailOptions>() ?? new EmailOptions();
 
+        // Registered whichever provider carries the mail: the sender's name is what a message with no store
+        // behind it goes out under (D-111).
+        services.AddSingleton(email);
+
         if (string.Equals(email.Provider, EmailOptions.LogProvider, StringComparison.OrdinalIgnoreCase))
         {
             services.AddSingleton<IEmailDelivery, LoggingEmailDelivery>();
@@ -103,7 +107,6 @@ public static class DependencyInjection
                 "Mailgun needs Email:Mailgun:ApiKey, Email:Mailgun:Domain and Email:SenderAddress.");
         }
 
-        services.AddSingleton(email);
         services.AddHttpClient<IEmailDelivery, MailgunEmailDelivery>(client => MailgunEmailDelivery.Configure(client, email));
     }
 }

@@ -19,13 +19,21 @@ internal sealed class MailgunEmailDelivery(
 {
     public async Task DeliverAsync(EmailMessage message, CancellationToken cancellationToken)
     {
-        using var content = new FormUrlEncodedContent(new Dictionary<string, string>
+        var fields = new Dictionary<string, string>
         {
             ["from"] = await FromAsync(cancellationToken),
             ["to"] = message.To,
             ["subject"] = message.Subject,
             ["text"] = message.Body,
-        });
+        };
+
+        // Both parts travel: a client that will not show the HTML falls back to the words.
+        if (message.HtmlBody is { Length: > 0 } html)
+        {
+            fields["html"] = html;
+        }
+
+        using var content = new FormUrlEncodedContent(fields);
 
         using var response = await httpClient.PostAsync($"v3/{options.Mailgun.Domain}/messages", content, cancellationToken);
 

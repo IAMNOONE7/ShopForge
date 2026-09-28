@@ -9,4 +9,6 @@ public interface IEmailSender
     Task SendOutsideStoreAsync(EmailMessage message, CancellationToken cancellationToken);
 }
 
-public sealed record EmailMessage(string To, string Subject, string Body);
+// The text is what is written; the HTML is the same thing in the store's livery, added on the way out (D-121).
+// A client that cannot show the HTML still has something to read.
+public sealed record EmailMessage(string To, string Subject, string Body, string? HtmlBody = null);
