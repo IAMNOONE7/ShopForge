@@ -156,10 +156,7 @@ public sealed class AccountTests(ShopForgeApiFactory factory)
         await VerifyAsync(shopper, email);
 
         using var asked = await shopper.PostAsync("/api/storefront/account/password/forgot", new { Email = email });
-        var token = await factory.EventuallyAsync(
-            () => Task.FromResult(factory.Emails.LatestLinkFor(email)),
-            link => link is not null,
-            CancellationToken);
+        var token = await LinkAsync(email);
         using var reset = await shopper.PostAsync("/api/storefront/account/password/reset", new { Token = token, Password = "New-password-2026" });
         using var reused = await shopper.PostAsync("/api/storefront/account/password/reset", new { Token = token, Password = "Another-password-2026" });
         using var oldPassword = await shopper.PostAsync("/api/storefront/account/login", new { Email = email, Password = Password });
@@ -357,7 +354,7 @@ public sealed class AccountTests(ShopForgeApiFactory factory)
 
         // Waiting for the first letter before asking for the second is what makes "the newest link" mean
         // anything here: two messages in flight at once can be delivered either way round.
-        _linksUsed[email] = (await LinkAsync(email))!;
+        await LinkAsync(email);
 
         using var second = await shopper.PostAsync("/api/storefront/account/register", Registration(email, password: "Second-attempt-2026"));
         await VerifyAsync(shopper, email);
@@ -383,11 +380,18 @@ public sealed class AccountTests(ShopForgeApiFactory factory)
         return response.StatusCode;
     }
 
-    private Task<string?> LinkAsync(string email) =>
-        factory.EventuallyAsync(
+    // Links are spent as they are used, and the newest one delivered is not always the newest one issued, so a
+    // test asks for a link it has not already used rather than for whatever arrived last.
+    private async Task<string?> LinkAsync(string email)
+    {
+        var link = await factory.EventuallyAsync(
             () => Task.FromResult(factory.Emails.LatestLinkFor(email)),
-            link => link is not null,
+            candidate => candidate is not null && (!_linksUsed.TryGetValue(email, out var used) || candidate != used),
             CancellationToken);
+        _linksUsed[email] = link!;
+
+        return link;
+    }
 
     private readonly Dictionary<string, string> _linksUsed = [];
 
@@ -395,11 +399,7 @@ public sealed class AccountTests(ShopForgeApiFactory factory)
     {
         // The link is in a message the outbox delivers. Where one address registers at two stores, the second link
         // takes a moment to arrive, and the first one is no use at the second store (D-102) — so wait for a new one.
-        var token = await factory.EventuallyAsync(
-            () => Task.FromResult(factory.Emails.LatestLinkFor(email)),
-            link => link is not null && (!_linksUsed.TryGetValue(email, out var used) || link != used),
-            CancellationToken);
-        _linksUsed[email] = token!;
+        var token = await LinkAsync(email);
 
         using var response = await shopper.PostAsync("/api/storefront/account/verify", new { Token = token });
 
