@@ -15,6 +15,12 @@ param storefrontFqdn string
 param stripeSecretKey string = ''
 @secure()
 param stripeWebhookSecret string = ''
+@description('Which e-mail provider carries transactional mail; "log" sends nothing.')
+param emailProvider string = 'log'
+param emailSenderAddress string = ''
+param mailgunDomain string = ''
+@secure()
+param mailgunApiKey string = ''
 
 resource group 'Microsoft.Resources/resourceGroups@2024-03-01' = {
   name: '${namePrefix}-rg'
@@ -62,6 +68,9 @@ module api 'modules/api.bicep' = {
     registryServer: registryServer
     keyVaultUri: 'https://${namePrefix}-kv${environment().suffixes.keyvaultDns}/'
     frontDoorId: edgeProfile.outputs.frontDoorId
+    emailProvider: emailProvider
+    emailSenderAddress: emailSenderAddress
+    mailgunDomain: mailgunDomain
   }
 }
 
@@ -91,6 +100,7 @@ module vault 'modules/vault.bicep' = {
     databasePassword: databasePassword
     stripeSecretKey: stripeSecretKey
     stripeWebhookSecret: stripeWebhookSecret
+    mailgunApiKey: mailgunApiKey
   }
 }
 

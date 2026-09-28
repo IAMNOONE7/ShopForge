@@ -5,6 +5,10 @@ param image string
 param registryServer string
 param keyVaultUri string
 param frontDoorId string
+@description('Which e-mail provider carries transactional mail; "log" sends nothing.')
+param emailProvider string = 'log'
+param emailSenderAddress string = ''
+param mailgunDomain string = ''
 
 resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
   name: workspaceName
@@ -60,6 +64,9 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'ASPNETCORE_ENVIRONMENT', value: 'Production' }
             { name: 'KeyVault__Uri', value: keyVaultUri }
             { name: 'Edge__FrontDoorId', value: frontDoorId }
+            { name: 'Email__Provider', value: emailProvider }
+            { name: 'Email__SenderAddress', value: emailSenderAddress }
+            { name: 'Email__Mailgun__Domain', value: mailgunDomain }
           ]
           probes: [
             {

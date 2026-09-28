@@ -45,7 +45,6 @@ public static class DependencyInjection
         services.AddSingleton(new BlobContainerClient(fileStorageConnectionString, containerName));
         services.AddSingleton<IFileStorage, AzureBlobFileStorage>();
         services.AddSingleton<IDocumentRenderer, MigraDocRenderer>();
-        services.AddSingleton<IEmailDelivery, LoggingEmailDelivery>();
         services.AddScoped<IEmailSender, OutboxEmailSender>();
         services.AddScoped<IOutbox, Outbox>();
         services.AddScoped<IEventHandler<EmailRequested>, EmailRequestedHandler>();
@@ -59,6 +58,8 @@ public static class DependencyInjection
         services.AddScoped<IMaintenanceOutsideStores, AuditCleanup>();
         services.AddSingleton<StoreMaintenance>();
         services.AddHostedService<MaintenanceWorker>();
+
+        AddEmailDelivery(services, configuration);
 
         var stripe = configuration.GetSection(StripeOptions.Section).Get<StripeOptions>() ?? new StripeOptions();
 
@@ -74,5 +75,35 @@ public static class DependencyInjection
         }
 
         return services;
+    }
+
+    // One seam, one setting: another provider is a class implementing IEmailDelivery and a name here (D-120).
+    // Nothing configured means the log, which is how development and the tests run.
+    private static void AddEmailDelivery(IServiceCollection services, IConfiguration configuration)
+    {
+        var email = configuration.GetSection(EmailOptions.Section).Get<EmailOptions>() ?? new EmailOptions();
+
+        if (string.Equals(email.Provider, EmailOptions.LogProvider, StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddSingleton<IEmailDelivery, LoggingEmailDelivery>();
+
+            return;
+        }
+
+        if (!string.Equals(email.Provider, EmailOptions.MailgunProvider, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"'{email.Provider}' is not an e-mail provider ShopForge knows.");
+        }
+
+        // Asking for a provider and not giving it what it needs is a mistake worth making at startup, not one to
+        // discover from mail nobody received.
+        if (!email.Mailgun.IsConfigured || email.SenderAddress.Length == 0)
+        {
+            throw new InvalidOperationException(
+                "Mailgun needs Email:Mailgun:ApiKey, Email:Mailgun:Domain and Email:SenderAddress.");
+        }
+
+        services.AddSingleton(email);
+        services.AddHttpClient<IEmailDelivery, MailgunEmailDelivery>(client => MailgunEmailDelivery.Configure(client, email));
     }
 }

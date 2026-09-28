@@ -12,6 +12,8 @@ param databasePassword string
 param stripeSecretKey string
 @secure()
 param stripeWebhookSecret string
+@secure()
+param mailgunApiKey string
 
 resource storage 'Microsoft.Storage/storageAccounts@2024-01-01' existing = {
   name: storageAccountName
@@ -77,6 +79,14 @@ resource stripeWebhookSecretValue 'Microsoft.KeyVault/vaults/secrets@2024-11-01'
   name: 'Payments--Stripe--WebhookSecret'
   properties: {
     value: stripeWebhookSecret
+  }
+}
+
+resource mailgunApiKeySecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = if (!empty(mailgunApiKey)) {
+  parent: vault
+  name: 'Email--Mailgun--ApiKey'
+  properties: {
+    value: mailgunApiKey
   }
 }
 

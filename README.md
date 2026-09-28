@@ -27,6 +27,7 @@ A multi-store e-commerce platform. One ASP.NET Core backend and one React storef
 - **Consent is asked for and kept.** A customer says yes or no to being written to about anything beyond their own orders, and the answer is stored with the words they were shown, when they gave it and from where, so it can be shown later. They can change their mind, it is in their export, and it goes when they do. Nothing sends on it yet — that is what it will be checked against when it does.
 - **Nothing personal is kept longer than it earns.** A daily sweep clears abandoned carts and unconfirmed sign-ups inside each store, and, once a day with nothing in scope, delivered outbox messages and spent staff and operator links after a month and audit entries after a year. A message that gave up is left where somebody can see it — a dead letter is waiting for a person, not for a sweep.
 - **A record of what was done.** Money moving, access changing and prices changing all leave an append-only entry naming who did it, from where, and to which company or store — written where the decision is made, in the same transaction, so a change that rolls back leaves no claim that it happened. A company reads its own entries and no others; the platform reads a company's, or its own. Nothing can edit or delete one: the save itself refuses.
+- **Mail through a provider, or none at all.** Transactional mail is handed to a provider (Mailgun today) behind one interface, chosen by configuration; with nothing configured it goes to the log, which is how development runs. A shop's mail is sent under the shop's name and the platform's verified address. A provider that is down or refuses a message fails loudly, so the outbox in front of it backs off, retries, and eventually puts the message where somebody can see it.
 - **Events through a transactional outbox.** What happens to an order is written with the change that caused it and delivered by a background worker: confirmations, payment receipts and shipment notices are handlers, not inline calls. Delivery is leased, retried with backoff, and anything that gives up lands in a failed-message list the store can requeue.
 - **Telemetry that follows the work.** OpenTelemetry traces cover a request, its database calls and the background work it causes — an order and the confirmation e-mail sent seconds later share one trace — plus business counters (orders, payments, refused reservations) and outbox gauges. Nothing is exported unless an OTLP endpoint is configured.
 - **Replaceable infrastructure behind small interfaces.** File storage (`IFileStorage`, Azure Blob Storage adapter, Azurite locally) and payments (`IPaymentProvider`, with methods the store settles itself today and a hosted provider later).
@@ -68,6 +69,19 @@ Telemetry is off unless an OTLP endpoint is configured. Compose brings a collect
 export OpenTelemetry__Otlp__Endpoint=http://localhost:4317
 docker compose logs -f otel-collector
 ```
+
+E-mail goes to the log until a provider is configured. Another provider is one class behind `IEmailDelivery` and
+one setting:
+
+```bash
+export Email__Provider=mailgun
+export Email__SenderAddress=no-reply@mg.example.com
+export Email__Mailgun__ApiKey=...
+export Email__Mailgun__Domain=mg.example.com
+export Email__Mailgun__BaseUrl=https://api.mailgun.net   # the default is the European host
+```
+
+Asking for a provider without its settings stops the application at startup rather than losing mail quietly.
 
 Card payments are off unless Stripe keys are configured:
 
