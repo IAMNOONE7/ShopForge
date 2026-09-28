@@ -9,6 +9,7 @@ using ShopForge.Infrastructure.Files;
 using ShopForge.Infrastructure.Messaging;
 using ShopForge.Infrastructure.Persistence;
 using ShopForge.IntegrationTests;
+using ShopForge.Shared.Dns;
 using ShopForge.Shared.Email;
 using Testcontainers.Azurite;
 using Testcontainers.PostgreSql;
@@ -32,6 +33,9 @@ public sealed class ShopForgeApiFactory : WebApplicationFactory<Program>, IAsync
     public RecordedEmails Emails { get; } = new();
 
     internal RecordingEmailDelivery EmailDelivery { get; }
+
+    // Real DNS is not something a test can arrange, so the challenge answers come from here.
+    internal FakeDnsTxtRecords Dns { get; } = new();
 
     // Tests do not wait for the worker's ten-second tick; they run the outbox when they need what it delivers.
     public Task<int> DispatchOutboxAsync(CancellationToken cancellationToken = default) =>
@@ -85,7 +89,11 @@ public sealed class ShopForgeApiFactory : WebApplicationFactory<Program>, IAsync
         builder.UseSetting("Security:RequireSecureCookies", "false");
         builder.UseSetting("Email:Mailgun:WebhookSigningKey", MailgunSigningKey);
         // Only the last hop is faked: registration still writes an outbox message, which the dispatcher delivers.
-        builder.ConfigureTestServices(services => services.AddSingleton<IEmailDelivery>(EmailDelivery));
+        builder.ConfigureTestServices(services =>
+        {
+            services.AddSingleton<IEmailDelivery>(EmailDelivery);
+            services.AddSingleton<IDnsTxtRecords>(Dns);
+        });
     }
 
     public override async ValueTask DisposeAsync()
@@ -94,6 +102,17 @@ public sealed class ShopForgeApiFactory : WebApplicationFactory<Program>, IAsync
         await _database.DisposeAsync();
         await _fileStorage.DisposeAsync();
     }
+}
+
+// Stands in for the world's DNS: a test says what a name answers, and nothing leaves the machine.
+internal sealed class FakeDnsTxtRecords : IDnsTxtRecords
+{
+    private readonly ConcurrentDictionary<string, string[]> _records = new(StringComparer.OrdinalIgnoreCase);
+
+    public void Publish(string name, params string[] values) => _records[name] = values;
+
+    public Task<IReadOnlyList<string>> LookupAsync(string name, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<string>>(_records.TryGetValue(name, out var values) ? values : []);
 }
 
 // Messages normally go to the log (D-053); tests read them here to follow the links a customer would click.

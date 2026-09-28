@@ -36,7 +36,7 @@ internal static class TestStores
     private static async Task<TestStore> CreateAsync(IServiceProvider services, Tenant tenant, string name, bool addTenant)
     {
         var store = new Store(tenant.Id, name, "EUR", "en-IE", new StoreTheme("#112233", "#FFFFFF", 4));
-        var domain = store.AddDomain(UniqueHostName());
+        var domain = store.AddDomain(UniqueHostName(), DateTimeOffset.UtcNow);
         store.SetCompany(new StoreCompany("Test Furniture s.r.o.", "1 Workshop Lane", "Brno", "602 00", "CZ", "12345678", "CZ12345678"));
         store.Publish();
 

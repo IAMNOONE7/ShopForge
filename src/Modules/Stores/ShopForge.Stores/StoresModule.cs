@@ -63,6 +63,7 @@ public static class StoresModule
     {
         storeAdmin.MapAdminStoreLogo();
         storeAdmin.MapStoreLifecycle();
+        storeAdmin.MapStoreDomainEndpoints();
 
         return storeAdmin;
     }

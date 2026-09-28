@@ -32,15 +32,16 @@ public static class DevelopmentStores
             }
         }
 
+        var now = TimeProvider.System.GetUtcNow();
         var tenant = new Tenant(DemoTenantName);
 
         var woodenHome = new Store(tenant.Id, "Wooden Home", "CZK", "cs-CZ", new StoreTheme("#8B5A2B", "#F5F0E8", 8));
-        woodenHome.AddDomain(WoodenHomeHost);
+        woodenHome.AddDomain(WoodenHomeHost, now);
         woodenHome.SetCompany(new StoreCompany("Wooden Home s.r.o.", "Dřevařská 12", "Brno", "602 00", "CZ", "27654321", "CZ27654321"));
         woodenHome.Publish();
 
         var voltElectronics = new Store(tenant.Id, "Volt Electronics", "EUR", "en-IE", new StoreTheme("#1F6FEB", "#EEF4FF", 2));
-        voltElectronics.AddDomain(VoltElectronicsHost);
+        voltElectronics.AddDomain(VoltElectronicsHost, now);
         voltElectronics.SetCompany(new StoreCompany("Volt Electronics Ltd", "4 Dock Road", "Galway", "H91 AB12", "IE", "IE448921", "IE4489217W"));
         voltElectronics.Publish();
 

@@ -11,8 +11,8 @@ public sealed class StoreTests
     {
         var store = new Store(Guid.NewGuid(), "Wooden Home", "czk", "cs-CZ", Theme);
 
-        var first = store.AddDomain("wooden-home.cz");
-        var second = store.AddDomain("www.wooden-home.cz");
+        var first = store.AddDomain("wooden-home.cz", DateTimeOffset.UtcNow);
+        var second = store.AddDomain("www.wooden-home.cz", DateTimeOffset.UtcNow);
 
         Assert.True(first.IsPrimary);
         Assert.False(second.IsPrimary);
@@ -23,9 +23,9 @@ public sealed class StoreTests
     public void Same_domain_cannot_be_added_twice()
     {
         var store = new Store(Guid.NewGuid(), "Wooden Home", "CZK", "cs-CZ", Theme);
-        store.AddDomain("wooden-home.cz");
+        store.AddDomain("wooden-home.cz", DateTimeOffset.UtcNow);
 
-        Assert.Throws<InvalidOperationException>(() => store.AddDomain("Wooden-Home.cz:443"));
+        Assert.Throws<InvalidOperationException>(() => store.AddDomain("Wooden-Home.cz:443", DateTimeOffset.UtcNow));
     }
 
     [Theory]

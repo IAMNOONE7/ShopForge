@@ -43,7 +43,7 @@ public sealed class StoreIsolationTests(ShopForgeApiFactory factory)
         await using var scope = TestStores.CreateScope(factory.Services, storeA);
         var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
 
-        dbContext.Add(new StoreDomain(storeA.StoreId, TestStores.UniqueHostName(), isPrimary: false));
+        dbContext.Add(StoreDomain.OwnedByThePlatform(storeA.StoreId, TestStores.UniqueHostName(), isPrimary: false, DateTimeOffset.UtcNow));
         await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(2, await Domains(scope).CountAsync(TestContext.Current.CancellationToken));
@@ -57,7 +57,7 @@ public sealed class StoreIsolationTests(ShopForgeApiFactory factory)
         await using var scope = TestStores.CreateScope(factory.Services, storeA);
         var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
 
-        dbContext.Add(new StoreDomain(storeB.StoreId, hostName, isPrimary: false));
+        dbContext.Add(StoreDomain.OwnedByThePlatform(storeB.StoreId, hostName, isPrimary: false, DateTimeOffset.UtcNow));
 
         await Assert.ThrowsAsync<TenancyViolationException>(() => dbContext.SaveChangesAsync(TestContext.Current.CancellationToken));
         Assert.False(await Domains(scope).IgnoreQueryFilters().AnyAsync(domain => domain.HostName == hostName, TestContext.Current.CancellationToken));

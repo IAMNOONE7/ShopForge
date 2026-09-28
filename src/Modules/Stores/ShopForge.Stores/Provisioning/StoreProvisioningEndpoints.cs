@@ -34,6 +34,7 @@ internal static class StoreProvisioningEndpoints
         StoreContext storeContext,
         ITenantLimits limits,
         IEnumerable<IStoreInitializer> initializers,
+        TimeProvider clock,
         CancellationToken cancellationToken)
     {
         var hostName = HostNames.Normalize(request.HostName);
@@ -73,7 +74,7 @@ internal static class StoreProvisioningEndpoints
             request.Currency!,
             request.Culture!,
             request.Theme!.ToTheme());
-        store.AddDomain(hostName!);
+        store.AddDomain(hostName!, clock.GetUtcNow());
 
         // Adding the store's own domain is a write inside the new store, so the tenant scope is narrowed to it first.
         storeContext.Set(store.Id, store.TenantId);

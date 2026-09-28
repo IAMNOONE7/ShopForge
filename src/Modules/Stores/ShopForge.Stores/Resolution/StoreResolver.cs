@@ -29,6 +29,7 @@ internal sealed class StoreResolver(DbContext dbContext, IMemoryCache cache)
                 join owner in dbContext.Set<Store>().IgnoreQueryFilters() on domain.StoreId equals owner.Id
                 join tenant in dbContext.Set<Tenant>() on owner.TenantId equals tenant.Id
                 where domain.HostName == hostName
+                    && domain.VerifiedAt != null
                     && owner.Status == StoreStatus.Published
                     && tenant.Status == TenantStatus.Active
                 select new ResolvedStore(owner.Id, owner.TenantId))
