@@ -78,6 +78,10 @@ jobs:
             --output ./migrate
           ./migrate
 
+      # Nobody is told a deployment succeeded until the thing it deployed answers (D-125).
+      - name: Smoke test
+        run: scripts/smoke.sh "${{ vars.API_BASE_URL }}" "${{ vars.SMOKE_STOREFRONT_HOST }}"
+
       - name: Publish the built frontends
         run: |
           az storage blob upload-batch --account-name "${{ vars.STORAGE_ACCOUNT }}" --auth-mode login \
