@@ -38,6 +38,8 @@ public sealed class ShopForgeApiFactory : WebApplicationFactory<Program>, IAsync
     internal FakeDnsTxtRecords Dns { get; } = new();
 
     // Tests do not wait for the worker's ten-second tick; they run the outbox when they need what it delivers.
+    internal QueryCounter Queries { get; } = new();
+
     public Task<int> DispatchOutboxAsync(CancellationToken cancellationToken = default) =>
         Services.GetRequiredService<OutboxDispatcher>().DispatchAsync(cancellationToken);
 
@@ -97,6 +99,7 @@ public sealed class ShopForgeApiFactory : WebApplicationFactory<Program>, IAsync
         {
             services.AddSingleton<IEmailDelivery>(EmailDelivery);
             services.AddSingleton<IDnsTxtRecords>(Dns);
+            services.ConfigureDbContext<ShopForgeDbContext>(options => options.AddInterceptors(Queries));
         });
     }
 
