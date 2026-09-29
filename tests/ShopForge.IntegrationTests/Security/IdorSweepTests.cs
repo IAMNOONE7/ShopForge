@@ -1,5 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.Http.Metadata;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using ShopForge.IntegrationTests.Catalog;
 using ShopForge.IntegrationTests.Orders;
 
@@ -8,47 +12,67 @@ namespace ShopForge.IntegrationTests.Security;
 // Every endpoint that takes an id, asked for somebody else's. Two shapes of attack, and the second is the one
 // that is easy to get wrong: a company's own admin, legitimately signed in, naming a row that belongs to another
 // of its stores. The tenant check passes there, and only the store filter stands between them (D-127).
-public sealed class IdorSweepTests(ShopForgeApiFactory factory)
+public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
 {
     private static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
 
     // Store-scoped routes, called under a sibling store of the same company with the first store's ids.
-    public static TheoryData<string, string, string?> StoreScopedRoutes() => new()
-    {
-        { "PUT", "products/{storeProduct}", """{"name":"Taken","price":1,"vatRate":21,"isVisible":true,"sortOrder":0}""" },
-        { "PUT", "products/{storeProduct}/categories", """{"categoryIds":[]}""" },
-        { "GET", "products/{storeProduct}/attributes", null },
-        { "PUT", "products/{storeProduct}/attributes", """{"values":{}}""" },
-        { "PUT", "categories/{category}", """{"name":"Taken","slug":"taken","sortOrder":0}""" },
-        { "PUT", "categories/{category}/attributes", """{"attributeIds":[]}""" },
-        { "PUT", "attributes/{attribute}", """{"name":"Taken","isFilterable":true,"isVisibleOnProductPage":true,"unit":null,"sortOrder":0}""" },
-        { "POST", "attributes/{attribute}/options", """{"name":"Taken"}""" },
-        { "POST", "reviews/{review}/publish", null },
-        { "POST", "reviews/{review}/reject", null },
-        { "POST", "returns/{return}/accept", null },
-        { "POST", "returns/{return}/refuse", null },
-        { "POST", "returns/{return}/receive", null },
-        { "GET", "orders/{order}", null },
-        { "POST", "orders/{order}/payment", null },
-        { "POST", "orders/{order}/cancel", null },
-        { "POST", "orders/{order}/refund", null },
-        { "POST", "orders/{order}/shipment", """{"trackingNumber":"PKG-1"}""" },
-        { "POST", "domains/{domain}/verify", null },
-        { "POST", "domains/{domain}/primary", null },
-        { "DELETE", "domains/{domain}", null },
-    };
+    private static readonly (string Method, string Route, string? Body)[] StoreScoped =
+    [
+        ("PUT", "products/{storeProduct}", """{"name":"Taken","price":1,"vatRate":21,"isVisible":true,"sortOrder":0}"""),
+        ("PUT", "products/{storeProduct}/categories", """{"categoryIds":[]}"""),
+        ("GET", "products/{storeProduct}/attributes", null),
+        ("PUT", "products/{storeProduct}/attributes", """{"values":{}}"""),
+        ("PUT", "categories/{category}", """{"name":"Taken","slug":"taken","sortOrder":0}"""),
+        ("PUT", "categories/{category}/attributes", """{"attributeIds":[]}"""),
+        ("PUT", "attributes/{attribute}", """{"name":"Taken","isFilterable":true,"isVisibleOnProductPage":true,"unit":null,"sortOrder":0}"""),
+        ("POST", "attributes/{attribute}/options", """{"name":"Taken"}"""),
+        ("POST", "reviews/{review}/publish", null),
+        ("POST", "reviews/{review}/reject", null),
+        ("POST", "returns/{return}/accept", null),
+        ("POST", "returns/{return}/refuse", null),
+        ("POST", "returns/{return}/receive", null),
+        ("GET", "orders/{order}", null),
+        ("GET", "orders/{order}/documents/{document}", null),
+        ("POST", "orders/{order}/payment", null),
+        ("POST", "orders/{order}/cancel", null),
+        ("POST", "orders/{order}/refund", null),
+        ("POST", "orders/{order}/shipment", """{"trackingNumber":"PKG-1"}"""),
+        ("POST", "domains/{domain}/verify", null),
+        ("POST", "domains/{domain}/primary", null),
+        ("DELETE", "domains/{domain}", null),
+    ];
 
     // Tenant-scoped routes, called by another company's owner with the first company's ids.
-    public static TheoryData<string, string, string?> TenantScopedRoutes() => new()
+    private static readonly (string Method, string Route, string? Body)[] TenantScoped =
+    [
+        ("PUT", "products/{product}", """{"sku":"TAKEN-1","ean":null,"weightGrams":null}"""),
+        ("PUT", "stock/{product}", """{"quantity":5}"""),
+        ("GET", "stock/{product}/movements", null),
+        ("GET", "products/{product}/images/{image}", null),
+        ("DELETE", "products/{product}/images/{image}", null),
+        ("POST", "products/{product}/images", Image),
+        ("PUT", "users/{user}/role", """{"role":"Support"}"""),
+        ("POST", "users/{user}/deactivate", null),
+        ("POST", "users/{user}/activate", null),
+        ("DELETE", "users/invitations/{invitation}", null),
+    ];
+
+    public static TheoryData<string, string, string?> StoreScopedRoutes() => Rows(StoreScoped);
+
+    public static TheoryData<string, string, string?> TenantScopedRoutes() => Rows(TenantScoped);
+
+    private static TheoryData<string, string, string?> Rows((string Method, string Route, string? Body)[] routes)
     {
-        { "PUT", "products/{product}", """{"sku":"TAKEN-1","ean":null,"weightGrams":null}""" },
-        { "PUT", "stock/{product}", """{"quantity":5}""" },
-        { "GET", "stock/{product}/movements", null },
-        { "PUT", "users/{user}/role", """{"role":"Support"}""" },
-        { "POST", "users/{user}/deactivate", null },
-        { "POST", "users/{user}/activate", null },
-        { "DELETE", "users/invitations/{invitation}", null },
-    };
+        var data = new TheoryData<string, string, string?>();
+
+        foreach (var (method, route, body) in routes)
+        {
+            data.Add(method, route, body);
+        }
+
+        return data;
+    }
 
     [Theory]
     [MemberData(nameof(StoreScopedRoutes))]
@@ -87,6 +111,53 @@ public sealed class IdorSweepTests(ShopForgeApiFactory factory)
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    // The lists above are written by hand, so the one thing they cannot promise is that they are complete. This
+    // asks the router instead: every admin route the application actually has, called by a stranger, must answer
+    // "not found". Nothing needs adding to a list when an endpoint is written, because the store is resolved in
+    // middleware and refuses before the handler is ever reached (D-132).
+    [Fact]
+    public async Task No_route_of_a_store_answers_a_stranger()
+    {
+        var world = await WorldAsync();
+        var answered = new List<string>();
+
+        foreach (var (method, route) in StoreRoutesOfTheApplication())
+        {
+            var path = route.Replace("{storeId:guid}", world.Store.ToString(), StringComparison.Ordinal);
+
+            using var response = await SendAsync(world.Stranger, method, Placeholders(path), null);
+
+            if (response.StatusCode != HttpStatusCode.NotFound)
+            {
+                answered.Add($"{method} {route} answered {(int)response.StatusCode}");
+            }
+        }
+
+        Assert.True(answered.Count == 0, string.Join(Environment.NewLine, answered));
+    }
+
+    // And the matrix knows what it does not cover. A route keyed by something other than a row id cannot be
+    // pointed at another store's data, and the reason is written down rather than left as an omission.
+    [Fact]
+    public void Every_route_that_names_a_row_is_either_swept_or_excused()
+    {
+        var swept = StoreScoped
+            .Select(route => Shape($"/api/admin/stores/{{storeId:guid}}/{route.Route}"))
+            .Concat(TenantScoped.Select(route => Shape($"/api/admin/{route.Route}")))
+            .Concat(NotSwept.Keys.Select(Shape))
+            .ToHashSet();
+
+        var missing = AdminRoutesOfTheApplication()
+            .Where(route => NamesARow(route.Route))
+            .Select(route => Shape(route.Route))
+            .Distinct()
+            .Where(shape => !swept.Contains(shape))
+            .Order()
+            .ToList();
+
+        Assert.True(missing.Count == 0, $"Not swept and not excused:{Environment.NewLine}{string.Join(Environment.NewLine, missing)}");
+    }
+
     // The same rows, asked for by the people who actually own them, so the sweep above is not passing because
     // every one of those routes happens to answer NotFound to everybody.
     [Fact]
@@ -112,11 +183,76 @@ public sealed class IdorSweepTests(ShopForgeApiFactory factory)
         Assert.Equal(HttpStatusCode.NoContent, domain.StatusCode);
     }
 
+    // The one swept route that takes a file rather than JSON; an empty body would be refused at binding, before
+    // the handler ever looks at whose product it is.
+    private const string Image = "(image)";
+
+    // Routes whose id is not another store's to name, so pointing one store's URL at another store's row is not
+    // a thing that can be attempted. Each one is here with the reason it is here.
+    private static readonly Dictionary<string, string> NotSwept = new()
+    {
+        // The code belongs to whichever store the path names, so there is no second store's row in play.
+        ["/api/admin/stores/{storeId:guid}/discounts/{code}"] = "keyed by a code of the store in the path",
+        ["/api/admin/stores/{storeId:guid}/payment-methods/{code}"] = "keyed by a code of the store in the path",
+        ["/api/admin/stores/{storeId:guid}/shipping-methods/{code}"] = "keyed by a code of the store in the path",
+        ["/api/admin/stores/{storeId:guid}/pickup-points/{code}"] = "keyed by a code of the store in the path",
+
+        // A dead letter has to be delivered and then fail before it can be named, which no fixture here
+        // arranges; the query behind it is store-filtered like every other (D-123).
+        ["/api/admin/stores/{storeId:guid}/failed-messages/{messageId:guid}/requeue"] = "needs a dead letter to exist",
+
+        // Suppression comes from a provider's webhook rather than from anything an admin can ask for.
+        ["/api/admin/stores/{storeId:guid}/suppressed-addresses/{id:guid}"] = "needs a bounce to have arrived",
+    };
+
+    private static string Shape(string route) =>
+        ParameterPattern().Replace(route, "{}").TrimEnd('/');
+
+    // A route that names a row: one with a parameter of its own beyond the store it hangs off.
+    private static bool NamesARow(string route) =>
+        ParameterPattern().Matches(route).Count > (route.Contains("{storeId", StringComparison.Ordinal) ? 1 : 0);
+
+    private static string Placeholders(string path) =>
+        ParameterPattern().Replace(path, match => match.Value.Contains(":guid", StringComparison.Ordinal) ? $"{Guid.CreateVersion7()}" : "x");
+
+    private IEnumerable<(string Method, string Route)> StoreRoutesOfTheApplication() =>
+        AdminRoutesOfTheApplication().Where(route => route.Route.StartsWith("/api/admin/stores/{storeId", StringComparison.Ordinal));
+
+    private List<(string Method, string Route)> AdminRoutesOfTheApplication()
+    {
+        // The server is built lazily, so the route table only exists once something has asked for a client.
+        using var started = factory.CreateClient();
+
+        return
+        [
+            .. factory.Services.GetServices<EndpointDataSource>()
+                .SelectMany(source => source.Endpoints)
+                .OfType<RouteEndpoint>()
+                .Where(endpoint => endpoint.RoutePattern.RawText?.StartsWith("/api/admin/", StringComparison.Ordinal) == true)
+                .SelectMany(endpoint => (endpoint.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods ?? ["GET"])
+                    .Select(method => (Method: method, Route: endpoint.RoutePattern.RawText!.TrimEnd('/'))))
+                .Distinct()
+                .OrderBy(route => route.Route, StringComparer.Ordinal),
+        ];
+    }
+
+    [GeneratedRegex(@"\{[^}]+\}")]
+    private static partial Regex ParameterPattern();
+
     private async Task<HttpResponseMessage> SendAsync(HttpClient client, string method, string path, string? body)
     {
         using var request = new HttpRequestMessage(new HttpMethod(method), path);
 
-        if (body is not null)
+        if (body == Image)
+        {
+            var form = new MultipartFormDataContent();
+            var file = new ByteArrayContent(AdminCatalogApi.PngBytes);
+            file.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");
+            form.Add(file, "file", "taken.png");
+            form.Add(new StringContent("Taken"), "altText");
+            request.Content = form;
+        }
+        else if (body is not null)
         {
             request.Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
         }
@@ -150,6 +286,8 @@ public sealed class IdorSweepTests(ShopForgeApiFactory factory)
             reviewId,
             returnId,
             orderNumber,
+            await InvoiceNumberAsync(furniture, orderNumber),
+            await ImageIdAsync(furniture),
             domains!.Single().Id,
             await UserIdAsync(furniture),
             await InvitationIdAsync(furniture));
@@ -193,6 +331,32 @@ public sealed class IdorSweepTests(ShopForgeApiFactory factory)
         return (order.Number, reviews!.Single().Id, returns!.Single().Id);
     }
 
+    // The invoice is issued by the worker once the payment lands, so the sweep waits for the document it is
+    // about to ask for as somebody else.
+    private async Task<string> InvoiceNumberAsync(FurnitureStore furniture, string orderNumber)
+    {
+        var documents = await factory.EventuallyAsync(
+            async () =>
+            {
+                var order = await furniture.Admin.GetFromJsonAsync<OrderDetail>(
+                    $"/api/admin/stores/{furniture.Store.StoreId}/orders/{orderNumber}", CancellationToken);
+
+                return order!.Documents;
+            },
+            found => found.Count > 0,
+            CancellationToken);
+
+        return documents[0].Number;
+    }
+
+    private async Task<Guid> ImageIdAsync(FurnitureStore furniture)
+    {
+        using var uploaded = await furniture.Admin.UploadImageAsync(furniture.ProductIds["oak-chair"], AdminCatalogApi.PngBytes);
+        Assert.Equal(HttpStatusCode.Created, uploaded.StatusCode);
+
+        return (await uploaded.Content.ReadFromJsonAsync<Named>(CancellationToken))!.Id;
+    }
+
     private async Task<Guid> UserIdAsync(FurnitureStore furniture)
     {
         var colleague = await TestUsers.CreateAsync(factory.Services, furniture.Store.TenantId, ShopForge.Access.Domain.TenantRole.Support);
@@ -224,6 +388,8 @@ public sealed class IdorSweepTests(ShopForgeApiFactory factory)
         Guid Review,
         Guid Return,
         string Order,
+        string Document,
+        Guid Image,
         Guid Domain,
         Guid User,
         Guid Invitation)
@@ -236,12 +402,18 @@ public sealed class IdorSweepTests(ShopForgeApiFactory factory)
             .Replace("{review}", Review.ToString(), StringComparison.Ordinal)
             .Replace("{return}", Return.ToString(), StringComparison.Ordinal)
             .Replace("{order}", Order, StringComparison.Ordinal)
+            .Replace("{document}", Document, StringComparison.Ordinal)
+            .Replace("{image}", Image.ToString(), StringComparison.Ordinal)
             .Replace("{domain}", Domain.ToString(), StringComparison.Ordinal)
             .Replace("{user}", User.ToString(), StringComparison.Ordinal)
             .Replace("{invitation}", Invitation.ToString(), StringComparison.Ordinal);
     }
 
     private sealed record Named(Guid Id, string? Email);
+
+    private sealed record OrderDetail(List<Document> Documents);
+
+    private sealed record Document(string Number);
 
     private sealed record Colleagues(List<Named> Users);
 }
