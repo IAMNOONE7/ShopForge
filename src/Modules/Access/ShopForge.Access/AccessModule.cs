@@ -74,6 +74,7 @@ public static class AccessModule
     {
         tenantAdmin.MapColleagueEndpoints();
         tenantAdmin.MapMyAccountEndpoints();
+        tenantAdmin.MapGroup("/account").MapTwoFactorEndpoints();
 
         return tenantAdmin;
     }

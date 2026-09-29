@@ -14,6 +14,7 @@ internal sealed class TenantUserEntityConfiguration : IEntityTypeConfiguration<T
         builder.Property(user => user.Email).HasMaxLength(254);
         builder.Property(user => user.PasswordHash).HasMaxLength(200);
         builder.Property(user => user.Role).HasConversion<string>().HasMaxLength(32);
+        builder.Property(user => user.TwoFactorSecret).HasMaxLength(64);
 
         builder.HasIndex(user => user.Email).IsUnique();
         builder.HasIndex(user => user.TenantId);
