@@ -59,6 +59,10 @@ internal static class CustomerReturnEndpoints
             return TypedResults.NotFound();
         }
 
+        // The request holds the order's row while it works out what is left to send back, so two of them cannot
+        // both book the last item (D-130). A row held outside a transaction is a row let go immediately.
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
         var result = await returns.RequestAsync(
             order,
             storeCustomerId,
@@ -72,6 +76,7 @@ internal static class CustomerReturnEndpoints
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return TypedResults.Ok(await ReturnsOfAsync(order, returns, cancellationToken));
     }

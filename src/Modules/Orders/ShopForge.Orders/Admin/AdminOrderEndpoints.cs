@@ -74,8 +74,8 @@ internal static class AdminOrderEndpoints
             {
                 await stock.ConfirmAsync(order.Number, token);
                 outbox.Enqueue(new PaymentReceived(order.Number, order.Email, order.GrandTotal, order.Currency));
-                metrics.PaymentConfirmed(order.PaymentMethodCode);
             },
+            order => metrics.PaymentConfirmed(order.PaymentMethodCode),
             "The order is not awaiting payment",
             cancellationToken);
 
@@ -94,8 +94,8 @@ internal static class AdminOrderEndpoints
             {
                 await stock.ReleaseAsync(order.Number, token);
                 outbox.Enqueue(new OrderCancelled(order.Number, order.Email, "The store cancelled the order."));
-                metrics.OrderCancelled("admin");
             },
+            _ => metrics.OrderCancelled("admin"),
             "Only an order that is awaiting payment can be cancelled",
             cancellationToken);
 
@@ -216,8 +216,8 @@ internal static class AdminOrderEndpoints
         }
 
         outbox.Enqueue(new ShipmentCreated(order.Number, order.Email, details.Carrier, details.TrackingNumber, order.PickupPointName));
-        metrics.ShipmentCreated();
         await dbContext.SaveChangesAsync(cancellationToken);
+        metrics.ShipmentCreated();
 
         return TypedResults.Ok(await DetailAsync(dbContext, order, cancellationToken));
     }
@@ -227,6 +227,7 @@ internal static class AdminOrderEndpoints
         DbContext dbContext,
         Func<Order, bool> change,
         Func<Order, CancellationToken, Task> moveStock,
+        Action<Order> count,
         string rejection,
         CancellationToken cancellationToken)
     {
@@ -247,6 +248,10 @@ internal static class AdminOrderEndpoints
         await moveStock(order, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+
+        // Nothing is counted until it is committed: a writer who lost the row leaves no work behind, and a metric
+        // is the one effect a rolled-back transaction cannot take with it.
+        count(order);
 
         return TypedResults.Ok(await DetailAsync(dbContext, order, cancellationToken));
     }

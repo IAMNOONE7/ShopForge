@@ -29,6 +29,11 @@ internal sealed class OrderEntityConfiguration : IEntityTypeConfiguration<Order>
         builder.ToTable("orders", OrdersModule.Schema, table =>
             table.HasCheckConstraint("ck_orders_shipping_price", "shipping_price >= 0"));
 
+        // Two writers can reach for one order at the same moment — the store marking it paid while the provider's
+        // webhook says the same thing, a cancel racing the expiry sweep. PostgreSQL stamps every row version with
+        // xmin, so the update carries the version it read and the second writer changes nothing and is told (D-130).
+        builder.Property<uint>("Version").HasColumnName("xmin").IsRowVersion();
+
         builder.Property(order => order.Number).HasMaxLength(20);
         builder.Property(order => order.Email).HasMaxLength(254);
         builder.Property(order => order.Currency).HasMaxLength(3).IsFixedLength();

@@ -82,6 +82,8 @@ internal sealed class OrderReturns(
             return new ReturnRequestResult(null, $"The return window for this order closed on {closesAt:yyyy-MM-dd}.");
         }
 
+        await TakeOrderRowAsync(order, cancellationToken);
+
         var returnable = await ReturnableAsync(order, cancellationToken);
         var lines = new List<(Guid StoreProductId, string Name, int Quantity)>();
 
@@ -125,6 +127,8 @@ internal sealed class OrderReturns(
     // follows through the provider that took it (D-095).
     public async Task<bool> ReceiveAsync(Order order, OrderReturn orderReturn, CancellationToken cancellationToken)
     {
+        await TakeOrderRowAsync(order, cancellationToken);
+
         var refundedBefore = await HeldQuantitiesAsync(order.Number, onlyReceived: true, cancellationToken);
         var credited = new List<CreditedLine>();
         var amount = 0m;
@@ -190,6 +194,17 @@ internal sealed class OrderReturns(
         metrics.OrderRefunded(orderReturn.StoreCustomerId is null ? "store" : "return");
 
         return true;
+    }
+
+    // Everything here is worked out from the other returns of the same order, so two parcels arriving at the same
+    // moment would each compute from what the other had not committed yet — and the delivery, which is refunded
+    // only with the last of the goods, would be refunded with neither. Taking the order's row first makes them
+    // queue, and the reload is what the second one then reads instead of what it remembered (D-130).
+    private async Task TakeOrderRowAsync(Order order, CancellationToken cancellationToken)
+    {
+        await dbContext.Database.ExecuteSqlRawAsync(
+            "SELECT 1 FROM orders.orders WHERE id = {0} FOR UPDATE", [order.Id], cancellationToken);
+        await dbContext.Entry(order).ReloadAsync(cancellationToken);
     }
 
     private async Task<Dictionary<Guid, int>> HeldQuantitiesAsync(string orderNumber, bool onlyReceived, CancellationToken cancellationToken)
