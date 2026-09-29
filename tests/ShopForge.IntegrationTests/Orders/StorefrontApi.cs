@@ -12,8 +12,20 @@ internal sealed class StorefrontApi(WebApplicationFactory<Program> factory, Test
     public Task<HttpResponseMessage> GetAsync(string path) =>
         _client.GetAsync(Url(path), TestContext.Current.CancellationToken);
 
-    public Task<HttpResponseMessage> PostAsync(string path, object? body) =>
-        _client.PostAsJsonAsync(Url(path), body ?? new { }, TestContext.Current.CancellationToken);
+    public async Task<HttpResponseMessage> PostAsync(string path, object? body, (string Name, string Value)? header = null)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, Url(path))
+        {
+            Content = JsonContent.Create(body ?? new { }),
+        };
+
+        if (header is { } extra)
+        {
+            request.Headers.Add(extra.Name, extra.Value);
+        }
+
+        return await _client.SendAsync(request, TestContext.Current.CancellationToken);
+    }
 
     public Task<HttpResponseMessage> PutAsync(string path, object body) =>
         _client.PutAsJsonAsync(Url(path), body, TestContext.Current.CancellationToken);

@@ -30,7 +30,7 @@ internal static class CheckoutEndpoints
     {
         storefront.MapGet("/checkout/methods", GetMethodsAsync);
         storefront.MapGet("/checkout/pickup-points/{methodCode}", GetPickupPointsAsync);
-        storefront.MapPost("/checkout", PlaceOrderAsync);
+        storefront.MapPost("/checkout", PlaceOrderAsync).Idempotent();
         storefront.MapGet("/orders/{number}", GetOrderAsync);
     }
 

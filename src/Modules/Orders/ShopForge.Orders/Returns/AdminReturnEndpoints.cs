@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Orders.Domain;
 using ShopForge.Shared.Auditing;
+using ShopForge.Shared.Http;
 using ShopForge.Shared.Messaging;
 using ShopForge.Shared.Security;
 
@@ -17,7 +18,7 @@ internal static class AdminReturnEndpoints
         storeAdmin.MapGet("/returns", GetReturnsAsync);
         storeAdmin.MapPost("/returns/{returnId:guid}/accept", AcceptAsync).RequireAuthorization(AdminPolicies.StoreManagement);
         storeAdmin.MapPost("/returns/{returnId:guid}/refuse", RefuseAsync).RequireAuthorization(AdminPolicies.StoreManagement);
-        storeAdmin.MapPost("/returns/{returnId:guid}/receive", ReceiveAsync).RequireAuthorization(AdminPolicies.StoreManagement);
+        storeAdmin.MapPost("/returns/{returnId:guid}/receive", ReceiveAsync).RequireAuthorization(AdminPolicies.StoreManagement).Idempotent();
     }
 
     private static async Task<Ok<List<AdminReturnResponse>>> GetReturnsAsync(

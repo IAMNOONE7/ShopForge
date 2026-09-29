@@ -24,6 +24,7 @@ using ShopForge.Orders;
 using ShopForge.Orders.Development;
 using ShopForge.Platform;
 using ShopForge.Platform.Development;
+using ShopForge.Shared.Http;
 using ShopForge.Shared.Security;
 using ShopForge.Shared.Tenancy;
 using ShopForge.Stores;
@@ -128,6 +129,19 @@ var app = builder.Build();
 
 app.UseEdgeHeaders();
 app.UseSecurityHeaders();
+
+// A request that carries an idempotency key has its body read twice: once to bind it, once to fingerprint it, so
+// the same key used for a different request is caught rather than answered with somebody else's order (D-131).
+// Nothing else pays for the buffering, and the body is capped at a megabyte either way (D-126).
+app.Use(async (context, next) =>
+{
+    if (context.Request.Headers.ContainsKey(Idempotency.HeaderName))
+    {
+        context.Request.EnableBuffering();
+    }
+
+    await next(context);
+});
 app.UseMiddleware<CorrelationMiddleware>();
 app.UseHttpLogging();
 app.UseExceptionHandler();

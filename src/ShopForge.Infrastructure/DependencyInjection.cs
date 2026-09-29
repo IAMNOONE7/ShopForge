@@ -9,6 +9,7 @@ using ShopForge.Infrastructure.Dns;
 using ShopForge.Infrastructure.Documents;
 using ShopForge.Infrastructure.Email;
 using ShopForge.Infrastructure.Files;
+using ShopForge.Infrastructure.Idempotency;
 using ShopForge.Infrastructure.Messaging;
 using ShopForge.Infrastructure.Payments;
 using ShopForge.Infrastructure.Persistence;
@@ -17,6 +18,7 @@ using ShopForge.Shared.Dns;
 using ShopForge.Shared.Documents;
 using ShopForge.Shared.Email;
 using ShopForge.Shared.Files;
+using ShopForge.Shared.Http;
 using ShopForge.Shared.Maintenance;
 using ShopForge.Shared.Messaging;
 using ShopForge.Shared.Payments;
@@ -59,9 +61,11 @@ public static class DependencyInjection
         services.AddScoped<IEmailSuppression>(provider => provider.GetRequiredService<EmailSuppression>());
         services.AddScoped<MailgunWebhook>();
         services.AddScoped<IAuditLog, AuditLog>();
+        services.AddScoped<IIdempotentRequests, IdempotentRequests>();
         services.AddScoped<AuditReader>();
         services.AddScoped<IMaintenanceOutsideStores, OutboxCleanup>();
         services.AddScoped<IMaintenanceOutsideStores, AuditCleanup>();
+        services.AddScoped<IMaintenanceOutsideStores, IdempotencyCleanup>();
         services.AddSingleton<StoreMaintenance>();
         services.AddHostedService<MaintenanceWorker>();
 

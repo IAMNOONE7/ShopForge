@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Orders.Domain;
 using ShopForge.Shared.Customers;
+using ShopForge.Shared.Http;
 using ShopForge.Shared.Security;
 
 namespace ShopForge.Orders.Returns;
@@ -17,7 +18,7 @@ internal static class CustomerReturnEndpoints
         var returns = storefront.MapGroup("/account/orders/{number}/returns").RequireAuthorization(CustomerPolicies.Customer);
 
         returns.MapGet("/", GetReturnsAsync);
-        returns.MapPost("/", RequestReturnAsync);
+        returns.MapPost("/", RequestReturnAsync).Idempotent();
     }
 
     private static async Task<Results<Ok<CustomerReturnsResponse>, NotFound, UnauthorizedHttpResult>> GetReturnsAsync(
