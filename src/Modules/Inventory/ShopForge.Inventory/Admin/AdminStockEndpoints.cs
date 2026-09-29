@@ -29,16 +29,26 @@ internal static class AdminStockEndpoints
             .Select(item => new StockResponse(item.ProductId, item.QuantityOnHand, item.QuantityReserved, item.QuantityOnHand - item.QuantityReserved))
             .ToListAsync(cancellationToken));
 
-    private static async Task<Ok<List<StockMovementResponse>>> GetMovementsAsync(
+    private static async Task<Results<Ok<List<StockMovementResponse>>, NotFound>> GetMovementsAsync(
         Guid productId,
         DbContext dbContext,
-        CancellationToken cancellationToken) =>
-        TypedResults.Ok(await dbContext.Set<StockMovement>()
+        ITenantProducts products,
+        CancellationToken cancellationToken)
+    {
+        // The movements themselves are the company's and nothing of another's could be read here, but answering
+        // "here are none" for a product the caller cannot see is not an answer it should get (D-127).
+        if (!await products.ExistsAsync(productId, cancellationToken))
+        {
+            return TypedResults.NotFound();
+        }
+
+        return TypedResults.Ok(await dbContext.Set<StockMovement>()
             .Where(movement => movement.ProductId == productId)
             .OrderByDescending(movement => movement.OccurredAt)
             .Take(50)
             .Select(movement => new StockMovementResponse(movement.OccurredAt, movement.Quantity, movement.Reason.ToString(), movement.Reference))
             .ToListAsync(cancellationToken));
+    }
 
     private static async Task<Results<Ok<StockResponse>, ValidationProblem, NotFound, ProblemHttpResult>> SetStockAsync(
         Guid productId,
