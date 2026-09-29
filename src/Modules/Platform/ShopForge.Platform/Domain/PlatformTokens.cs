@@ -67,3 +67,29 @@ internal sealed class PlatformPasswordReset
 
     public void Use(DateTimeOffset now) => UsedAt = now;
 }
+
+// The way back in when an operator loses their phone. Nothing here belongs to a company, so unlike the staff
+// version it carries no tenant (D-103, D-129).
+internal sealed class PlatformRecoveryCode
+{
+    private PlatformRecoveryCode()
+    {
+    }
+
+    public PlatformRecoveryCode(Guid platformUserId, string codeHash)
+    {
+        Id = Guid.CreateVersion7();
+        PlatformUserId = platformUserId;
+        CodeHash = codeHash;
+    }
+
+    public Guid Id { get; private set; }
+
+    public Guid PlatformUserId { get; private set; }
+
+    public string CodeHash { get; private set; } = null!;
+
+    public DateTimeOffset? UsedAt { get; private set; }
+
+    public void Use(DateTimeOffset now) => UsedAt = now;
+}

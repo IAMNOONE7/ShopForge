@@ -76,7 +76,7 @@ internal static class AuthEndpoints
         if (user.IsTwoFactorEnabled)
         {
             return TypedResults.Ok(SignInResponse.NeedsCode(
-                TwoFactorTickets.Issue(dataProtection, user.Id, user.SecurityStamp, clock.GetUtcNow())));
+                TwoFactorTickets.Issue(dataProtection, TwoFactorTickets.TenantUser, user.Id, user.SecurityStamp, clock.GetUtcNow())));
         }
 
         var principal = Sessions.PrincipalFor(user);
@@ -97,7 +97,7 @@ internal static class AuthEndpoints
     {
         var now = clock.GetUtcNow();
 
-        if (TwoFactorTickets.Read(dataProtection, request.Ticket) is not { } pending)
+        if (TwoFactorTickets.Read(dataProtection, TwoFactorTickets.TenantUser, request.Ticket) is not { } pending)
         {
             return Refused();
         }

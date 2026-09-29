@@ -13,6 +13,7 @@ internal sealed class PlatformUserEntityConfiguration : IEntityTypeConfiguration
 
         builder.Property(user => user.Email).HasMaxLength(Emails.MaxLength);
         builder.Property(user => user.PasswordHash).HasMaxLength(200);
+        builder.Property(user => user.TwoFactorSecret).HasMaxLength(64);
 
         builder.HasIndex(user => user.Email).IsUnique();
     }

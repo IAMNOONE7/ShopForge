@@ -1,5 +1,6 @@
 using System.Reflection;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Routing;
@@ -57,6 +58,7 @@ public static class PlatformModule
     public static IEndpointRouteBuilder MapPlatformOperatorEndpoints(this IEndpointRouteBuilder platformOperator)
     {
         platformOperator.MapOperatorEndpoints();
+        platformOperator.MapGroup("/account").MapPlatformTwoFactorEndpoints();
 
         return platformOperator;
     }

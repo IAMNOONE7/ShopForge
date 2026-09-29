@@ -31,3 +31,16 @@ internal sealed class PlatformPasswordResetEntityConfiguration : IEntityTypeConf
         builder.HasIndex(reset => reset.PlatformUserId);
     }
 }
+
+internal sealed class PlatformRecoveryCodeEntityConfiguration : IEntityTypeConfiguration<PlatformRecoveryCode>
+{
+    public void Configure(EntityTypeBuilder<PlatformRecoveryCode> builder)
+    {
+        builder.ToTable("platform_recovery_codes", PlatformModule.Schema);
+
+        builder.Property(code => code.CodeHash).HasMaxLength(64);
+
+        builder.HasIndex(code => code.PlatformUserId);
+        builder.HasIndex(code => code.CodeHash).IsUnique();
+    }
+}
