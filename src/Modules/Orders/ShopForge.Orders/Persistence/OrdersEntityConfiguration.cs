@@ -17,7 +17,7 @@ internal sealed class CartEntityConfiguration : IEntityTypeConfiguration<Cart>
             lines.ToTable("cart_lines", OrdersModule.Schema, table =>
                 table.HasCheckConstraint("ck_cart_lines_quantity", $"quantity > 0 AND quantity <= {Cart.MaxQuantity}"));
             lines.WithOwner().HasForeignKey("CartId");
-            lines.HasKey("CartId", nameof(CartLine.StoreProductId));
+            lines.HasKey("CartId", nameof(CartLine.StoreProductId), nameof(CartLine.VariantId));
         });
     }
 }
@@ -269,7 +269,7 @@ internal sealed class OrderReturnEntityConfiguration : IEntityTypeConfiguration<
             lines.ToTable("order_return_lines", OrdersModule.Schema, table =>
                 table.HasCheckConstraint("ck_order_return_lines_quantity", "quantity > 0"));
             lines.WithOwner().HasForeignKey("OrderReturnId");
-            lines.HasKey("OrderReturnId", nameof(OrderReturnLine.StoreProductId));
+            lines.HasKey("OrderReturnId", nameof(OrderReturnLine.StoreProductId), nameof(OrderReturnLine.VariantId));
             lines.Property(line => line.ProductName).HasMaxLength(200);
         });
 

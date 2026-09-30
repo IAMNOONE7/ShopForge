@@ -55,14 +55,14 @@ internal sealed class OrderReturn : IStoreOwned
     // A return still waiting for a decision, or waiting for the parcel, keeps its goods out of another return.
     public bool HoldsGoods => Status is ReturnStatus.Requested or ReturnStatus.Accepted or ReturnStatus.Received;
 
-    public void AddLine(Guid storeProductId, string productName, int quantity)
+    public void AddLine(Guid storeProductId, Guid variantId, string productName, int quantity)
     {
         if (quantity < 1)
         {
             throw new ArgumentOutOfRangeException(nameof(quantity), "A return line needs at least one item.");
         }
 
-        _lines.Add(new OrderReturnLine(storeProductId, productName, quantity));
+        _lines.Add(new OrderReturnLine(storeProductId, variantId, productName, quantity));
     }
 
     public bool Accept(DateTimeOffset decidedAt)
@@ -121,14 +121,18 @@ internal sealed class OrderReturnLine
     {
     }
 
-    internal OrderReturnLine(Guid storeProductId, string productName, int quantity)
+    internal OrderReturnLine(Guid storeProductId, Guid variantId, string productName, int quantity)
     {
         StoreProductId = storeProductId;
+        VariantId = variantId;
         ProductName = productName;
         Quantity = quantity;
     }
 
     public Guid StoreProductId { get; private set; }
+
+    // Which form of it came back: two sizes of one shirt are two lines of one order and two lines of its return.
+    public Guid VariantId { get; private set; }
 
     // The name as the order has it, so a renamed product does not rewrite the paperwork.
     public string ProductName { get; private set; } = null!;

@@ -27,7 +27,11 @@ internal sealed class InventoryItemEntityConfiguration : IEntityTypeConfiguratio
         builder.Ignore(item => item.QuantityAvailable);
 
         builder.HasOne<Warehouse>().WithMany().HasForeignKey(item => item.WarehouseId);
-        builder.HasIndex(item => new { item.WarehouseId, item.ProductId }).IsUnique();
+        builder.HasIndex(item => new { item.WarehouseId, item.VariantId }).IsUnique();
+
+        // Stock moved from the product to the variant. The old column stays, unread, for the release after this
+        // one to drop: a change that takes data with it is two releases (D-125).
+        builder.Property<Guid?>("ProductId");
     }
 }
 
@@ -41,7 +45,8 @@ internal sealed class StockMovementEntityConfiguration : IEntityTypeConfiguratio
         builder.Property(movement => movement.Reference).HasMaxLength(50);
 
         builder.HasOne<Warehouse>().WithMany().HasForeignKey(movement => movement.WarehouseId);
-        builder.HasIndex(movement => new { movement.TenantId, movement.ProductId, movement.OccurredAt });
+        builder.HasIndex(movement => new { movement.TenantId, movement.VariantId, movement.OccurredAt });
+        builder.Property<Guid?>("ProductId");
     }
 }
 
@@ -57,5 +62,6 @@ internal sealed class StockReservationEntityConfiguration : IEntityTypeConfigura
 
         builder.HasOne<Warehouse>().WithMany().HasForeignKey(reservation => reservation.WarehouseId);
         builder.HasIndex(reservation => new { reservation.TenantId, reservation.Reference });
+        builder.Property<Guid?>("ProductId");
     }
 }

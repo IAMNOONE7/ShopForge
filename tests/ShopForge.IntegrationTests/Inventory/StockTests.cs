@@ -49,16 +49,16 @@ public sealed class StockTests(ShopForgeApiFactory factory)
     public async Task An_order_reserves_stock_and_paying_for_it_takes_the_items_out()
     {
         var furniture = await FurnitureStore.CreateAsync(factory);
-        var productId = furniture.ProductIds["oak-chair"];
-        await furniture.Admin.StockAsync(productId, 5);
+        var variantId = furniture.VariantIds["oak-chair"];
+        await furniture.Admin.VariantStockAsync(variantId, 5);
         using var shopper = new StorefrontApi(factory, furniture.Store);
         await AddToCartAsync(shopper, furniture.Products["oak-chair"], 2);
 
         var order = await PlaceOrderAsync(shopper);
-        var reserved = await StockAsync(furniture, productId);
+        var reserved = await StockAsync(furniture, variantId);
         using var paid = await furniture.Admin.PostAsync(
             $"/api/admin/stores/{furniture.Store.StoreId}/orders/{order.Number}/payment", null, CancellationToken);
-        var afterPayment = await StockAsync(furniture, productId);
+        var afterPayment = await StockAsync(furniture, variantId);
         var movements = await MovementsAsync(furniture, "oak-chair");
 
         Assert.Equal(HttpStatusCode.OK, paid.StatusCode);
@@ -71,8 +71,8 @@ public sealed class StockTests(ShopForgeApiFactory factory)
     public async Task Cancelling_an_order_gives_its_stock_back()
     {
         var furniture = await FurnitureStore.CreateAsync(factory);
-        var productId = furniture.ProductIds["oak-chair"];
-        await furniture.Admin.StockAsync(productId, 4);
+        var variantId = furniture.VariantIds["oak-chair"];
+        await furniture.Admin.VariantStockAsync(variantId, 4);
         using var shopper = new StorefrontApi(factory, furniture.Store);
         await AddToCartAsync(shopper, furniture.Products["oak-chair"], 3);
         var order = await PlaceOrderAsync(shopper);
@@ -80,7 +80,7 @@ public sealed class StockTests(ShopForgeApiFactory factory)
         using var cancelled = await furniture.Admin.PostAsync(
             $"/api/admin/stores/{furniture.Store.StoreId}/orders/{order.Number}/cancel", null, CancellationToken);
         var status = (await cancelled.Content.ReadFromJsonAsync<OrderStatusView>(CancellationToken))!.Status;
-        var stock = await StockAsync(furniture, productId);
+        var stock = await StockAsync(furniture, variantId);
 
         Assert.Equal(HttpStatusCode.OK, cancelled.StatusCode);
         Assert.Equal("Cancelled", status);
@@ -111,9 +111,9 @@ public sealed class StockTests(ShopForgeApiFactory factory)
     public async Task Concurrent_reservations_for_the_last_item_do_not_oversell()
     {
         var furniture = await FurnitureStore.CreateAsync(factory);
-        var productId = furniture.ProductIds["oak-chair"];
-        await furniture.Admin.StockAsync(productId, 1);
-        var request = new[] { new StockRequest(productId, 1) };
+        var variantId = furniture.VariantIds["oak-chair"];
+        await furniture.Admin.VariantStockAsync(variantId, 1);
+        var request = new[] { new StockRequest(variantId, 1) };
         var expiry = DateTimeOffset.UtcNow.AddMinutes(30);
 
         await using var firstScope = TestStores.CreateScope(factory.Services, furniture.Store);
@@ -134,10 +134,10 @@ public sealed class StockTests(ShopForgeApiFactory factory)
 
         await firstTransaction.CommitAsync(CancellationToken);
         var secondResult = await second;
-        var stock = await StockAsync(furniture, productId);
+        var stock = await StockAsync(furniture, variantId);
 
         Assert.True(first.Succeeded);
-        Assert.Equal([productId], secondResult.UnavailableProductIds);
+        Assert.Equal([variantId], secondResult.UnavailableVariantIds);
         Assert.Equal((1, 1, 0), (stock.OnHand, stock.Reserved, stock.Available));
     }
 
@@ -147,20 +147,20 @@ public sealed class StockTests(ShopForgeApiFactory factory)
     public async Task Releasing_the_same_order_twice_at_once_gives_the_stock_back_once()
     {
         var furniture = await FurnitureStore.CreateAsync(factory);
-        var productId = furniture.ProductIds["oak-chair"];
-        await furniture.Admin.StockAsync(productId, 10);
+        var variantId = furniture.VariantIds["oak-chair"];
+        await furniture.Admin.VariantStockAsync(variantId, 10);
         var expiry = DateTimeOffset.UtcNow.AddMinutes(30);
 
         // A second order keeps its own items reserved, so a double release shows up as wrong numbers rather than as
         // a check constraint stopping the quantity from going below zero.
         await using var otherScope = TestStores.CreateScope(factory.Services, furniture.Store);
         await otherScope.ServiceProvider.GetRequiredService<IStockLedger>()
-            .ReserveAsync([new StockRequest(productId, 4)], "other", expiry, CancellationToken);
+            .ReserveAsync([new StockRequest(variantId, 4)], "other", expiry, CancellationToken);
 
         await using var firstScope = TestStores.CreateScope(factory.Services, furniture.Store);
         await firstScope.ServiceProvider.GetRequiredService<IStockLedger>()
-            .ReserveAsync([new StockRequest(productId, 3)], "expiring", expiry, CancellationToken);
-        var reserved = await StockAsync(furniture, productId);
+            .ReserveAsync([new StockRequest(variantId, 3)], "expiring", expiry, CancellationToken);
+        var reserved = await StockAsync(furniture, variantId);
 
         var firstDbContext = firstScope.ServiceProvider.GetRequiredService<DbContext>();
         await using var firstTransaction = await firstDbContext.Database.BeginTransactionAsync(CancellationToken);
@@ -180,7 +180,7 @@ public sealed class StockTests(ShopForgeApiFactory factory)
         await WaitForLockAsync();
         await firstTransaction.CommitAsync(CancellationToken);
         await second;
-        var released = await StockAsync(furniture, productId);
+        var released = await StockAsync(furniture, variantId);
 
         Assert.Equal((10, 7, 3), (reserved.OnHand, reserved.Reserved, reserved.Available));
         Assert.Equal((10, 4, 6), (released.OnHand, released.Reserved, released.Available));
@@ -190,14 +190,14 @@ public sealed class StockTests(ShopForgeApiFactory factory)
     public async Task Stock_cannot_be_set_below_what_orders_reserve()
     {
         var furniture = await FurnitureStore.CreateAsync(factory);
-        var productId = furniture.ProductIds["oak-chair"];
-        await furniture.Admin.StockAsync(productId, 5);
+        var variantId = furniture.VariantIds["oak-chair"];
+        await furniture.Admin.VariantStockAsync(variantId, 5);
         using var shopper = new StorefrontApi(factory, furniture.Store);
         await AddToCartAsync(shopper, furniture.Products["oak-chair"], 4);
         await PlaceOrderAsync(shopper);
 
-        using var response = await furniture.Admin.SetStockAsync(productId, 2);
-        var stock = await StockAsync(furniture, productId);
+        using var response = await furniture.Admin.SetVariantStockAsync(variantId, 2);
+        var stock = await StockAsync(furniture, variantId);
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Equal((5, 4), (stock.OnHand, stock.Reserved));
@@ -207,15 +207,15 @@ public sealed class StockTests(ShopForgeApiFactory factory)
     public async Task An_unpaid_order_expires_and_returns_its_stock()
     {
         var furniture = await FurnitureStore.CreateAsync(factory);
-        var productId = furniture.ProductIds["oak-chair"];
-        await furniture.Admin.StockAsync(productId, 6);
+        var variantId = furniture.VariantIds["oak-chair"];
+        await furniture.Admin.VariantStockAsync(variantId, 6);
         using var shopper = new StorefrontApi(factory, furniture.Store);
         await AddToCartAsync(shopper, furniture.Products["oak-chair"], 2);
         var order = await PlaceOrderAsync(shopper);
 
         await ExpireAsync(furniture, order.Number);
         var cancelled = await factory.Services.GetRequiredService<ExpiredOrders>().SweepAsync(CancellationToken);
-        var stock = await StockAsync(furniture, productId);
+        var stock = await StockAsync(furniture, variantId);
         var confirmation = await shopper.GetJsonAsync<OrderView>($"/api/storefront/orders/{order.Number}?token={order.Token}");
 
         Assert.True(cancelled >= 1);
@@ -229,8 +229,8 @@ public sealed class StockTests(ShopForgeApiFactory factory)
     public async Task Two_sweeps_at_once_cancel_each_expired_order_once()
     {
         var furniture = await FurnitureStore.CreateAsync(factory);
-        var productId = furniture.ProductIds["oak-chair"];
-        await furniture.Admin.StockAsync(productId, 40);
+        var variantId = furniture.VariantIds["oak-chair"];
+        await furniture.Admin.VariantStockAsync(variantId, 40);
         var numbers = new List<string>();
 
         for (var order = 0; order < 8; order++)
@@ -252,7 +252,7 @@ public sealed class StockTests(ShopForgeApiFactory factory)
         await Task.WhenAll(
             Task.Run(() => sweeps.SweepAsync(CancellationToken), CancellationToken),
             Task.Run(() => sweeps.SweepAsync(CancellationToken), CancellationToken));
-        var stock = await StockAsync(furniture, productId);
+        var stock = await StockAsync(furniture, variantId);
         var letters = await CancellationsAsync(furniture, numbers);
         var cancelled = await factory.QueryAsync(furniture.Store, async dbContext => await dbContext.Set<Order>()
             .CountAsync(order => numbers.Contains(order.Number) && order.Status == OrderStatus.Cancelled, CancellationToken));
@@ -269,8 +269,8 @@ public sealed class StockTests(ShopForgeApiFactory factory)
         var (otherTenantStore, _) = await TestStores.CreateTwoStoresOfOneTenantAsync(factory.Services);
         using var otherAdmin = await TestUsers.LoginAsync(factory, await TestUsers.CreateAsync(factory.Services, otherTenantStore.TenantId));
 
-        using var response = await otherAdmin.SetStockAsync(furniture.ProductIds["oak-chair"], 99);
-        var stock = await StockAsync(furniture, furniture.ProductIds["oak-chair"]);
+        using var response = await otherAdmin.SetVariantStockAsync(furniture.VariantIds["oak-chair"], 99);
+        var stock = await StockAsync(furniture, furniture.VariantIds["oak-chair"]);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal(FurnitureStore.StockPerProduct, stock.OnHand);
@@ -322,17 +322,17 @@ public sealed class StockTests(ShopForgeApiFactory factory)
         }
     }
 
-    private async Task<StockView> StockAsync(FurnitureStore furniture, Guid productId)
+    private async Task<StockView> StockAsync(FurnitureStore furniture, Guid variantId)
     {
         var stock = await furniture.Admin.GetFromJsonAsync<List<StockView>>("/api/admin/stock", CancellationToken);
 
-        return stock!.Single(item => item.ProductId == productId);
+        return stock!.Single(item => item.VariantId == variantId);
     }
 
     private async Task<List<MovementView>> MovementsAsync(FurnitureStore furniture, string slug)
     {
         var movements = await furniture.Admin.GetFromJsonAsync<List<MovementView>>(
-            $"/api/admin/stock/{furniture.ProductIds[slug]}/movements", CancellationToken);
+            $"/api/admin/stock/{furniture.VariantIds[slug]}/movements", CancellationToken);
 
         return movements!;
     }
@@ -348,7 +348,7 @@ public sealed class StockTests(ShopForgeApiFactory factory)
             CancellationToken);
     }
 
-    private sealed record StockView(Guid ProductId, int OnHand, int Reserved, int Available);
+    private sealed record StockView(Guid VariantId, int OnHand, int Reserved, int Available);
 
     private sealed record MovementView(DateTimeOffset OccurredAt, int Quantity, string Reason, string Reference);
 

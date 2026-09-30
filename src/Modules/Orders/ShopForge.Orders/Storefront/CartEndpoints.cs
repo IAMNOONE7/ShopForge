@@ -63,14 +63,25 @@ internal static class CartEndpoints
             return errors.ToProblem();
         }
 
-        if ((await products.FindAsync([request.StoreProductId], cancellationToken)).Count == 0)
+        var product = (await products.FindAsync([request.StoreProductId], cancellationToken)).SingleOrDefault();
+
+        if (product is null)
         {
             return new RequestErrors().Check(false, "storeProductId", "The product is not available in this store.").ToProblem();
         }
 
+        // A shopper who names no form of a thing sold in one form means that one; a shirt in three sizes has to
+        // be asked for by size, because the warehouse holds three different things (D-135).
+        if (product.Form(request.VariantId) is not { } variant)
+        {
+            return new RequestErrors()
+                .Check(false, "variantId", Chosen(product))
+                .ToProblem();
+        }
+
         var carts = new Carts(httpContext, dbContext, storeContext, products, stock, discounts, clock);
         var cart = await carts.GetOrCreateAsync(cancellationToken);
-        cart.Add(request.StoreProductId, quantity);
+        cart.Add(request.StoreProductId, variant.Id, quantity);
         carts.Touch(cart);
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -79,6 +90,7 @@ internal static class CartEndpoints
 
     private static async Task<Results<Ok<CartResponse>, ValidationProblem, NotFound>> SetQuantityAsync(
         Guid storeProductId,
+        Guid? variantId,
         SetQuantityRequest request,
         HttpContext httpContext,
         DbContext dbContext,
@@ -104,12 +116,13 @@ internal static class CartEndpoints
             stock,
             discounts,
             clock,
-            cart => cart.SetQuantity(storeProductId, request.Quantity),
+            cart => cart.SetQuantity(storeProductId, variantId ?? OnlyFormIn(cart, storeProductId), request.Quantity),
             cancellationToken);
     }
 
     private static Task<Results<Ok<CartResponse>, ValidationProblem, NotFound>> RemoveItemAsync(
         Guid storeProductId,
+        Guid? variantId,
         HttpContext httpContext,
         DbContext dbContext,
         IStoreContext storeContext,
@@ -126,8 +139,18 @@ internal static class CartEndpoints
             stock,
             discounts,
             clock,
-            cart => cart.SetQuantity(storeProductId, 0),
+            cart => cart.SetQuantity(storeProductId, variantId ?? OnlyFormIn(cart, storeProductId), 0),
             cancellationToken);
+
+    // Changing a line the shopper already has: they need only name the form when their cart holds more than one
+    // form of that listing.
+    private static Guid OnlyFormIn(Cart cart, Guid storeProductId) =>
+        cart.Lines.Where(line => line.StoreProductId == storeProductId).Select(line => line.VariantId).SingleOrDefault();
+
+    private static string Chosen(SellableProduct product) =>
+        product.Variants.Count > 1
+            ? $"Choose which one: {string.Join(", ", product.OptionNames)}."
+            : "That form of the product is not available in this store.";
 
     private static async Task<Results<Ok<CartResponse>, ValidationProblem, NotFound>> ApplyDiscountAsync(
         DiscountRequest request,
@@ -213,7 +236,7 @@ internal static class CartEndpoints
     }
 }
 
-internal sealed record AddItemRequest(Guid StoreProductId, int? Quantity);
+internal sealed record AddItemRequest(Guid StoreProductId, Guid? VariantId, int? Quantity);
 
 internal sealed record SetQuantityRequest(int Quantity);
 
@@ -234,6 +257,8 @@ internal sealed record CartResponse(
         [
             .. contents.Items.Select(item => new CartLineResponse(
                 item.Product.StoreProductId,
+                item.Variant.Id,
+                item.Variant.OptionValues,
                 item.Product.Name,
                 item.Product.Slug,
                 item.Product.Price,
@@ -256,6 +281,8 @@ internal sealed record CartDiscountResponse(string Code, string Name, decimal Am
 
 internal sealed record CartLineResponse(
     Guid StoreProductId,
+    Guid VariantId,
+    IReadOnlyList<string> OptionValues,
     string Name,
     string Slug,
     decimal UnitPrice,

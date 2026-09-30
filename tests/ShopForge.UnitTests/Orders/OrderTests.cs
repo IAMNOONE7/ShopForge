@@ -43,7 +43,7 @@ public sealed class OrderTests
     public void Totals_add_shipping_and_derive_vat_from_gross_prices()
     {
         var order = Place();
-        order.AddLine(Guid.NewGuid(), "Oak Chair", 121m, 21m, 2);
+        order.AddLine(Guid.NewGuid(), Guid.NewGuid(), "Oak Chair", 121m, 21m, 2);
 
         Assert.Equal(242m, order.ItemsTotal);
         Assert.Equal(246.90m, order.GrandTotal);

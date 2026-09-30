@@ -67,7 +67,7 @@ internal static class CustomerReturnEndpoints
         var result = await returns.RequestAsync(
             order,
             storeCustomerId,
-            [.. request.Lines.Select(line => new RequestedReturnLine(line.StoreProductId, line.Quantity))],
+            [.. request.Lines.Select(line => new RequestedReturnLine(line.StoreProductId, line.VariantId, line.Quantity))],
             request.Reason?.Trim() is { Length: > 0 } reason ? reason[..Math.Min(reason.Length, OrderReturn.MaxReasonLength)] : null,
             cancellationToken);
 
@@ -87,6 +87,7 @@ internal static class CustomerReturnEndpoints
             await returns.ClosesAtAsync(order, cancellationToken),
             [.. (await returns.ReturnableAsync(order, cancellationToken)).Select(line => new ReturnableLineResponse(
                 line.StoreProductId,
+                line.VariantId,
                 line.ProductName,
                 line.Returnable))],
             [.. (await returns.OfOrderAsync(order.Number, cancellationToken)).Select(CustomerReturnResponse.From)]);
@@ -98,14 +99,14 @@ internal static class CustomerReturnEndpoints
 
 internal sealed record ReturnRequest(List<ReturnRequestLine> Lines, string? Reason);
 
-internal sealed record ReturnRequestLine(Guid StoreProductId, int Quantity);
+internal sealed record ReturnRequestLine(Guid StoreProductId, Guid? VariantId, int Quantity);
 
 internal sealed record CustomerReturnsResponse(
     DateTimeOffset? ClosesAt,
     List<ReturnableLineResponse> Returnable,
     List<CustomerReturnResponse> Returns);
 
-internal sealed record ReturnableLineResponse(Guid StoreProductId, string ProductName, int Quantity);
+internal sealed record ReturnableLineResponse(Guid StoreProductId, Guid VariantId, string ProductName, int Quantity);
 
 internal sealed record CustomerReturnResponse(
     string Number,

@@ -122,7 +122,7 @@ internal static class AdminOrderEndpoints
         var refund = await returns.RequestAsync(
             order,
             storeCustomerId: null,
-            [.. outstanding.Select(line => new RequestedReturnLine(line.StoreProductId, line.Returnable))],
+            [.. outstanding.Select(line => new RequestedReturnLine(line.StoreProductId, line.VariantId, line.Returnable))],
             "Refunded by the store.",
             cancellationToken);
 

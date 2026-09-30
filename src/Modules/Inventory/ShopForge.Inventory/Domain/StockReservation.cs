@@ -8,12 +8,12 @@ internal sealed class StockReservation : ITenantOwned
     {
     }
 
-    public StockReservation(Guid tenantId, Guid warehouseId, Guid productId, int quantity, string reference, DateTimeOffset expiresAt)
+    public StockReservation(Guid tenantId, Guid warehouseId, Guid variantId, int quantity, string reference, DateTimeOffset expiresAt)
     {
         Id = Guid.CreateVersion7();
         TenantId = tenantId;
         WarehouseId = warehouseId;
-        ProductId = productId;
+        VariantId = variantId;
         Quantity = quantity;
         Reference = reference;
         ExpiresAt = expiresAt;
@@ -26,7 +26,7 @@ internal sealed class StockReservation : ITenantOwned
 
     public Guid WarehouseId { get; private set; }
 
-    public Guid ProductId { get; private set; }
+    public Guid VariantId { get; private set; }
 
     public int Quantity { get; private set; }
 

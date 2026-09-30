@@ -109,10 +109,17 @@ internal static class StorefrontCatalogEndpoints
                     .OrderBy(image => image.Position)
                     .Select(image => (Guid?)image.Id)
                     .FirstOrDefault(),
+                VariantIds = dbContext.Set<Product>()
+                    .Where(product => product.Id == storeProduct.ProductId)
+                    .SelectMany(product => product.Variants)
+                    .Select(variant => variant.Id)
+                    .ToList(),
             })
             .ToListAsync(cancellationToken);
 
-        var available = await stock.AvailableAsync([.. items.Select(item => item.ProductId)], cancellationToken);
+        // A card says what the shopper could buy, which is every form of it added up; the product page is where
+        // one form is chosen (D-135).
+        var available = await stock.AvailableAsync([.. items.SelectMany(item => item.VariantIds)], cancellationToken);
         var facets = new List<ProductFacetResponse>();
 
         foreach (var definition in await FacetDefinitionsAsync(dbContext, categoryId, definitions, cancellationToken))
@@ -127,7 +134,7 @@ internal static class StorefrontCatalogEndpoints
                     item.Slug,
                     item.Name,
                     item.Price,
-                    available.GetValueOrDefault(item.ProductId),
+                    item.VariantIds.Sum(available.GetValueOrDefault),
                     item.RatingAverage,
                     item.RatingCount,
                     ImageUrl(item.Id, item.ImageId))),
@@ -173,7 +180,8 @@ internal static class StorefrontCatalogEndpoints
             .ThenBy(definition => definition.Name)
             .ToListAsync(cancellationToken);
 
-        var available = await stock.AvailableAsync([storeProduct.ProductId], cancellationToken);
+        var variants = product.Variants.OrderBy(variant => variant.Position).ToList();
+        var available = await stock.AvailableAsync([.. variants.Select(variant => variant.Id)], cancellationToken);
 
         return TypedResults.Ok(new ProductDetailResponse(
             storeProduct.Id,
@@ -181,7 +189,12 @@ internal static class StorefrontCatalogEndpoints
             storeProduct.Name,
             storeProduct.Description,
             storeProduct.Price,
-            available.GetValueOrDefault(storeProduct.ProductId),
+            variants.Sum(variant => available.GetValueOrDefault(variant.Id)),
+            product.OptionNames,
+            [.. variants.Select(variant => new ProductVariantResponse(
+                variant.Id,
+                variant.OptionValues,
+                available.GetValueOrDefault(variant.Id)))],
             storeProduct.RatingAverage,
             storeProduct.RatingCount,
             [.. product.Images.OrderBy(image => image.Position).Select(image => new ProductImageResponse(ImageUrl(storeProduct.Id, image.Id)!, image.AltText))],
@@ -379,11 +392,16 @@ internal sealed record ProductDetailResponse(
     string? Description,
     decimal Price,
     int Available,
+    IReadOnlyList<string> OptionNames,
+    List<ProductVariantResponse> Variants,
     decimal Rating,
     int ReviewCount,
     List<ProductImageResponse> Images,
     List<StorefrontCategoryResponse> Categories,
     List<ProductAttributeResponse> Attributes);
+
+// One form of the product, what it is called along each axis, and what is left of it.
+internal sealed record ProductVariantResponse(Guid Id, IReadOnlyList<string> OptionValues, int Available);
 
 internal sealed record ProductImageResponse(string Url, string? AltText);
 

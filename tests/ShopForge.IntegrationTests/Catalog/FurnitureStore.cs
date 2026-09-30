@@ -8,7 +8,8 @@ internal sealed record FurnitureStore(
     HttpClient Admin,
     Guid ChairsCategoryId,
     Dictionary<string, Guid> Products,
-    Dictionary<string, Guid> ProductIds)
+    Dictionary<string, Guid> ProductIds,
+    Dictionary<string, Guid> VariantIds)
 {
     public const int StockPerProduct = 50;
 
@@ -41,7 +42,14 @@ internal sealed record FurnitureStore(
             ["oak-bench"] = await AddAsync(admin, storeId, productIds, "Oak Bench", 300m, categoryId: null, new { material = "oak", width = 120, foldable = false, colors = new[] { "natural" }, seats = 3 }),
         };
 
-        return new FurnitureStore(store, otherStore, admin, chairs, products, productIds);
+        var variantIds = new Dictionary<string, Guid>();
+
+        foreach (var (slug, productId) in productIds)
+        {
+            variantIds[slug] = await admin.DefaultVariantIdAsync(productId);
+        }
+
+        return new FurnitureStore(store, otherStore, admin, chairs, products, productIds, variantIds);
     }
 
     private static async Task<Guid> AddAsync(

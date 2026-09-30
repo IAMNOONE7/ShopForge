@@ -19,31 +19,31 @@ internal static class AdminStockEndpoints
         var stock = tenantAdmin.MapGroup("/stock");
 
         stock.MapGet("/", GetStockAsync);
-        stock.MapGet("/{productId:guid}/movements", GetMovementsAsync);
-        stock.MapPut("/{productId:guid}", SetStockAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
+        stock.MapGet("/{variantId:guid}/movements", GetMovementsAsync);
+        stock.MapPut("/{variantId:guid}", SetStockAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
     }
 
     private static async Task<Ok<List<StockResponse>>> GetStockAsync(DbContext dbContext, CancellationToken cancellationToken) =>
         TypedResults.Ok(await dbContext.Set<InventoryItem>()
-            .OrderBy(item => item.ProductId)
-            .Select(item => new StockResponse(item.ProductId, item.QuantityOnHand, item.QuantityReserved, item.QuantityOnHand - item.QuantityReserved))
+            .OrderBy(item => item.VariantId)
+            .Select(item => new StockResponse(item.VariantId, item.QuantityOnHand, item.QuantityReserved, item.QuantityOnHand - item.QuantityReserved))
             .ToListAsync(cancellationToken));
 
     private static async Task<Results<Ok<List<StockMovementResponse>>, NotFound>> GetMovementsAsync(
-        Guid productId,
+        Guid variantId,
         DbContext dbContext,
         ITenantProducts products,
         CancellationToken cancellationToken)
     {
         // The movements themselves are the company's and nothing of another's could be read here, but answering
-        // "here are none" for a product the caller cannot see is not an answer it should get (D-127).
-        if (!await products.ExistsAsync(productId, cancellationToken))
+        // "here are none" for something the caller cannot see is not an answer it should get (D-127).
+        if (!await products.VariantExistsAsync(variantId, cancellationToken))
         {
             return TypedResults.NotFound();
         }
 
         return TypedResults.Ok(await dbContext.Set<StockMovement>()
-            .Where(movement => movement.ProductId == productId)
+            .Where(movement => movement.VariantId == variantId)
             .OrderByDescending(movement => movement.OccurredAt)
             .Take(50)
             .Select(movement => new StockMovementResponse(movement.OccurredAt, movement.Quantity, movement.Reason.ToString(), movement.Reference))
@@ -51,7 +51,7 @@ internal static class AdminStockEndpoints
     }
 
     private static async Task<Results<Ok<StockResponse>, ValidationProblem, NotFound, ProblemHttpResult>> SetStockAsync(
-        Guid productId,
+        Guid variantId,
         SetStockRequest request,
         DbContext dbContext,
         IStockLedger stock,
@@ -66,14 +66,14 @@ internal static class AdminStockEndpoints
             return errors.ToProblem();
         }
 
-        if (!await products.ExistsAsync(productId, cancellationToken))
+        if (!await products.VariantExistsAsync(variantId, cancellationToken))
         {
             return TypedResults.NotFound();
         }
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
-        if (!await stock.SetOnHandAsync(productId, request.Quantity, "manual", cancellationToken))
+        if (!await stock.SetOnHandAsync(variantId, request.Quantity, "manual", cancellationToken))
         {
             return TypedResults.Problem(
                 statusCode: StatusCodes.Status409Conflict,
@@ -81,18 +81,18 @@ internal static class AdminStockEndpoints
                 detail: "Cancel or fulfil the open orders for this product first.");
         }
 
-        audit.Record("stock.set", productId.ToString(), new { request.Quantity });
+        audit.Record("stock.set", variantId.ToString(), new { request.Quantity });
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        var item = await dbContext.Set<InventoryItem>().AsNoTracking().SingleAsync(candidate => candidate.ProductId == productId, cancellationToken);
+        var item = await dbContext.Set<InventoryItem>().AsNoTracking().SingleAsync(candidate => candidate.VariantId == variantId, cancellationToken);
 
-        return TypedResults.Ok(new StockResponse(productId, item.QuantityOnHand, item.QuantityReserved, item.QuantityAvailable));
+        return TypedResults.Ok(new StockResponse(variantId, item.QuantityOnHand, item.QuantityReserved, item.QuantityAvailable));
     }
 }
 
 internal sealed record SetStockRequest(int Quantity);
 
-internal sealed record StockResponse(Guid ProductId, int OnHand, int Reserved, int Available);
+internal sealed record StockResponse(Guid VariantId, int OnHand, int Reserved, int Available);
 
 internal sealed record StockMovementResponse(DateTimeOffset OccurredAt, int Quantity, string Reason, string Reference);

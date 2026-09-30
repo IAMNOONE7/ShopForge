@@ -206,8 +206,9 @@ public sealed class InvoiceTests(ShopForgeApiFactory factory)
     private async Task<StockView> StockAsync(FurnitureStore furniture, Guid productId)
     {
         var stock = await furniture.Admin.GetFromJsonAsync<List<StockView>>("/api/admin/stock", CancellationToken);
+        var variantId = await furniture.Admin.DefaultVariantIdAsync(productId);
 
-        return stock!.Single(item => item.ProductId == productId);
+        return stock!.Single(item => item.VariantId == variantId);
     }
 
     // Read back as the module sees it, so the totals and the VAT summary are the ones the document is built from.
@@ -215,7 +216,7 @@ public sealed class InvoiceTests(ShopForgeApiFactory factory)
         factory.QueryAsync(furniture.Store, dbContext => dbContext.Set<Invoice>()
             .SingleAsync(invoice => invoice.Number == documentNumber, CancellationToken));
 
-    private sealed record StockView(Guid ProductId, int OnHand, int Reserved, int Available);
+    private sealed record StockView(Guid VariantId, int OnHand, int Reserved, int Available);
 
     private sealed record AdminOrderView(string Number, string Status, List<DocumentView> Documents);
 }

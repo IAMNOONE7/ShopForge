@@ -231,7 +231,7 @@ public sealed class ConcurrencyTests(ShopForgeApiFactory factory)
     {
         var stock = await furniture.Admin.GetFromJsonAsync<List<StockRow>>("/api/admin/stock", CancellationToken);
 
-        return stock!.Single(item => item.ProductId == furniture.ProductIds["oak-chair"]);
+        return stock!.Single(item => item.VariantId == furniture.VariantIds["oak-chair"]);
     }
 
     private Task<Order> OrderAsync(FurnitureStore furniture, string number) =>
@@ -244,5 +244,5 @@ public sealed class ConcurrencyTests(ShopForgeApiFactory factory)
 
     private sealed record ReturnRow(Guid Id, string Number, string OrderNumber, string Status, DateTimeOffset RequestedAt);
 
-    private sealed record StockRow(Guid ProductId, int OnHand, int Reserved, int Available);
+    private sealed record StockRow(Guid VariantId, int OnHand, int Reserved, int Available);
 }

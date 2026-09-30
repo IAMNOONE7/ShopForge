@@ -80,7 +80,8 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
     {
         foreach (var update in _stockUpdates)
         {
-            if (!await stock.SetOnHandAsync(update.Product.Id, update.Quantity, "import", cancellationToken))
+            // A row of the file is one SKU, which is one form of a product (D-135); a row per form is 25d.
+            if (!await stock.SetOnHandAsync(update.Product.Default.Id, update.Quantity, "import", cancellationToken))
             {
                 issues.Add(new ImportIssue(update.Row, ImportColumns.Stock, "Stock was left unchanged: open orders reserve more items than this."));
             }

@@ -32,12 +32,30 @@ internal static class AdminCatalogApi
         return await IdFromAsync(response);
     }
 
+    // Stock belongs to a form of a product (D-135). A test that says "this product" means the one form a plain
+    // product has, so the helper looks it up; a test about several forms names the one it means.
     public static async Task<HttpResponseMessage> SetStockAsync(this HttpClient admin, Guid productId, int quantity) =>
-        await admin.PutAsJsonAsync($"/api/admin/stock/{productId}", new { Quantity = quantity }, TestContext.Current.CancellationToken);
+        await admin.SetVariantStockAsync(await admin.DefaultVariantIdAsync(productId), quantity);
+
+    public static async Task<HttpResponseMessage> SetVariantStockAsync(this HttpClient admin, Guid variantId, int quantity) =>
+        await admin.PutAsJsonAsync($"/api/admin/stock/{variantId}", new { Quantity = quantity }, TestContext.Current.CancellationToken);
+
+    public static async Task<Guid> DefaultVariantIdAsync(this HttpClient admin, Guid productId)
+    {
+        var products = await admin.GetFromJsonAsync<List<ProductWithVariants>>("/api/admin/products", TestContext.Current.CancellationToken);
+
+        return products!.Single(product => product.Id == productId).Variants[0].Id;
+    }
 
     public static async Task StockAsync(this HttpClient admin, Guid productId, int quantity)
     {
         using var response = await admin.SetStockAsync(productId, quantity);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    public static async Task VariantStockAsync(this HttpClient admin, Guid variantId, int quantity)
+    {
+        using var response = await admin.SetVariantStockAsync(variantId, quantity);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
@@ -81,4 +99,8 @@ internal static class AdminCatalogApi
     }
 
     private sealed record Created(Guid Id);
+
+    private sealed record ProductWithVariants(Guid Id, List<Variant> Variants);
+
+    private sealed record Variant(Guid Id);
 }

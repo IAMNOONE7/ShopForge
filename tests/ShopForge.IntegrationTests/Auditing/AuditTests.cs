@@ -26,7 +26,7 @@ public sealed class AuditTests(ShopForgeApiFactory factory)
         using var refunded = await furniture.Admin.PostAsync(
             $"/api/admin/stores/{furniture.Store.StoreId}/orders/{order.Number}/refund", null, CancellationToken);
         using var stocked = await furniture.Admin.PutAsJsonAsync(
-            $"/api/admin/stock/{furniture.ProductIds["oak-chair"]}", new { Quantity = 3 }, CancellationToken);
+            $"/api/admin/stock/{furniture.VariantIds["oak-chair"]}", new { Quantity = 3 }, CancellationToken);
 
         var entries = await AuditAsync(furniture.Admin);
 

@@ -14,7 +14,9 @@ namespace ShopForge.IntegrationTests.Catalog;
 // one starts from a database that still has products of the old shape (D-134).
 public sealed class VariantMigrationTests(ShopForgeApiFactory factory)
 {
-    private const string Before = "20260929064806_IdempotentRequests";
+    private const string BeforeVariants = "20260929064806_IdempotentRequests";
+
+    private const string BeforeStockMoved = "20260930052538_ProductVariants";
 
     private static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
 
@@ -33,7 +35,7 @@ public sealed class VariantMigrationTests(ShopForgeApiFactory factory)
             var migrator = dbContext.GetService<IMigrator>();
 
             // The catalog as it stood before this stage: a product carrying its own SKU, barcode and weight.
-            await migrator.MigrateAsync(Before, CancellationToken);
+            await migrator.MigrateAsync(BeforeVariants, CancellationToken);
             await dbContext.Database.ExecuteSqlRawAsync(
                 "INSERT INTO catalog.products (id, tenant_id, sku, ean, weight_grams) VALUES ({0}, {1}, 'OLD-1', '8594000000001', 850)",
                 [productId, tenantId],
@@ -49,6 +51,60 @@ public sealed class VariantMigrationTests(ShopForgeApiFactory factory)
                 .ToListAsync(CancellationToken);
 
             Assert.Equal(["OLD-1:8594000000001:850:0"], variants);
+        }
+        finally
+        {
+            await DropDatabaseAsync(name);
+        }
+    }
+
+    // The same danger one stage later: stock that named a product has to come out naming the one form that
+    // product had, or a shop wakes up with empty shelves.
+    [Fact]
+    public async Task Stock_from_before_variants_comes_through_naming_the_one_form()
+    {
+        var name = $"migration_{Guid.NewGuid():N}";
+        var tenantId = Guid.CreateVersion7();
+        var productId = Guid.CreateVersion7();
+        var warehouseId = Guid.CreateVersion7();
+
+        await CreateDatabaseAsync(name);
+
+        try
+        {
+            await using var dbContext = ContextFor(name);
+            var migrator = dbContext.GetService<IMigrator>();
+
+            await migrator.MigrateAsync(BeforeStockMoved, CancellationToken);
+            await dbContext.Database.ExecuteSqlRawAsync(
+                "INSERT INTO inventory.warehouses (id, tenant_id, code, name) VALUES ({0}, {1}, 'main', 'Main')",
+                [warehouseId, tenantId],
+                CancellationToken);
+            await dbContext.Database.ExecuteSqlRawAsync(
+                "INSERT INTO catalog.products (id, tenant_id, sku) VALUES ({0}, {1}, 'STOCKED-1')",
+                [productId, tenantId],
+                CancellationToken);
+            await dbContext.Database.ExecuteSqlRawAsync(
+                "INSERT INTO catalog.product_variants (id, tenant_id, product_id, sku, option_values, position) "
+                + "VALUES ({0}, {1}, {2}, 'STOCKED-1', ARRAY[]::text[], 0)",
+                [Guid.CreateVersion7(), tenantId, productId],
+                CancellationToken);
+            await dbContext.Database.ExecuteSqlRawAsync(
+                "INSERT INTO inventory.inventory_items (id, tenant_id, warehouse_id, product_id, quantity_on_hand, quantity_reserved) "
+                + "VALUES ({0}, {1}, {2}, {3}, 12, 0)",
+                [Guid.CreateVersion7(), tenantId, warehouseId, productId],
+                CancellationToken);
+
+            await migrator.MigrateAsync(cancellationToken: CancellationToken);
+
+            var counted = await dbContext.Database
+                .SqlQueryRaw<int>(
+                    "SELECT i.quantity_on_hand AS \"Value\" FROM inventory.inventory_items i "
+                    + "JOIN catalog.product_variants v ON v.id = i.variant_id WHERE v.product_id = {0}",
+                    productId)
+                .ToListAsync(CancellationToken);
+
+            Assert.Equal([12], counted);
         }
         finally
         {

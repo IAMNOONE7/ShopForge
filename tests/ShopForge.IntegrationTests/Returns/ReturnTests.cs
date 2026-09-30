@@ -406,8 +406,9 @@ public sealed class ReturnTests(ShopForgeApiFactory factory)
     private async Task<StockView> StockAsync(FurnitureStore furniture, Guid productId)
     {
         var stock = await furniture.Admin.GetFromJsonAsync<List<StockView>>("/api/admin/stock", CancellationToken);
+        var variantId = await furniture.Admin.DefaultVariantIdAsync(productId);
 
-        return stock!.Single(item => item.ProductId == productId);
+        return stock!.Single(item => item.VariantId == variantId);
     }
 
     private async Task CreateDiscountAsync(FurnitureStore furniture, string code)
@@ -463,7 +464,7 @@ public sealed class ReturnTests(ShopForgeApiFactory factory)
 
     private sealed record ThemeView(string PrimaryColor, string SecondaryColor, int BorderRadius);
 
-    private sealed record StockView(Guid ProductId, int OnHand, int Reserved, int Available);
+    private sealed record StockView(Guid VariantId, int OnHand, int Reserved, int Available);
 
     private sealed record ProblemView(string Title);
 }

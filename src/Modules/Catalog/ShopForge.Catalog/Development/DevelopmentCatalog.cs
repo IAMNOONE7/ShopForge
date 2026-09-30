@@ -219,7 +219,7 @@ public static class DevelopmentCatalog
 
         foreach (var product in added)
         {
-            await stock.SetOnHandAsync(product.Id, 25, "seed", cancellationToken);
+            await stock.SetOnHandAsync(product.Default.Id, 25, "seed", cancellationToken);
         }
     }
 

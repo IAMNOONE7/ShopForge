@@ -222,12 +222,14 @@ public sealed class StripePaymentTests : IDisposable
     private async Task<StockView> StockAsync(FurnitureStore store, Guid productId)
     {
         var stock = await store.Admin.GetFromJsonAsync<List<StockView>>("/api/admin/stock", CancellationToken);
+        var variantId = await store.Admin.DefaultVariantIdAsync(productId);
 
-        return stock!.Single(item => item.ProductId == productId);
+        return stock!.Single(item => item.VariantId == variantId);
     }
 
     private async Task<List<MovementView>> MovementsAsync(FurnitureStore store, Guid productId) =>
-        (await store.Admin.GetFromJsonAsync<List<MovementView>>($"/api/admin/stock/{productId}/movements", CancellationToken))!;
+        (await store.Admin.GetFromJsonAsync<List<MovementView>>(
+            $"/api/admin/stock/{await store.Admin.DefaultVariantIdAsync(productId)}/movements", CancellationToken))!;
 
     private static async Task AddToCartAsync(StorefrontApi shopper, Guid storeProductId, int quantity)
     {
@@ -245,7 +247,7 @@ public sealed class StripePaymentTests : IDisposable
 
     private sealed record PlacedOrderView(string Number, Guid Token, string PaymentInstructions, string? RedirectUrl);
 
-    private sealed record StockView(Guid ProductId, int OnHand, int Reserved, int Available);
+    private sealed record StockView(Guid VariantId, int OnHand, int Reserved, int Available);
 
     private sealed record MovementView(int Quantity, string Reason, string Reference);
 

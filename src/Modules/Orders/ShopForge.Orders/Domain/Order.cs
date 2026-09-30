@@ -124,14 +124,14 @@ internal sealed class Order : IStoreOwned
     // What has gone back to the customer so far, across every return of this order.
     public decimal RefundedTotal { get; private set; }
 
-    public void AddLine(Guid storeProductId, string name, decimal unitPrice, decimal vatRate, int quantity, decimal discount = 0m)
+    public void AddLine(Guid storeProductId, Guid variantId, string name, decimal unitPrice, decimal vatRate, int quantity, decimal discount = 0m)
     {
         if (quantity < 1)
         {
             throw new ArgumentOutOfRangeException(nameof(quantity), "An order line needs at least one item.");
         }
 
-        _lines.Add(new OrderLine(storeProductId, name, unitPrice, vatRate, quantity, discount));
+        _lines.Add(new OrderLine(storeProductId, variantId, name, unitPrice, vatRate, quantity, discount));
     }
 
     public void ApplyDiscount(string code, string name, decimal shippingDiscount)
@@ -244,9 +244,10 @@ internal sealed class OrderLine
     {
     }
 
-    internal OrderLine(Guid storeProductId, string name, decimal unitPrice, decimal vatRate, int quantity, decimal discount)
+    internal OrderLine(Guid storeProductId, Guid variantId, string name, decimal unitPrice, decimal vatRate, int quantity, decimal discount)
     {
         StoreProductId = storeProductId;
+        VariantId = variantId;
         ProductName = name;
         UnitPrice = unitPrice;
         VatRate = vatRate;
@@ -255,6 +256,9 @@ internal sealed class OrderLine
     }
 
     public Guid StoreProductId { get; private set; }
+
+    // Which form of it was sold: what the reservation took and what a return puts back (D-135).
+    public Guid VariantId { get; private set; }
 
     public string ProductName { get; private set; } = null!;
 

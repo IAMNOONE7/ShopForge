@@ -21,6 +21,11 @@ internal sealed class SellableProductLookup(DbContext dbContext) : ISellableProd
                     storeProduct.Price,
                     storeProduct.VatRate,
                     ImageId = product.Images.OrderBy(image => image.Position).Select(image => (Guid?)image.Id).FirstOrDefault(),
+                    product.OptionNames,
+                    Variants = product.Variants
+                        .OrderBy(variant => variant.Position)
+                        .Select(variant => new SellableVariant(variant.Id, variant.Sku, variant.OptionValues, variant.Position))
+                        .ToList(),
                 })
             .ToListAsync(cancellationToken);
 
@@ -33,7 +38,9 @@ internal sealed class SellableProductLookup(DbContext dbContext) : ISellableProd
                 product.Slug,
                 product.Price,
                 product.VatRate,
-                product.ImageId is null ? null : $"/api/storefront/products/{product.Id}/images/{product.ImageId}")),
+                product.ImageId is null ? null : $"/api/storefront/products/{product.Id}/images/{product.ImageId}",
+                product.OptionNames,
+                product.Variants)),
         ];
     }
 }

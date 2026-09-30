@@ -8,12 +8,12 @@ internal sealed class StockMovement : ITenantOwned
     {
     }
 
-    public StockMovement(Guid tenantId, Guid warehouseId, Guid productId, int quantity, StockMovementReason reason, string reference, DateTimeOffset occurredAt)
+    public StockMovement(Guid tenantId, Guid warehouseId, Guid variantId, int quantity, StockMovementReason reason, string reference, DateTimeOffset occurredAt)
     {
         Id = Guid.CreateVersion7();
         TenantId = tenantId;
         WarehouseId = warehouseId;
-        ProductId = productId;
+        VariantId = variantId;
         Quantity = quantity;
         Reason = reason;
         Reference = reference;
@@ -26,7 +26,7 @@ internal sealed class StockMovement : ITenantOwned
 
     public Guid WarehouseId { get; private set; }
 
-    public Guid ProductId { get; private set; }
+    public Guid VariantId { get; private set; }
 
     // Signed: stock coming in is positive, stock leaving is negative.
     public int Quantity { get; private set; }

@@ -10,12 +10,12 @@ namespace ShopForge.Inventory.Stock;
 // wrap these calls in a transaction.
 internal sealed class StockLedger(DbContext dbContext, IStoreContext storeContext, TimeProvider clock) : IStockLedger
 {
-    public async Task<IReadOnlyDictionary<Guid, int>> AvailableAsync(IReadOnlyCollection<Guid> productIds, CancellationToken cancellationToken) =>
+    public async Task<IReadOnlyDictionary<Guid, int>> AvailableAsync(IReadOnlyCollection<Guid> variantIds, CancellationToken cancellationToken) =>
         await dbContext.Set<InventoryItem>()
-            .Where(item => productIds.Contains(item.ProductId))
-            .GroupBy(item => item.ProductId)
-            .Select(group => new { ProductId = group.Key, Available = group.Sum(item => item.QuantityOnHand - item.QuantityReserved) })
-            .ToDictionaryAsync(row => row.ProductId, row => row.Available, cancellationToken);
+            .Where(item => variantIds.Contains(item.VariantId))
+            .GroupBy(item => item.VariantId)
+            .Select(group => new { VariantId = group.Key, Available = group.Sum(item => item.QuantityOnHand - item.QuantityReserved) })
+            .ToDictionaryAsync(row => row.VariantId, row => row.Available, cancellationToken);
 
     public async Task<StockReservationResult> ReserveAsync(
         IReadOnlyCollection<StockRequest> requests,
@@ -31,7 +31,7 @@ internal sealed class StockLedger(DbContext dbContext, IStoreContext storeContex
         {
             var reserved = await dbContext.Set<InventoryItem>()
                 .Where(item => item.WarehouseId == warehouseId
-                    && item.ProductId == request.ProductId
+                    && item.VariantId == request.VariantId
                     && item.QuantityOnHand - item.QuantityReserved >= request.Quantity)
                 .ExecuteUpdateAsync(
                     setters => setters.SetProperty(item => item.QuantityReserved, item => item.QuantityReserved + request.Quantity),
@@ -39,11 +39,11 @@ internal sealed class StockLedger(DbContext dbContext, IStoreContext storeContex
 
             if (reserved == 0)
             {
-                unavailable.Add(request.ProductId);
+                unavailable.Add(request.VariantId);
                 continue;
             }
 
-            held.Add(new StockReservation(TenantId, warehouseId, request.ProductId, request.Quantity, reference, expiresAt));
+            held.Add(new StockReservation(TenantId, warehouseId, request.VariantId, request.Quantity, reference, expiresAt));
         }
 
         // A refused reservation leaves nothing behind: the caller's transaction takes the quantities back, and rows
@@ -69,7 +69,7 @@ internal sealed class StockLedger(DbContext dbContext, IStoreContext storeContex
             }
 
             await dbContext.Set<InventoryItem>()
-                .Where(item => item.WarehouseId == reservation.WarehouseId && item.ProductId == reservation.ProductId)
+                .Where(item => item.WarehouseId == reservation.WarehouseId && item.VariantId == reservation.VariantId)
                 .ExecuteUpdateAsync(
                     setters => setters
                         .SetProperty(item => item.QuantityOnHand, item => item.QuantityOnHand - reservation.Quantity)
@@ -79,7 +79,7 @@ internal sealed class StockLedger(DbContext dbContext, IStoreContext storeContex
             dbContext.Add(new StockMovement(
                 TenantId,
                 reservation.WarehouseId,
-                reservation.ProductId,
+                reservation.VariantId,
                 -reservation.Quantity,
                 StockMovementReason.Sale,
                 reference,
@@ -99,7 +99,7 @@ internal sealed class StockLedger(DbContext dbContext, IStoreContext storeContex
             }
 
             await dbContext.Set<InventoryItem>()
-                .Where(item => item.WarehouseId == reservation.WarehouseId && item.ProductId == reservation.ProductId)
+                .Where(item => item.WarehouseId == reservation.WarehouseId && item.VariantId == reservation.VariantId)
                 .ExecuteUpdateAsync(
                     setters => setters.SetProperty(item => item.QuantityReserved, item => item.QuantityReserved - reservation.Quantity),
                     cancellationToken);
@@ -114,7 +114,7 @@ internal sealed class StockLedger(DbContext dbContext, IStoreContext storeContex
 
         foreach (var request in requests)
         {
-            var item = await ItemAsync(request.ProductId, cancellationToken);
+            var item = await ItemAsync(request.VariantId, cancellationToken);
 
             await dbContext.Set<InventoryItem>()
                 .Where(candidate => candidate.Id == item.Id)
@@ -125,7 +125,7 @@ internal sealed class StockLedger(DbContext dbContext, IStoreContext storeContex
             dbContext.Add(new StockMovement(
                 TenantId,
                 warehouseId,
-                request.ProductId,
+                request.VariantId,
                 request.Quantity,
                 StockMovementReason.Return,
                 reference,
@@ -135,11 +135,11 @@ internal sealed class StockLedger(DbContext dbContext, IStoreContext storeContex
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<bool> SetOnHandAsync(Guid productId, int quantity, string reference, CancellationToken cancellationToken)
+    public async Task<bool> SetOnHandAsync(Guid variantId, int quantity, string reference, CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(quantity);
 
-        var item = await ItemAsync(productId, cancellationToken);
+        var item = await ItemAsync(variantId, cancellationToken);
         var previous = item.QuantityOnHand;
 
         // Stock already promised to an order cannot be adjusted away; the reservation has to be released first.
@@ -157,7 +157,7 @@ internal sealed class StockLedger(DbContext dbContext, IStoreContext storeContex
             dbContext.Add(new StockMovement(
                 TenantId,
                 item.WarehouseId,
-                productId,
+                variantId,
                 quantity - previous,
                 StockMovementReason.Adjustment,
                 reference,
@@ -185,18 +185,18 @@ internal sealed class StockLedger(DbContext dbContext, IStoreContext storeContex
             .Where(candidate => candidate.Id == reservation.Id && candidate.Status == ReservationStatus.Held)
             .ExecuteUpdateAsync(setters => setters.SetProperty(candidate => candidate.Status, outcome), cancellationToken) == 1;
 
-    private async Task<InventoryItem> ItemAsync(Guid productId, CancellationToken cancellationToken)
+    private async Task<InventoryItem> ItemAsync(Guid variantId, CancellationToken cancellationToken)
     {
         var warehouseId = await DefaultWarehouseIdAsync(cancellationToken);
         var item = await dbContext.Set<InventoryItem>()
-            .SingleOrDefaultAsync(candidate => candidate.WarehouseId == warehouseId && candidate.ProductId == productId, cancellationToken);
+            .SingleOrDefaultAsync(candidate => candidate.WarehouseId == warehouseId && candidate.VariantId == variantId, cancellationToken);
 
         if (item is not null)
         {
             return item;
         }
 
-        item = new InventoryItem(TenantId, warehouseId, productId);
+        item = new InventoryItem(TenantId, warehouseId, variantId);
         dbContext.Add(item);
         await dbContext.SaveChangesAsync(cancellationToken);
 

@@ -75,7 +75,7 @@ public sealed class RetentionTests(ShopForgeApiFactory factory)
         var furniture = await FurnitureStore.CreateAsync(factory);
         using var unpublished = await furniture.Admin.PostAsync(
             $"/api/admin/stores/{furniture.Store.StoreId}/unpublish", null, CancellationToken);
-        var old = await BackdateAuditEntryAsync(furniture.ProductIds["oak-chair"].ToString(), days: 400);
+        var old = await BackdateAuditEntryAsync(furniture.VariantIds["oak-chair"].ToString(), days: 400);
 
         var removed = await SweepAsync();
         var entries = await furniture.Admin.GetFromJsonAsync<List<AuditView>>("/api/admin/audit?pageSize=100", CancellationToken);

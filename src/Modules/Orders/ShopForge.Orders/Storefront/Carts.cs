@@ -64,7 +64,7 @@ internal sealed class Carts(
     public async Task<CartContents> ContentsAsync(Cart cart, CancellationToken cancellationToken)
     {
         var sellable = await products.FindAsync([.. cart.Lines.Select(line => line.StoreProductId)], cancellationToken);
-        var available = await stock.AvailableAsync([.. sellable.Select(product => product.ProductId)], cancellationToken);
+        var available = await stock.AvailableAsync([.. cart.Lines.Select(line => line.VariantId)], cancellationToken);
 
         var changed = false;
         var shortNames = new List<string>();
@@ -72,14 +72,15 @@ internal sealed class Carts(
         foreach (var line in cart.Lines.ToList())
         {
             var product = sellable.SingleOrDefault(candidate => candidate.StoreProductId == line.StoreProductId);
-            var limit = product is null ? 0 : available.GetValueOrDefault(product.ProductId);
+            // A form that is no longer part of the product has nothing left in stock, whatever the shelf says.
+            var limit = product?.Form(line.VariantId) is null ? 0 : available.GetValueOrDefault(line.VariantId);
 
             if (line.Quantity <= limit)
             {
                 continue;
             }
 
-            cart.SetQuantity(line.StoreProductId, limit);
+            cart.SetQuantity(line.StoreProductId, line.VariantId, limit);
             changed = true;
 
             if (product is not null)
@@ -93,13 +94,20 @@ internal sealed class Carts(
             await dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        var items = sellable
-            .Where(product => cart.Lines.Any(line => line.StoreProductId == product.StoreProductId))
-            .Select(product => new CartItem(
-                product,
-                cart.Lines.Single(line => line.StoreProductId == product.StoreProductId).Quantity,
-                available.GetValueOrDefault(product.ProductId)))
+        var items = cart.Lines
+            .Select(line => new
+            {
+                Line = line,
+                Product = sellable.SingleOrDefault(candidate => candidate.StoreProductId == line.StoreProductId),
+            })
+            .Where(pair => pair.Product?.Form(pair.Line.VariantId) is not null)
+            .Select(pair => new CartItem(
+                pair.Product!,
+                pair.Product!.Form(pair.Line.VariantId)!,
+                pair.Line.Quantity,
+                available.GetValueOrDefault(pair.Line.VariantId)))
             .OrderBy(item => item.Product.Name)
+            .ThenBy(item => item.Variant.Position)
             .ToList();
 
         var (discount, problem) = await DiscountForAsync(cart, items, cancellationToken);
@@ -137,7 +145,7 @@ internal sealed class Carts(
     }
 }
 
-internal sealed record CartItem(SellableProduct Product, int Quantity, int Available)
+internal sealed record CartItem(SellableProduct Product, SellableVariant Variant, int Quantity, int Available)
 {
     public decimal LineTotal => Product.Price * Quantity;
 }

@@ -169,7 +169,7 @@ internal static class CheckoutEndpoints
 
         var number = await Numbers.NextOrderNumberAsync(dbContext, storeContext.StoreId!.Value, placedAt.Year, cancellationToken);
         var requests = contents!.Items
-            .GroupBy(item => item.Product.ProductId)
+            .GroupBy(item => item.Variant.Id)
             .Select(group => new StockRequest(group.Key, group.Sum(item => item.Quantity)))
             .ToList();
         var reserved = await stock.ReserveAsync(requests, number, reservationExpiresAt, cancellationToken);
@@ -180,8 +180,8 @@ internal static class CheckoutEndpoints
             metrics.ReservationRefused();
 
             var names = contents.Items
-                .Where(item => reserved.UnavailableProductIds.Contains(item.Product.ProductId))
-                .Select(item => item.Product.Name);
+                .Where(item => reserved.UnavailableVariantIds.Contains(item.Variant.Id))
+                .Select(item => Named(item));
 
             return TypedResults.Problem(
                 statusCode: StatusCodes.Status409Conflict,
@@ -239,6 +239,7 @@ internal static class CheckoutEndpoints
         {
             order.AddLine(
                 item.Product.StoreProductId,
+                item.Variant.Id,
                 item.Product.Name,
                 item.Product.Price,
                 item.Product.VatRate,
@@ -325,6 +326,12 @@ internal static class CheckoutEndpoints
             ? TypedResults.NotFound()
             : TypedResults.Ok(OrderResponse.From(order, await Documents.OfAsync(dbContext, order.Number, cancellationToken)));
     }
+
+    // "Oak Chair" on its own, "Oak Chair (M)" when the shop sells it in more than one form.
+    private static string Named(CartItem item) =>
+        item.Variant.OptionValues.Count == 0
+            ? item.Product.Name
+            : $"{item.Product.Name} ({string.Join(" / ", item.Variant.OptionValues)})";
 
     private static bool IsEmail(string? email) =>
         email is { Length: <= 254 } && email.Count(character => character == '@') == 1 && email.Trim().Length == email.Length

@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using ShopForge.Orders.Domain;
 using ShopForge.Orders.Invoicing;
 using ShopForge.Orders.Persistence;
-using ShopForge.Shared.Catalog;
 using ShopForge.Shared.Diagnostics;
 using ShopForge.Shared.Inventory;
 using ShopForge.Shared.Messaging;
@@ -18,7 +17,6 @@ internal sealed class OrderReturns(
     DbContext dbContext,
     IStoreContext storeContext,
     ICurrentStoreSettings storeSettings,
-    ITenantProducts products,
     IStockLedger stock,
     Invoices invoices,
     IEnumerable<IPaymentRefunds> paymentRefunds,
@@ -42,9 +40,10 @@ internal sealed class OrderReturns(
             .. order.Lines
                 .Select(line => new ReturnableLine(
                     line.StoreProductId,
+                    line.VariantId,
                     line.ProductName,
                     line.Quantity,
-                    line.Quantity - held.GetValueOrDefault(line.StoreProductId)))
+                    line.Quantity - held.GetValueOrDefault(line.VariantId)))
                 .Where(line => line.Returnable > 0),
         ];
     }
@@ -85,11 +84,18 @@ internal sealed class OrderReturns(
         await TakeOrderRowAsync(order, cancellationToken);
 
         var returnable = await ReturnableAsync(order, cancellationToken);
-        var lines = new List<(Guid StoreProductId, string Name, int Quantity)>();
+        var lines = new List<(Guid StoreProductId, Guid VariantId, string Name, int Quantity)>();
 
         foreach (var line in requested.Where(line => line.Quantity > 0))
         {
-            if (returnable.SingleOrDefault(candidate => candidate.StoreProductId == line.StoreProductId) is not { } available)
+            // A form is named when the order holds more than one of the same listing; otherwise the listing is
+            // enough, which is what every order placed before variants existed looks like.
+            var candidates = returnable.Where(candidate => candidate.StoreProductId == line.StoreProductId).ToList();
+            var available = line.VariantId is { } named
+                ? candidates.SingleOrDefault(candidate => candidate.VariantId == named)
+                : candidates.Count == 1 ? candidates[0] : null;
+
+            if (available is null)
             {
                 return new ReturnRequestResult(null, "One of the products is not part of this order, or is already being returned.");
             }
@@ -101,7 +107,7 @@ internal sealed class OrderReturns(
                     $"You can send back {available.Returnable} × {available.ProductName}, not {line.Quantity}.");
             }
 
-            lines.Add((line.StoreProductId, available.ProductName, line.Quantity));
+            lines.Add((line.StoreProductId, available.VariantId, available.ProductName, line.Quantity));
         }
 
         if (lines.Count == 0)
@@ -113,9 +119,9 @@ internal sealed class OrderReturns(
         var number = await Numbers.NextDocumentNumberAsync(dbContext, order.StoreId, NumberSeries.Return, requestedAt.Year, cancellationToken);
         var orderReturn = new OrderReturn(storeContext.StoreId!.Value, number, order.Number, storeCustomerId, reason, requestedAt);
 
-        foreach (var (storeProductId, name, quantity) in lines)
+        foreach (var (storeProductId, variantId, name, quantity) in lines)
         {
-            orderReturn.AddLine(storeProductId, name, quantity);
+            orderReturn.AddLine(storeProductId, variantId, name, quantity);
         }
 
         dbContext.Add(orderReturn);
@@ -135,11 +141,11 @@ internal sealed class OrderReturns(
 
         foreach (var line in orderReturn.Lines)
         {
-            var sold = order.Lines.Single(candidate => candidate.StoreProductId == line.StoreProductId);
+            var sold = order.Lines.Single(candidate => candidate.VariantId == line.VariantId);
             var share = ReturnedAmounts.DiscountShare(
                 sold.Discount,
                 sold.Quantity,
-                refundedBefore.GetValueOrDefault(line.StoreProductId),
+                refundedBefore.GetValueOrDefault(line.VariantId),
                 line.Quantity);
 
             amount += (sold.UnitPrice * line.Quantity) - share;
@@ -148,8 +154,8 @@ internal sealed class OrderReturns(
 
         // The customer keeps nothing, so the delivery they paid for is refunded with the goods (D-096).
         var everythingBack = order.Lines.All(line =>
-            refundedBefore.GetValueOrDefault(line.StoreProductId)
-                + orderReturn.Lines.Where(returned => returned.StoreProductId == line.StoreProductId).Sum(returned => returned.Quantity)
+            refundedBefore.GetValueOrDefault(line.VariantId)
+                + orderReturn.Lines.Where(returned => returned.VariantId == line.VariantId).Sum(returned => returned.Quantity)
             >= line.Quantity);
 
         if (everythingBack)
@@ -170,16 +176,10 @@ internal sealed class OrderReturns(
 
         orderReturn.Receive(amount, clock.GetUtcNow());
 
-        var productIds = await products.ProductIdsAsync([.. orderReturn.Lines.Select(line => line.StoreProductId)], cancellationToken);
-        var backToStock = orderReturn.Lines
-            .Where(line => productIds.ContainsKey(line.StoreProductId))
-            .Select(line => new StockRequest(productIds[line.StoreProductId], line.Quantity))
-            .ToList();
+        // The order line says which form was sold, so the goods go back on the shelf they came off (D-135).
+        var backToStock = orderReturn.Lines.Select(line => new StockRequest(line.VariantId, line.Quantity)).ToList();
 
-        if (backToStock.Count > 0)
-        {
-            await stock.ReturnAsync(backToStock, order.Number, cancellationToken);
-        }
+        await stock.ReturnAsync(backToStock, order.Number, cancellationToken);
 
         await invoices.IssueCreditNoteAsync(order, orderReturn.Id, credited, everythingBack, cancellationToken);
 
@@ -215,16 +215,16 @@ internal sealed class OrderReturns(
                 ? orderReturn.Status == ReturnStatus.Received
                 : orderReturn.Status != ReturnStatus.Refused)
             .SelectMany(orderReturn => orderReturn.Lines)
-            .GroupBy(line => line.StoreProductId)
-            .Select(group => new { StoreProductId = group.Key, Quantity = group.Sum(line => line.Quantity) })
+            .GroupBy(line => line.VariantId)
+            .Select(group => new { VariantId = group.Key, Quantity = group.Sum(line => line.Quantity) })
             .ToListAsync(cancellationToken);
 
-        return lines.ToDictionary(line => line.StoreProductId, line => line.Quantity);
+        return lines.ToDictionary(line => line.VariantId, line => line.Quantity);
     }
 }
 
-internal sealed record ReturnableLine(Guid StoreProductId, string ProductName, int Bought, int Returnable);
+internal sealed record ReturnableLine(Guid StoreProductId, Guid VariantId, string ProductName, int Bought, int Returnable);
 
-internal sealed record RequestedReturnLine(Guid StoreProductId, int Quantity);
+internal sealed record RequestedReturnLine(Guid StoreProductId, Guid? VariantId, int Quantity);
 
 internal sealed record ReturnRequestResult(OrderReturn? Created, string? Problem);

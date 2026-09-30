@@ -47,8 +47,8 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
     private static readonly (string Method, string Route, string? Body)[] TenantScoped =
     [
         ("PUT", "products/{product}", """{"sku":"TAKEN-1","ean":null,"weightGrams":null}"""),
-        ("PUT", "stock/{product}", """{"quantity":5}"""),
-        ("GET", "stock/{product}/movements", null),
+        ("PUT", "stock/{variant}", """{"quantity":5}"""),
+        ("GET", "stock/{variant}/movements", null),
         ("GET", "products/{product}/images/{image}", null),
         ("DELETE", "products/{product}/images/{image}", null),
         ("POST", "products/{product}/images", Image),
@@ -171,7 +171,7 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
 
         using var listing = await SendAsync(world.Owner, "GET", $"/api/admin/stores/{world.Store}/products/{world.StoreProduct}/attributes", null);
         using var order = await SendAsync(world.Owner, "GET", $"/api/admin/stores/{world.Store}/orders/{world.Order}", null);
-        using var movements = await SendAsync(world.Owner, "GET", $"/api/admin/stock/{world.Product}/movements", null);
+        using var movements = await SendAsync(world.Owner, "GET", $"/api/admin/stock/{world.Variant}/movements", null);
         using var review = await SendAsync(world.Owner, "POST", $"/api/admin/stores/{world.Store}/reviews/{world.Review}/publish", null);
         using var added = await world.Owner.PostAsJsonAsync(
             $"/api/admin/stores/{world.Store}/domains",

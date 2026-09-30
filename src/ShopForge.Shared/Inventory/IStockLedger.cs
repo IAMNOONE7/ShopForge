@@ -1,9 +1,10 @@
 namespace ShopForge.Shared.Inventory;
 
-// How other modules read and move stock without depending on the Inventory module.
+// How other modules read and move stock without depending on the Inventory module. Stock belongs to a variant —
+// the thing a warehouse actually counts — so every id here names one of those, never a product (D-135).
 public interface IStockLedger
 {
-    Task<IReadOnlyDictionary<Guid, int>> AvailableAsync(IReadOnlyCollection<Guid> productIds, CancellationToken cancellationToken);
+    Task<IReadOnlyDictionary<Guid, int>> AvailableAsync(IReadOnlyCollection<Guid> variantIds, CancellationToken cancellationToken);
 
     Task<StockReservationResult> ReserveAsync(
         IReadOnlyCollection<StockRequest> requests,
@@ -19,14 +20,14 @@ public interface IStockLedger
     Task ReturnAsync(IReadOnlyCollection<StockRequest> requests, string reference, CancellationToken cancellationToken);
 
     // False when the quantity is below what orders already reserved; the reservations have to go first.
-    Task<bool> SetOnHandAsync(Guid productId, int quantity, string reference, CancellationToken cancellationToken);
+    Task<bool> SetOnHandAsync(Guid variantId, int quantity, string reference, CancellationToken cancellationToken);
 }
 
-public sealed record StockRequest(Guid ProductId, int Quantity);
+public sealed record StockRequest(Guid VariantId, int Quantity);
 
-public sealed record StockReservationResult(IReadOnlyList<Guid> UnavailableProductIds)
+public sealed record StockReservationResult(IReadOnlyList<Guid> UnavailableVariantIds)
 {
     public static readonly StockReservationResult Reserved = new([]);
 
-    public bool Succeeded => UnavailableProductIds.Count == 0;
+    public bool Succeeded => UnavailableVariantIds.Count == 0;
 }
