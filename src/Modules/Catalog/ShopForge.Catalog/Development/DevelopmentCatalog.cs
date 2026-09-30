@@ -194,7 +194,7 @@ public static class DevelopmentCatalog
 
             foreach (var item in items)
             {
-                if (await dbContext.Set<Product>().AnyAsync(candidate => candidate.Sku == item.Sku, cancellationToken))
+                if (await dbContext.Set<ProductVariant>().AnyAsync(candidate => candidate.Sku == item.Sku, cancellationToken))
                 {
                     continue;
                 }

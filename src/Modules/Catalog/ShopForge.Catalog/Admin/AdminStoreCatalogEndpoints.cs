@@ -34,7 +34,7 @@ internal static class AdminStoreCatalogEndpoints
                 select new AdminStoreProductResponse(
                     storeProduct.Id,
                     product.Id,
-                    product.Sku,
+                    product.Variants.OrderBy(variant => variant.Position).First().Sku,
                     storeProduct.Name,
                     storeProduct.Slug,
                     storeProduct.Description,
@@ -300,7 +300,7 @@ internal sealed record AdminStoreProductResponse(
     public static AdminStoreProductResponse From(StoreProduct storeProduct, Product product) => new(
         storeProduct.Id,
         product.Id,
-        product.Sku,
+        product.Default.Sku,
         storeProduct.Name,
         storeProduct.Slug,
         storeProduct.Description,

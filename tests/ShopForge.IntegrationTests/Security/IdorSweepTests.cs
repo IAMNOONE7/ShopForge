@@ -52,6 +52,10 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
         ("GET", "products/{product}/images/{image}", null),
         ("DELETE", "products/{product}/images/{image}", null),
         ("POST", "products/{product}/images", Image),
+        ("PUT", "products/{product}/options", """{"names":[],"values":{}}"""),
+        ("POST", "products/{product}/variants", """{"sku":"TAKEN-VARIANT","ean":null,"weightGrams":null,"optionValues":[]}"""),
+        ("PUT", "products/{product}/variants/{variant}", """{"sku":"TAKEN-VARIANT","ean":null,"weightGrams":null,"optionValues":[]}"""),
+        ("DELETE", "products/{product}/variants/{variant}", null),
         ("PUT", "users/{user}/role", """{"role":"Support"}"""),
         ("POST", "users/{user}/deactivate", null),
         ("POST", "users/{user}/activate", null),
@@ -286,6 +290,7 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
             reviewId,
             returnId,
             orderNumber,
+            await VariantIdAsync(furniture),
             await InvoiceNumberAsync(furniture, orderNumber),
             await ImageIdAsync(furniture),
             domains!.Single().Id,
@@ -349,6 +354,13 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
         return documents[0].Number;
     }
 
+    private async Task<Guid> VariantIdAsync(FurnitureStore furniture)
+    {
+        var products = await furniture.Admin.GetFromJsonAsync<List<ProductRow>>("/api/admin/products", CancellationToken);
+
+        return products!.Single(product => product.Id == furniture.ProductIds["oak-chair"]).Variants[0].Id;
+    }
+
     private async Task<Guid> ImageIdAsync(FurnitureStore furniture)
     {
         using var uploaded = await furniture.Admin.UploadImageAsync(furniture.ProductIds["oak-chair"], AdminCatalogApi.PngBytes);
@@ -388,6 +400,7 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
         Guid Review,
         Guid Return,
         string Order,
+        Guid Variant,
         string Document,
         Guid Image,
         Guid Domain,
@@ -401,6 +414,7 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
             .Replace("{attribute}", Attribute.ToString(), StringComparison.Ordinal)
             .Replace("{review}", Review.ToString(), StringComparison.Ordinal)
             .Replace("{return}", Return.ToString(), StringComparison.Ordinal)
+            .Replace("{variant}", Variant.ToString(), StringComparison.Ordinal)
             .Replace("{order}", Order, StringComparison.Ordinal)
             .Replace("{document}", Document, StringComparison.Ordinal)
             .Replace("{image}", Image.ToString(), StringComparison.Ordinal)
@@ -410,6 +424,8 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
     }
 
     private sealed record Named(Guid Id, string? Email);
+
+    private sealed record ProductRow(Guid Id, List<Named> Variants);
 
     private sealed record OrderDetail(List<Document> Documents);
 

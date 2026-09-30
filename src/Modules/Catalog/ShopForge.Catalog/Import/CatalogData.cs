@@ -44,7 +44,9 @@ internal sealed class CatalogData
             .Distinct()
             .ToList();
 
-        var products = await dbContext.Set<Product>().Where(product => skus.Contains(product.Sku)).ToListAsync(cancellationToken);
+        var products = await dbContext.Set<Product>()
+            .Where(product => product.Variants.Any(variant => skus.Contains(variant.Sku)))
+            .ToListAsync(cancellationToken);
         var productIds = products.Select(product => product.Id).ToList();
 
         var listings = await dbContext.Set<StoreProduct>()
@@ -63,7 +65,7 @@ internal sealed class CatalogData
 
         return new CatalogData(
             storeId,
-            products.ToDictionary(product => product.Sku, StringComparer.Ordinal),
+            products.ToDictionary(product => product.Default.Sku, StringComparer.Ordinal),
             listings.ToDictionary(listing => listing.ProductId),
             categories.ToDictionary(category => category.Slug, StringComparer.Ordinal),
             definitions.ToDictionary(definition => definition.Code, StringComparer.Ordinal),

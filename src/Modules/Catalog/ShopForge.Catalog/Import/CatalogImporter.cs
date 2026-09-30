@@ -130,7 +130,7 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
         }
         else
         {
-            changed |= product.UpdatePhysicalData(ean, weight);
+            changed |= product.Default.UpdatePhysicalData(ean, weight);
         }
 
         var created = listing is null;
@@ -317,7 +317,7 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
     {
         if (!row.Has(ImportColumns.Ean))
         {
-            return product?.Ean;
+            return product?.Default.Ean;
         }
 
         var ean = row[ImportColumns.Ean].Text;
@@ -335,7 +335,7 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
     {
         if (!row.Has(ImportColumns.Weight))
         {
-            return product?.WeightGrams;
+            return product?.Default.WeightGrams;
         }
 
         if (row[ImportColumns.Weight].TryInteger(out var weight) && weight is >= 0 and <= int.MaxValue)

@@ -30,6 +30,10 @@ public sealed class ShopForgeApiFactory : WebApplicationFactory<Program>, IAsync
     // Real mail still goes to the recording delivery; the key only makes the webhook believable.
     public const string MailgunSigningKey = "test-signing-key";
 
+    // The suite's own PostgreSQL. A test that needs a database of its own makes one on this server rather than
+    // starting a second container.
+    internal string DatabaseConnectionString => _database.GetConnectionString();
+
     public RecordedEmails Emails { get; } = new();
 
     internal RecordingEmailDelivery EmailDelivery { get; }

@@ -5,7 +5,9 @@ namespace ShopForge.UnitTests.Security;
 
 public sealed class TwoFactorTicketsTests
 {
-    private static readonly DateTimeOffset Now = new(2026, 9, 29, 12, 0, 0, TimeSpan.Zero);
+    // A ticket's life is measured against the real clock by the data protector, so the moment it was issued has
+    // to be a real one: a fixed date makes the test pass until that date goes by.
+    private static DateTimeOffset Now => DateTimeOffset.UtcNow;
 
     // The two sign-in domains protect their tickets under different purposes, so half a sign-in as a company's
     // staff is not half a sign-in as an operator, whatever the ids inside happen to be (D-129).
