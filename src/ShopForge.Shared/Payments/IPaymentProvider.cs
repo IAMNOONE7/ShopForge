@@ -19,4 +19,6 @@ public sealed record PaymentRequest(
     string CancelUrl,
     DateTimeOffset ExpiresAt);
 
-public sealed record PaymentInstructions(string Message, string? RedirectUrl = null);
+// Reference is what the provider calls this attempt — a session, a transaction — so that what it says later can
+// be matched to what we sent. A method the store settles itself has none (D-141).
+public sealed record PaymentInstructions(string Message, string? RedirectUrl = null, string? Reference = null);

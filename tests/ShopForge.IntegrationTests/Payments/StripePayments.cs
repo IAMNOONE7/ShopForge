@@ -12,13 +12,13 @@ internal sealed class FakeCheckoutSessions : ICheckoutSessions
 
     public bool Fails { get; set; }
 
-    public Task<string> CreateAsync(CheckoutSession session, CancellationToken cancellationToken)
+    public Task<StartedSession> CreateAsync(CheckoutSession session, CancellationToken cancellationToken)
     {
         Last = session;
 
         return Fails
-            ? Task.FromException<string>(new HttpRequestException("Stripe is unreachable."))
-            : Task.FromResult($"https://checkout.stripe.test/{session.OrderNumber}");
+            ? Task.FromException<StartedSession>(new HttpRequestException("Stripe is unreachable."))
+            : Task.FromResult(new StartedSession($"cs_test_{session.OrderNumber}", $"https://checkout.stripe.test/{session.OrderNumber}"));
     }
 }
 

@@ -6,8 +6,11 @@ namespace ShopForge.Infrastructure.Payments;
 // The one place that talks to Stripe's API; kept behind an interface so the provider can be exercised without a network.
 internal interface ICheckoutSessions
 {
-    Task<string> CreateAsync(CheckoutSession session, CancellationToken cancellationToken);
+    Task<StartedSession> CreateAsync(CheckoutSession session, CancellationToken cancellationToken);
 }
+
+// Where the shopper is sent, and what Stripe calls the session they were sent to.
+internal sealed record StartedSession(string Id, string Url);
 
 internal sealed record CheckoutSession(
     string OrderNumber,
@@ -23,7 +26,7 @@ internal sealed class StripeCheckoutSessions(StripeOptions options) : ICheckoutS
 {
     private readonly SessionService _sessions = new(new StripeClient(options.SecretKey));
 
-    public async Task<string> CreateAsync(CheckoutSession session, CancellationToken cancellationToken)
+    public async Task<StartedSession> CreateAsync(CheckoutSession session, CancellationToken cancellationToken)
     {
         var metadata = new Dictionary<string, string>
         {
@@ -58,7 +61,7 @@ internal sealed class StripeCheckoutSessions(StripeOptions options) : ICheckoutS
             },
             cancellationToken: cancellationToken);
 
-        return created.Url;
+        return new StartedSession(created.Id, created.Url);
     }
 }
 

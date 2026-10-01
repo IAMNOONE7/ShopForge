@@ -14,7 +14,10 @@ internal sealed class FakeGateway : IPaymentProvider, IPaymentNotifications
     public string Key => ProviderKey;
 
     public Task<PaymentInstructions> StartAsync(PaymentRequest request, CancellationToken cancellationToken) =>
-        Task.FromResult(new PaymentInstructions($"Pay for {request.OrderNumber} at the fake gateway.", $"https://gateway.test/{request.OrderNumber}"));
+        Task.FromResult(new PaymentInstructions(
+            $"Pay for {request.OrderNumber} at the fake gateway.",
+            $"https://gateway.test/{request.OrderNumber}",
+            $"gateway-{request.OrderNumber}"));
 
     public async Task<PaymentNotification?> ReadAsync(HttpRequest request, CancellationToken cancellationToken)
     {

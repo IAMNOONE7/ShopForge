@@ -73,6 +73,7 @@ internal static class AdminOrderEndpoints
             async (order, token) =>
             {
                 await stock.ConfirmAsync(order.Number, token);
+                await SettleAttemptAsync(dbContext, order, PaymentAttemptStatus.Paid, clock, token);
                 outbox.Enqueue(new PaymentReceived(order.Number, order.Email, order.GrandTotal, order.Currency));
             },
             order => metrics.PaymentConfirmed(order.PaymentMethodCode),
@@ -85,6 +86,7 @@ internal static class AdminOrderEndpoints
         IStockLedger stock,
         IOutbox outbox,
         IShopForgeMetrics metrics,
+        TimeProvider clock,
         CancellationToken cancellationToken) =>
         ChangeAsync(
             number,
@@ -93,6 +95,7 @@ internal static class AdminOrderEndpoints
             async (order, token) =>
             {
                 await stock.ReleaseAsync(order.Number, token);
+                await SettleAttemptAsync(dbContext, order, PaymentAttemptStatus.Failed, clock, token);
                 outbox.Enqueue(new OrderCancelled(order.Number, order.Email, "The store cancelled the order."));
             },
             _ => metrics.OrderCancelled("admin"),
@@ -220,6 +223,23 @@ internal static class AdminOrderEndpoints
         metrics.ShipmentCreated();
 
         return TypedResults.Ok(await DetailAsync(dbContext, order, cancellationToken));
+    }
+
+    // A store that takes the money itself still has an attempt to close, so "how was this order paid for" has
+    // one answer rather than one per kind of method.
+    private static async Task SettleAttemptAsync(
+        DbContext dbContext,
+        Order order,
+        PaymentAttemptStatus status,
+        TimeProvider clock,
+        CancellationToken cancellationToken)
+    {
+        var attempt = await dbContext.Set<PaymentAttempt>()
+            .Where(candidate => candidate.OrderNumber == order.Number)
+            .OrderByDescending(candidate => candidate.StartedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        attempt?.Record(status, clock.GetUtcNow());
     }
 
     private static async Task<Results<Ok<AdminOrderDetailResponse>, NotFound, ProblemHttpResult>> ChangeAsync(

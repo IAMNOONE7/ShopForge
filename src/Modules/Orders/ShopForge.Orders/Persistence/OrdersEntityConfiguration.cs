@@ -174,6 +174,30 @@ internal sealed class StorePickupPointEntityConfiguration : IEntityTypeConfigura
     }
 }
 
+internal sealed class PaymentAttemptEntityConfiguration : IEntityTypeConfiguration<PaymentAttempt>
+{
+    public void Configure(EntityTypeBuilder<PaymentAttempt> builder)
+    {
+        builder.ToTable("payment_attempts", OrdersModule.Schema);
+
+        builder.Property(attempt => attempt.OrderNumber).HasMaxLength(20);
+        builder.Property(attempt => attempt.Provider).HasMaxLength(50);
+        builder.Property(attempt => attempt.Reference).HasMaxLength(200);
+        builder.Property(attempt => attempt.Currency).HasMaxLength(3).IsFixedLength();
+        builder.Property(attempt => attempt.Amount).HasPrecision(12, 2);
+        builder.Property(attempt => attempt.RedirectUrl).HasMaxLength(2000);
+        builder.Property(attempt => attempt.Status).HasConversion<string>().HasMaxLength(20);
+        builder.Ignore(attempt => attempt.IsFinished);
+
+        builder.HasIndex(attempt => new { attempt.StoreId, attempt.OrderNumber });
+
+        // What a provider calls an attempt is its own, so it names one attempt and no other. A method the store
+        // settles itself has no reference at all, and PostgreSQL lets as many nulls through a unique index as
+        // there are such methods.
+        builder.HasIndex(attempt => new { attempt.StoreId, attempt.Provider, attempt.Reference }).IsUnique();
+    }
+}
+
 internal sealed class PaymentEventEntityConfiguration : IEntityTypeConfiguration<PaymentEvent>
 {
     public void Configure(EntityTypeBuilder<PaymentEvent> builder)

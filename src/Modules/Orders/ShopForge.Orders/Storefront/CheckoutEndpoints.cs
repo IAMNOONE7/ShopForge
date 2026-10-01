@@ -278,6 +278,18 @@ internal static class CheckoutEndpoints
             loggerFactory,
             cancellationToken);
 
+        // What was asked of the provider, written with the order: a shopper who comes back and tries again makes
+        // a second attempt rather than erasing the first one (D-141).
+        dbContext.Add(new PaymentAttempt(
+            order.StoreId,
+            order.Number,
+            payment.ProviderKey,
+            instructions.Reference,
+            order.GrandTotal,
+            order.Currency,
+            instructions.RedirectUrl,
+            placedAt));
+
         // The event goes in with the order, so a confirmation is never sent for an order that was rolled back (D-065).
         outbox.Enqueue(new OrderPlaced(order.Number, order.Email, order.GrandTotal, order.Currency, instructions.Message));
         metrics.OrderPlaced(payment.Code);

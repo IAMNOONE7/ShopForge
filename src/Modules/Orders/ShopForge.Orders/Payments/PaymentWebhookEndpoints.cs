@@ -82,11 +82,39 @@ internal static class PaymentWebhookEndpoints
         }
 
         dbContext.Add(new PaymentEvent(store.StoreId, provider, notification.EventId, order.Number, clock.GetUtcNow()));
+        await RecordAttemptAsync(dbContext, order.Number, provider, notification.Result, clock, cancellationToken);
         await ApplyAsync(notification, order, stock, outbox, metrics, provider, clock, logger, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
         return TypedResults.Ok();
+    }
+
+    // The attempt this message is about: the one still running for this provider on this order. Comgate will
+    // name its own transaction and be matched on that instead (D-141); until a provider does, the attempt in
+    // flight is the only one a message can mean.
+    private static async Task RecordAttemptAsync(
+        DbContext dbContext,
+        string orderNumber,
+        string provider,
+        PaymentResult result,
+        TimeProvider clock,
+        CancellationToken cancellationToken)
+    {
+        var attempt = await dbContext.Set<PaymentAttempt>()
+            .Where(candidate => candidate.OrderNumber == orderNumber && candidate.Provider == provider)
+            .OrderByDescending(candidate => candidate.StartedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        attempt?.Record(
+            result switch
+            {
+                PaymentResult.Paid => PaymentAttemptStatus.Paid,
+                PaymentResult.Failed => PaymentAttemptStatus.Failed,
+                PaymentResult.Authorized => PaymentAttemptStatus.Authorized,
+                _ => PaymentAttemptStatus.Pending,
+            },
+            clock.GetUtcNow());
     }
 
     private static async Task ApplyAsync(

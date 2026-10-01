@@ -10,7 +10,7 @@ internal sealed class StripePaymentProvider(ICheckoutSessions sessions) : IPayme
 
     public async Task<PaymentInstructions> StartAsync(PaymentRequest request, CancellationToken cancellationToken)
     {
-        var url = await sessions.CreateAsync(
+        var started = await sessions.CreateAsync(
             new CheckoutSession(
                 request.OrderNumber,
                 request.StoreId,
@@ -22,7 +22,7 @@ internal sealed class StripePaymentProvider(ICheckoutSessions sessions) : IPayme
                 request.ExpiresAt),
             cancellationToken);
 
-        return new PaymentInstructions($"Order {request.OrderNumber} is waiting for your payment.", url);
+        return new PaymentInstructions($"Order {request.OrderNumber} is waiting for your payment.", started.Url, started.Id);
     }
 
     // Stripe takes amounts in the currency's smallest unit. Every currency ShopForge supports so far has two decimals;
