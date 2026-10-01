@@ -14,7 +14,7 @@ internal sealed class StripePaymentProvider(ICheckoutSessions sessions) : IPayme
             new CheckoutSession(
                 request.OrderNumber,
                 request.StoreId,
-                MinorUnits(request.Amount),
+                MinorUnits.Of(request.Amount, request.Currency),
                 request.Currency,
                 request.CustomerEmail,
                 request.ReturnUrl,
@@ -24,8 +24,4 @@ internal sealed class StripePaymentProvider(ICheckoutSessions sessions) : IPayme
 
         return new PaymentInstructions($"Order {request.OrderNumber} is waiting for your payment.", started.Url, started.Id);
     }
-
-    // Stripe takes amounts in the currency's smallest unit. Every currency ShopForge supports so far has two decimals;
-    // zero-decimal currencies (JPY, HUF) need their own conversion before they can be sold in.
-    private static long MinorUnits(decimal amount) => (long)decimal.Round(amount * 100, 0, MidpointRounding.AwayFromZero);
 }

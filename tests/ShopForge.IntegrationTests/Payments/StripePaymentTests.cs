@@ -182,7 +182,11 @@ public sealed class StripePaymentTests : IDisposable
             CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
-        Assert.Equal(["manual"], providers);
+
+        // What this test is about is stripe's absence. Which other providers a deployment has is not its
+        // business, and asserting the whole list made it fail every time one was added.
+        Assert.DoesNotContain("stripe", providers!);
+        Assert.Contains("manual", providers!);
     }
 
     public void Dispose() => _withStripe.Dispose();

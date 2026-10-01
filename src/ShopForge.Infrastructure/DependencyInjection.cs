@@ -15,6 +15,7 @@ using ShopForge.Infrastructure.Files;
 using ShopForge.Infrastructure.Idempotency;
 using ShopForge.Infrastructure.Messaging;
 using ShopForge.Infrastructure.Payments;
+using ShopForge.Infrastructure.Payments.Comgate;
 using ShopForge.Infrastructure.Persistence;
 using ShopForge.Infrastructure.Secrets;
 using ShopForge.Shared.Auditing;
@@ -77,6 +78,7 @@ public static class DependencyInjection
         services.AddHostedService<MaintenanceWorker>();
 
         AddSecretStore(services, configuration);
+        AddComgate(services, configuration);
         AddEmailDelivery(services, configuration);
 
         var stripe = configuration.GetSection(StripeOptions.Section).Get<StripeOptions>() ?? new StripeOptions();
@@ -99,6 +101,16 @@ public static class DependencyInjection
     // Nothing configured means the log, which is how development and the tests run.
     // Where a merchant's own provider credentials are kept. A vault when there is one, configuration otherwise,
     // which is development, CI and a single merchant running their own installation (D-138, D-139).
+    // Comgate needs nothing from the deployment: its merchant and secret belong to the store, so the provider
+    // is always registered and simply not offered where nobody has connected one (D-138).
+    private static void AddComgate(IServiceCollection services, IConfiguration configuration)
+    {
+        var baseAddress = configuration["Payments:Comgate:BaseAddress"] ?? "https://payments.comgate.cz/";
+
+        services.AddHttpClient<IComgatePayments, ComgateHttpPayments>(client => client.BaseAddress = new Uri(baseAddress));
+        services.AddScoped<IPaymentProvider, ComgatePaymentProvider>();
+    }
+
     private static void AddSecretStore(IServiceCollection services, IConfiguration configuration)
     {
         services.AddMemoryCache();
