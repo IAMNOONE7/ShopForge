@@ -74,6 +74,27 @@ internal sealed class Product : ITenantOwned
         }
     }
 
+    // Importing brings one row per form, so the axes are named once and each row says where its own form sits
+    // along them, rather than every row restating the whole product (D-137).
+    public bool SellAlong(string[] names, ProductVariant variant, string[] values)
+    {
+        var changed = false;
+
+        if (!OptionNames.SequenceEqual(names, StringComparer.Ordinal))
+        {
+            OptionNames = names;
+            changed = true;
+        }
+
+        if (!variant.OptionValues.SequenceEqual(values, StringComparer.Ordinal))
+        {
+            variant.Choose(values);
+            changed = true;
+        }
+
+        return changed;
+    }
+
     public ProductImage AddImage(string contentType, string? altText)
     {
         var image = new ProductImage(Id, TenantId, contentType, altText, position: _images.Count);

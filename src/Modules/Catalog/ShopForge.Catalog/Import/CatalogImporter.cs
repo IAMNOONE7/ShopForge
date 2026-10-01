@@ -12,12 +12,19 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
 
     private readonly List<StockUpdate> _stockUpdates = [];
 
+    private string[] _axes = [];
+
+    private string[] _optionColumns = [];
+
     public async Task<ImportReport> ImportAsync(ImportFile file, CancellationToken cancellationToken)
     {
         if (!file.Columns.Contains(ImportColumns.Sku))
         {
             throw new ImportFileException($"A '{ImportColumns.Sku}' column is required.");
         }
+
+        _optionColumns = [.. file.Columns.Where(ImportColumns.IsOption)];
+        _axes = [.. _optionColumns.Select(ImportColumns.AxisOf)];
 
         var catalog = await CatalogData.LoadAsync(dbContext, storeContext.StoreId!.Value, file, cancellationToken);
         var issues = new List<ImportIssue>();
@@ -72,7 +79,8 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
             outcomes.Count(outcome => outcome == RowOutcome.Unchanged),
             outcomes.Count(outcome => outcome == RowOutcome.Invalid),
             failed,
-            [.. file.Columns.Where(column => !ImportColumns.All.Contains(column) && !catalog.Definitions.ContainsKey(column))],
+            [.. file.Columns.Where(column =>
+                !ImportColumns.All.Contains(column) && !ImportColumns.IsOption(column) && !catalog.Definitions.ContainsKey(column))],
             [.. issues.Take(MaxIssues)]);
 
     // Products only have their ids once the catalog is saved, so stock is written afterwards, from the rows that were valid.
@@ -80,8 +88,7 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
     {
         foreach (var update in _stockUpdates)
         {
-            // A row of the file is one SKU, which is one form of a product (D-135); a row per form is 25d.
-            if (!await stock.SetOnHandAsync(update.Product.Default.Id, update.Quantity, "import", cancellationToken))
+            if (!await stock.SetOnHandAsync(update.Variant.Id, update.Quantity, "import", cancellationToken))
             {
                 issues.Add(new ImportIssue(update.Row, ImportColumns.Stock, "Stock was left unchanged: open orders reserve more items than this."));
             }
@@ -108,12 +115,23 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
 
         var product = catalog.Products.GetValueOrDefault(sku);
         var listing = product is null ? null : catalog.Listings.GetValueOrDefault(product.Id);
+
+        // A SKU nobody has seen may still be another form of a product the store already sells: the rows are
+        // tied together by the listing they share, which is the slug (D-137).
+        if (product is null && SlugOf(row) is { Length: > 0 } slug && catalog.ListingsBySlug.GetValueOrDefault(slug) is { } listed)
+        {
+            listing = listed;
+            product = catalog.ProductOf(listed);
+        }
+
         var details = ReadDetails(row, listing, catalog, issues);
         var categoryNames = ReadCategoryNames(row, issues);
         var attributes = ReadAttributes(row, catalog, issues);
-        var ean = ReadEan(row, product, issues);
-        var weight = ReadWeight(row, product, issues);
+        var variant = product?.Variants.SingleOrDefault(candidate => candidate.Sku == sku);
+        var ean = ReadEan(row, variant, issues);
+        var weight = ReadWeight(row, variant, issues);
         var stockQuantity = ReadStock(row, issues);
+        var optionValues = ReadOptions(row, product, issues);
 
         if (issues.Count > 0)
         {
@@ -121,20 +139,36 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
         }
 
         var changed = false;
+        var newForm = variant is null;
 
         if (product is null)
         {
             product = new Product(storeContext.TenantId!.Value, sku, ean, weight);
             dbContext.Add(product);
-            catalog.Products[sku] = product;
+            variant = product.Default;
+            changed = true;
+        }
+        else if (variant is null)
+        {
+            variant = product.AddVariant(sku, ean, weight, optionValues);
             changed = true;
         }
         else
         {
-            changed |= product.Default.UpdatePhysicalData(ean, weight);
+            changed |= variant.UpdatePhysicalData(ean, weight);
         }
 
-        var created = listing is null;
+        catalog.Products[sku] = product;
+        catalog.ProductsById[product.Id] = product;
+
+        if (_axes.Length > 0)
+        {
+            changed |= product.SellAlong(_axes, variant, optionValues);
+        }
+
+        // A row brought something new into the catalog if it added a listing or a form of one; a row that only
+        // restates what is already there is an update.
+        var created = listing is null || newForm;
 
         if (listing is null)
         {
@@ -155,14 +189,57 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
             changed |= listing.SetAttributeValue(definition, AttributeCells.Resolve(definition, pending));
         }
 
+        catalog.ListingsBySlug[details.Slug] = listing;
+
         if (stockQuantity is { } quantity)
         {
-            _stockUpdates.Add(new StockUpdate(row.Number, product, quantity));
+            _stockUpdates.Add(new StockUpdate(row.Number, variant, quantity));
             changed = true;
         }
 
         return created ? RowOutcome.Created : changed ? RowOutcome.Updated : RowOutcome.Unchanged;
     }
+
+    // What this row says about the form it describes: one value per axis the file names, in column order.
+    private string[] ReadOptions(ImportRow row, Product? product, List<ImportIssue> issues)
+    {
+        void Invalid(string? column, string message) => issues.Add(new ImportIssue(row.Number, column, message));
+
+        var values = new string[_optionColumns.Length];
+
+        for (var axis = 0; axis < _optionColumns.Length; axis++)
+        {
+            values[axis] = row[_optionColumns[axis]].Text.Trim();
+
+            if (values[axis].Length == 0)
+            {
+                Invalid(_optionColumns[axis], $"A value for {_axes[axis]} is needed, because the file sells this product along it.");
+            }
+        }
+
+        if (product is null || product.OptionNames.SequenceEqual(_axes, StringComparer.Ordinal))
+        {
+            return values;
+        }
+
+        // Naming new axes for a product that is already sold in several forms would leave the forms the file
+        // does not mention with nothing to say for themselves.
+        if (product.OptionNames.Length > 0)
+        {
+            Invalid(null, $"This product is already sold along {string.Join(", ", product.OptionNames)}; the file names {Named(_axes)}.");
+        }
+        else if (product.Variants.Count > 1)
+        {
+            Invalid(null, "This product is already sold in several forms with no axes; name the axes in the admin first.");
+        }
+
+        return values;
+    }
+
+    private static string Named(string[] axes) => axes.Length == 0 ? "none" : string.Join(", ", axes);
+
+    private static string SlugOf(ImportRow row) =>
+        row.Has(ImportColumns.Slug) ? row[ImportColumns.Slug].Text : Slugs.Create(row[ImportColumns.Name].Text);
 
     private static int? ReadStock(ImportRow row, List<ImportIssue> issues)
     {
@@ -314,11 +391,11 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
         return values;
     }
 
-    private static string? ReadEan(ImportRow row, Product? product, List<ImportIssue> issues)
+    private static string? ReadEan(ImportRow row, ProductVariant? variant, List<ImportIssue> issues)
     {
         if (!row.Has(ImportColumns.Ean))
         {
-            return product?.Default.Ean;
+            return variant?.Ean;
         }
 
         var ean = row[ImportColumns.Ean].Text;
@@ -332,11 +409,11 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
         return null;
     }
 
-    private static int? ReadWeight(ImportRow row, Product? product, List<ImportIssue> issues)
+    private static int? ReadWeight(ImportRow row, ProductVariant? variant, List<ImportIssue> issues)
     {
         if (!row.Has(ImportColumns.Weight))
         {
-            return product?.Default.WeightGrams;
+            return variant?.WeightGrams;
         }
 
         if (row[ImportColumns.Weight].TryInteger(out var weight) && weight is >= 0 and <= int.MaxValue)
@@ -360,4 +437,4 @@ internal enum RowOutcome
     Invalid,
 }
 
-internal sealed record StockUpdate(int Row, Product Product, int Quantity);
+internal sealed record StockUpdate(int Row, ProductVariant Variant, int Quantity);

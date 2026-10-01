@@ -10,6 +10,7 @@ internal sealed class CatalogData
         Guid storeId,
         Dictionary<string, Product> products,
         Dictionary<Guid, StoreProduct> listings,
+        Dictionary<string, StoreProduct> listingsBySlug,
         Dictionary<string, Category> categories,
         Dictionary<string, AttributeDefinition> definitions,
         Dictionary<string, Guid> slugs)
@@ -17,6 +18,7 @@ internal sealed class CatalogData
         StoreId = storeId;
         Products = products;
         Listings = listings;
+        ListingsBySlug = listingsBySlug;
         Categories = categories;
         Definitions = definitions;
         Slugs = slugs;
@@ -28,6 +30,10 @@ internal sealed class CatalogData
 
     public Dictionary<Guid, StoreProduct> Listings { get; }
 
+    // A row for a SKU nobody has seen may still belong to a product the store already lists: that is how a
+    // second size is added to a shirt that is already on sale (D-137).
+    public Dictionary<string, StoreProduct> ListingsBySlug { get; }
+
     public Dictionary<string, Category> Categories { get; }
 
     public Dictionary<string, AttributeDefinition> Definitions { get; }
@@ -35,6 +41,10 @@ internal sealed class CatalogData
     public Dictionary<string, Guid> Slugs { get; }
 
     public HashSet<string> SeenSkus { get; } = new(StringComparer.Ordinal);
+
+    public Dictionary<Guid, Product> ProductsById { get; } = [];
+
+    public Product ProductOf(StoreProduct listing) => ProductsById[listing.ProductId];
 
     public static async Task<CatalogData> LoadAsync(DbContext dbContext, Guid storeId, ImportFile file, CancellationToken cancellationToken)
     {
@@ -44,8 +54,19 @@ internal sealed class CatalogData
             .Distinct()
             .ToList();
 
+        var fileSlugs = file.Rows
+            .Select(row => row.Has(ImportColumns.Slug) ? row[ImportColumns.Slug].Text : Domain.Slugs.Create(row[ImportColumns.Name].Text))
+            .Where(slug => slug.Length > 0)
+            .Distinct()
+            .ToList();
+
+        var listedProductIds = await dbContext.Set<StoreProduct>()
+            .Where(listing => fileSlugs.Contains(listing.Slug))
+            .Select(listing => listing.ProductId)
+            .ToListAsync(cancellationToken);
+
         var products = await dbContext.Set<Product>()
-            .Where(product => product.Variants.Any(variant => skus.Contains(variant.Sku)))
+            .Where(product => product.Variants.Any(variant => skus.Contains(variant.Sku)) || listedProductIds.Contains(product.Id))
             .ToListAsync(cancellationToken);
         var productIds = products.Select(product => product.Id).ToList();
 
@@ -63,13 +84,23 @@ internal sealed class CatalogData
             .ToListAsync(cancellationToken);
         var slugs = await dbContext.Set<StoreProduct>().Select(listing => new { listing.Slug, listing.Id }).ToListAsync(cancellationToken);
 
-        return new CatalogData(
+        var catalog = new CatalogData(
             storeId,
-            products.ToDictionary(product => product.Default.Sku, StringComparer.Ordinal),
+            products
+                .SelectMany(product => product.Variants.Select(variant => (variant.Sku, Product: product)))
+                .ToDictionary(entry => entry.Sku, entry => entry.Product, StringComparer.Ordinal),
             listings.ToDictionary(listing => listing.ProductId),
+            listings.ToDictionary(listing => listing.Slug, StringComparer.Ordinal),
             categories.ToDictionary(category => category.Slug, StringComparer.Ordinal),
             definitions.ToDictionary(definition => definition.Code, StringComparer.Ordinal),
             slugs.ToDictionary(listing => listing.Slug, listing => listing.Id, StringComparer.Ordinal));
+
+        foreach (var product in products)
+        {
+            catalog.ProductsById[product.Id] = product;
+        }
+
+        return catalog;
     }
 }
 
@@ -88,5 +119,19 @@ internal static class ImportColumns
     public const string Ean = "ean";
     public const string Weight = "weight";
 
+    // An axis is named by the column header after this prefix, and the cell holds that row's value for it:
+    // "option:size" holding "L". Several of them make several axes, in the order the columns appear (D-137).
+    public const string OptionPrefix = "option:";
+
     public static readonly string[] All = [Sku, Name, Slug, Description, Price, Vat, Stock, Visible, SortOrder, Categories, Ean, Weight];
+
+    public static bool IsOption(string column) => column.StartsWith(OptionPrefix, StringComparison.Ordinal);
+
+    // "option:size" names the axis "Size": the file is read in lower case, and an axis is read by a shopper.
+    public static string AxisOf(string column)
+    {
+        var name = column[OptionPrefix.Length..].Trim();
+
+        return name.Length == 0 ? name : char.ToUpperInvariant(name[0]) + name[1..];
+    }
 }
