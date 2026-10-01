@@ -101,6 +101,22 @@ internal static class PaymentWebhookEndpoints
         CancellationToken cancellationToken)
     {
         var result = notification.Result;
+
+        // A payment that has not finished is not a payment that failed. Only a result that says the money will
+        // never arrive cancels the order and gives its stock back; everything else leaves the order where it is,
+        // including an authorisation, which is held money rather than taken money (D-140).
+        if (result is not (PaymentResult.Paid or PaymentResult.Failed))
+        {
+            logger.LogInformation(
+                "Order {OrderNumber} is {Status}; a {Provider} event says {Result}, which changes nothing yet.",
+                order.Number,
+                order.Status,
+                provider,
+                result);
+
+            return;
+        }
+
         var applied = result switch
         {
             PaymentResult.Paid => order.ConfirmPayment(clock.GetUtcNow(), notification.PaymentReference),
