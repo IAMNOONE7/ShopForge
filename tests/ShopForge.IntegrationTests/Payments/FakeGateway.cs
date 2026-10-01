@@ -15,11 +15,18 @@ internal class FakeGateway : IPaymentProvider, IPaymentNotifications
 
     public virtual bool NeedsConnection => false;
 
-    public Task<PaymentInstructions> StartAsync(PaymentRequest request, CancellationToken cancellationToken) =>
-        Task.FromResult(new PaymentInstructions(
+    // What the gateway was told about the last order it was asked to take money for.
+    public PaymentRequest? Last { get; private set; }
+
+    public Task<PaymentInstructions> StartAsync(PaymentRequest request, CancellationToken cancellationToken)
+    {
+        Last = request;
+
+        return Task.FromResult(new PaymentInstructions(
             $"Pay for {request.OrderNumber} at the fake gateway.",
             $"https://gateway.test/{request.OrderNumber}",
             $"gateway-{request.OrderNumber}"));
+    }
 
     public async Task<PaymentNotification?> ReadAsync(HttpRequest request, CancellationToken cancellationToken)
     {

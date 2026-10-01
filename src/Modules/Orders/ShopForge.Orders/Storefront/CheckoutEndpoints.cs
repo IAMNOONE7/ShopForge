@@ -276,7 +276,13 @@ internal static class CheckoutEndpoints
                 order.Email,
                 ReturnUrl: $"{storefront}/order/{order.Number}?token={order.AccessToken}",
                 CancelUrl: $"{storefront}/cart",
-                order.ReservationExpiresAt),
+                order.ReservationExpiresAt,
+                order.BillingAddress.FullName,
+                order.BillingAddress.Country,
+                Language(settings.Culture),
+                // Which it is, is the order's own fact: a point was chosen or it was not. The method only says
+                // whether one had to be.
+                pickupPoint is null ? PaymentDelivery.ToAddress : PaymentDelivery.ToPickupPoint),
             loggerFactory,
             cancellationToken);
 
@@ -360,6 +366,11 @@ internal static class CheckoutEndpoints
             ? TypedResults.NotFound()
             : TypedResults.Ok(OrderResponse.From(order, await Documents.OfAsync(dbContext, order.Number, cancellationToken)));
     }
+
+    // The store's own language, which is the only one ShopForge has: a shopper reading the storefront in
+    // another is Stage 32's problem, and guessing from a header would be worse than saying what the shop is.
+    private static string Language(string culture) =>
+        culture.Split('-') is [{ Length: > 0 } language, ..] ? language.ToLowerInvariant() : culture;
 
     // "Oak Chair" on its own, "Linen Shirt (L)" when the shop sells it in more than one form. The order line
     // keeps this as written, so the invoice, the credit note and the return all say which one was bought even
