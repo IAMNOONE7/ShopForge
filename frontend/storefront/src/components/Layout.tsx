@@ -29,7 +29,9 @@ export function Layout() {
         ? { status: "error", retry: categories.reload }
         : { status: "ready", categories: categories.data };
   const accountTo =
-    customerStatus === "guest" ? "/account/sign-in" : "/account";
+    customerStatus === "guest"
+      ? "/account/sign-in?returnTo=%2Faccount"
+      : "/account";
   const accountLabel = customer
     ? customer.firstName
     : customerStatus === "guest"

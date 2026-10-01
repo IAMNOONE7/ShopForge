@@ -13,15 +13,7 @@ import {
   type KnownDocumentKind,
   type KnownOrderStatus,
 } from "./orderPresentation";
-
-const statusLabelKeys = {
-  AwaitingPayment: "orders:status.AwaitingPayment",
-  Paid: "orders:status.Paid",
-  Shipped: "orders:status.Shipped",
-  Cancelled: "orders:status.Cancelled",
-  Refunded: "orders:status.Refunded",
-  unknown: "orders:status.unknown",
-} as const satisfies Record<KnownOrderStatus, string>;
+import { OrderStatusBadge } from "./OrderStatusBadge";
 
 const statusNoticeKeys = {
   AwaitingPayment: "orders:statusNotice.AwaitingPayment",
@@ -86,9 +78,7 @@ export function OrderReceipt({
           >
             <div className="order-panel-heading">
               <h2 id="order-status-heading">{t("orders:statusHeading")}</h2>
-              <strong className={"order-status " + status.toLowerCase()}>
-                {t(statusLabelKeys[status])}
-              </strong>
+              <OrderStatusBadge value={order.status} />
             </div>
             <div className="order-status-copy" aria-live="polite">
               <p>{t(statusNoticeKeys[status])}</p>

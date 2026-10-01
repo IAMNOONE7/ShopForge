@@ -474,6 +474,11 @@
   border-radius: var(--radius-control);
 }
 
+.availability.pending {
+  color: var(--color-text-muted);
+  background: var(--color-surface-subtle);
+}
+
 .availability.available {
   color: var(--color-success);
   background: var(--color-success-surface);
@@ -2173,5 +2178,297 @@
 
   .pagination-direction {
     flex: 1 1 7rem;
+  }
+}
+
+/* Customer authentication */
+.account-form {
+  margin-inline: auto;
+}
+
+.auth-header h1 {
+  margin-top: 0;
+}
+
+.auth-introduction {
+  color: var(--color-text-muted);
+}
+
+.auth-introduction > :last-child,
+.auth-footer > :last-child {
+  margin-bottom: 0;
+}
+
+.auth-footer {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.auth-field {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.auth-field > label {
+  font-weight: 650;
+}
+
+.password-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: stretch;
+}
+
+.password-control input {
+  min-width: 0;
+}
+
+.password-reveal {
+  min-height: 2.75rem;
+  padding-inline: var(--space-3);
+  color: var(--color-link);
+  background: var(--color-surface-subtle);
+  border-color: var(--color-border-strong);
+  white-space: nowrap;
+}
+
+.auth-validation:focus {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.account-form > .button,
+.account-form form > button:last-of-type {
+  width: 100%;
+}
+
+@media (max-width: 24rem) {
+  .account-form {
+    padding-inline: var(--space-4);
+  }
+
+  .password-control {
+    grid-template-columns: 1fr;
+  }
+
+  .password-reveal {
+    width: 100%;
+  }
+}
+
+/* Customer account */
+.account-load-state {
+  width: min(100%, var(--reading-width));
+}
+
+.account {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.account-header {
+  display: flex;
+  gap: var(--space-6);
+  align-items: start;
+  justify-content: space-between;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  background: var(--color-store-surface);
+  border: 1px solid var(--color-brand-border);
+  border-radius: var(--radius-panel);
+}
+
+.account-header h1 {
+  margin-bottom: var(--space-2);
+}
+
+.account-header p {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.account-layout {
+  display: grid;
+  grid-template-columns: minmax(17rem, 21rem) minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.account-panel {
+  min-width: 0;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-sm);
+}
+
+.account-section-heading {
+  padding-bottom: var(--space-4);
+  margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.account-section-heading h2 {
+  margin: 0;
+  font-size: var(--text-xl);
+}
+
+.account-section-heading p {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+}
+
+.account-profile form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.account-profile input[readonly] {
+  color: var(--color-text-muted);
+  background: var(--color-surface-subtle);
+}
+
+.account-profile form > button {
+  justify-self: start;
+}
+
+.account-history-empty {
+  display: grid;
+  gap: var(--space-4);
+  justify-items: start;
+}
+
+.account-history-empty p {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.account-orders-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.account-orders-table {
+  width: 100%;
+  min-width: 39rem;
+  border-collapse: collapse;
+}
+
+.account-orders-table th,
+.account-orders-table td {
+  padding: var(--space-3);
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.account-orders-table thead th {
+  padding-top: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 650;
+}
+
+.account-orders-table tbody th {
+  font-weight: 700;
+}
+
+.account-orders-table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+.account-orders-table .order-status {
+  min-height: 1.75rem;
+  padding-inline: var(--space-2);
+}
+
+.account-order-action {
+  text-align: right !important;
+  white-space: nowrap;
+}
+
+@media (max-width: 52rem) {
+  .account-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .account-profile {
+    width: min(100%, 36rem);
+  }
+}
+
+@media (max-width: 42rem) {
+  .account-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .account-header > button,
+  .account-profile form > button {
+    width: 100%;
+    justify-self: stretch;
+  }
+
+  .account-orders-wrap {
+    overflow: visible;
+  }
+
+  .account-orders-table,
+  .account-orders-table tbody {
+    display: block;
+    min-width: 0;
+  }
+
+  .account-orders-table thead {
+    display: none;
+  }
+
+  .account-orders-table tr {
+    display: grid;
+    gap: var(--space-2);
+    padding: var(--space-4);
+    margin-bottom: var(--space-3);
+    background: var(--color-store-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+  }
+
+  .account-orders-table tr:last-child {
+    margin-bottom: 0;
+  }
+
+  .account-orders-table th,
+  .account-orders-table td {
+    display: grid;
+    grid-template-columns: minmax(7rem, 38%) minmax(0, 1fr);
+    gap: var(--space-3);
+    align-items: center;
+    padding: 0;
+    text-align: left !important;
+    border: 0;
+  }
+
+  .account-orders-table th::before,
+  .account-orders-table td::before {
+    content: attr(data-label);
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+    font-weight: 650;
+  }
+
+  .account-orders-table .account-order-action {
+    padding-top: var(--space-3);
+    margin-top: var(--space-1);
+    border-top: 1px solid var(--color-border);
+  }
+}
+
+@media (max-width: 26rem) {
+  .account-orders-table th,
+  .account-orders-table td {
+    grid-template-columns: 1fr;
+    gap: var(--space-1);
   }
 }

@@ -433,7 +433,7 @@ function CheckoutForm({
               <Trans
                 ns="checkout"
                 i18nKey="guestPrompt"
-                components={{ signIn: <Link to="/account/sign-in" /> }}
+                components={{ signIn: <Link to="/account/sign-in?returnTo=%2Fcheckout" /> }}
               />
             </p>
           )}
