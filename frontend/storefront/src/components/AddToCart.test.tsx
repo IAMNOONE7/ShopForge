@@ -41,6 +41,7 @@ function cartWith(quantity: number): Cart {
     items: [
       {
         storeProductId: "product-1",
+        variantId: "variant-1",
         name: "Oak chair",
         slug: "oak-chair",
         unitPrice: 120,
@@ -55,7 +56,8 @@ function cartWith(quantity: number): Cart {
 }
 
 function renderControl(options: {
-  available?: number;
+  available?: number | null;
+  variantId?: string | null;
   cart?: Cart | null;
   mutate?: CartState["mutate"];
 } = {}) {
@@ -76,8 +78,9 @@ function renderControl(options: {
       <CartContext value={state}>
         <AddToCart
           storeProductId="product-1"
+          variantId={options.variantId === undefined ? "variant-1" : options.variantId}
           productName="Oak chair"
-          available={options.available ?? 10}
+          available={options.available === undefined ? 10 : options.available}
         />
       </CartContext>
     </MemoryRouter>,
@@ -118,7 +121,7 @@ describe("AddToCart", () => {
     await user.type(quantity, "4");
     await user.click(screen.getByRole("button", { name: "Add Oak chair to cart" }));
 
-    expect(mocks.addToCart).toHaveBeenCalledWith("product-1", 4);
+    expect(mocks.addToCart).toHaveBeenCalledWith("product-1", "variant-1", 4);
     expect(await screen.findByText("Added 4 items to your cart.", { exact: false })).toBeTruthy();
     expect(screen.getByRole("link", { name: "View cart" })).toBeTruthy();
   });
@@ -139,6 +142,27 @@ describe("AddToCart", () => {
         { exact: false },
       ),
     ).toBeTruthy();
+  });
+
+  it("reconciles the selected variant when another form of the same listing is already in the cart", async () => {
+    const user = userEvent.setup();
+    const first = cartWith(2).items[0];
+    const second = { ...first, variantId: "variant-2", quantity: 5, lineTotal: 600 };
+    const before = { ...emptyCart, items: [first, second], count: 7 };
+    const updated = { ...before, items: [first, { ...second, quantity: 6, lineTotal: 720 }], count: 8 };
+    mocks.addToCart.mockResolvedValue(updated);
+    renderControl({ cart: before, variantId: "variant-2" });
+
+    await user.click(screen.getByRole("button", { name: "Add Oak chair to cart" }));
+    expect(mocks.addToCart).toHaveBeenCalledWith("product-1", "variant-2", 1);
+    expect(await screen.findByText("Added 1 item to your cart.", { exact: false })).toBeTruthy();
+  });
+
+  it("requires a variant before enabling quantity or submission", () => {
+    renderControl({ variantId: null, available: null });
+    expect(screen.getByRole("spinbutton", { name: "Quantity" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Add Oak chair to cart" })).toHaveProperty("disabled", true);
+    expect(screen.getByText("Choose each option to see availability.")).toBeTruthy();
   });
 
   it("keeps an out-of-stock quantity and add action disabled", () => {
@@ -192,6 +216,7 @@ describe("AddToCart", () => {
         <PendingCartProvider>
           <AddToCart
             storeProductId="product-1"
+            variantId="variant-1"
             productName="Oak chair"
             available={10}
           />

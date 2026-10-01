@@ -58,6 +58,12 @@ export type ProductAttribute = {
   value: string | number | boolean | string[];
 };
 
+export type ProductVariant = {
+  id: string;
+  optionValues: string[];
+  available: number;
+};
+
 export type ProductDetail = {
   id: string;
   slug: string;
@@ -65,6 +71,8 @@ export type ProductDetail = {
   description: string | null;
   price: number;
   available: number;
+  optionNames: string[];
+  variants: ProductVariant[];
   rating: number;
   reviewCount: number;
   images: { url: string; altText: string | null }[];

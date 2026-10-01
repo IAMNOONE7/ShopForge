@@ -30,6 +30,7 @@ const store: Store = {
 };
 const line: CartLineModel = {
   storeProductId: "product-1",
+  variantId: "variant-1",
   name: "Oak chair",
   slug: "oak-chair",
   unitPrice: 120,

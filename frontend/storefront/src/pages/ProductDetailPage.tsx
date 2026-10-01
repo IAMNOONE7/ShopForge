@@ -1,15 +1,14 @@
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router";
 import { getProduct } from "../api";
-import { AddToCart } from "../components/AddToCart";
 import { Message } from "../components/Message";
 import { ProductReviews } from "../components/ProductReviews";
 import { Stars } from "../components/Stars";
 import { ProductAttributes } from "../components/product/ProductAttributes";
 import { ProductDetailLoading } from "../components/product/ProductDetailLoading";
 import { ProductGallery } from "../components/product/ProductGallery";
+import { ProductPurchase } from "../components/product/ProductPurchase";
 import { RequestError } from "../components/ui/RequestError";
-import { WishlistButton } from "../components/WishlistButton";
 import { formatPrice, useStore } from "../storeContext";
 import { useRequest } from "../useRequest";
 
@@ -47,7 +46,6 @@ export function ProductDetailPage() {
         id,
         name,
         price,
-        available,
         rating,
         reviewCount,
         description,
@@ -55,13 +53,6 @@ export function ProductDetailPage() {
         categories,
         attributes,
       } = product.data;
-      const availability =
-        available === 0
-          ? t("catalog:outOfStock")
-          : available <= 5
-            ? t("catalog:onlyLeft", { count: available })
-            : t("catalog:inStockCount", { count: available });
-
       return (
         <>
           {product.refreshError !== null && (
@@ -93,18 +84,7 @@ export function ProductDetailPage() {
               <h1 lang={store.culture}>{name}</h1>
               <p className="product-price">{formatPrice(price, store)}</p>
               <Stars rating={rating} count={reviewCount} />
-              <p className={`availability ${available === 0 ? "unavailable" : "available"}`}>
-                {availability}
-              </p>
-              <div className="product-actions">
-                <AddToCart
-                  key={`${id}:${available}`}
-                  storeProductId={id}
-                  productName={name}
-                  available={available}
-                />
-                <WishlistButton storeProductId={id} />
-              </div>
+              <ProductPurchase key={id} product={product.data} />
               {description && (
                 <section className="product-section" aria-labelledby="product-description-heading">
                   <h2 id="product-description-heading">{t("catalog:description")}</h2>

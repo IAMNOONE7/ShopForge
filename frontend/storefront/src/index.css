@@ -389,6 +389,84 @@
   font-size: var(--text-sm);
 }
 
+.product-variant-picker {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  margin-top: var(--space-2);
+}
+
+.variant-group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.variant-group legend {
+  margin-bottom: var(--space-2);
+  font-weight: 700;
+}
+
+.variant-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.variant-choice {
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+  cursor: pointer;
+}
+
+.variant-choice input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.variant-choice span {
+  display: inline-flex;
+  min-height: 2.75rem;
+  max-width: 100%;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  overflow-wrap: anywhere;
+}
+
+.variant-choice input:checked + span {
+  border-color: var(--color-primary);
+  background: var(--color-brand-surface);
+  box-shadow: inset 0 0 0 1px var(--color-primary);
+}
+
+.variant-choice input:focus-visible + span {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.variant-choice input:disabled + span {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.variant-choice small {
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+}
+
+.variant-selection-note {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
 .availability {
   width: fit-content;
   padding: var(--space-1) var(--space-2);

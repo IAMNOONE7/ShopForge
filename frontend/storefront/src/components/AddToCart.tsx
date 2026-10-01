@@ -15,16 +15,18 @@ type Result =
 
 export function AddToCart({
   storeProductId,
+  variantId,
   productName,
   available,
 }: {
   storeProductId: string;
+  variantId: string | null;
   productName: string;
-  available: number;
+  available: number | null;
 }) {
   const { t } = useTranslation(["catalog", "validation"]);
   const { cart, error, mutate, pending } = useCart();
-  const maximum = Math.min(Math.max(available, 0), 99);
+  const maximum = Math.min(Math.max(available ?? 0, 0), 99);
   const [quantity, setQuantity] = useState("1");
   const [invalid, setInvalid] = useState(false);
   const [result, setResult] = useState<Result>(null);
@@ -34,7 +36,7 @@ export function AddToCart({
 
   async function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting.current || pending || maximum === 0) return;
+    if (submitting.current || pending || variantId === null || maximum === 0) return;
 
     const requested = Number(quantity);
     if (!Number.isInteger(requested) || requested < 1 || requested > maximum) {
@@ -47,9 +49,9 @@ export function AddToCart({
     setInvalid(false);
     setResult(null);
     const before =
-      cart?.items.find((line) => line.storeProductId === storeProductId)
+      cart?.items.find((line) => line.storeProductId === storeProductId && line.variantId === variantId)
         ?.quantity ?? 0;
-    const updated = await mutate(() => addToCart(storeProductId, requested));
+    const updated = await mutate(() => addToCart(storeProductId, variantId, requested));
     submitting.current = false;
 
     if (!updated) {
@@ -58,7 +60,7 @@ export function AddToCart({
     }
 
     const after =
-      updated.items.find((line) => line.storeProductId === storeProductId)
+      updated.items.find((line) => line.storeProductId === storeProductId && line.variantId === variantId)
         ?.quantity ?? 0;
     const actual = Math.max(after - before, 0);
     if (actual === 0) {
@@ -83,7 +85,7 @@ export function AddToCart({
           step="1"
           required
           value={quantity}
-          disabled={pending || maximum === 0}
+          disabled={pending || variantId === null || maximum === 0}
           aria-invalid={invalid || undefined}
           aria-describedby={`${hintId} ${statusId}`}
           onChange={(event) => {
@@ -93,14 +95,16 @@ export function AddToCart({
           }}
         />
         <span id={hintId} className="hint">
-          {maximum > 0
-            ? t("catalog:quantityRange", { max: maximum })
-            : t("catalog:outOfStock")}
+          {available === null
+            ? t("catalog:chooseOptions")
+            : maximum > 0
+              ? t("catalog:quantityRange", { max: maximum })
+              : t("catalog:outOfStock")}
         </span>
       </div>
       <Button
         type="submit"
-        disabled={maximum === 0}
+        disabled={variantId === null || maximum === 0}
         aria-disabled={pending || undefined}
         aria-busy={pending || undefined}
         aria-label={t("catalog:addProductToCart", { name: productName })}

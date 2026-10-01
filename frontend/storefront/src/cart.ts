@@ -2,6 +2,7 @@ import { requestJson } from "./api/http";
 
 export type CartLine = {
   storeProductId: string;
+  variantId: string;
   name: string;
   slug: string;
   unitPrice: number;
@@ -126,10 +127,10 @@ export type Order = {
 export const getCart = (signal?: AbortSignal) =>
   requestJson<Cart>("/api/storefront/cart", { signal });
 
-export const addToCart = (storeProductId: string, quantity: number) =>
+export const addToCart = (storeProductId: string, variantId: string, quantity: number) =>
   requestJson<Cart>("/api/storefront/cart/items", {
     method: "POST",
-    body: { storeProductId, quantity },
+    body: { storeProductId, variantId, quantity },
   });
 
 export const setCartQuantity = (storeProductId: string, quantity: number) =>

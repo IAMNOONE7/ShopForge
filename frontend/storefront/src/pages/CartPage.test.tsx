@@ -31,6 +31,7 @@ const store: Store = {
 };
 const oak: CartLine = {
   storeProductId: "oak",
+  variantId: "oak-variant",
   name: "Oak chair",
   slug: "oak-chair",
   unitPrice: 120,
@@ -41,6 +42,7 @@ const oak: CartLine = {
 };
 const beech: CartLine = {
   storeProductId: "beech",
+  variantId: "beech-variant",
   name: "Beech table",
   slug: "beech-table",
   unitPrice: 300,

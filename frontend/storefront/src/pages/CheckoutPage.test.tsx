@@ -57,6 +57,7 @@ const cart: Cart = {
   items: [
     {
       storeProductId: "oak",
+      variantId: "oak-variant",
       name: "Oak chair",
       slug: "oak-chair",
       unitPrice: 120,
