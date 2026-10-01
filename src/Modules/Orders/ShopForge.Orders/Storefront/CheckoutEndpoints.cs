@@ -37,10 +37,11 @@ internal static class CheckoutEndpoints
     private static async Task<Ok<CheckoutMethodsResponse>> GetMethodsAsync(
         DbContext dbContext,
         IEnumerable<IPaymentProvider> paymentProviders,
+        IProviderConnections connections,
         CancellationToken cancellationToken)
     {
         // A method whose provider is not configured on this deployment is not on offer, however active the store left it.
-        var providerKeys = paymentProviders.Select(provider => provider.Key).ToList();
+        var providerKeys = await UsableProvidersAsync(paymentProviders, connections, cancellationToken);
         var payment = await dbContext.Set<PaymentMethod>()
             .Where(method => method.IsActive && providerKeys.Contains(method.ProviderKey))
             .OrderBy(method => method.Name)
@@ -89,6 +90,7 @@ internal static class CheckoutEndpoints
         ICurrentCustomer currentCustomer,
         IStockLedger stock,
         IEnumerable<IPaymentProvider> paymentProviders,
+        IProviderConnections connections,
         IEnumerable<IShippingProvider> shippingProviders,
         DiscountCodes discounts,
         IOutbox outbox,
@@ -101,7 +103,7 @@ internal static class CheckoutEndpoints
         var cart = await carts.FindAsync(cancellationToken);
         var contents = cart is null ? null : await carts.ContentsAsync(cart, cancellationToken);
 
-        var providerKeys = paymentProviders.Select(provider => provider.Key).ToList();
+        var providerKeys = await UsableProvidersAsync(paymentProviders, connections, cancellationToken);
         var payment = await dbContext.Set<PaymentMethod>()
             .SingleOrDefaultAsync(
                 method => method.Code == request.PaymentMethodCode && method.IsActive && providerKeys.Contains(method.ProviderKey),
@@ -300,6 +302,26 @@ internal static class CheckoutEndpoints
         return TypedResults.Created(
             $"/api/storefront/orders/{order.Number}?token={order.AccessToken}",
             new PlacedOrderResponse(order.Number, order.AccessToken, instructions.Message, instructions.RedirectUrl));
+    }
+
+    // A gateway a merchant signed up for is only on offer where that merchant has connected it: the platform's
+    // own providers need nothing, and a store that has not finished connecting one is not shown its methods
+    // rather than being shown a method that cannot take money (D-138).
+    private static async Task<List<string>> UsableProvidersAsync(
+        IEnumerable<IPaymentProvider> providers,
+        IProviderConnections connections,
+        CancellationToken cancellationToken)
+    {
+        var all = providers.ToList();
+
+        if (!all.Any(provider => provider.NeedsConnection))
+        {
+            return [.. all.Select(provider => provider.Key)];
+        }
+
+        var connected = await connections.ConnectedAsync(cancellationToken);
+
+        return [.. all.Where(provider => !provider.NeedsConnection || connected.Contains(provider.Key)).Select(provider => provider.Key)];
     }
 
     // The order is committed before the provider is called: if the provider is down the shopper still has an order,

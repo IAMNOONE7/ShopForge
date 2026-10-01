@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Infrastructure.Auditing;
+using ShopForge.Infrastructure.Connections;
 using ShopForge.Infrastructure.Diagnostics;
 using ShopForge.Infrastructure.Dns;
 using ShopForge.Infrastructure.Documents;
@@ -66,6 +67,8 @@ public static class DependencyInjection
         services.AddScoped<MailgunWebhook>();
         services.AddScoped<IAuditLog, AuditLog>();
         services.AddScoped<IIdempotentRequests, IdempotentRequests>();
+        services.AddScoped<IProviderConnections, ProviderConnections>();
+        services.AddScoped<ProviderConnectionAdmin>();
         services.AddScoped<AuditReader>();
         services.AddScoped<IMaintenanceOutsideStores, OutboxCleanup>();
         services.AddScoped<IMaintenanceOutsideStores, AuditCleanup>();

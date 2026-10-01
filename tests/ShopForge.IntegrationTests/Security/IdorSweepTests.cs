@@ -205,6 +205,11 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
         // arranges; the query behind it is store-filtered like every other (D-123).
         ["/api/admin/stores/{storeId:guid}/failed-messages/{messageId:guid}/requeue"] = "needs a dead letter to exist",
 
+        // A provider's key is the platform's, not another store's row: the path names which gateway, and the
+        // connection it reaches is whichever one belongs to the store in the path (D-138).
+        ["/api/admin/stores/{storeId:guid}/provider-connections/{provider}"] = "keyed by a provider of the platform",
+        ["/api/admin/stores/{storeId:guid}/provider-connections/{provider}/secret"] = "keyed by a provider of the platform",
+
         // Suppression comes from a provider's webhook rather than from anything an admin can ask for.
         ["/api/admin/stores/{storeId:guid}/suppressed-addresses/{id:guid}"] = "needs a bounce to have arrived",
     };

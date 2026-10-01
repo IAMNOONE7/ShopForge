@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using ShopForge.Access;
 using ShopForge.Access.Development;
 using ShopForge.Api.Auditing;
+using ShopForge.Api.Connections;
 using ShopForge.Api.Diagnostics;
 using ShopForge.Api.Email;
 using ShopForge.Api.Errors;
@@ -187,6 +188,7 @@ tenantAdmin.MapInventoryTenantAdminEndpoints();
 
 var storeAdmin = tenantAdmin.MapGroup("/stores/{storeId:guid}").RequireAdminStore();
 storeAdmin.MapStoresStoreAdminEndpoints();
+storeAdmin.MapProviderConnections();
 storeAdmin.MapCatalogStoreAdminEndpoints();
 storeAdmin.MapOrdersStoreAdminEndpoints();
 storeAdmin.MapAdminOutboxEndpoints();

@@ -7,11 +7,13 @@ namespace ShopForge.IntegrationTests.Payments;
 // A payment provider a test drives directly: it reports whatever the test posts to its webhook. Stripe's stub
 // can only say paid or expired, which is exactly the half of the result space that never needed deciding; this
 // one can say a payment is still going, or authorised but not taken (D-140).
-internal sealed class FakeGateway : IPaymentProvider, IPaymentNotifications
+internal class FakeGateway : IPaymentProvider, IPaymentNotifications
 {
     public const string ProviderKey = "fake-gateway";
 
-    public string Key => ProviderKey;
+    public virtual string Key => ProviderKey;
+
+    public virtual bool NeedsConnection => false;
 
     public Task<PaymentInstructions> StartAsync(PaymentRequest request, CancellationToken cancellationToken) =>
         Task.FromResult(new PaymentInstructions(
