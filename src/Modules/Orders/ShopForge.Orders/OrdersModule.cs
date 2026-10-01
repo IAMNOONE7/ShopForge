@@ -33,6 +33,7 @@ public static class OrdersModule
     public static IServiceCollection AddOrdersModule(this IServiceCollection services)
     {
         services.AddScoped<IPaymentProvider, ManualPaymentProvider>();
+        services.AddScoped<IPaymentAttempts, PaymentAttempts>();
         services.AddScoped<IShippingProvider, StoreShippingProvider>();
         services.AddScoped<IStorePublishCheck, OrdersPublishCheck>();
         services.AddScoped<IStoreInitializer, DefaultStoreMethods>();

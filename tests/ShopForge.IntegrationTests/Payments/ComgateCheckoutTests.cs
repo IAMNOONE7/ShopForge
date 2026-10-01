@@ -48,7 +48,7 @@ public sealed class ComgateCheckoutTests : IDisposable
 
         Assert.Equal($"https://pay.comgate.test/{order.Number}/1", order.RedirectUrl);
         Assert.Equal(order.RedirectUrl, attempt.RedirectUrl);
-        Assert.Equal($"trans-1-{order.Number}", attempt.Reference);
+        Assert.StartsWith("trans-", attempt.Reference!, StringComparison.Ordinal);
         Assert.Equal(ComgatePaymentProvider.ProviderKey, attempt.Provider);
     }
 

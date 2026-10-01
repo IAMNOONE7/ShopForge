@@ -13,6 +13,10 @@ namespace ShopForge.Infrastructure.Payments.Comgate;
 internal interface IComgatePayments
 {
     Task<ComgateCreated> CreateAsync(ComgateMerchant merchant, ComgatePayment payment, CancellationToken cancellationToken);
+
+    // What Comgate says the transaction is now. A push tells us to look; this is the looking, and it is the
+    // only answer believed (D-141).
+    Task<ComgateTransaction?> FindAsync(ComgateMerchant merchant, string transactionId, CancellationToken cancellationToken);
 }
 
 // Who the payment is taken for. The secret is read from the store's secret store at the moment of the call and
@@ -39,6 +43,14 @@ internal sealed record ComgatePayment(
 // exactly as given and never rebuilt.
 internal sealed record ComgateCreated(string TransactionId, string RedirectUrl);
 
+internal sealed record ComgateTransaction(
+    string TransactionId,
+    string Status,
+    long PriceInMinorUnits,
+    string Currency,
+    string ReferenceId,
+    bool Test);
+
 internal sealed class ComgateHttpPayments(HttpClient client) : IComgatePayments
 {
     public async Task<ComgateCreated> CreateAsync(ComgateMerchant merchant, ComgatePayment payment, CancellationToken cancellationToken)
@@ -63,9 +75,7 @@ internal sealed class ComgateHttpPayments(HttpClient client) : IComgatePayments
 
         // Basic authentication with the merchant and its secret, as the security notes describe. Nothing about
         // the credentials is logged: the header is set here and read nowhere.
-        request.Headers.Authorization = new AuthenticationHeaderValue(
-            "Basic",
-            Convert.ToBase64String(Encoding.UTF8.GetBytes($"{merchant.MerchantId}:{merchant.Secret}")));
+        request.Headers.Authorization = Basic(merchant);
 
         using var response = await client.SendAsync(request, cancellationToken);
         response.EnsureSuccessStatusCode();
@@ -76,6 +86,38 @@ internal sealed class ComgateHttpPayments(HttpClient client) : IComgatePayments
             ? new ComgateCreated(transactionId, redirect)
             : throw new InvalidOperationException("Comgate created a payment without a transaction id or a redirect.");
     }
+
+    public async Task<ComgateTransaction?> FindAsync(ComgateMerchant merchant, string transactionId, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"v2.0/payment/transId/{Uri.EscapeDataString(transactionId)}.json");
+        request.Headers.Authorization = Basic(merchant);
+
+        using var response = await client.SendAsync(request, cancellationToken);
+
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+        var found = await response.Content.ReadFromJsonAsync<TransactionResponse>(cancellationToken);
+
+        return found is { TransactionId: { Length: > 0 } id, Status: { Length: > 0 } status }
+            ? new ComgateTransaction(id, status, found.Price, found.Currency ?? string.Empty, found.ReferenceId ?? string.Empty, found.Test)
+            : null;
+    }
+
+    private static AuthenticationHeaderValue Basic(ComgateMerchant merchant) => new(
+        "Basic",
+        Convert.ToBase64String(Encoding.UTF8.GetBytes($"{merchant.MerchantId}:{merchant.Secret}")));
+
+    private sealed record TransactionResponse(
+        [property: JsonPropertyName("transId")] string? TransactionId,
+        [property: JsonPropertyName("status")] string? Status,
+        [property: JsonPropertyName("price")] long Price,
+        [property: JsonPropertyName("curr")] string? Currency,
+        [property: JsonPropertyName("refId")] string? ReferenceId,
+        [property: JsonPropertyName("test")] bool Test);
 
     private sealed record CreateRequest(
         [property: JsonPropertyName("price")] long Price,

@@ -14,6 +14,11 @@ internal sealed class FakeComgate : IComgatePayments
 
     public bool Fails { get; set; }
 
+    // What this stand-in will say the transaction is when asked, which is the only answer the reader believes.
+    public ComgateTransaction? Says { get; set; }
+
+    public bool AskedAbout { get; private set; }
+
     public Task<ComgateCreated> CreateAsync(ComgateMerchant merchant, ComgatePayment payment, CancellationToken cancellationToken)
     {
         LastMerchant = merchant;
@@ -26,6 +31,16 @@ internal sealed class FakeComgate : IComgatePayments
 
         Created++;
 
-        return Task.FromResult(new ComgateCreated($"trans-{Created}-{payment.ReferenceId}", $"https://pay.comgate.test/{payment.ReferenceId}/{Created}"));
+        return Task.FromResult(new ComgateCreated($"trans-{Guid.NewGuid():N}", $"https://pay.comgate.test/{payment.ReferenceId}/{Created}"));
+    }
+
+    public Task<ComgateTransaction?> FindAsync(ComgateMerchant merchant, string transactionId, CancellationToken cancellationToken)
+    {
+        AskedAbout = true;
+        LastMerchant = merchant;
+
+        return Fails
+            ? Task.FromException<ComgateTransaction?>(new HttpRequestException("Comgate is unreachable."))
+            : Task.FromResult(Says);
     }
 }

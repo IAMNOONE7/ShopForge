@@ -69,6 +69,7 @@ public static class DependencyInjection
         services.AddScoped<IAuditLog, AuditLog>();
         services.AddScoped<IIdempotentRequests, IdempotentRequests>();
         services.AddScoped<IProviderConnections, ProviderConnections>();
+        services.AddScoped<IMerchantConnections, MerchantConnections>();
         services.AddScoped<ProviderConnectionAdmin>();
         services.AddScoped<AuditReader>();
         services.AddScoped<IMaintenanceOutsideStores, OutboxCleanup>();
@@ -109,6 +110,7 @@ public static class DependencyInjection
 
         services.AddHttpClient<IComgatePayments, ComgateHttpPayments>(client => client.BaseAddress = new Uri(baseAddress));
         services.AddScoped<IPaymentProvider, ComgatePaymentProvider>();
+        services.AddScoped<IPaymentNotifications, ComgateNotifications>();
     }
 
     private static void AddSecretStore(IServiceCollection services, IConfiguration configuration)

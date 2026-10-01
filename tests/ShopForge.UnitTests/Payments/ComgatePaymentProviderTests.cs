@@ -67,6 +67,9 @@ public sealed class ComgatePaymentProviderTests
 
             return Task.FromResult(new ComgateCreated("trans", "https://pay.comgate.test/1"));
         }
+
+        public Task<ComgateTransaction?> FindAsync(ComgateMerchant merchant, string transactionId, CancellationToken cancellationToken) =>
+            Task.FromResult<ComgateTransaction?>(null);
     }
 
     private sealed class OneConnection(ProviderConnection? connection) : IProviderConnections
