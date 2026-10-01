@@ -28,7 +28,7 @@ public sealed class ObservabilityTests(ShopForgeApiFactory factory)
     }
 
     [Fact]
-    public async Task Readiness_covers_the_database_and_the_file_storage()
+    public async Task Readiness_covers_everything_an_instance_needs_before_it_serves()
     {
         using var client = factory.CreateClient();
 
@@ -41,7 +41,7 @@ public sealed class ObservabilityTests(ShopForgeApiFactory factory)
 
         Assert.Equal(HttpStatusCode.OK, ready.StatusCode);
         Assert.Equal(HttpStatusCode.OK, live.StatusCode);
-        Assert.Equal(["database", "file-storage"], checks);
+        Assert.Equal(["database", "file-storage", "secret-store"], checks);
     }
 
     // Placing an order and the e-mail the worker sends afterwards belong to one story (D-070).

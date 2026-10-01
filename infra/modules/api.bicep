@@ -4,6 +4,7 @@ param workspaceName string
 param image string
 param registryServer string
 param keyVaultUri string
+param providerVaultUri string
 param frontDoorId string
 @description('Which e-mail provider carries transactional mail; "log" sends nothing.')
 param emailProvider string = 'log'
@@ -63,6 +64,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
           env: [
             { name: 'ASPNETCORE_ENVIRONMENT', value: 'Production' }
             { name: 'KeyVault__Uri', value: keyVaultUri }
+            { name: 'ProviderSecrets__VaultUri', value: providerVaultUri }
             { name: 'Edge__FrontDoorId', value: frontDoorId }
             { name: 'Email__Provider', value: emailProvider }
             { name: 'Email__SenderAddress', value: emailSenderAddress }

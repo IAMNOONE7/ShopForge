@@ -123,7 +123,8 @@ builder.Services.AddPlatformModule(requireSecureCookies);
 
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<ShopForgeDbContext>("database", tags: [HealthEndpoints.ReadinessTag])
-    .AddCheck<FileStorageHealthCheck>("file-storage", tags: [HealthEndpoints.ReadinessTag]);
+    .AddCheck<FileStorageHealthCheck>("file-storage", tags: [HealthEndpoints.ReadinessTag])
+    .AddCheck<SecretStoreHealthCheck>("secret-store", tags: [HealthEndpoints.ReadinessTag]);
 
 var app = builder.Build();
 

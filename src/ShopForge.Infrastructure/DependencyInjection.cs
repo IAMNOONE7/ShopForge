@@ -1,4 +1,6 @@
 using System.Reflection;
+using Azure.Identity;
+using Azure.Security.KeyVault.Secrets;
 using Azure.Storage.Blobs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -13,6 +15,7 @@ using ShopForge.Infrastructure.Idempotency;
 using ShopForge.Infrastructure.Messaging;
 using ShopForge.Infrastructure.Payments;
 using ShopForge.Infrastructure.Persistence;
+using ShopForge.Infrastructure.Secrets;
 using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Dns;
 using ShopForge.Shared.Documents;
@@ -22,6 +25,7 @@ using ShopForge.Shared.Http;
 using ShopForge.Shared.Maintenance;
 using ShopForge.Shared.Messaging;
 using ShopForge.Shared.Payments;
+using ShopForge.Shared.Security;
 
 namespace ShopForge.Infrastructure;
 
@@ -69,6 +73,7 @@ public static class DependencyInjection
         services.AddSingleton<StoreMaintenance>();
         services.AddHostedService<MaintenanceWorker>();
 
+        AddSecretStore(services, configuration);
         AddEmailDelivery(services, configuration);
 
         var stripe = configuration.GetSection(StripeOptions.Section).Get<StripeOptions>() ?? new StripeOptions();
@@ -89,6 +94,23 @@ public static class DependencyInjection
 
     // One seam, one setting: another provider is a class implementing IEmailDelivery and a name here (D-120).
     // Nothing configured means the log, which is how development and the tests run.
+    // Where a merchant's own provider credentials are kept. A vault when there is one, configuration otherwise,
+    // which is development, CI and a single merchant running their own installation (D-138, D-139).
+    private static void AddSecretStore(IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddMemoryCache();
+
+        if (configuration[SecretStoreOptions.VaultUri] is not { Length: > 0 } vaultUri)
+        {
+            services.AddSingleton<ISecretStore, ConfigurationSecretStore>();
+
+            return;
+        }
+
+        services.AddSingleton(new SecretClient(new Uri(vaultUri), new DefaultAzureCredential()));
+        services.AddSingleton<ISecretStore, KeyVaultSecretStore>();
+    }
+
     private static void AddEmailDelivery(IServiceCollection services, IConfiguration configuration)
     {
         var email = configuration.GetSection(EmailOptions.Section).Get<EmailOptions>() ?? new EmailOptions();

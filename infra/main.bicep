@@ -67,6 +67,7 @@ module api 'modules/api.bicep' = {
     image: image
     registryServer: registryServer
     keyVaultUri: 'https://${namePrefix}-kv${environment().suffixes.keyvaultDns}/'
+    providerVaultUri: 'https://${namePrefix}-kv-prov${environment().suffixes.keyvaultDns}/'
     frontDoorId: edgeProfile.outputs.frontDoorId
     emailProvider: emailProvider
     emailSenderAddress: emailSenderAddress

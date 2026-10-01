@@ -102,3 +102,36 @@ resource reader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
 }
 
 output vaultUri string = vault.properties.vaultUri
+
+// A second vault, for credentials that belong to a merchant rather than to the deployment: a gateway's secret, a
+// carrier's password. The application writes here, because a merchant rotates their own credentials from the
+// admin, and it must not be able to write where the database connection string lives (D-152).
+resource providerVault 'Microsoft.KeyVault/vaults@2024-11-01' = {
+  name: '${vault.name}-prov'
+  location: location
+  properties: {
+    sku: {
+      family: 'A'
+      name: 'standard'
+    }
+    tenantId: subscription().tenantId
+    enableRbacAuthorization: true
+    enableSoftDelete: true
+    softDeleteRetentionInDays: 90
+    enablePurgeProtection: true
+    publicNetworkAccess: 'Enabled'
+  }
+}
+
+// Key Vault Secrets Officer, scoped to the provider vault alone: read, write and rotate what a merchant owns.
+resource providerSecretsOfficer 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: providerVault
+  name: guid(providerVault.id, readerPrincipalId, 'b86a8fe4-44ce-4948-aee7-eccb2c155cd7')
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b86a8fe4-44ce-4948-aee7-eccb2c155cd7')
+    principalId: readerPrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+output providerVaultUri string = providerVault.properties.vaultUri

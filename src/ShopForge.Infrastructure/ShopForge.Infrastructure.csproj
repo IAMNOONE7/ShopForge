@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <PackageReference Include="Azure.Monitor.OpenTelemetry.AspNetCore" />
+    <PackageReference Include="Azure.Security.KeyVault.Secrets" />
     <PackageReference Include="Azure.Storage.Blobs" />
     <PackageReference Include="DnsClient" />
     <PackageReference Include="EFCore.NamingConventions" />
