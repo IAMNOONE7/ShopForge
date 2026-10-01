@@ -80,7 +80,7 @@ internal sealed class OrderEntityConfiguration : IEntityTypeConfiguration<Order>
         {
             lines.ToTable("order_lines", OrdersModule.Schema);
             lines.WithOwner().HasForeignKey("OrderId");
-            lines.Property(line => line.ProductName).HasMaxLength(200);
+            lines.Property(line => line.ProductName).HasMaxLength(OrderLine.MaxProductNameLength);
             lines.Property(line => line.UnitPrice).HasPrecision(12, 2);
             lines.Property(line => line.Discount).HasPrecision(12, 2);
             lines.Property(line => line.VatRate).HasPrecision(5, 2);

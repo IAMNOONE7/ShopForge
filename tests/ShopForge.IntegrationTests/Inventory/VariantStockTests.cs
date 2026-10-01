@@ -16,7 +16,7 @@ public sealed class VariantStockTests(ShopForgeApiFactory factory)
     [Fact]
     public async Task Each_size_is_counted_on_its_own_shelf()
     {
-        var shirt = await ShirtAsync(factory);
+        var shirt = await ShirtStore.CreateAsync(factory);
 
         await shirt.Furniture.Admin.VariantStockAsync(shirt.Small, 2);
         await shirt.Furniture.Admin.VariantStockAsync(shirt.Large, 7);
@@ -31,7 +31,7 @@ public sealed class VariantStockTests(ShopForgeApiFactory factory)
     [Fact]
     public async Task The_listing_adds_the_sizes_up_and_the_page_takes_them_apart()
     {
-        var shirt = await ShirtAsync(factory);
+        var shirt = await ShirtStore.CreateAsync(factory);
         await shirt.Furniture.Admin.VariantStockAsync(shirt.Small, 2);
         await shirt.Furniture.Admin.VariantStockAsync(shirt.Large, 7);
 
@@ -47,7 +47,7 @@ public sealed class VariantStockTests(ShopForgeApiFactory factory)
     [Fact]
     public async Task A_shopper_buys_the_size_they_asked_for_and_only_that_one_leaves_the_shelf()
     {
-        var shirt = await ShirtAsync(factory);
+        var shirt = await ShirtStore.CreateAsync(factory);
         await shirt.Furniture.Admin.VariantStockAsync(shirt.Small, 5);
         await shirt.Furniture.Admin.VariantStockAsync(shirt.Large, 5);
 
@@ -69,7 +69,7 @@ public sealed class VariantStockTests(ShopForgeApiFactory factory)
     [Fact]
     public async Task Two_sizes_of_one_shirt_are_two_lines()
     {
-        var shirt = await ShirtAsync(factory);
+        var shirt = await ShirtStore.CreateAsync(factory);
         await shirt.Furniture.Admin.VariantStockAsync(shirt.Small, 5);
         await shirt.Furniture.Admin.VariantStockAsync(shirt.Large, 5);
 
@@ -88,7 +88,7 @@ public sealed class VariantStockTests(ShopForgeApiFactory factory)
     [Fact]
     public async Task A_shopper_has_to_say_which_size_they_want()
     {
-        var shirt = await ShirtAsync(factory);
+        var shirt = await ShirtStore.CreateAsync(factory);
         await shirt.Furniture.Admin.VariantStockAsync(shirt.Small, 5);
 
         using var shopper = new StorefrontApi(factory, shirt.Furniture.Store);
@@ -119,7 +119,7 @@ public sealed class VariantStockTests(ShopForgeApiFactory factory)
     [Fact]
     public async Task What_comes_back_goes_on_the_shelf_it_came_off()
     {
-        var shirt = await ShirtAsync(factory);
+        var shirt = await ShirtStore.CreateAsync(factory);
         await shirt.Furniture.Admin.VariantStockAsync(shirt.Small, 5);
         await shirt.Furniture.Admin.VariantStockAsync(shirt.Large, 5);
 
@@ -137,7 +137,7 @@ public sealed class VariantStockTests(ShopForgeApiFactory factory)
         Assert.Equal((4, 5), (afterReturn[shirt.Small].OnHand, afterReturn[shirt.Large].OnHand));
     }
 
-    private async Task ReturnAsync(Shirt shirt, StorefrontApi buyer, string orderNumber, Guid variantId, int quantity)
+    private async Task ReturnAsync(ShirtStore shirt, StorefrontApi buyer, string orderNumber, Guid variantId, int quantity)
     {
         using var requested = await buyer.PostAsync(
             $"/api/storefront/account/orders/{orderNumber}/returns",
@@ -157,7 +157,7 @@ public sealed class VariantStockTests(ShopForgeApiFactory factory)
         Assert.Equal(HttpStatusCode.OK, received.StatusCode);
     }
 
-    private async Task<StorefrontApi> BuyerAsync(Shirt shirt)
+    private async Task<StorefrontApi> BuyerAsync(ShirtStore shirt)
     {
         var email = $"sizes-{Guid.NewGuid():N}@example.test";
         var buyer = new StorefrontApi(factory, shirt.Furniture.Store);
@@ -175,14 +175,14 @@ public sealed class VariantStockTests(ShopForgeApiFactory factory)
         return buyer;
     }
 
-    private async Task<Dictionary<Guid, StockView>> StockAsync(Shirt shirt)
+    private async Task<Dictionary<Guid, StockView>> StockAsync(ShirtStore shirt)
     {
         var stock = await shirt.Furniture.Admin.GetFromJsonAsync<List<StockView>>("/api/admin/stock", CancellationToken);
 
         return stock!.ToDictionary(item => item.VariantId);
     }
 
-    private async Task<IReadOnlyList<Guid>> SoldFormsAsync(Shirt shirt, string number) =>
+    private async Task<IReadOnlyList<Guid>> SoldFormsAsync(ShirtStore shirt, string number) =>
         await factory.QueryAsync(shirt.Furniture.Store, async dbContext =>
         {
             var order = await dbContext.Set<Order>().AsNoTracking().SingleAsync(candidate => candidate.Number == number, CancellationToken);
@@ -197,51 +197,19 @@ public sealed class VariantStockTests(ShopForgeApiFactory factory)
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
-    private async Task<PlacedOrder> CheckoutAsync(Shirt shirt, StorefrontApi shopper)
+    private async Task<PlacedOrder> CheckoutAsync(ShirtStore shirt, StorefrontApi shopper)
     {
         using var placed = await shopper.PostAsync("/api/storefront/checkout", Checkout.Request());
 
         return await shopper.ReadAsync<PlacedOrder>(placed, HttpStatusCode.Created);
     }
 
-    private async Task PayAsync(Shirt shirt, string number)
+    private async Task PayAsync(ShirtStore shirt, string number)
     {
         using var paid = await shirt.Furniture.Admin.PostAsync(
             $"/api/admin/stores/{shirt.Furniture.Store.StoreId}/orders/{number}/payment", null, CancellationToken);
         Assert.Equal(HttpStatusCode.OK, paid.StatusCode);
     }
-
-    private static async Task<Shirt> ShirtAsync(ShopForgeApiFactory factory)
-    {
-        var furniture = await FurnitureStore.CreateAsync(factory);
-        var admin = furniture.Admin;
-        var sku = $"SHIRT-{Guid.NewGuid():N}"[..20];
-
-        var productId = await admin.CreateProductAsync(sku);
-        var small = await admin.DefaultVariantIdAsync(productId);
-
-        using var named = await admin.PutAsJsonAsync(
-            $"/api/admin/products/{productId}/options",
-            new { Names = new[] { "Size" }, Values = new Dictionary<Guid, string[]> { [small] = ["S"] } },
-            CancellationToken);
-        Assert.Equal(HttpStatusCode.OK, named.StatusCode);
-
-        using var added = await admin.PostAsJsonAsync(
-            $"/api/admin/products/{productId}/variants",
-            new { Sku = sku + "-L", Ean = (string?)null, WeightGrams = (int?)null, OptionValues = new[] { "L" } },
-            CancellationToken);
-        Assert.Equal(HttpStatusCode.Created, added.StatusCode);
-        var large = (await added.Content.ReadFromJsonAsync<VariantView>(CancellationToken))!.Id;
-
-        var slug = $"shirt-{Guid.NewGuid():N}"[..20];
-        var listing = await admin.ListProductAsync(furniture.Store.StoreId, productId, "Linen Shirt", 60m, slug: slug);
-
-        return new Shirt(furniture, productId, listing, slug, small, large);
-    }
-
-    private sealed record Shirt(FurnitureStore Furniture, Guid ProductId, Guid Listing, string Slug, Guid Small, Guid Large);
-
-    private sealed record VariantView(Guid Id);
 
     private sealed record ReturnRow(Guid Id, string OrderNumber);
 

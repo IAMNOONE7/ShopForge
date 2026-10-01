@@ -240,6 +240,8 @@ internal sealed class Shipment
 
 internal sealed class OrderLine
 {
+    public const int MaxProductNameLength = 200;
+
     private OrderLine()
     {
     }

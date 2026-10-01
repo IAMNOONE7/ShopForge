@@ -240,7 +240,7 @@ internal static class CheckoutEndpoints
             order.AddLine(
                 item.Product.StoreProductId,
                 item.Variant.Id,
-                item.Product.Name,
+                Named(item),
                 item.Product.Price,
                 item.Product.VatRate,
                 item.Quantity,
@@ -327,11 +327,17 @@ internal static class CheckoutEndpoints
             : TypedResults.Ok(OrderResponse.From(order, await Documents.OfAsync(dbContext, order.Number, cancellationToken)));
     }
 
-    // "Oak Chair" on its own, "Oak Chair (M)" when the shop sells it in more than one form.
-    private static string Named(CartItem item) =>
-        item.Variant.OptionValues.Count == 0
+    // "Oak Chair" on its own, "Linen Shirt (L)" when the shop sells it in more than one form. The order line
+    // keeps this as written, so the invoice, the credit note and the return all say which one was bought even
+    // after the product or the size is renamed (D-136).
+    private static string Named(CartItem item)
+    {
+        var named = item.Variant.OptionValues.Count == 0
             ? item.Product.Name
             : $"{item.Product.Name} ({string.Join(" / ", item.Variant.OptionValues)})";
+
+        return named.Length <= OrderLine.MaxProductNameLength ? named : named[..OrderLine.MaxProductNameLength];
+    }
 
     private static bool IsEmail(string? email) =>
         email is { Length: <= 254 } && email.Count(character => character == '@') == 1 && email.Trim().Length == email.Length
