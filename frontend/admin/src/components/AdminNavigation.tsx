@@ -31,6 +31,9 @@ export function AdminNavigation({
       <NavLink to="/products" onClick={onNavigate}>
         {t("navigation:products")}
       </NavLink>
+      <NavLink to="/stock" end onClick={onNavigate}>
+        {t("navigation:stock")}
+      </NavLink>
       <NavLink to="/stores" end onClick={onNavigate}>
         {t("navigation:stores")}
       </NavLink>

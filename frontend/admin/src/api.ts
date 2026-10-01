@@ -1,5 +1,11 @@
 import { HttpError, requestBlob, requestJson, saveDownload } from "./api/http";
 
+export type SignInResponse = {
+  twoFactorRequired: boolean;
+  ticket: string | null;
+  user: CurrentUser | null;
+};
+
 export type CurrentUser = {
   id: string;
   email: string;
@@ -61,7 +67,18 @@ export type Product = {
   sku: string;
   ean: string | null;
   weightGrams: number | null;
+  optionNames: string[];
+  variants: ProductVariant[];
   images: ProductImage[];
+};
+
+export type ProductVariant = {
+  id: string;
+  sku: string;
+  ean: string | null;
+  weightGrams: number | null;
+  optionValues: string[];
+  position: number;
 };
 
 export type StoreProduct = {
@@ -108,13 +125,20 @@ export type AttributeDefinition = {
 };
 
 export type AttributeInput = {
+  code: string | null;
   name: string;
   type: AttributeType;
   unit: string | null;
   isFilterable: boolean;
   isVisibleOnProductPage: boolean;
+  sortOrder: number;
   options: string[];
 };
+
+export type AttributeUpdate = Pick<
+  AttributeInput,
+  "name" | "unit" | "isFilterable" | "isVisibleOnProductPage" | "sortOrder"
+>;
 
 export type AttributeValues = Record<
   string,
@@ -196,7 +220,7 @@ export type AdminOrderDetail = {
 };
 
 export type Stock = {
-  productId: string;
+  variantId: string;
   onHand: number;
   reserved: number;
   available: number;
@@ -331,9 +355,15 @@ export const api = {
       notifyUnauthorized: false,
     }),
   login: (email: string, password: string) =>
-    requestJson<CurrentUser>("/api/admin/auth/login", {
+    requestJson<SignInResponse>("/api/admin/auth/login", {
       method: "POST",
       body: { email, password },
+      notifyUnauthorized: false,
+    }),
+  completeTwoFactor: (ticket: string, code: string) =>
+    requestJson<SignInResponse>("/api/admin/auth/two-factor", {
+      method: "POST",
+      body: { ticket, code },
       notifyUnauthorized: false,
     }),
   logout: () => request<void>("POST", "/api/admin/auth/logout"),
@@ -358,6 +388,8 @@ export const api = {
     ean: string | null;
     weightGrams: number | null;
   }) => request<Product>("POST", "/api/admin/products", input),
+  updateProduct: (productId: string, input: { ean: string | null; weightGrams: number | null }) =>
+    request<Product>("PUT", `/api/admin/products/${productId}`, input),
   uploadProductImage: (productId: string, file: File, altText: string) =>
     request<ProductImage>(
       "POST",
@@ -421,7 +453,13 @@ export const api = {
     request<AttributeDefinition>(
       "POST",
       `/api/admin/stores/${storeId}/attributes`,
-      { ...input, sortOrder: 0 },
+      input,
+    ),
+  updateAttribute: (storeId: string, attributeId: string, input: AttributeUpdate) =>
+    request<AttributeDefinition>(
+      "PUT",
+      `/api/admin/stores/${storeId}/attributes/${attributeId}`,
+      input,
     ),
   addOption: (storeId: string, attributeId: string, name: string) =>
     request<AttributeDefinition>(
@@ -511,12 +549,12 @@ export const api = {
 
   stock: (signal?: AbortSignal) =>
     request<Stock[]>("GET", "/api/admin/stock", undefined, signal),
-  setStock: (productId: string, quantity: number) =>
-    request<Stock>("PUT", `/api/admin/stock/${productId}`, { quantity }),
-  stockMovements: (productId: string, signal?: AbortSignal) =>
+  setStock: (variantId: string, quantity: number) =>
+    request<Stock>("PUT", `/api/admin/stock/${variantId}`, { quantity }),
+  stockMovements: (variantId: string, signal?: AbortSignal) =>
     request<StockMovement[]>(
       "GET",
-      `/api/admin/stock/${productId}/movements`,
+      `/api/admin/stock/${variantId}/movements`,
       undefined,
       signal,
     ),

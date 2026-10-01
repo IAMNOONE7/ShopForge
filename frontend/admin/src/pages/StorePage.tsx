@@ -10,7 +10,6 @@ import {
 } from "../api";
 import { useSelectedStore } from "../adminContext";
 import { AttributeValueFields } from "../components/AttributeValueFields";
-import { AttributesSection } from "../components/AttributesSection";
 import { DiscountsSection } from "../components/DiscountsSection";
 import { FailedMessagesSection } from "../components/FailedMessagesSection";
 import { ImportSection } from "../components/ImportSection";
@@ -19,6 +18,8 @@ import { OrdersSection } from "../components/OrdersSection";
 import { PermissionScope } from "../components/PermissionScope";
 import { ReturnsSection } from "../components/ReturnsSection";
 import { ReviewsSection } from "../components/ReviewsSection";
+import { StoreLogoSection } from "../components/StoreLogoSection";
+import { StorePublicationSection } from "../components/StorePublicationSection";
 import { StoreSettingsSection } from "../components/StoreSettingsSection";
 import { readAttributeValues } from "../components/attributeValues";
 import { LoadingState } from "../components/ui/LoadingState";
@@ -46,64 +47,26 @@ function StoreRoute({
 }
 
 export function StoreSettingsPage() {
-  const { t } = useTranslation(["stores", "common"]);
+  const { t } = useTranslation("stores");
   const { user } = useSession();
   const { store, reloadStores } = useSelectedStore();
-  const [error, run] = useAction(reloadStores);
   return (
-    <StoreRoute
-      title={t("stores:settings")}
-      allowed={canManageStore(user.role)}
-    >
-      <section>
-        <h2>{t("stores:settings")}</h2>
-        <p className="inline-form">
-          {store.status === "draft" ? (
-            <button
-              type="button"
-              onClick={() => run(() => api.publishStore(store.id))}
-            >
-              {t("stores:publish")}
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => run(() => api.unpublishStore(store.id))}
-            >
-              {t("stores:unpublish")}
-            </button>
-          )}
-          {store.status === "draft" && (
-            <span className="hint">{t("stores:draftHint")}</span>
-          )}
-        </p>
-        {error !== null && <RequestError error={error} operation="write" />}
-      </section>
-      <StoreSettingsSection store={store} theme={store.theme} run={run} />
-      <section>
-        <h2>{t("stores:branding")}</h2>
-        <div className="inline-form">
-          {store.logoUrl && (
-            <img
-              src={store.logoUrl}
-              alt={t("stores:logoAlt", { name: store.name })}
-              className="logo-preview"
-            />
-          )}
-          <label className="upload">
-            {store.logoUrl ? t("stores:replaceLogo") : t("stores:uploadLogo")}
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = "";
-                if (file) void run(() => api.uploadLogo(store.id, file));
-              }}
-            />
-          </label>
-        </div>
-      </section>
+    <StoreRoute title={t("settings")} allowed={canManageStore(user.role)}>
+      <div className="store-settings-workspace">
+        <StorePublicationSection
+          store={store}
+          reloadStores={reloadStores}
+        />
+        <StoreSettingsSection
+          store={store}
+          reloadStores={reloadStores}
+        />
+        <StoreLogoSection
+          key={store.id}
+          store={store}
+          reloadStores={reloadStores}
+        />
+      </div>
     </StoreRoute>
   );
 }
@@ -134,35 +97,6 @@ export function StoreDiscountsPage() {
         storeId={store.id}
         money={currencyFormatter(store.currency, i18n.resolvedLanguage)}
       />
-    </StoreRoute>
-  );
-}
-
-export function StoreAttributesPage() {
-  const { t } = useTranslation(["attributes", "errors"]);
-  const { user } = useSession();
-  const { store } = useSelectedStore();
-  const [attributes, reload] = useRequest(`attributes:${store.id}`, (signal) =>
-    api.attributes(store.id, signal),
-  );
-  const [error, run] = useAction(reload);
-  return (
-    <StoreRoute
-      title={t("attributes:title")}
-      allowed={canManageCatalog(user.role)}
-    >
-      {requestError(attributes, reload)}
-      {error !== null && <RequestError error={error} operation="write" />}
-      {attributes.status === "loading" && (
-        <LoadingState label={t("attributes:loading")} lines={4} />
-      )}
-      {attributes.status === "ready" && (
-        <AttributesSection
-          storeId={store.id}
-          attributes={attributes.data}
-          run={run}
-        />
-      )}
     </StoreRoute>
   );
 }

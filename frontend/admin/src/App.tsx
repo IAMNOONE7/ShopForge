@@ -11,11 +11,15 @@ import { StoreLayout } from "./layouts/StoreLayout";
 import { LoginPage } from "./pages/LoginPage";
 import { NewStorePage } from "./pages/NewStorePage";
 import { ProductsPage } from "./pages/ProductsPage";
+import { NewPhysicalProductPage } from "./pages/NewPhysicalProductPage";
+import { PhysicalProductPage } from "./pages/PhysicalProductPage";
+import { StockPage } from "./pages/StockPage";
+import { AttributesIndexPage, AttributeDetailPage, NewAttributePage } from "./pages/AttributePages";
+import { ProductStockPage } from "./pages/ProductStockPage";
 import { ForbiddenPage, NotFoundPage } from "./pages/RouteStatePage";
 import { StoreIndexPage } from "./pages/StoreIndexPage";
 import { StoreOverviewPage } from "./pages/StoreOverviewPage";
 import {
-  StoreAttributesPage,
   StoreCategoriesPage,
   StoreDiscountsPage,
   StoreImportPage,
@@ -28,7 +32,7 @@ import {
   StoreSettingsPage,
 } from "./pages/StorePage";
 import { adminHomePath, safeAdminReturnPath } from "./routing";
-import { canManageStore, SessionContext } from "./session";
+import { canManageCatalog, canManageStore, SessionContext } from "./session";
 
 type SessionState =
   | { status: "checking" }
@@ -154,6 +158,12 @@ function App() {
               <Route element={<Layout />}>
                 <Route index element={<Navigate to="/products" replace />} />
                 <Route path="products" element={<ProductsPage />} />
+                <Route path="products/new" element={
+                  canManageCatalog(session.user.role) ? <NewPhysicalProductPage /> : <ForbiddenPage />
+                } />
+                <Route path="products/:productId" element={<PhysicalProductPage />} />
+                <Route path="stock" element={<StockPage />} />
+                <Route path="stock/:variantId" element={<ProductStockPage />} />
                 <Route path="stores" element={<StoreIndexPage />} />
                 <Route
                   path="stores/new"
@@ -170,7 +180,9 @@ function App() {
                   <Route path="settings" element={<StoreSettingsPage />} />
                   <Route path="products" element={<StoreProductsPage />} />
                   <Route path="categories" element={<StoreCategoriesPage />} />
-                  <Route path="attributes" element={<StoreAttributesPage />} />
+                  <Route path="attributes" element={<AttributesIndexPage />} />
+                  <Route path="attributes/new" element={canManageCatalog(session.user.role) ? <NewAttributePage /> : <ForbiddenPage />} />
+                  <Route path="attributes/:attributeId" element={<AttributeDetailPage />} />
                   <Route path="import" element={<StoreImportPage />} />
                   <Route path="methods" element={<StoreMethodsPage />} />
                   <Route path="discounts" element={<StoreDiscountsPage />} />

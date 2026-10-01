@@ -40,7 +40,7 @@ export function Field({
           {hint}
         </span>
       )}
-      {error !== null && (
+      {error != null && (
         <span id={errorId} className={styles.fieldError}>
           {error}
         </span>

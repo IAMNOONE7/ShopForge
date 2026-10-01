@@ -56,9 +56,9 @@ export function StoreIndexPage() {
                 {store.primaryHostName ?? t("stores:noAddress")} ·{" "}
                 {store.currency}
               </span>
-              {store.status === "draft" && (
-                <span className="badge">{t("common:draft")}</span>
-              )}
+              <span className={`badge store-status store-status-${store.status}`}>
+                {t(`stores:status.${store.status}`)}
+              </span>
             </Link>
           </li>
         ))}
