@@ -30,9 +30,16 @@ public sealed class ShopForgeApiFactory : WebApplicationFactory<Program>, IAsync
     // Real mail still goes to the recording delivery; the key only makes the webhook believable.
     public const string MailgunSigningKey = "test-signing-key";
 
+    // Read once, after the containers are up, and used for every host built afterwards. Asking Testcontainers
+    // again each time a host is built is what put `127.0.0.1:1` — its answer for a container with no published
+    // port — into a connection string in the middle of a run, which failed one test in roughly every third
+    // full suite with a transient "connection refused".
+    private string? _databaseConnectionString;
+    private string? _fileStorageConnectionString;
+
     // The suite's own PostgreSQL. A test that needs a database of its own makes one on this server rather than
     // starting a second container.
-    internal string DatabaseConnectionString => _database.GetConnectionString();
+    internal string DatabaseConnectionString => Started(_databaseConnectionString);
 
     public RecordedEmails Emails { get; } = new();
 
@@ -75,9 +82,16 @@ public sealed class ShopForgeApiFactory : WebApplicationFactory<Program>, IAsync
         return await query(scope.ServiceProvider.GetRequiredService<DbContext>());
     }
 
+    // A host built before the containers are up has nowhere to connect to, and saying so is better than
+    // handing out an address that cannot work.
+    private static string Started(string? connectionString) =>
+        connectionString ?? throw new InvalidOperationException("The suite's containers have not started yet.");
+
     public async ValueTask InitializeAsync()
     {
         await Task.WhenAll(_database.StartAsync(), _fileStorage.StartAsync());
+        _databaseConnectionString = _database.GetConnectionString();
+        _fileStorageConnectionString = _fileStorage.GetConnectionString();
         await Services.MigrateDatabaseAsync();
         await Services.CreateFileStorageContainerAsync();
     }
@@ -85,8 +99,8 @@ public sealed class ShopForgeApiFactory : WebApplicationFactory<Program>, IAsync
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
-        builder.UseSetting("ConnectionStrings:ShopForge", _database.GetConnectionString());
-        builder.UseSetting("ConnectionStrings:FileStorage", _fileStorage.GetConnectionString());
+        builder.UseSetting("ConnectionStrings:ShopForge", Started(_databaseConnectionString));
+        builder.UseSetting("ConnectionStrings:FileStorage", Started(_fileStorageConnectionString));
 
         // The suite is one caller doing in a minute what a crowd would do in a day, so every window is opened
         // wide here; each limit is exercised by a test of its own that closes the one it cares about.
