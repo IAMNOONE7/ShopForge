@@ -28,12 +28,13 @@ public sealed class RetentionTests(ShopForgeApiFactory factory)
 
         var beforeTheSweep = await MessagesForAsync(email);
         await BackdateOutboxAsync(email);
-        var removed = await SweepAsync();
+        await SweepAsync();
         var afterTheSweep = await MessagesForAsync(email);
 
+        // How many rows the sweep took is not this test's business and is not even its own: the sweep is
+        // platform-wide and another test's may have run first. What this one is about is these messages.
         Assert.Equal(HttpStatusCode.Accepted, registered.StatusCode);
         Assert.True(beforeTheSweep > 0);
-        Assert.True(removed > 0);
         Assert.Equal(0, afterTheSweep);
     }
 
@@ -77,11 +78,10 @@ public sealed class RetentionTests(ShopForgeApiFactory factory)
             $"/api/admin/stores/{furniture.Store.StoreId}/unpublish", null, CancellationToken);
         var old = await BackdateAuditEntryAsync(furniture.VariantIds["oak-chair"].ToString(), days: 400);
 
-        var removed = await SweepAsync();
+        await SweepAsync();
         var entries = await furniture.Admin.GetFromJsonAsync<List<AuditView>>("/api/admin/audit?pageSize=100", CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, unpublished.StatusCode);
-        Assert.True(removed > 0);
         Assert.DoesNotContain(entries!, entry => entry.Id == old);
         Assert.Contains(entries!, entry => entry.Action == "store.unpublished");
     }
