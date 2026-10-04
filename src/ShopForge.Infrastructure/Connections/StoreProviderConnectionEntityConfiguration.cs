@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using ShopForge.Shared.Connections;
 using ShopForge.Shared.Security;
 
 namespace ShopForge.Infrastructure.Connections;

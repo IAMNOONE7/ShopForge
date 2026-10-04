@@ -1,4 +1,5 @@
 using ShopForge.Infrastructure.Payments.Comgate;
+using ShopForge.Shared.Connections;
 using ShopForge.Shared.Payments;
 using ShopForge.Shared.Security;
 

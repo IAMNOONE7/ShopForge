@@ -8,6 +8,7 @@ using ShopForge.Orders.Discounts;
 using ShopForge.Orders.Domain;
 using ShopForge.Orders.Persistence;
 using ShopForge.Shared.Catalog;
+using ShopForge.Shared.Connections;
 using ShopForge.Shared.Customers;
 using ShopForge.Shared.Diagnostics;
 using ShopForge.Shared.Http;
@@ -64,8 +65,9 @@ internal static class CheckoutEndpoints
         var parcel = new Parcel(
             cart is null ? null : (await carts.ContentsAsync(cart, cancellationToken)).WeightGrams,
             DestinationCountry: null);
+        var carriers = await UsableProvidersAsync(shippingProviders, connections, cancellationToken);
         var methods = await dbContext.Set<ShippingMethod>()
-            .Where(method => method.IsActive)
+            .Where(method => method.IsActive && carriers.Contains(method.ProviderKey))
             .OrderBy(method => method.Price)
             .ThenBy(method => method.Name)
             .ToListAsync(cancellationToken);
@@ -136,7 +138,7 @@ internal static class CheckoutEndpoints
             .SingleOrDefaultAsync(
                 method => method.Code == request.PaymentMethodCode && method.IsActive && providerKeys.Contains(method.ProviderKey),
                 cancellationToken);
-        var shippingProviderKeys = shippingProviders.Select(provider => provider.Key).ToList();
+        var shippingProviderKeys = await UsableProvidersAsync(shippingProviders, connections, cancellationToken);
         var shipping = await dbContext.Set<ShippingMethod>()
             .SingleOrDefaultAsync(
                 method => method.Code == request.ShippingMethodCode && method.IsActive && shippingProviderKeys.Contains(method.ProviderKey),
@@ -356,10 +358,14 @@ internal static class CheckoutEndpoints
     // A gateway a merchant signed up for is only on offer where that merchant has connected it: the platform's
     // own providers need nothing, and a store that has not finished connecting one is not shown its methods
     // rather than being shown a method that cannot take money (D-138).
-    private static async Task<List<string>> UsableProvidersAsync(
-        IEnumerable<IPaymentProvider> providers,
+    // The same question for a gateway and a carrier, asked once: which of these can this store actually use
+    // today. A provider that needs no connection is always usable; one that does is usable where the store has
+    // finished connecting an account to it (D-138, D-153).
+    private static async Task<List<string>> UsableProvidersAsync<TProvider>(
+        IEnumerable<TProvider> providers,
         IProviderConnections connections,
         CancellationToken cancellationToken)
+        where TProvider : IConnectedProvider
     {
         var all = providers.ToList();
 

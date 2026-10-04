@@ -19,6 +19,7 @@ using ShopForge.Infrastructure.Payments.Comgate;
 using ShopForge.Infrastructure.Persistence;
 using ShopForge.Infrastructure.Secrets;
 using ShopForge.Shared.Auditing;
+using ShopForge.Shared.Connections;
 using ShopForge.Shared.Dns;
 using ShopForge.Shared.Documents;
 using ShopForge.Shared.Email;

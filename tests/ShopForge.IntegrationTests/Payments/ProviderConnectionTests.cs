@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using ShopForge.IntegrationTests.Catalog;
 using ShopForge.IntegrationTests.Orders;
+using ShopForge.Shared.Connections;
 using ShopForge.Shared.Payments;
 using ShopForge.Shared.Security;
 

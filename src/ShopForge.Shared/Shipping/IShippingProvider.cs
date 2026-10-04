@@ -1,11 +1,14 @@
+using ShopForge.Shared.Connections;
+
 namespace ShopForge.Shared.Shipping;
 
 // Shipping methods name the provider that carries them, the way payment methods do (D-061). Stage 10 ships the
 // store's own; a carrier adapter implements the same interface.
-public interface IShippingProvider
+//
+// `NeedsConnection` is true for a carrier a merchant signed up for, and is answered the same way a gateway
+// answers it, because it is the same question (D-138).
+public interface IShippingProvider : IConnectedProvider
 {
-    string Key { get; }
-
     // Where the shopper chooses a point: from a list this provider can produce, or in the carrier's own map.
     // A carrier with thousands of boxes does not hand them over to be listed, and asking it to is the mistake
     // this says out loud rather than leaving to an empty list nobody can explain.

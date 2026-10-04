@@ -1,4 +1,4 @@
-namespace ShopForge.Shared.Payments;
+namespace ShopForge.Shared.Connections;
 
 // A gateway's callback names the merchant account it concerns, because that is the only party the gateway knows
 // about; which storefront sells under that account is ours to answer. This is therefore one of the few questions

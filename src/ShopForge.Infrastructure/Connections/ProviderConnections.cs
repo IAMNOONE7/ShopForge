@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using ShopForge.Shared.Connections;
 using ShopForge.Shared.Payments;
 
 namespace ShopForge.Infrastructure.Connections;

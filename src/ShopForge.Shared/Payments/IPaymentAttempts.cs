@@ -1,3 +1,5 @@
+using ShopForge.Shared.Connections;
+
 namespace ShopForge.Shared.Payments;
 
 // A provider's callback arrives with no store on it: the request is a machine's, not a shopper's. The stores it

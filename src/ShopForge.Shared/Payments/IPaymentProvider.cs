@@ -1,16 +1,14 @@
+using ShopForge.Shared.Connections;
+
 namespace ShopForge.Shared.Payments;
 
 // Payment methods name the provider that handles them: "manual" for methods a store settles itself, "stripe" for
 // hosted checkout. Orders never sees a provider's own types.
-public interface IPaymentProvider
+//
+// `NeedsConnection` is true for a gateway a merchant signed up for, whose methods a store that has connected no
+// account cannot offer (D-138).
+public interface IPaymentProvider : IConnectedProvider
 {
-    string Key { get; }
-
-    // Whether this provider takes money through a merchant account the store itself is connected to. The manual
-    // methods do not, and the platform's own Stripe account is the deployment's (D-059); a gateway a merchant
-    // signed up for does, and its methods are not offered by a store that has not connected one (D-138).
-    bool NeedsConnection => false;
-
     Task<PaymentInstructions> StartAsync(PaymentRequest request, CancellationToken cancellationToken);
 }
 

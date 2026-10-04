@@ -1,4 +1,4 @@
-namespace ShopForge.Shared.Payments;
+namespace ShopForge.Shared.Connections;
 
 // Which merchant account a store takes money through. One company may run several storefronts, each approved for
 // its own connection, and a payment for one must never travel through another's (D-138).

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using ShopForge.Infrastructure.Connections;
+using ShopForge.Shared.Connections;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Payments;
 using ShopForge.Shared.Security;

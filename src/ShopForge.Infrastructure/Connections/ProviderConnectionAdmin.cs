@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Shared.Auditing;
+using ShopForge.Shared.Connections;
 using ShopForge.Shared.Payments;
 using ShopForge.Shared.Security;
 using ShopForge.Shared.Tenancy;
