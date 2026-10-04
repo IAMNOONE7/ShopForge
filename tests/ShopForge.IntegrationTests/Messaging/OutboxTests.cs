@@ -53,7 +53,14 @@ public sealed class OutboxTests(ShopForgeApiFactory factory)
             new { TrackingNumber = "PKG-9" },
             CancellationToken);
         await DeliverEverythingAsync();
-        var subjects = factory.Emails.For(email).Select(message => message.Subject).ToList();
+
+        // The worker shares this host and may still be delivering what this dispatch left behind, so both
+        // letters are waited for rather than read the instant the dispatch returns.
+        var subjects = await factory.EventuallyAsync(
+            () => Task.FromResult(factory.Emails.For(email).Select(message => message.Subject).ToList()),
+            delivered => delivered.Any(subject => subject.Contains("Payment received", StringComparison.Ordinal))
+                && delivered.Any(subject => subject.Contains("on its way", StringComparison.Ordinal)),
+            CancellationToken);
 
         Assert.Equal((HttpStatusCode.OK, HttpStatusCode.OK), (paid.StatusCode, shipped.StatusCode));
         Assert.Contains(subjects, subject => subject.Contains("Payment received", StringComparison.Ordinal));
