@@ -30,6 +30,7 @@ const store: Store = {
   currency: "CZK",
   culture: "en-IE",
   logoUrl: null,
+  providerKeys: [],
   theme: { primaryColor: "#000000", secondaryColor: "#ffffff", borderRadius: 4 },
 };
 

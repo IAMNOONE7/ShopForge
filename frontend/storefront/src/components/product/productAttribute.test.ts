@@ -9,6 +9,7 @@ const store: Store = {
   currency: "EUR",
   culture: "cs-CZ",
   logoUrl: null,
+  providerKeys: [],
   theme: { primaryColor: "#000000", secondaryColor: "#ffffff", borderRadius: 4 },
 };
 

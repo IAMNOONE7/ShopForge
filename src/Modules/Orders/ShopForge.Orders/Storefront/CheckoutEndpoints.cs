@@ -77,7 +77,12 @@ internal static class CheckoutEndpoints
         {
             if (await CarriesAsync(method, shippingProviders, parcel, cancellationToken))
             {
-                shipping.Add(new ShippingMethodResponse(method.Code, method.Name, method.Price, method.RequiresPickupPoint));
+                shipping.Add(new ShippingMethodResponse(
+                    method.Code,
+                    method.Name,
+                    method.Price,
+                    method.RequiresPickupPoint,
+                    Choice(method, shippingProviders)));
             }
         }
 
@@ -146,9 +151,21 @@ internal static class CheckoutEndpoints
         var carrier = shipping is null
             ? null
             : shippingProviders.SingleOrDefault(candidate => candidate.Key == shipping.ProviderKey);
-        var pickupPoint = carrier is not null && shipping!.RequiresPickupPoint && !string.IsNullOrWhiteSpace(request.PickupPointCode)
-            ? await carrier.FindPickupPointAsync(request.PickupPointCode, cancellationToken)
-            : null;
+        var chosenPoint = carrier is not null && shipping!.RequiresPickupPoint && !string.IsNullOrWhiteSpace(request.PickupPointCode)
+            ? await AskAboutPointAsync(carrier, request.PickupPointCode, loggerFactory, cancellationToken)
+            : new PickupPointAnswer(null, Answered: true);
+
+        // A carrier that cannot be reached has not refused the point; it has said nothing. An order placed on
+        // that silence would be one nobody has checked, so the shopper is asked to try again instead (D-160).
+        if (!chosenPoint.Answered)
+        {
+            return TypedResults.Problem(
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                title: "The pickup point could not be checked",
+                detail: "The carrier did not answer. Nothing has been ordered; please try again in a moment.");
+        }
+
+        var pickupPoint = chosenPoint.Point;
 
         if (contents is { Changed: true })
         {
@@ -433,6 +450,33 @@ internal static class CheckoutEndpoints
         return named.Length <= OrderLine.MaxProductNameLength ? named : named[..OrderLine.MaxProductNameLength];
     }
 
+    // The two words the shop knows: ask us for a list, or open the carrier's map.
+    private static string Choice(ShippingMethod method, IEnumerable<IShippingProvider> shippingProviders) =>
+        shippingProviders.SingleOrDefault(candidate => candidate.Key == method.ProviderKey) is { PickupPoints: PickupPointChoice.InTheCarriersMap }
+            ? "carrier-map"
+            : "list";
+
+    // "Is this one of yours" and "are you there at all" are different questions with the same shape, and the
+    // checkout has to tell them apart: null is a refusal, silence is not.
+    private static async Task<PickupPointAnswer> AskAboutPointAsync(
+        IShippingProvider carrier,
+        string code,
+        ILoggerFactory loggerFactory,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return new PickupPointAnswer(await carrier.FindPickupPointAsync(code, cancellationToken), Answered: true);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            loggerFactory.CreateLogger(typeof(CheckoutEndpoints))
+                .LogError(exception, "Asking {Carrier} about a chosen pickup point failed.", carrier.Key);
+
+            return new PickupPointAnswer(null, Answered: false);
+        }
+    }
+
     // Both gates, in the one place that knows about either: what the store said this method takes (D-145), and
     // then the carrier's own answer, which is the only one that can speak for a box in somebody else's network.
     private static async Task<bool> CarriesAsync(
@@ -465,6 +509,9 @@ internal static class CheckoutEndpoints
         && email.Split('@') is [{ Length: > 0 }, { Length: > 2 } domain] && domain.Contains('.');
 }
 
+// What the carrier said about the point the shopper chose, and whether it said anything at all.
+internal sealed record PickupPointAnswer(PickupPoint? Point, bool Answered);
+
 internal sealed record CheckoutRequest(
     string? Email,
     string? Phone,
@@ -490,7 +537,15 @@ internal sealed record CheckoutMethodsResponse(List<PaymentMethodResponse> Payme
 
 internal sealed record PaymentMethodResponse(string Code, string Name);
 
-internal sealed record ShippingMethodResponse(string Code, string Name, decimal Price, bool RequiresPickupPoint);
+// `PickupPointChoice` tells the shop which way to ask: our own list of points, or the carrier's map opened in
+// the shopper's browser. Without it an empty list of points is indistinguishable from a store that configured
+// none (D-158).
+internal sealed record ShippingMethodResponse(
+    string Code,
+    string Name,
+    decimal Price,
+    bool RequiresPickupPoint,
+    string PickupPointChoice);
 
 internal sealed record PickupPointResponse(string Code, string Name, string Line1, string City, string PostalCode, string Country);
 

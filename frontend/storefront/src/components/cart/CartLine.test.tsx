@@ -26,6 +26,7 @@ const store: Store = {
   currency: "EUR",
   culture: "en-IE",
   logoUrl: null,
+  providerKeys: [],
   theme: { primaryColor: "#000000", secondaryColor: "#ffffff", borderRadius: 4 },
 };
 const line: CartLineModel = {

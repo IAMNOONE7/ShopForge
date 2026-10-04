@@ -47,6 +47,7 @@ const store: Store = {
   currency: "EUR",
   culture: "en-IE",
   logoUrl: null,
+  providerKeys: [{ provider: "packeta", key: "widget-key" }],
   theme: {
     primaryColor: "#000000",
     secondaryColor: "#ffffff",
@@ -82,12 +83,21 @@ const methods: CheckoutMethods = {
       name: "Courier",
       price: 10,
       requiresPickupPoint: false,
+      pickupPointChoice: "list",
     },
     {
       code: "pickup",
       name: "Pickup",
       price: 4,
       requiresPickupPoint: true,
+      pickupPointChoice: "list",
+    },
+    {
+      code: "z-box",
+      name: "Z-BOX",
+      price: 6,
+      requiresPickupPoint: true,
+      pickupPointChoice: "carrier-map",
     },
   ],
 };
@@ -381,6 +391,52 @@ describe("CheckoutPage", () => {
       name: "Telephone number",
     });
     expect(phone).toHaveProperty("value", "+420 777 888 999");
+  });
+
+  // The map is the carrier's, so the page has no list to check the answer against: it only insists that one
+  // was given, and the server asks the carrier whether it is real.
+  it("will not order a map method until a point has been chosen", async () => {
+    const user = userEvent.setup();
+    mocks.getCheckoutMethods.mockResolvedValue(methods);
+    renderCheckout();
+
+    await screen.findByRole("button", { name: "Place order" });
+    await fillGuestAddress(user);
+    await user.click(screen.getByRole("radio", { name: /Z-BOX/ }));
+    await user.click(screen.getByRole("button", { name: "Place order" }));
+
+    await screen.findByRole("button", { name: "Choose an available pickup point." });
+    expect(mocks.placeOrder).not.toHaveBeenCalled();
+  });
+
+  it("sends the point the carrier's map gave back, and nothing else about it", async () => {
+    const user = userEvent.setup();
+    mocks.getCheckoutMethods.mockResolvedValue(methods);
+    mocks.placeOrder.mockResolvedValue({ number: "2026-00001", token: "t", paymentInstructions: null, redirectUrl: null });
+    (window as { Packeta?: unknown }).Packeta = {
+      Widget: {
+        pick: (_key: string, callback: (point: { id: string; name: string }) => void) =>
+          callback({ id: "4321", name: "Z-BOX Hlavní nádraží" }),
+      },
+    };
+
+    try {
+      renderCheckout();
+
+      await screen.findByRole("button", { name: "Place order" });
+      await fillGuestAddress(user);
+      await user.click(screen.getByRole("radio", { name: /Z-BOX/ }));
+      await user.click(screen.getByRole("button", { name: "Choose a pickup point" }));
+      await user.click(screen.getByRole("button", { name: "Place order" }));
+
+      await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(1));
+      expect(mocks.placeOrder.mock.calls[0][0]).toMatchObject({
+        shippingMethodCode: "z-box",
+        pickupPointCode: "4321",
+      });
+    } finally {
+      delete (window as { Packeta?: unknown }).Packeta;
+    }
   });
 
   it("focuses a linked validation summary and blocks an incomplete order", async () => {

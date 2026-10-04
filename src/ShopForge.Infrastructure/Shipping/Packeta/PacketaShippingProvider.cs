@@ -18,6 +18,12 @@ internal sealed class PacketaShippingProvider(
 {
     public const string ProviderKey = "packeta";
 
+    // One country and one kind of place, which is the whole of what this stage offers. The widget is opened
+    // with the same pair in the browser, and the validator is asked with it again here so that a point which
+    // is real but is a shop counter in Slovakia cannot be passed off as a Czech Z-BOX.
+    public const string Country = "cz";
+    public const string Vendor = "zbox";
+
     public string Key => ProviderKey;
 
     public bool NeedsConnection => true;
@@ -38,7 +44,7 @@ internal sealed class PacketaShippingProvider(
             return null;
         }
 
-        return await packeta.FindPointAsync(account, code, cancellationToken) is { } point
+        return await packeta.ValidatePointAsync(account, new PacketaPointChoice(code, Country, Vendor), cancellationToken) is { } point
             ? new PickupPoint(point.Id, point.Name, point.Street, point.City, point.Zip, point.Country)
             : null;
     }

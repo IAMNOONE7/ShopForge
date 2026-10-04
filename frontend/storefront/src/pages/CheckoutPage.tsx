@@ -24,6 +24,7 @@ import {
   PaymentMethodSelection,
   ShippingMethodSelection,
 } from "../components/checkout/MethodSelection";
+import { CarrierMapPicker, type ChosenPoint } from "../components/checkout/CarrierMapPicker";
 import { PickupPointSelect } from "../components/checkout/PickupPointSelect";
 import { Message } from "../components/Message";
 import { InlineMessage } from "../components/ui/InlineMessage";
@@ -191,6 +192,7 @@ function CheckoutForm({
   const [shippingCode, setShippingCode] = useState("");
   const [paymentCode, setPaymentCode] = useState("");
   const [pickupPointCode, setPickupPointCode] = useState("");
+  const [mapPoint, setMapPoint] = useState<ChosenPoint | null>(null);
   const [showValidation, setShowValidation] = useState(false);
   const [failed, setFailed] = useState<unknown | null>(null);
   const [refreshFailure, setRefreshFailure] = useState<unknown | null>(null);
@@ -208,14 +210,22 @@ function CheckoutForm({
   const chosenPaymentCode =
     methods.paymentMethods.find((method) => method.code === paymentCode)?.code ??
     methods.paymentMethods[0].code;
+  const fromOurList =
+    chosenShipping.requiresPickupPoint &&
+    chosenShipping.pickupPointChoice === "list";
+  const inTheCarriersMap =
+    chosenShipping.requiresPickupPoint &&
+    chosenShipping.pickupPointChoice === "carrier-map";
   const pickupPoints = useRequest(
-    "checkout-pickup:" +
-      (chosenShipping.requiresPickupPoint ? chosenShipping.code : "none"),
+    "checkout-pickup:" + (fromOurList ? chosenShipping.code : "none"),
     (signal) =>
-      chosenShipping.requiresPickupPoint
-        ? getPickupPoints(chosenShipping.code, signal)
-        : Promise.resolve([]),
+      fromOurList ? getPickupPoints(chosenShipping.code, signal) : Promise.resolve([]),
   );
+  const chosenPointCode = inTheCarriersMap ? (mapPoint?.id ?? "") : pickupPointCode;
+  // The carrier issued this key to be used in this page; without it its map cannot be opened at all.
+  const carrierKey =
+    store.providerKeys.find((published) => published.provider === "packeta")?.key ??
+    null;
 
   const issues = checkoutIssues({
     email: customer?.email ?? email,
@@ -226,8 +236,10 @@ function CheckoutForm({
     shippingMethodCode: chosenShippingCode,
     paymentMethodCode: chosenPaymentCode,
     pickupRequired: chosenShipping.requiresPickupPoint,
-    pickupPointCode,
-    pickupPoints,
+    // A point chosen in the carrier's map is not in any list of ours, so there is nothing to check it
+    // against here; the server asks the carrier, which is the only one that can answer.
+    pickupPointCode: chosenPointCode,
+    pickupPoints: inTheCarriersMap ? null : pickupPoints,
     messages: {
       email: t("checkout:emailIssue"),
       phone: t("checkout:phoneIssue"),
@@ -250,6 +262,7 @@ function CheckoutForm({
   function chooseShipping(code: string) {
     setShippingCode(code);
     setPickupPointCode("");
+    setMapPoint(null);
     setShowValidation(false);
   }
 
@@ -257,7 +270,7 @@ function CheckoutForm({
     setRefreshingCart(true);
     setRefreshFailure(null);
     methodsRequest.reload();
-    if (chosenShipping.requiresPickupPoint) pickupPoints.reload();
+    if (fromOurList) pickupPoints.reload();
     try {
       applyCart(await getCart());
     } catch (error) {
@@ -310,7 +323,7 @@ function CheckoutForm({
         paymentMethodCode: chosenPaymentCode,
         shippingMethodCode: chosenShippingCode,
         pickupPointCode: chosenShipping.requiresPickupPoint
-          ? pickupPointCode
+          ? chosenPointCode
           : null,
       });
       const confirmationPath = rememberCheckout(order);
@@ -502,13 +515,24 @@ function CheckoutForm({
           onChange={chooseShipping}
         />
 
-        {chosenShipping.requiresPickupPoint && (
+        {fromOurList && (
           <PickupPointSelect
             points={pickupPoints}
             value={pickupPointCode}
             disabled={pending}
             showError={showValidation}
             onChange={setPickupPointCode}
+          />
+        )}
+
+        {inTheCarriersMap && (
+          <CarrierMapPicker
+            apiKey={carrierKey}
+            language={store.culture.split("-")[0]}
+            chosen={mapPoint}
+            disabled={pending}
+            showError={showValidation}
+            onChoose={setMapPoint}
           />
         )}
 
@@ -584,7 +608,7 @@ function checkoutIssues({
       postalCode: string;
       country: string;
     }[]
-  >;
+  > | null;
   messages: {
     email: string;
     phone: string;
@@ -621,10 +645,14 @@ function checkoutIssues({
       message: messages.paymentMethod,
     });
   if (pickupRequired) {
-    const selectedExists =
-      pickupPoints.status === "ready" &&
-      pickupPoints.data.some((point) => point.code === pickupPointCode);
-    if (!selectedExists)
+    // A point chosen in the carrier's map cannot be looked up in a list we do not have, so here it only has
+    // to have been chosen; whether it is a real one is the carrier's answer, asked for on the server.
+    const chosen =
+      pickupPoints === null
+        ? pickupPointCode.length > 0
+        : pickupPoints.status === "ready" &&
+          pickupPoints.data.some((point) => point.code === pickupPointCode);
+    if (!chosen)
       issues.push({
         target: "pickupPointCode",
         message: messages.pickup,

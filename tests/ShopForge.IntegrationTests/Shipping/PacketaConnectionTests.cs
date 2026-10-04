@@ -2,12 +2,14 @@ using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ShopForge.Infrastructure.Shipping.Packeta;
 using ShopForge.IntegrationTests.Catalog;
 using ShopForge.IntegrationTests.Orders;
 using ShopForge.IntegrationTests.Payments;
+using ShopForge.Orders.Domain;
 using ShopForge.Shared.Security;
 
 namespace ShopForge.IntegrationTests.Shipping;
@@ -114,8 +116,86 @@ public sealed class PacketaConnectionTests : IDisposable
         using var placed = await world.Shopper.PostAsync("/api/storefront/checkout", PacketaCheckout());
 
         Assert.Equal(HttpStatusCode.Created, placed.StatusCode);
-        Assert.Equal("99", _packeta.LastPointId);
+        Assert.Equal("99", _packeta.LastChoice?.PointId);
         Assert.Equal(ApiPassword, _packeta.LastAccount?.ApiPassword);
+    }
+
+    // Nothing about the point comes from the browser except which one it is: the validator is asked, and what
+    // it says is what the order keeps.
+    [Fact]
+    public async Task A_point_the_validator_accepts_is_kept_as_the_validator_describes_it()
+    {
+        var world = await PacketaStoreAsync(connect: true);
+
+        using var placed = await world.Shopper.PostAsync("/api/storefront/checkout", PacketaCheckout());
+        var order = await world.Shopper.ReadAsync<PlacedOrder>(placed, HttpStatusCode.Created);
+        var stored = await StoredAsync(world, order.Number);
+
+        Assert.Equal(("cz", "zbox"), (_packeta.LastChoice?.Country, _packeta.LastChoice?.Vendor));
+        Assert.Equal("99", stored.PickupPointCode);
+        Assert.Equal("Z-BOX Hlavní nádraží", stored.PickupPointName);
+        Assert.Equal("Wilsonova 8", stored.PickupPointAddress!.Line1);
+    }
+
+    [Fact]
+    public async Task A_point_the_validator_refuses_stops_the_order()
+    {
+        var world = await PacketaStoreAsync(connect: true);
+        _packeta.Says = null;
+
+        using var refused = await world.Shopper.PostAsync("/api/storefront/checkout", PacketaCheckout());
+
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+    }
+
+    // Silence is not refusal. An order placed on it would be one nobody had checked, so the shopper is asked
+    // to come back rather than told their point is wrong.
+    [Fact]
+    public async Task A_validator_that_does_not_answer_stops_the_order_and_says_so()
+    {
+        var world = await PacketaStoreAsync(connect: true);
+        _packeta.Unreachable = true;
+
+        using var refused = await world.Shopper.PostAsync("/api/storefront/checkout", PacketaCheckout());
+        var problem = await refused.Content.ReadFromJsonAsync<ProblemView>(CancellationToken);
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, refused.StatusCode);
+        Assert.Equal("The pickup point could not be checked", problem!.Title);
+    }
+
+    [Fact]
+    public async Task A_method_whose_points_live_in_a_map_says_so_rather_than_offering_an_empty_list()
+    {
+        var world = await PacketaStoreAsync(connect: true);
+
+        var methods = await world.Shopper.GetJsonAsync<MethodsView>("/api/storefront/checkout/methods");
+
+        Assert.Equal("carrier-map", methods.ShippingMethods.Single(method => method.Code == "z-box").PickupPointChoice);
+        Assert.Equal("list", methods.ShippingMethods.Single(method => method.Code == "courier").PickupPointChoice);
+    }
+
+    // The shipping price is the store's row, whatever a browser puts in the body.
+    [Fact]
+    public async Task A_price_sent_by_the_browser_is_ignored()
+    {
+        var world = await PacketaStoreAsync(connect: true);
+
+        using var placed = await world.Shopper.PostAsync("/api/storefront/checkout", new
+        {
+            Email = "buyer@example.test",
+            Phone = "+420 123 456 789",
+            BillingAddress = new { FullName = "Alex Buyer", Line1 = "1 Main Street", Line2 = (string?)null, City = "Dublin", PostalCode = "D01 AB12", Country = "IE" },
+            ShippingAddress = (object?)null,
+            PaymentMethodCode = "bank-transfer",
+            ShippingMethodCode = "z-box",
+            PickupPointCode = "99",
+            ShippingPrice = 0m,
+            Price = 0m,
+        });
+        var order = await world.Shopper.ReadAsync<PlacedOrder>(placed, HttpStatusCode.Created);
+        var stored = await StoredAsync(world, order.Number);
+
+        Assert.Equal(59m, stored.ShippingPrice);
     }
 
     // Packeta puts the API password in the path of the URL, so the URL is itself a credential and the ordinary
@@ -136,7 +216,8 @@ public sealed class PacketaConnectionTests : IDisposable
         var world = await PacketaStoreAsync(connect: true, host: withTheRealClient);
         using var attempted = await world.Shopper.PostAsync("/api/storefront/checkout", PacketaCheckout());
 
-        Assert.Equal(HttpStatusCode.BadRequest, attempted.StatusCode);
+        // The stub answers nothing useful, so the carrier counts as unreachable and the order is refused.
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, attempted.StatusCode);
         Assert.NotEmpty(logs.Messages);
         Assert.DoesNotContain(logs.Messages, message => message.Contains(ApiPassword, StringComparison.Ordinal));
     }
@@ -202,32 +283,44 @@ public sealed class PacketaConnectionTests : IDisposable
         return new PacketaWorld(furniture, admin, shopper);
     }
 
+    private Task<Order> StoredAsync(PacketaWorld world, string number) =>
+        _factory.QueryAsync(world.Furniture.Store, dbContext => dbContext.Set<Order>()
+            .AsNoTracking()
+            .SingleAsync(order => order.Number == number, CancellationToken));
+
     private sealed record PacketaWorld(FurnitureStore Furniture, HttpClient Admin, StorefrontApi Shopper);
+
+    private sealed record ProblemView(string Title);
 
     private sealed record MethodsView(List<ShippingMethodView> ShippingMethods);
 
-    private sealed record ShippingMethodView(string Code, string Name, decimal Price, bool RequiresPickupPoint);
+    private sealed record ShippingMethodView(string Code, string Name, decimal Price, bool RequiresPickupPoint, string PickupPointChoice);
 
     private sealed record StoreView(string Name, List<ProviderKeyView> ProviderKeys);
 
     private sealed record ProviderKeyView(string Provider, string Key);
 }
 
-// Records what would have gone to Packeta, so every later slice is testable without the network.
+// Records what would have gone to Packeta, so every later slice is testable without the network. It can also
+// refuse a point, and fail to answer at all, which are two different things the checkout must tell apart.
 internal sealed class RecordingPacketa : IPacketaClient
 {
     public PacketaAccount? LastAccount { get; private set; }
 
-    public string? LastPointId { get; private set; }
+    public PacketaPointChoice? LastChoice { get; private set; }
 
     public PacketaPoint? Says { get; set; } = new("99", "Z-BOX Hlavní nádraží", "Wilsonova 8", "Praha", "110 00", "CZ");
 
-    public Task<PacketaPoint?> FindPointAsync(PacketaAccount account, string pointId, CancellationToken cancellationToken)
+    public bool Unreachable { get; set; }
+
+    public Task<PacketaPoint?> ValidatePointAsync(PacketaAccount account, PacketaPointChoice choice, CancellationToken cancellationToken)
     {
         LastAccount = account;
-        LastPointId = pointId;
+        LastChoice = choice;
 
-        return Task.FromResult(Says);
+        return Unreachable
+            ? Task.FromException<PacketaPoint?>(new HttpRequestException("Packeta is unreachable."))
+            : Task.FromResult(Says);
     }
 }
 

@@ -38,6 +38,8 @@ export type ShippingMethod = {
   name: string;
   price: number;
   requiresPickupPoint: boolean;
+  // Where the shopper chooses the point: a list this shop can produce, or the carrier's own map.
+  pickupPointChoice: "list" | "carrier-map";
 };
 
 export type PickupPoint = {

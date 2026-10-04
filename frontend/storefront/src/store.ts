@@ -13,6 +13,8 @@ export type Store = {
   culture: string;
   logoUrl: string | null;
   theme: StoreTheme;
+  // Keys a provider issued to be used in this page: a carrier's map will not open without one.
+  providerKeys: { provider: string; key: string }[];
 };
 
 export function fetchStore(signal: AbortSignal) {

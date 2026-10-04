@@ -24,6 +24,7 @@ const store: Store = {
   currency: "CZK",
   culture: "cs-CZ",
   logoUrl: null,
+  providerKeys: [],
   theme: { primaryColor: "#123456", secondaryColor: "#ffffff", borderRadius: 4 },
 };
 const emptyCart: Cart = {

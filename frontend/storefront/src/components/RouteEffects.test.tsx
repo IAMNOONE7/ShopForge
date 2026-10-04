@@ -13,6 +13,7 @@ const store: Store = {
   currency: "EUR",
   culture: "en-IE",
   logoUrl: null,
+  providerKeys: [],
   theme: {
     primaryColor: "#123456",
     secondaryColor: "#eeeeee",
