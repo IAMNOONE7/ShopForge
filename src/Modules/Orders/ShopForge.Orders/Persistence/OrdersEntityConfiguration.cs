@@ -36,11 +36,13 @@ internal sealed class OrderEntityConfiguration : IEntityTypeConfiguration<Order>
 
         builder.Property(order => order.Number).HasMaxLength(20);
         builder.Property(order => order.Email).HasMaxLength(254);
+        builder.Property(order => order.Phone).HasMaxLength(30);
         builder.Property(order => order.Currency).HasMaxLength(3).IsFixedLength();
         builder.Property(order => order.Status).HasConversion<string>().HasMaxLength(20);
         builder.Property(order => order.PaymentMethodCode).HasMaxLength(50);
         builder.Property(order => order.PaymentMethodName).HasMaxLength(100);
         builder.Property(order => order.PaymentProviderKey).HasMaxLength(50);
+        builder.Property(order => order.ShippingProviderKey).HasMaxLength(50);
         builder.Property(order => order.ShippingMethodCode).HasMaxLength(50);
         builder.Property(order => order.ShippingMethodName).HasMaxLength(100);
         builder.Property(order => order.ShippingPrice).HasPrecision(12, 2);

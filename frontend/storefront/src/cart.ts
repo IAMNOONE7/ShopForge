@@ -65,6 +65,7 @@ export type Address = {
 
 export type CheckoutRequest = {
   email: string;
+  phone: string;
   billingAddress: Address;
   shippingAddress: Address | null;
   paymentMethodCode: string;

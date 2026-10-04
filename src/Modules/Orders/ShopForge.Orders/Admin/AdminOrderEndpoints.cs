@@ -175,9 +175,9 @@ internal static class AdminOrderEndpoints
             return TypedResults.NotFound();
         }
 
-        var method = await dbContext.Set<ShippingMethod>()
-            .SingleOrDefaultAsync(candidate => candidate.Code == order.ShippingMethodCode, cancellationToken);
-        var provider = method is null ? null : shippingProviders.SingleOrDefault(candidate => candidate.Key == method.ProviderKey);
+        // The order's own carrier, not the method's today: renaming or deactivating a method after the fact must
+        // not change how an order already placed is shipped, and looking it up again did exactly that (D-081).
+        var provider = shippingProviders.SingleOrDefault(candidate => candidate.Key == order.ShippingProviderKey);
 
         if (provider is null)
         {
@@ -301,6 +301,7 @@ internal sealed record AdminOrderDetailResponse(
     DateTimeOffset PlacedAt,
     string Status,
     string Email,
+    string? Phone,
     string Currency,
     string PaymentMethod,
     string ShippingMethod,
@@ -321,6 +322,7 @@ internal sealed record AdminOrderDetailResponse(
         order.PlacedAt,
         order.Status.ToString(),
         order.Email,
+        order.Phone,
         order.Currency,
         order.PaymentMethodName,
         order.ShippingMethodName,

@@ -178,6 +178,7 @@ function CheckoutForm({
   const store = useStore();
   const navigate = useNavigate();
   const [email, setEmail] = useState(customer?.email ?? "");
+  const [phone, setPhone] = useState(customer?.phone ?? "");
   const [billing, setBilling] = useState<AddressDraft>(() => ({
     ...emptyAddress(),
     fullName: customer
@@ -218,6 +219,7 @@ function CheckoutForm({
 
   const issues = checkoutIssues({
     email: customer?.email ?? email,
+    phone,
     billing,
     shipElsewhere,
     shippingAddress,
@@ -228,6 +230,7 @@ function CheckoutForm({
     pickupPoints,
     messages: {
       email: t("checkout:emailIssue"),
+      phone: t("checkout:phoneIssue"),
       billing: t("checkout:billingIssue"),
       shipping: t("checkout:shippingIssue"),
       shippingMethod: t("checkout:shippingMethodIssue"),
@@ -301,6 +304,7 @@ function CheckoutForm({
     try {
       const order = await placeOrder({
         email: (customer?.email ?? email).trim(),
+        phone: phone.trim(),
         billingAddress: toAddress(billing),
         shippingAddress: shipElsewhere ? toAddress(shippingAddress) : null,
         paymentMethodCode: chosenPaymentCode,
@@ -428,6 +432,22 @@ function CheckoutForm({
               onChange={(event) => setEmail(event.target.value)}
             />
           </label>
+          <label>
+            <span>{t("checkout:phone")}</span>
+            <input
+              name="phone"
+              type="tel"
+              autoComplete="tel"
+              value={phone}
+              required
+              aria-invalid={(showValidation && !isPhone(phone)) || undefined}
+              aria-describedby="checkout-phone-hint"
+              onChange={(event) => setPhone(event.target.value)}
+            />
+          </label>
+          <p className="hint" id="checkout-phone-hint">
+            {t("checkout:phoneHint")}
+          </p>
           {customer === null && (
             <p className="hint">
               <Trans
@@ -535,6 +555,7 @@ function CheckoutForm({
 
 function checkoutIssues({
   email,
+  phone,
   billing,
   shipElsewhere,
   shippingAddress,
@@ -546,6 +567,7 @@ function checkoutIssues({
   messages,
 }: {
   email: string;
+  phone: string;
   billing: AddressDraft;
   shipElsewhere: boolean;
   shippingAddress: AddressDraft;
@@ -565,6 +587,7 @@ function checkoutIssues({
   >;
   messages: {
     email: string;
+    phone: string;
     billing: string;
     shipping: string;
     shippingMethod: string;
@@ -575,6 +598,8 @@ function checkoutIssues({
   const issues: CheckoutIssue[] = [];
   if (!isEmail(email))
     issues.push({ target: "email", message: messages.email });
+  if (!isPhone(phone))
+    issues.push({ target: "phone", message: messages.phone });
   if (!isAddressComplete(billing))
     issues.push({
       target: "billing.fullName",
@@ -606,6 +631,16 @@ function checkoutIssues({
       });
   }
   return issues;
+}
+
+// The same shape the server accepts: enough to tell a telephone number from a line of prose, and no more.
+function isPhone(value: string) {
+  const digits = value.replace(/\D/g, "").length;
+  return (
+    value.trim().length <= 30 &&
+    digits >= 6 &&
+    /^[\d\s+\-()/]*$/.test(value.trim())
+  );
 }
 
 function isEmail(value: string) {

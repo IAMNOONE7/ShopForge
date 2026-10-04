@@ -42,6 +42,7 @@ public sealed class PaymentRequestTests : IDisposable
 
         Assert.Equal(order.Number, _gateway.Last!.OrderNumber);
         Assert.Equal("Alex Buyer", _gateway.Last.CustomerName);
+        Assert.Equal("+420 123 456 789", _gateway.Last.CustomerPhone);
         Assert.Equal("IE", _gateway.Last.CountryCode);
         Assert.Equal("en", _gateway.Last.Language);
         Assert.Equal(204.90m, _gateway.Last.Amount);

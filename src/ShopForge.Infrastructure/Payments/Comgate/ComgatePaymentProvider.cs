@@ -32,6 +32,7 @@ internal sealed class ComgatePaymentProvider(
                 request.OrderNumber,
                 request.CustomerEmail,
                 string.IsNullOrWhiteSpace(request.CustomerName) ? null : request.CustomerName,
+                string.IsNullOrWhiteSpace(request.CustomerPhone) ? null : request.CustomerPhone,
                 request.CountryCode,
                 request.Language,
                 // A parcel locker is a collection point as far as a gateway is concerned; it does not make the

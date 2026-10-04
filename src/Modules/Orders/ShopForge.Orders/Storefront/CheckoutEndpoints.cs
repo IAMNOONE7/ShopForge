@@ -150,6 +150,7 @@ internal static class CheckoutEndpoints
 
         var errors = new RequestErrors()
             .Check(IsEmail(email), "email", "A valid e-mail address is required.")
+            .Check(IsPhone(request.Phone), "phone", "A telephone number is required so the carrier can reach the recipient.")
             .Check(request.BillingAddress?.IsComplete == true, "billingAddress", "The billing address is incomplete.")
             .Check(request.ShippingAddress is null || request.ShippingAddress.IsComplete, "shippingAddress", "The shipping address is incomplete.")
             .Check(payment is not null, "paymentMethodCode", "Choose one of the store's payment methods.")
@@ -218,13 +219,15 @@ internal static class CheckoutEndpoints
             number,
             settings.Currency,
             email!,
+            request.Phone!,
             request.BillingAddress!.ToAddress(),
             (request.ShippingAddress ?? request.BillingAddress).ToAddress(),
             new ChosenMethods(
                 payment!.Code,
                 payment.Name,
                 payment.ProviderKey,
-                shipping!.Code,
+                shipping!.ProviderKey,
+                shipping.Code,
                 shipping.Name,
                 shipping.Price,
                 shipping.VatRate),
@@ -278,6 +281,7 @@ internal static class CheckoutEndpoints
                 CancelUrl: $"{storefront}/cart",
                 order.ReservationExpiresAt,
                 order.BillingAddress.FullName,
+                order.Phone!,
                 order.BillingAddress.Country,
                 Language(settings.Culture),
                 // Which it is, is the order's own fact: a point was chosen or it was not. The method only says
@@ -384,6 +388,12 @@ internal static class CheckoutEndpoints
         return named.Length <= OrderLine.MaxProductNameLength ? named : named[..OrderLine.MaxProductNameLength];
     }
 
+    // Enough to tell a telephone number from a line of prose, and no more: what a carrier will accept is the
+    // carrier's rule to state, not ours to guess at (D-144).
+    private static bool IsPhone(string? phone) =>
+        phone is { Length: <= 30 } && phone.Count(char.IsAsciiDigit) >= 6
+        && phone.All(character => char.IsAsciiDigit(character) || character is ' ' or '+' or '-' or '(' or ')' or '/');
+
     private static bool IsEmail(string? email) =>
         email is { Length: <= 254 } && email.Count(character => character == '@') == 1 && email.Trim().Length == email.Length
         && email.Split('@') is [{ Length: > 0 }, { Length: > 2 } domain] && domain.Contains('.');
@@ -391,6 +401,7 @@ internal static class CheckoutEndpoints
 
 internal sealed record CheckoutRequest(
     string? Email,
+    string? Phone,
     AddressRequest? BillingAddress,
     AddressRequest? ShippingAddress,
     string? PaymentMethodCode,

@@ -16,6 +16,7 @@ internal sealed class Order : IStoreOwned
         string number,
         string currency,
         string email,
+        string phone,
         Address billing,
         Address shipping,
         ChosenMethods methods,
@@ -31,11 +32,13 @@ internal sealed class Order : IStoreOwned
         AccessToken = Guid.CreateVersion7();
         Currency = currency;
         Email = email.Trim().ToLowerInvariant();
+        Phone = phone.Trim();
         BillingAddress = billing;
         ShippingAddress = shipping;
         PaymentMethodCode = methods.PaymentCode;
         PaymentMethodName = methods.PaymentName;
         PaymentProviderKey = methods.PaymentProviderKey;
+        ShippingProviderKey = methods.ShippingProviderKey;
         ShippingMethodCode = methods.ShippingCode;
         ShippingMethodName = methods.ShippingName;
         ShippingPrice = methods.ShippingPrice;
@@ -73,6 +76,10 @@ internal sealed class Order : IStoreOwned
 
     public string Email { get; private set; } = null!;
 
+    // Every order carries one, whatever the method: a rule that depended on the carrier would break the day a
+    // merchant switched method (D-144). Null only on orders placed before it was asked for.
+    public string? Phone { get; private set; }
+
     public string Currency { get; private set; } = null!;
 
     public Address BillingAddress { get; private set; } = null!;
@@ -85,6 +92,10 @@ internal sealed class Order : IStoreOwned
 
     // Which provider took the money, so a refund knows who to ask (D-081).
     public string PaymentProviderKey { get; private set; } = null!;
+
+    // Which carrier the order was placed with, read from the method at the time rather than looked up again:
+    // a method that is renamed or deactivated afterwards must not change how an old order ships (D-081).
+    public string? ShippingProviderKey { get; private set; }
 
     public string ShippingMethodCode { get; private set; } = null!;
 
@@ -293,6 +304,7 @@ internal sealed record ChosenMethods(
     string PaymentCode,
     string PaymentName,
     string PaymentProviderKey,
+    string ShippingProviderKey,
     string ShippingCode,
     string ShippingName,
     decimal ShippingPrice,

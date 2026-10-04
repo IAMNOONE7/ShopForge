@@ -95,7 +95,7 @@ const customer: Customer = {
   email: "ada@example.com",
   firstName: "Ada",
   lastName: "Lovelace",
-  phone: null,
+  phone: "+420 777 888 999",
 };
 
 beforeAll(async () => {
@@ -163,6 +163,7 @@ function renderCheckout(options: { authenticated?: boolean } = {}) {
 
 async function fillGuestAddress(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByRole("textbox", { name: "E-mail" }), "guest@example.com");
+  await user.type(screen.getByRole("textbox", { name: "Telephone number" }), "+420123456789");
   await user.type(screen.getByRole("textbox", { name: "Full name" }), "Guest Buyer");
   await user.type(screen.getByRole("textbox", { name: "Street and number" }), "1 Main Street");
   await user.type(screen.getByRole("textbox", { name: "City" }), "Dublin");
@@ -349,6 +350,37 @@ describe("CheckoutPage", () => {
       screen.getByRole("checkbox", { name: "Ship to a different address" }),
     );
     expect(screen.getAllByRole("textbox", { name: "Full name" })).toHaveLength(2);
+  });
+
+  // The carrier needs somebody to ring, so the order cannot be placed without one (D-144). A shopper who has
+  // already told the shop their number should not have to type it again.
+  it("requires a telephone number and offers the one on the account", async () => {
+    const user = userEvent.setup();
+    mocks.getCheckoutMethods.mockResolvedValue(methods);
+    renderCheckout();
+
+    const phone = await screen.findByRole("textbox", {
+      name: "Telephone number",
+    });
+    await fillGuestAddress(user);
+    await user.clear(phone);
+    await user.type(phone, "call the office");
+    await user.click(screen.getByRole("button", { name: "Place order" }));
+
+    await screen.findByRole("button", {
+      name: "Enter a telephone number the carrier can call.",
+    });
+    expect(mocks.placeOrder).not.toHaveBeenCalled();
+  });
+
+  it("carries the telephone number of a signed-in shopper", async () => {
+    mocks.getCheckoutMethods.mockResolvedValue(methods);
+    renderCheckout({ authenticated: true });
+
+    const phone = await screen.findByRole("textbox", {
+      name: "Telephone number",
+    });
+    expect(phone).toHaveProperty("value", "+420 777 888 999");
   });
 
   it("focuses a linked validation summary and blocks an incomplete order", async () => {

@@ -104,9 +104,11 @@ internal static class Checkout
         string? email = "buyer@example.test",
         string? payment = "bank-transfer",
         string? shipping = "courier",
-        string? pickupPoint = null) => new
+        string? pickupPoint = null,
+        string? phone = "+420 123 456 789") => new
         {
             Email = email,
+            Phone = phone,
             BillingAddress = new { FullName = "Alex Buyer", Line1 = "1 Main Street", Line2 = (string?)null, City = "Dublin", PostalCode = "D01 AB12", Country = "IE" },
             ShippingAddress = (object?)null,
             PaymentMethodCode = payment,

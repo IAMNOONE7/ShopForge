@@ -30,6 +30,7 @@ internal sealed record ComgatePayment(
     string ReferenceId,
     string Email,
     string? FullName,
+    string? Phone,
     string Country,
     string Language,
     string Delivery,
@@ -62,7 +63,7 @@ internal sealed class ComgateHttpPayments(HttpClient client) : IComgatePayments
                 payment.Currency,
                 payment.Label,
                 payment.ReferenceId,
-                new Payer(payment.Email, payment.FullName),
+                new Payer(payment.Email, payment.FullName, payment.Phone),
                 payment.Country,
                 payment.Language,
                 payment.Delivery,
@@ -136,7 +137,8 @@ internal sealed class ComgateHttpPayments(HttpClient client) : IComgatePayments
 
     private sealed record Payer(
         [property: JsonPropertyName("email")] string Email,
-        [property: JsonPropertyName("name")] string? Name);
+        [property: JsonPropertyName("name")] string? Name,
+        [property: JsonPropertyName("phone")] string? Phone);
 
     private sealed record CreateResponse(
         [property: JsonPropertyName("transId")] string? TransactionId,

@@ -30,6 +30,7 @@ public sealed record PaymentRequest(
     string CancelUrl,
     DateTimeOffset ExpiresAt,
     string CustomerName = "",
+    string CustomerPhone = "",
     string CountryCode = "",
     string Language = "",
     PaymentDelivery Delivery = PaymentDelivery.ToAddress);
