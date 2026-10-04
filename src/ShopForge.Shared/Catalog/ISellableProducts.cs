@@ -26,4 +26,6 @@ public sealed record SellableProduct(
 
 // Position is the order the merchant put the forms in — small, medium, large rather than large, medium,
 // small — so anything listing them keeps that order instead of inventing an alphabetical one.
-public sealed record SellableVariant(Guid Id, string Sku, IReadOnlyList<string> OptionValues, int Position);
+// The weight is what a carrier is told the parcel comes to, and null means the merchant has not said. A method
+// with a weight limit cannot carry what it cannot weigh (D-145).
+public sealed record SellableVariant(Guid Id, string Sku, IReadOnlyList<string> OptionValues, int Position, int? WeightGrams);

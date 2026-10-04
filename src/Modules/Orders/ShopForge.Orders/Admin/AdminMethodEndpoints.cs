@@ -111,7 +111,9 @@ internal static class AdminMethodEndpoints
                 method.Price,
                 method.VatRate,
                 method.IsActive,
-                method.RequiresPickupPoint))
+                method.RequiresPickupPoint,
+                method.MaxWeightGrams,
+                method.Countries))
             .ToListAsync(cancellationToken));
 
     private static async Task<Results<Created<AdminShippingMethodResponse>, ValidationProblem, ProblemHttpResult>> CreateShippingMethodAsync(
@@ -144,7 +146,9 @@ internal static class AdminMethodEndpoints
             providerKey,
             request.Price,
             request.VatRate,
-            request.RequiresPickupPoint);
+            request.RequiresPickupPoint,
+            request.MaxWeightGrams,
+            request.Countries);
         dbContext.Add(method);
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -173,14 +177,30 @@ internal static class AdminMethodEndpoints
             return TypedResults.NotFound();
         }
 
-        method.Update(request.Name!, request.Price, request.VatRate, request.IsActive, request.RequiresPickupPoint);
+        method.Update(
+            request.Name!,
+            request.Price,
+            request.VatRate,
+            request.IsActive,
+            request.RequiresPickupPoint,
+            request.MaxWeightGrams,
+            request.Countries);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return TypedResults.Ok(ShippingResponse(method));
     }
 
     private static AdminShippingMethodResponse ShippingResponse(ShippingMethod method) =>
-        new(method.Code, method.Name, method.ProviderKey, method.Price, method.VatRate, method.IsActive, method.RequiresPickupPoint);
+        new(
+            method.Code,
+            method.Name,
+            method.ProviderKey,
+            method.Price,
+            method.VatRate,
+            method.IsActive,
+            method.RequiresPickupPoint,
+            method.MaxWeightGrams,
+            method.Countries);
 
     private static RequestErrors ValidateName(string? name) =>
         new RequestErrors().Check(!string.IsNullOrWhiteSpace(name) && name.Trim().Length <= 100, "name", "Name is required (up to 100 characters).");
@@ -188,7 +208,12 @@ internal static class AdminMethodEndpoints
     private static RequestErrors ValidateShipping(ShippingMethodRequest request) =>
         ValidateName(request.Name)
             .Check(request.Price >= 0 && decimal.Round(request.Price, 2) == request.Price, "price", "Price must be zero or more, with at most two decimals.")
-            .Check(request.VatRate is >= 0 and <= 100, "vatRate", "The VAT rate must be between 0 and 100.");
+            .Check(request.VatRate is >= 0 and <= 100, "vatRate", "The VAT rate must be between 0 and 100.")
+            .Check(request.MaxWeightGrams is null or > 0, "maxWeightGrams", "A weight limit must be more than nothing.")
+            .Check(
+                request.Countries is null || request.Countries.All(country => country.Trim().Length == 2),
+                "countries",
+                "Each country must be a two-letter code.");
 
     private static ProblemHttpResult Conflict(string kind) =>
         TypedResults.Problem(statusCode: StatusCodes.Status409Conflict, title: $"The store already has a {kind} method with this name");
@@ -196,7 +221,15 @@ internal static class AdminMethodEndpoints
 
 internal sealed record PaymentMethodRequest(string? Name, string? ProviderKey, bool IsActive);
 
-internal sealed record ShippingMethodRequest(string? Name, string? ProviderKey, decimal Price, decimal VatRate, bool IsActive, bool RequiresPickupPoint);
+internal sealed record ShippingMethodRequest(
+    string? Name,
+    string? ProviderKey,
+    decimal Price,
+    decimal VatRate,
+    bool IsActive,
+    bool RequiresPickupPoint,
+    int? MaxWeightGrams = null,
+    IReadOnlyList<string>? Countries = null);
 
 internal sealed record AdminPaymentMethodResponse(string Code, string Name, string ProviderKey, bool IsActive);
 
@@ -207,7 +240,9 @@ internal sealed record AdminShippingMethodResponse(
     decimal Price,
     decimal VatRate,
     bool IsActive,
-    bool RequiresPickupPoint);
+    bool RequiresPickupPoint,
+    int? MaxWeightGrams,
+    IReadOnlyList<string> Countries);
 
 internal static class Codes
 {

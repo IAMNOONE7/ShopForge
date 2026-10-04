@@ -35,9 +35,17 @@ internal static class CheckoutEndpoints
     }
 
     private static async Task<Ok<CheckoutMethodsResponse>> GetMethodsAsync(
+        HttpContext httpContext,
         DbContext dbContext,
+        IStoreContext storeContext,
+        ISellableProducts products,
+        IStockLedger stock,
+        ICurrentStoreSettings storeSettings,
         IEnumerable<IPaymentProvider> paymentProviders,
         IProviderConnections connections,
+        IEnumerable<IShippingProvider> shippingProviders,
+        DiscountCodes discounts,
+        TimeProvider clock,
         CancellationToken cancellationToken)
     {
         // A method whose provider is not configured on this deployment is not on offer, however active the store left it.
@@ -48,12 +56,28 @@ internal static class CheckoutEndpoints
             .Select(method => new PaymentMethodResponse(method.Code, method.Name))
             .ToListAsync(cancellationToken);
 
-        var shipping = await dbContext.Set<ShippingMethod>()
+        // Where the parcel is going is not known yet — the shopper is still being shown their choices — so a
+        // method limited by destination stays on offer here and is refused at checkout if it turns out not to
+        // serve the address (D-145).
+        var carts = new Carts(httpContext, dbContext, storeContext, products, stock, discounts, clock);
+        var cart = await carts.FindAsync(cancellationToken);
+        var parcel = new Parcel(
+            cart is null ? null : (await carts.ContentsAsync(cart, cancellationToken)).WeightGrams,
+            DestinationCountry: null);
+        var methods = await dbContext.Set<ShippingMethod>()
             .Where(method => method.IsActive)
             .OrderBy(method => method.Price)
             .ThenBy(method => method.Name)
-            .Select(method => new ShippingMethodResponse(method.Code, method.Name, method.Price, method.RequiresPickupPoint))
             .ToListAsync(cancellationToken);
+        var shipping = new List<ShippingMethodResponse>();
+
+        foreach (var method in methods)
+        {
+            if (await CarriesAsync(method, shippingProviders, parcel, cancellationToken))
+            {
+                shipping.Add(new ShippingMethodResponse(method.Code, method.Name, method.Price, method.RequiresPickupPoint));
+            }
+        }
 
         return TypedResults.Ok(new CheckoutMethodsResponse(payment, shipping));
     }
@@ -73,7 +97,11 @@ internal static class CheckoutEndpoints
             return TypedResults.NotFound();
         }
 
-        var points = await provider.FindPickupPointsAsync(cancellationToken);
+        // A carrier whose points are chosen in its own map has no list to give, and asking for one would be
+        // either a call for nothing or every box in the country. The shopper picks in the widget instead.
+        var points = provider.PickupPoints == PickupPointChoice.InTheCarriersMap
+            ? []
+            : await provider.FindPickupPointsAsync(cancellationToken);
 
         return TypedResults.Ok(points
             .Select(point => new PickupPointResponse(point.Code, point.Name, point.Line1, point.City, point.PostalCode, point.Country))
@@ -113,9 +141,11 @@ internal static class CheckoutEndpoints
             .SingleOrDefaultAsync(
                 method => method.Code == request.ShippingMethodCode && method.IsActive && shippingProviderKeys.Contains(method.ProviderKey),
                 cancellationToken);
-        var pickupPoint = shipping?.RequiresPickupPoint == true && !string.IsNullOrWhiteSpace(request.PickupPointCode)
-            ? await dbContext.Set<StorePickupPoint>()
-                .SingleOrDefaultAsync(point => point.Code == request.PickupPointCode && point.IsActive, cancellationToken)
+        var carrier = shipping is null
+            ? null
+            : shippingProviders.SingleOrDefault(candidate => candidate.Key == shipping.ProviderKey);
+        var pickupPoint = carrier is not null && shipping!.RequiresPickupPoint && !string.IsNullOrWhiteSpace(request.PickupPointCode)
+            ? await carrier.FindPickupPointAsync(request.PickupPointCode, cancellationToken)
             : null;
 
         if (contents is { Changed: true })
@@ -156,6 +186,10 @@ internal static class CheckoutEndpoints
             .Check(payment is not null, "paymentMethodCode", "Choose one of the store's payment methods.")
             .Check(shipping is not null, "shippingMethodCode", "Choose one of the store's shipping methods.")
             .Check(shipping?.RequiresPickupPoint != true || pickupPoint is not null, "pickupPointCode", "Choose one of the pickup points.")
+            .Check(
+                shipping is null || await CarriesAsync(shipping, shippingProviders, Parcel(contents, request), cancellationToken),
+                "shippingMethodCode",
+                "That delivery method cannot carry this order.")
             .Check(contents is { Items.Count: > 0 }, "cart", "The cart is empty.");
 
         if (errors.Any)
@@ -231,7 +265,12 @@ internal static class CheckoutEndpoints
                 shipping.Name,
                 shipping.Price,
                 shipping.VatRate),
-            pickupPoint is null ? null : new ChosenPickupPoint(pickupPoint.Code, pickupPoint.Name, pickupPoint.Address),
+            pickupPoint is null
+                ? null
+                : new ChosenPickupPoint(
+                    pickupPoint.Code,
+                    pickupPoint.Name,
+                    new Address(pickupPoint.Name, pickupPoint.Line1, null, pickupPoint.City, pickupPoint.PostalCode, pickupPoint.Country)),
             placedAt,
             reservationExpiresAt);
 
@@ -387,6 +426,27 @@ internal static class CheckoutEndpoints
 
         return named.Length <= OrderLine.MaxProductNameLength ? named : named[..OrderLine.MaxProductNameLength];
     }
+
+    // Both gates, in the one place that knows about either: what the store said this method takes (D-145), and
+    // then the carrier's own answer, which is the only one that can speak for a box in somebody else's network.
+    private static async Task<bool> CarriesAsync(
+        ShippingMethod method,
+        IEnumerable<IShippingProvider> shippingProviders,
+        Parcel parcel,
+        CancellationToken cancellationToken)
+    {
+        if (!method.Carries(parcel))
+        {
+            return false;
+        }
+
+        var provider = shippingProviders.SingleOrDefault(candidate => candidate.Key == method.ProviderKey);
+
+        return provider is not null && await provider.CanCarryAsync(parcel, cancellationToken);
+    }
+
+    private static Parcel Parcel(CartContents? contents, CheckoutRequest request) =>
+        new(contents?.WeightGrams, (request.ShippingAddress ?? request.BillingAddress)?.Country);
 
     // Enough to tell a telephone number from a line of prose, and no more: what a carrier will accept is the
     // carrier's rule to state, not ours to guess at (D-144).

@@ -24,7 +24,7 @@ internal sealed class SellableProductLookup(DbContext dbContext) : ISellableProd
                     product.OptionNames,
                     Variants = product.Variants
                         .OrderBy(variant => variant.Position)
-                        .Select(variant => new SellableVariant(variant.Id, variant.Sku, variant.OptionValues, variant.Position))
+                        .Select(variant => new SellableVariant(variant.Id, variant.Sku, variant.OptionValues, variant.Position, variant.WeightGrams))
                         .ToList(),
                 })
             .ToListAsync(cancellationToken);

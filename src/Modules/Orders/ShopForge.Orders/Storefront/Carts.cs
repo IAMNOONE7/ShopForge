@@ -169,5 +169,11 @@ internal sealed record CartContents(
 
     public int Count => Items.Sum(item => item.Quantity);
 
+    // Null the moment anything in the cart has no weight recorded: a parcel is only as weighable as its
+    // least-known item, and a method with a limit is not allowed to assume the rest (D-145).
+    public int? WeightGrams => Items.Any(item => item.Variant.WeightGrams is null)
+        ? null
+        : Items.Sum(item => item.Variant.WeightGrams!.Value * item.Quantity);
+
     public decimal LineDiscount(int index) => Discount?.Result.LineDiscounts[index] ?? 0m;
 }
