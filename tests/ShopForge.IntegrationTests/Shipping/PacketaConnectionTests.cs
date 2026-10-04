@@ -1,0 +1,283 @@
+using System.Net;
+using System.Net.Http.Json;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using ShopForge.Infrastructure.Shipping.Packeta;
+using ShopForge.IntegrationTests.Catalog;
+using ShopForge.IntegrationTests.Orders;
+using ShopForge.IntegrationTests.Payments;
+using ShopForge.Shared.Security;
+
+namespace ShopForge.IntegrationTests.Shipping;
+
+// Packeta is registered whatever the deployment holds, and means nothing until a store connects an account.
+// Two credentials: one the browser is given on purpose, one that must never leave the server.
+public sealed class PacketaConnectionTests : IDisposable
+{
+    private const string WidgetKey = "widget-key-abc123";
+    private const string ApiPassword = "the-api-password-nobody-may-see";
+
+    private readonly ShopForgeApiFactory _factory;
+    private readonly RecordingPacketa _packeta = new();
+    private readonly WebApplicationFactory<Program> _withPacketa;
+
+    public PacketaConnectionTests(ShopForgeApiFactory factory)
+    {
+        _factory = factory;
+        _withPacketa = factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        {
+            services.AddSingleton<IPacketaClient>(_packeta);
+            services.AddSingleton<ISecretStore>(new InMemorySecrets());
+        }));
+    }
+
+    private static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
+
+    public void Dispose() => _withPacketa.Dispose();
+
+    [Fact]
+    public async Task A_store_that_has_connected_no_account_is_not_offered_the_carrier()
+    {
+        var world = await PacketaStoreAsync(connect: false);
+
+        var methods = await world.Shopper.GetJsonAsync<MethodsView>("/api/storefront/checkout/methods");
+        using var refused = await world.Shopper.PostAsync("/api/storefront/checkout", PacketaCheckout());
+
+        Assert.DoesNotContain("z-box", methods.ShippingMethods.Select(method => method.Code));
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+    }
+
+    // A connection without its credential is not a connection (D-153): the method stays off the shelf until
+    // somebody has set the password, exactly as a payment gateway's does.
+    [Fact]
+    public async Task A_connection_with_no_password_behind_it_offers_nothing()
+    {
+        var world = await PacketaStoreAsync(connect: true, withPassword: false);
+
+        var methods = await world.Shopper.GetJsonAsync<MethodsView>("/api/storefront/checkout/methods");
+
+        Assert.DoesNotContain("z-box", methods.ShippingMethods.Select(method => method.Code));
+    }
+
+    [Fact]
+    public async Task A_connected_store_offers_the_carrier()
+    {
+        var world = await PacketaStoreAsync(connect: true);
+
+        var methods = await world.Shopper.GetJsonAsync<MethodsView>("/api/storefront/checkout/methods");
+
+        Assert.Contains("z-box", methods.ShippingMethods.Select(method => method.Code));
+    }
+
+    // The widget cannot open without it, so it is published on purpose — and it is the only half that is.
+    [Fact]
+    public async Task The_browser_is_given_the_widget_key()
+    {
+        var world = await PacketaStoreAsync(connect: true);
+
+        var store = await world.Shopper.GetJsonAsync<StoreView>("/api/storefront/store");
+        var published = store.ProviderKeys.SingleOrDefault(key => key.Provider == PacketaShippingProvider.ProviderKey);
+
+        Assert.Equal(WidgetKey, published?.Key);
+    }
+
+    // Worth asserting rather than assuming: every answer either side of the shop gives about this store, read
+    // as the text that goes over the wire, with the password looked for in all of them.
+    [Fact]
+    public async Task The_api_password_is_in_no_answer_the_shop_or_the_admin_gives()
+    {
+        var world = await PacketaStoreAsync(connect: true);
+        var storeId = world.Furniture.Store.StoreId;
+
+        var answers = new List<string>
+        {
+            await world.Shopper.GetStringAsync("/api/storefront/store"),
+            await world.Shopper.GetStringAsync("/api/storefront/checkout/methods"),
+            await world.Shopper.GetStringAsync("/api/storefront/checkout/pickup-points/z-box"),
+            await world.Admin.GetStringAsync($"/api/admin/stores/{storeId}/provider-connections", CancellationToken),
+            await world.Admin.GetStringAsync($"/api/admin/stores/{storeId}/shipping-methods", CancellationToken),
+        };
+
+        Assert.All(answers, answer => Assert.DoesNotContain(ApiPassword, answer, StringComparison.Ordinal));
+        Assert.Contains(answers, answer => answer.Contains(WidgetKey, StringComparison.Ordinal));
+    }
+
+    // Only the carrier knows its own boxes, and it is asked with the password the store kept — never with
+    // anything the browser sent.
+    [Fact]
+    public async Task The_carrier_is_asked_about_the_point_with_the_stores_own_password()
+    {
+        var world = await PacketaStoreAsync(connect: true);
+
+        using var placed = await world.Shopper.PostAsync("/api/storefront/checkout", PacketaCheckout());
+
+        Assert.Equal(HttpStatusCode.Created, placed.StatusCode);
+        Assert.Equal("99", _packeta.LastPointId);
+        Assert.Equal(ApiPassword, _packeta.LastAccount?.ApiPassword);
+    }
+
+    // Packeta puts the API password in the path of the URL, so the URL is itself a credential and the ordinary
+    // HTTP request logging published it the first time this ran against the real client. The recording fake
+    // cannot catch that, so this one drives the real client over a stubbed socket and reads the log.
+    [Fact]
+    public async Task The_api_password_is_in_no_log_either()
+    {
+        var logs = new RecordingLogs();
+        using var withTheRealClient = _factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        {
+            services.AddSingleton<ISecretStore>(new InMemorySecrets());
+            services.AddSingleton<ILoggerProvider>(logs);
+            services.AddHttpClient<IPacketaClient, PacketaHttpClient>()
+                .ConfigurePrimaryHttpMessageHandler(() => new SilentHandler());
+        }));
+
+        var world = await PacketaStoreAsync(connect: true, host: withTheRealClient);
+        using var attempted = await world.Shopper.PostAsync("/api/storefront/checkout", PacketaCheckout());
+
+        Assert.Equal(HttpStatusCode.BadRequest, attempted.StatusCode);
+        Assert.NotEmpty(logs.Messages);
+        Assert.DoesNotContain(logs.Messages, message => message.Contains(ApiPassword, StringComparison.Ordinal));
+    }
+
+    private static object PacketaCheckout() => new
+    {
+        Email = "buyer@example.test",
+        Phone = "+420 123 456 789",
+        BillingAddress = new { FullName = "Alex Buyer", Line1 = "1 Main Street", Line2 = (string?)null, City = "Dublin", PostalCode = "D01 AB12", Country = "IE" },
+        ShippingAddress = (object?)null,
+        PaymentMethodCode = "bank-transfer",
+        ShippingMethodCode = "z-box",
+        PickupPointCode = "99",
+    };
+
+    private async Task<PacketaWorld> PacketaStoreAsync(
+        bool connect,
+        bool withPassword = true,
+        WebApplicationFactory<Program>? host = null)
+    {
+        var app = host ?? _withPacketa;
+        var furniture = await FurnitureStore.CreateAsync(_factory);
+        var admin = await TestUsers.LoginAsync(app, await TestUsers.CreateAsync(_factory.Services, furniture.Store.TenantId));
+        var storeId = furniture.Store.StoreId;
+
+        if (connect)
+        {
+            using var saved = await admin.PutAsJsonAsync(
+                $"/api/admin/stores/{storeId}/provider-connections/{PacketaShippingProvider.ProviderKey}",
+                new { MerchantId = "sender-identification", Environment = "Test", IsActive = true, PublishableKey = WidgetKey },
+                CancellationToken);
+            Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+
+            if (withPassword)
+            {
+                using var kept = await admin.PutAsJsonAsync(
+                    $"/api/admin/stores/{storeId}/provider-connections/{PacketaShippingProvider.ProviderKey}/secret",
+                    new { Secret = ApiPassword },
+                    CancellationToken);
+                Assert.Equal(HttpStatusCode.NoContent, kept.StatusCode);
+            }
+        }
+
+        using var method = await admin.PostAsJsonAsync(
+            $"/api/admin/stores/{storeId}/shipping-methods",
+            new
+            {
+                Name = "Z-BOX",
+                ProviderKey = PacketaShippingProvider.ProviderKey,
+                Price = 59m,
+                VatRate = 21m,
+                IsActive = true,
+                RequiresPickupPoint = true,
+            },
+            CancellationToken);
+        Assert.Equal(HttpStatusCode.Created, method.StatusCode);
+
+        var shopper = new StorefrontApi(app, furniture.Store);
+        using var added = await shopper.PostAsync(
+            "/api/storefront/cart/items", new { StoreProductId = furniture.Products["oak-chair"], Quantity = 1 });
+        Assert.Equal(HttpStatusCode.OK, added.StatusCode);
+
+        return new PacketaWorld(furniture, admin, shopper);
+    }
+
+    private sealed record PacketaWorld(FurnitureStore Furniture, HttpClient Admin, StorefrontApi Shopper);
+
+    private sealed record MethodsView(List<ShippingMethodView> ShippingMethods);
+
+    private sealed record ShippingMethodView(string Code, string Name, decimal Price, bool RequiresPickupPoint);
+
+    private sealed record StoreView(string Name, List<ProviderKeyView> ProviderKeys);
+
+    private sealed record ProviderKeyView(string Provider, string Key);
+}
+
+// Records what would have gone to Packeta, so every later slice is testable without the network.
+internal sealed class RecordingPacketa : IPacketaClient
+{
+    public PacketaAccount? LastAccount { get; private set; }
+
+    public string? LastPointId { get; private set; }
+
+    public PacketaPoint? Says { get; set; } = new("99", "Z-BOX Hlavní nádraží", "Wilsonova 8", "Praha", "110 00", "CZ");
+
+    public Task<PacketaPoint?> FindPointAsync(PacketaAccount account, string pointId, CancellationToken cancellationToken)
+    {
+        LastAccount = account;
+        LastPointId = pointId;
+
+        return Task.FromResult(Says);
+    }
+}
+
+// Answers every call without a network, so the real Packeta client can be exercised for what it logs.
+internal sealed class SilentHandler : HttpMessageHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+        Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+}
+
+// Everything the host logged, as the text that would have reached an operator's console.
+internal sealed class RecordingLogs : ILoggerProvider
+{
+    private readonly List<string> _messages = [];
+
+    public IReadOnlyList<string> Messages
+    {
+        get
+        {
+            lock (_messages)
+            {
+                return [.. _messages];
+            }
+        }
+    }
+
+    public ILogger CreateLogger(string categoryName) => new Recorder(_messages);
+
+    public void Dispose()
+    {
+    }
+
+    private sealed class Recorder(List<string> messages) : ILogger
+    {
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            lock (messages)
+            {
+                messages.Add(formatter(state, exception));
+            }
+        }
+    }
+}

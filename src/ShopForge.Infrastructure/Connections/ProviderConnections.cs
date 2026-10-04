@@ -20,7 +20,8 @@ internal sealed class ProviderConnections(DbContext dbContext) : IProviderConnec
                 connection.Provider,
                 connection.MerchantId,
                 connection.Environment,
-                connection.SecretName))
+                connection.SecretName,
+                connection.PublishableKey))
             .SingleOrDefaultAsync(cancellationToken);
     }
 
@@ -29,5 +30,13 @@ internal sealed class ProviderConnections(DbContext dbContext) : IProviderConnec
             .AsNoTracking()
             .Where(connection => connection.IsActive && connection.SecretName != null)
             .Select(connection => connection.Provider)
+            .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<PublishedProviderKey>> PublishedKeysAsync(CancellationToken cancellationToken) =>
+        await dbContext.Set<StoreProviderConnection>()
+            .AsNoTracking()
+            .Where(connection => connection.IsActive && connection.PublishableKey != null)
+            .OrderBy(connection => connection.Provider)
+            .Select(connection => new PublishedProviderKey(connection.Provider, connection.PublishableKey!))
             .ToListAsync(cancellationToken);
 }

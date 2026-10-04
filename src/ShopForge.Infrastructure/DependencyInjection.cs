@@ -18,6 +18,7 @@ using ShopForge.Infrastructure.Payments;
 using ShopForge.Infrastructure.Payments.Comgate;
 using ShopForge.Infrastructure.Persistence;
 using ShopForge.Infrastructure.Secrets;
+using ShopForge.Infrastructure.Shipping.Packeta;
 using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Connections;
 using ShopForge.Shared.Dns;
@@ -29,6 +30,7 @@ using ShopForge.Shared.Maintenance;
 using ShopForge.Shared.Messaging;
 using ShopForge.Shared.Payments;
 using ShopForge.Shared.Security;
+using ShopForge.Shared.Shipping;
 
 namespace ShopForge.Infrastructure;
 
@@ -81,6 +83,7 @@ public static class DependencyInjection
 
         AddSecretStore(services, configuration);
         AddComgate(services, configuration);
+        AddPacketa(services, configuration);
         AddEmailDelivery(services, configuration);
 
         var stripe = configuration.GetSection(StripeOptions.Section).Get<StripeOptions>() ?? new StripeOptions();
@@ -112,6 +115,21 @@ public static class DependencyInjection
         services.AddHttpClient<IComgatePayments, ComgateHttpPayments>(client => client.BaseAddress = new Uri(baseAddress));
         services.AddScoped<IPaymentProvider, ComgatePaymentProvider>();
         services.AddScoped<IPaymentNotifications, ComgateNotifications>();
+    }
+
+    // The same arrangement as Comgate's, for the same reason: the account belongs to the store, so the carrier
+    // is always registered and a store that has connected none is simply not offered its methods (D-138, D-155).
+    private static void AddPacketa(IServiceCollection services, IConfiguration configuration)
+    {
+        var baseAddress = configuration["Shipping:Packeta:BaseAddress"] ?? "https://www.zasilkovna.cz/api/";
+
+        // Packeta takes the API password in the path of the URL, and the default HTTP logging writes every
+        // request URI at Information. That put the password in the log the first time this ran (D-139 forbids
+        // exactly that), so this client does no request logging at all. Anything added back here must redact
+        // the path, not the headers.
+        services.AddHttpClient<IPacketaClient, PacketaHttpClient>(client => client.BaseAddress = new Uri(baseAddress))
+            .RemoveAllLoggers();
+        services.AddScoped<IShippingProvider, PacketaShippingProvider>();
     }
 
     private static void AddSecretStore(IServiceCollection services, IConfiguration configuration)

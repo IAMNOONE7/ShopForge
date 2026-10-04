@@ -13,6 +13,7 @@ internal sealed class StoreProviderConnectionEntityConfiguration : IEntityTypeCo
 
         builder.Property(connection => connection.Provider).HasMaxLength(50);
         builder.Property(connection => connection.MerchantId).HasMaxLength(StoreProviderConnection.MaxMerchantIdLength);
+        builder.Property(connection => connection.PublishableKey).HasMaxLength(StoreProviderConnection.MaxPublishableKeyLength);
         builder.Property(connection => connection.SecretName).HasMaxLength(SecretNames.MaxLength);
         builder.Property(connection => connection.Environment).HasConversion<string>().HasMaxLength(10);
 

@@ -12,9 +12,22 @@ public interface IProviderConnections
     Task<ProviderConnection?> FindAsync(string provider, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<string>> ConnectedAsync(CancellationToken cancellationToken);
+
+    // What a browser may be told: the keys a provider expects the shopper's own page to send it, and nothing
+    // else. A credential cannot leak through this because the answer has nowhere to put one.
+    Task<IReadOnlyList<PublishedProviderKey>> PublishedKeysAsync(CancellationToken cancellationToken);
 }
 
-public sealed record ProviderConnection(string Provider, string MerchantId, ProviderEnvironment Environment, string? SecretName)
+// A provider's name and the key its widget or script is given in the browser. Public by design: the provider
+// issued it knowing it would be read by anyone who views the page.
+public sealed record PublishedProviderKey(string Provider, string Key);
+
+public sealed record ProviderConnection(
+    string Provider,
+    string MerchantId,
+    ProviderEnvironment Environment,
+    string? SecretName,
+    string? PublishableKey = null)
 {
     // A connection with nowhere to read its credentials from cannot be used, and saying so here keeps every
     // caller from having to remember it.

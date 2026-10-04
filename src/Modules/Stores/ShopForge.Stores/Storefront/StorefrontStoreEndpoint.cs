@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using ShopForge.Shared.Connections;
 using ShopForge.Shared.Tenancy;
 using ShopForge.Stores.Domain;
 
@@ -16,6 +17,7 @@ internal static class StorefrontStoreEndpoint
     private static async Task<Results<Ok<StorefrontStoreResponse>, NotFound>> GetStoreAsync(
         DbContext dbContext,
         IStoreContext storeContext,
+        IProviderConnections connections,
         CancellationToken cancellationToken)
     {
         var store = await dbContext.Set<Store>()
@@ -34,7 +36,11 @@ internal static class StorefrontStoreEndpoint
             store.Culture,
             store.LogoPath is null ? null : "/api/storefront/store/logo",
             store.ReturnWindowDays,
-            new StorefrontThemeResponse(store.Theme.PrimaryColor, store.Theme.SecondaryColor, store.Theme.BorderRadius)));
+            new StorefrontThemeResponse(store.Theme.PrimaryColor, store.Theme.SecondaryColor, store.Theme.BorderRadius),
+            // The keys a provider issued to be used in the shopper's own browser — a carrier's map widget needs
+            // one before it will open. Only these; a credential has no way into this response.
+            [.. (await connections.PublishedKeysAsync(cancellationToken))
+                .Select(published => new StorefrontProviderKeyResponse(published.Provider, published.Key))]));
     }
 }
 
@@ -45,6 +51,9 @@ internal sealed record StorefrontStoreResponse(
     string Culture,
     string? LogoUrl,
     int ReturnWindowDays,
-    StorefrontThemeResponse Theme);
+    StorefrontThemeResponse Theme,
+    IReadOnlyList<StorefrontProviderKeyResponse> ProviderKeys);
+
+internal sealed record StorefrontProviderKeyResponse(string Provider, string Key);
 
 internal sealed record StorefrontThemeResponse(string PrimaryColor, string SecondaryColor, int BorderRadius);

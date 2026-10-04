@@ -10,19 +10,26 @@ namespace ShopForge.Infrastructure.Connections;
 internal sealed class StoreProviderConnection : IStoreOwned
 {
     public const int MaxMerchantIdLength = 100;
+    public const int MaxPublishableKeyLength = 200;
 
     private StoreProviderConnection()
     {
     }
 
-    public StoreProviderConnection(Guid storeId, string provider, string merchantId, ProviderEnvironment environment, DateTimeOffset createdAt)
+    public StoreProviderConnection(
+        Guid storeId,
+        string provider,
+        string merchantId,
+        ProviderEnvironment environment,
+        DateTimeOffset createdAt,
+        string? publishableKey = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(provider);
 
         Id = Guid.CreateVersion7();
         StoreId = storeId;
         Provider = provider.Trim().ToLowerInvariant();
-        Update(merchantId, environment, isActive: true, createdAt);
+        Update(merchantId, environment, isActive: true, createdAt, publishableKey);
     }
 
     public Guid Id { get; private set; }
@@ -39,17 +46,23 @@ internal sealed class StoreProviderConnection : IStoreOwned
     // why a connection can exist and still not be usable.
     public string? SecretName { get; private set; }
 
+    // The half of a provider's credentials that is meant to be seen: a key the shopper's own page sends to the
+    // provider, like a carrier's map widget or a gateway's browser script. It is kept beside the secret's name
+    // and never confused with it — this one is published on purpose, that one can never come out at all.
+    public string? PublishableKey { get; private set; }
+
     public bool IsActive { get; private set; }
 
     public DateTimeOffset ChangedAt { get; private set; }
 
-    public void Update(string merchantId, ProviderEnvironment environment, bool isActive, DateTimeOffset at)
+    public void Update(string merchantId, ProviderEnvironment environment, bool isActive, DateTimeOffset at, string? publishableKey = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(merchantId);
 
         MerchantId = merchantId.Trim();
         Environment = environment;
         IsActive = isActive;
+        PublishableKey = string.IsNullOrWhiteSpace(publishableKey) ? null : publishableKey.Trim();
         ChangedAt = at;
     }
 

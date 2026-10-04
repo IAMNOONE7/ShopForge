@@ -79,6 +79,9 @@ public sealed class ComgatePaymentProviderTests
 
         public Task<IReadOnlyList<string>> ConnectedAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<string>>(connection is null ? [] : [connection.Provider]);
+
+        public Task<IReadOnlyList<PublishedProviderKey>> PublishedKeysAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<PublishedProviderKey>>([]);
     }
 
     private sealed class OneSecret(string? secret) : ISecretStore

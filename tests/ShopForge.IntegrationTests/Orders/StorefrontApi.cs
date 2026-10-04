@@ -49,6 +49,14 @@ internal sealed class StorefrontApi(WebApplicationFactory<Program> factory, Test
         return (await response.Content.ReadFromJsonAsync<T>(TestContext.Current.CancellationToken))!;
     }
 
+    // The answer as the browser would receive it, for the rare assertion about what is not in it.
+    public async Task<string> GetStringAsync(string path)
+    {
+        using var response = await GetAsync(path);
+
+        return await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+    }
+
     public async Task<T> GetJsonAsync<T>(string path)
     {
         using var response = await GetAsync(path);

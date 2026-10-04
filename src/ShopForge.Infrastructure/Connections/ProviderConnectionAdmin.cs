@@ -27,6 +27,7 @@ public sealed class ProviderConnectionAdmin(
                 connection.Environment,
                 connection.IsActive,
                 connection.SecretName != null,
+                connection.PublishableKey,
                 connection.ChangedAt))
             .ToListAsync(cancellationToken);
 
@@ -35,6 +36,7 @@ public sealed class ProviderConnectionAdmin(
         string merchantId,
         ProviderEnvironment environment,
         bool isActive,
+        string? publishableKey,
         CancellationToken cancellationToken)
     {
         var now = clock.GetUtcNow();
@@ -42,12 +44,12 @@ public sealed class ProviderConnectionAdmin(
 
         if (connection is null)
         {
-            connection = new StoreProviderConnection(storeContext.StoreId!.Value, provider, merchantId, environment, now);
+            connection = new StoreProviderConnection(storeContext.StoreId!.Value, provider, merchantId, environment, now, publishableKey);
             dbContext.Add(connection);
         }
         else
         {
-            connection.Update(merchantId, environment, isActive, now);
+            connection.Update(merchantId, environment, isActive, now, publishableKey);
         }
 
         audit.Record("provider.connected", provider, new { MerchantId = merchantId, Environment = environment.ToString(), IsActive = isActive });
@@ -115,6 +117,7 @@ public sealed class ProviderConnectionAdmin(
         connection.Environment,
         connection.IsActive,
         connection.SecretName is not null,
+        connection.PublishableKey,
         connection.ChangedAt);
 }
 
@@ -125,6 +128,7 @@ public sealed record ConnectedProvider(
     ProviderEnvironment Environment,
     bool IsActive,
     bool HasSecret,
+    string? PublishableKey,
     DateTimeOffset ChangedAt);
 
 public enum SecretOutcome

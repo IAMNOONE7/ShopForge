@@ -4,6 +4,7 @@ using ShopForge.Shared.Connections;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Payments;
 using ShopForge.Shared.Security;
+using ShopForge.Shared.Shipping;
 
 namespace ShopForge.Api.Connections;
 
@@ -33,16 +34,23 @@ internal static class ProviderConnectionEndpoints
         ConnectionRequest request,
         ProviderConnectionAdmin connections,
         IEnumerable<IPaymentProvider> payments,
+        IEnumerable<IShippingProvider> carriers,
         CancellationToken cancellationToken)
     {
+        // A carrier a merchant signed up for connects exactly as a gateway does, so both kinds answer here.
         var key = provider.Trim().ToLowerInvariant();
+        var known = payments.Cast<IConnectedProvider>().Concat(carriers);
         var errors = new RequestErrors()
-            .Check(payments.Any(candidate => candidate.Key == key), "provider", "This deployment has no such provider.")
+            .Check(known.Any(candidate => candidate.Key == key), "provider", "This deployment has no such provider.")
             .Check(
                 request.MerchantId is { Length: > 0 } merchant && merchant.Trim().Length <= 100,
                 "merchantId",
                 "A merchant id is required (up to 100 characters).")
-            .Check(Enum.TryParse<ProviderEnvironment>(request.Environment, ignoreCase: true, out _), "environment", "Choose Test or Live.");
+            .Check(Enum.TryParse<ProviderEnvironment>(request.Environment, ignoreCase: true, out _), "environment", "Choose Test or Live.")
+            .Check(
+                request.PublishableKey is null || request.PublishableKey.Trim().Length <= 200,
+                "publishableKey",
+                "A publishable key can be up to 200 characters.");
 
         if (errors.Any)
         {
@@ -54,6 +62,7 @@ internal static class ProviderConnectionEndpoints
             request.MerchantId!.Trim(),
             Enum.Parse<ProviderEnvironment>(request.Environment!, ignoreCase: true),
             request.IsActive,
+            request.PublishableKey,
             cancellationToken);
 
         return TypedResults.Ok(ConnectionResponse.From(saved));
@@ -90,7 +99,7 @@ internal static class ProviderConnectionEndpoints
         await connections.RemoveAsync(provider, cancellationToken) ? TypedResults.NoContent() : TypedResults.NotFound();
 }
 
-internal sealed record ConnectionRequest(string? MerchantId, string? Environment, bool IsActive);
+internal sealed record ConnectionRequest(string? MerchantId, string? Environment, bool IsActive, string? PublishableKey = null);
 
 internal sealed record SecretRequest(string? Secret);
 
@@ -100,13 +109,17 @@ internal sealed record ConnectionResponse(
     string Environment,
     bool IsActive,
     bool HasSecret,
+    string? PublishableKey,
     DateTimeOffset ChangedAt)
 {
+    // `HasSecret` and not the secret: this record has nowhere to put a credential, which is the point. The
+    // publishable key is different in kind — the provider issued it to be read in a browser.
     public static ConnectionResponse From(ConnectedProvider connection) => new(
         connection.Provider,
         connection.MerchantId,
         connection.Environment.ToString(),
         connection.IsActive,
         connection.HasSecret,
+        connection.PublishableKey,
         connection.ChangedAt);
 }
