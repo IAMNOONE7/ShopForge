@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { NavLink } from "react-router";
 import type { Category } from "../api";
+import { categoryPath } from "../publicPages";
 
 type CategoryState =
   | { status: "loading" }
@@ -49,7 +50,7 @@ export function CategoryNavigation({
         state.categories.map((category) => (
           <NavLink
             key={category.slug}
-            to={`/c/${category.slug}`}
+            to={categoryPath(category.slug)}
             lang={contentLanguage}
             onClick={onNavigate}
           >

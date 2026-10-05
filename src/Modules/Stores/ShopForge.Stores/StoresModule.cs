@@ -26,6 +26,7 @@ public static class StoresModule
         services.AddScoped<IStorePublishCheck, StoreBrandingPublishCheck>();
         services.AddScoped<IStorePublishCheck, StoreCompanyPublishCheck>();
         services.AddScoped<ICurrentStoreSettings, CurrentStoreSettings>();
+        services.AddScoped<IStoreUrls, StoreUrls>();
         services.AddScoped<IStoreDirectory, StoreDirectory>();
         services.AddScoped<ITenantDirectory, TenantDirectory>();
         services.AddScoped<ITenantUsage, StoreUsage>();

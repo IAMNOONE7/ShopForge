@@ -12,6 +12,7 @@ import {
 import { useCart } from "../../cartContext";
 import { formatPrice, useStore } from "../../storeContext";
 import { InlineMessage } from "../ui/InlineMessage";
+import { productPath } from "../../publicPages";
 
 type LineAction = "idle" | "updating" | "removing" | "failed";
 
@@ -122,7 +123,7 @@ export function CartLine({
       <div className="cart-line-identity">
         <Link
           id={`cart-line-link-${identity}`}
-          to={`/p/${line.slug}`}
+          to={productPath(line.slug)}
           className="cart-line-name"
           lang={store.culture}
         >

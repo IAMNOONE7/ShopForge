@@ -11,6 +11,7 @@ import { ProductPurchase } from "../components/product/ProductPurchase";
 import { RequestError } from "../components/ui/RequestError";
 import { formatPrice, useStore } from "../storeContext";
 import { useRequest } from "../useRequest";
+import { categoryPath } from "../publicPages";
 
 export function ProductDetailPage() {
   const { t } = useTranslation(["catalog", "errors"]);
@@ -73,7 +74,7 @@ export function ProductDetailPage() {
                   {categories.map((category) => (
                     <Link
                       key={category.slug}
-                      to={`/c/${category.slug}`}
+                      to={categoryPath(category.slug)}
                       lang={store.culture}
                     >
                       {category.name}

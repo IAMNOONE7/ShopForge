@@ -3,12 +3,13 @@ import { Link } from "react-router";
 import type { ProductSummary } from "../api";
 import { formatPrice, useStore } from "../storeContext";
 import { Stars } from "./Stars";
+import { productPath } from "../publicPages";
 
 export function ProductCard({ product }: { product: ProductSummary }) {
   const { t } = useTranslation("catalog");
   const store = useStore();
   return (
-    <Link to={`/p/${product.slug}`} className="product-card">
+    <Link to={productPath(product.slug)} className="product-card">
       {product.imageUrl ? (
         <img
           src={product.imageUrl}

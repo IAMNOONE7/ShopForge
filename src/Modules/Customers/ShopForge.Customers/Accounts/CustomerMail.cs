@@ -13,6 +13,7 @@ internal sealed class CustomerMail(
     IEmailSender emailSender,
     IStoreContext storeContext,
     ICurrentStoreSettings storeSettings,
+    IStoreUrls urls,
     IHttpContextAccessor httpContextAccessor)
 {
     private static readonly TimeSpan VerificationLifetime = TimeSpan.FromHours(24);
@@ -61,12 +62,13 @@ internal sealed class CustomerMail(
             now + ChangeLifetime));
 
         var store = (await storeSettings.GetAsync(cancellationToken)).Name;
+        var confirm = await LinkAsync("account/confirm-email", value, cancellationToken);
 
         await emailSender.SendAsync(
             new EmailMessage(
                 newEmail,
                 $"Confirm your new e-mail address for {store}",
-                $"Confirm this address to start using it for your {store} account: {Link("account/confirm-email", value)}. "
+                $"Confirm this address to start using it for your {store} account: {confirm}. "
                 + "Until then nothing changes, and your old address still signs you in."),
             cancellationToken);
 
@@ -76,12 +78,13 @@ internal sealed class CustomerMail(
     public async Task SendAccountExistsAsync(CustomerIdentity identity, CancellationToken cancellationToken)
     {
         var store = (await storeSettings.GetAsync(cancellationToken)).Name;
+        var reset = await LinkAsync("account/forgot-password", token: null, cancellationToken);
 
         await emailSender.SendAsync(
             new EmailMessage(
                 identity.Email,
                 $"You already have a {store} account",
-                $"Someone tried to register this address at {store}. Sign in instead, or reset your password at {Link("account/forgot-password", token: null)}."),
+                $"Someone tried to register this address at {store}. Sign in instead, or reset your password at {reset}."),
             cancellationToken);
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -108,7 +111,7 @@ internal sealed class CustomerMail(
         dbContext.Add(new CustomerToken(identity.TenantId, identity.Id, storeContext.StoreId!.Value, purpose, hash, expiresAt));
 
         var store = (await storeSettings.GetAsync(cancellationToken)).Name;
-        var (subject, body) = compose(store, Link(path, value));
+        var (subject, body) = compose(store, await LinkAsync(path, value, cancellationToken));
 
         // Sending is enqueued, so it has to happen before the save that makes the token real: the message and the
         // token it points at are written together or not at all (D-065).
@@ -116,11 +119,17 @@ internal sealed class CustomerMail(
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private string Link(string path, string? token)
+    // A link in an inbox is followed hours later and from anywhere, so it names the store's own address
+    // rather than whichever host this request happened to arrive on (D-164). A store that has not proved a
+    // domain yet has no such address, and the asking host is then the only thing there is to offer.
+    private async Task<string> LinkAsync(string path, string? token, CancellationToken cancellationToken)
     {
         var request = httpContextAccessor.HttpContext!.Request;
+        var home = await urls.FindAsync(cancellationToken) is { } address
+            ? address.Home
+            : $"{request.Scheme}://{request.Host}/";
         var query = token is null ? string.Empty : $"?token={Uri.EscapeDataString(token)}";
 
-        return $"{request.Scheme}://{request.Host}/{path}{query}";
+        return $"{home}{path}{query}";
     }
 }

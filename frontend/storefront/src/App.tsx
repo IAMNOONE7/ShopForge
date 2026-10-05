@@ -22,6 +22,7 @@ import { VerifyEmailPage } from "./pages/VerifyEmailPage";
 import { applyStore, fetchStore, type Store } from "./store";
 import { StoreContext } from "./storeContext";
 import { statusOf } from "./api/errors";
+import { publicRoutes } from "./publicPages";
 
 type StoreState =
   | { status: "loading" }
@@ -108,8 +109,8 @@ function App() {
                 <Routes>
                   <Route element={<Layout />}>
                     <Route index element={<ProductListPage />} />
-                    <Route path="c/:slug" element={<ProductListPage />} />
-                    <Route path="p/:slug" element={<ProductDetailPage />} />
+                    <Route path={publicRoutes.category} element={<ProductListPage />} />
+                    <Route path={publicRoutes.product} element={<ProductDetailPage />} />
                     <Route path="cart" element={<CartPage />} />
                     <Route path="checkout" element={<CheckoutPage />} />
                     <Route path="order/:number" element={<OrderPage />} />
