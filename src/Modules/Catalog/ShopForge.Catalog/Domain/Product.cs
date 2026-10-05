@@ -7,6 +7,7 @@ namespace ShopForge.Catalog.Domain;
 internal sealed class Product : ITenantOwned
 {
     public const int MaxOptions = 3;
+    public const int MaxBrandLength = 70;
 
     private readonly List<ProductImage> _images = [];
     private readonly List<ProductVariant> _variants = [];
@@ -26,6 +27,10 @@ internal sealed class Product : ITenantOwned
 
     public Guid TenantId { get; private set; }
 
+    // Who made the thing. It belongs to the product rather than to the shop selling it or to one of its
+    // sizes, and every shopping feed asks for it (D-163). Null until somebody says.
+    public string? Brand { get; private set; }
+
     // The axes this product is sold along — ["Size", "Colour"] — empty for a product sold in one form only.
     public string[] OptionNames { get; private set; } = [];
 
@@ -36,6 +41,20 @@ internal sealed class Product : ITenantOwned
     // Everything written before variants existed asks a product for its SKU and its weight, and a shop that
     // sells one form of a thing still thinks that way. It is the first variant's.
     public ProductVariant Default => _variants.OrderBy(variant => variant.Position).First();
+
+    public bool Rebrand(string? brand)
+    {
+        var named = string.IsNullOrWhiteSpace(brand) ? null : brand.Trim();
+
+        if (named == Brand)
+        {
+            return false;
+        }
+
+        Brand = named;
+
+        return true;
+    }
 
     public ProductVariant AddVariant(string sku, string? ean, int? weightGrams, string[] optionValues)
     {

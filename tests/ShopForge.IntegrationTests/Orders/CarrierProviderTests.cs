@@ -168,7 +168,7 @@ public sealed class CarrierProviderTests : IDisposable
 
         using var weighed = await admin.PutAsJsonAsync(
             $"/api/admin/products/{productId}",
-            new { Ean = "8594000000002", WeightGrams = weightGrams },
+            new { Ean = "8594000000013", WeightGrams = weightGrams },
             CancellationToken);
         Assert.Equal(HttpStatusCode.OK, weighed.StatusCode);
 

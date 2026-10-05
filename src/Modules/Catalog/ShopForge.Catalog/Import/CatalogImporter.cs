@@ -130,6 +130,9 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
         var variant = product?.Variants.SingleOrDefault(candidate => candidate.Sku == sku);
         var ean = ReadEan(row, variant, issues);
         var weight = ReadWeight(row, variant, issues);
+        var brand = ReadBrand(row, product, issues);
+        var partNumber = ReadPartNumber(row, variant, issues);
+        var condition = ReadCondition(row, variant, issues);
         var stockQuantity = ReadStock(row, issues);
         var optionValues = ReadOptions(row, product, issues);
 
@@ -153,10 +156,11 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
             variant = product.AddVariant(sku, ean, weight, optionValues);
             changed = true;
         }
-        else
-        {
-            changed |= variant.UpdatePhysicalData(ean, weight);
-        }
+
+        // The identifiers a feed asks for, set the same way however the row arrived: a new product, a new
+        // form of one already here, or a row that changes what was loaded before (D-163).
+        changed |= product.Rebrand(brand);
+        changed |= variant.UpdatePhysicalData(ean, weight, partNumber, condition);
 
         catalog.Products[sku] = product;
         catalog.ProductsById[product.Id] = product;
@@ -400,12 +404,74 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
 
         var ean = row[ImportColumns.Ean].Text;
 
-        if (ean.Length is >= 8 and <= 14 && ean.All(char.IsAsciiDigit))
+        if (ean.Length == 0 || Gtin.IsValid(ean))
         {
-            return ean;
+            return ean.Length == 0 ? null : ean;
         }
 
-        issues.Add(new ImportIssue(row.Number, ImportColumns.Ean, "EAN must have 8 to 14 digits."));
+        // A feed rejects the whole product for a barcode that does not check out, so the import refuses the
+        // row rather than loading one (D-163).
+        issues.Add(new ImportIssue(row.Number, ImportColumns.Ean, "A barcode must be a GTIN of 8, 12, 13 or 14 digits whose check digit agrees."));
+        return null;
+    }
+
+    // The brand is the product's, so every row of one product says the same thing and the last one wins.
+    private static string? ReadBrand(ImportRow row, Product? product, List<ImportIssue> issues)
+    {
+        if (!row.Has(ImportColumns.Brand))
+        {
+            return product?.Brand;
+        }
+
+        var brand = row[ImportColumns.Brand].Text;
+
+        if (brand.Length <= Product.MaxBrandLength)
+        {
+            return brand.Length == 0 ? null : brand;
+        }
+
+        issues.Add(new ImportIssue(row.Number, ImportColumns.Brand, $"A brand can be up to {Product.MaxBrandLength} characters."));
+        return null;
+    }
+
+    private static string? ReadPartNumber(ImportRow row, ProductVariant? variant, List<ImportIssue> issues)
+    {
+        if (!row.Has(ImportColumns.PartNumber))
+        {
+            return variant?.PartNumber;
+        }
+
+        var partNumber = row[ImportColumns.PartNumber].Text;
+
+        if (partNumber.Length <= ProductVariant.MaxPartNumberLength)
+        {
+            return partNumber.Length == 0 ? null : partNumber;
+        }
+
+        issues.Add(new ImportIssue(row.Number, ImportColumns.PartNumber, $"A part number can be up to {ProductVariant.MaxPartNumberLength} characters."));
+        return null;
+    }
+
+    private static ProductCondition? ReadCondition(ImportRow row, ProductVariant? variant, List<ImportIssue> issues)
+    {
+        if (!row.Has(ImportColumns.Condition))
+        {
+            return variant?.Condition;
+        }
+
+        var condition = row[ImportColumns.Condition].Text;
+
+        if (condition.Length == 0)
+        {
+            return null;
+        }
+
+        if (Enum.TryParse<ProductCondition>(condition, ignoreCase: true, out var parsed))
+        {
+            return parsed;
+        }
+
+        issues.Add(new ImportIssue(row.Number, ImportColumns.Condition, "A condition is New, Refurbished or Used."));
         return null;
     }
 

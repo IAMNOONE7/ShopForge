@@ -15,10 +15,20 @@ import { ProductsPage } from "./ProductsPage";
 const product: Product = {
   id: "product-a",
   sku: "PHYSICAL-1",
-  ean: "00012345678",
+  ean: "00012345600012",
   weightGrams: 250,
+  brand: null,
   optionNames: [],
-  variants: [{ id: "variant-a", sku: "PHYSICAL-1", ean: "00012345678", weightGrams: 250, optionValues: [], position: 0 }],
+  variants: [{
+    id: "variant-a",
+    sku: "PHYSICAL-1",
+    ean: "00012345600012",
+    weightGrams: 250,
+    partNumber: null,
+    condition: null,
+    optionValues: [],
+    position: 0,
+  }],
   images: [],
 };
 
@@ -51,12 +61,27 @@ describe("physical products", () => {
       sku: "",
       ean: "1234567",
       weightGrams: "2.5",
+      brand: "",
+      partNumber: "",
+      condition: "",
     }, true).map((issue) => issue.field)).toEqual(["sku", "ean", "weightGrams"]);
     expect(validateProduct({
       sku: "P",
-      ean: "00012345678",
+      ean: "00012345600012",
       weightGrams: "0",
+      brand: "Thonet",
+      partNumber: "No-14",
+      condition: "New",
     }, true)).toEqual([]);
+    // A barcode whose check digit disagrees is the mistake the digit exists to catch.
+    expect(validateProduct({
+      sku: "P",
+      ean: "00012345600011",
+      weightGrams: "0",
+      brand: "",
+      partNumber: "",
+      condition: "",
+    }, true).map((issue) => issue.field)).toEqual(["ean"]);
     expect(validateProductImage(
       new File(["gif"], "wrong.gif", { type: "image/gif" }),
       "description",
@@ -104,19 +129,22 @@ describe("physical products", () => {
     await user.click(screen.getByRole("button", { name: "Create product" }));
     expect(create).not.toHaveBeenCalled();
     await user.type(screen.getByRole("textbox", { name: "SKU" }), "PHYSICAL-1");
-    await user.type(screen.getByRole("textbox", { name: "EAN (optional)" }), "00012345678");
+    await user.type(screen.getByRole("textbox", { name: "EAN (optional)" }), "00012345600012");
     await user.type(screen.getByRole("textbox", { name: "Weight in grams (optional)" }), "250");
     await user.click(screen.getByRole("button", { name: "Create product" }));
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect((screen.getByRole("textbox", { name: "EAN (optional)" }) as HTMLInputElement).value)
-      .toBe("00012345678");
+      .toBe("00012345600012");
     await user.click(screen.getByRole("button", { name: "Create product" }));
     expect(await screen.findByRole("heading", { name: "Created product detail" })).toBeTruthy();
     expect(create).toHaveBeenCalledTimes(2);
     expect(create.mock.calls[1][0]).toEqual({
       sku: "PHYSICAL-1",
-      ean: "00012345678",
+      ean: "00012345600012",
       weightGrams: 250,
+      brand: null,
+      partNumber: null,
+      condition: null,
     });
   });
 
@@ -126,7 +154,7 @@ describe("physical products", () => {
     vi.spyOn(api, "stock").mockResolvedValue([]);
     const update = vi.spyOn(api, "updateProduct")
       .mockRejectedValueOnce(new Error("offline"))
-      .mockResolvedValue({ ...product, ean: "00012345679", weightGrams: null });
+      .mockResolvedValue({ ...product, ean: "5901234123457", weightGrams: null });
     render(withSession(
       <MemoryRouter initialEntries={["/products/product-a"]}>
         <Routes>
@@ -140,15 +168,16 @@ describe("physical products", () => {
     const ean = screen.getByRole("textbox", { name: "EAN (optional)" });
     const weight = screen.getByRole("textbox", { name: "Weight in grams (optional)" });
     await user.clear(ean);
-    await user.type(ean, "00012345679");
+    await user.type(ean, "5901234123457");
     await user.clear(weight);
     await user.click(screen.getByRole("button", { name: "Save physical details" }));
     expect(await screen.findByRole("alert")).toBeTruthy();
-    expect((ean as HTMLInputElement).value).toBe("00012345679");
+    expect((ean as HTMLInputElement).value).toBe("5901234123457");
     await user.click(screen.getByRole("button", { name: "Save physical details" }));
     await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
     expect(update.mock.calls[1]).toEqual([
-      "product-a", { ean: "00012345679", weightGrams: null },
+      "product-a",
+      { ean: "5901234123457", weightGrams: null, brand: null, partNumber: null, condition: null },
     ]);
     expect(await screen.findByText("Physical details saved.")).toBeTruthy();
   });
@@ -159,7 +188,7 @@ describe("physical products", () => {
       optionNames: ["Size"],
       variants: [
         { ...product.variants[0], sku: "PHYSICAL-S", optionValues: ["Small"] },
-        { id: "variant-b", sku: "PHYSICAL-L", ean: null, weightGrams: 300, optionValues: ["Large"], position: 1 },
+        { id: "variant-b", sku: "PHYSICAL-L", ean: null, weightGrams: 300, partNumber: null, condition: null, optionValues: ["Large"], position: 1 },
       ],
     };
     vi.spyOn(api, "products").mockResolvedValue([multi]);

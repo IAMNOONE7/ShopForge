@@ -17,6 +17,7 @@ internal sealed class ProductEntityConfiguration : IEntityTypeConfiguration<Prod
         builder.Property<string?>("Ean").HasMaxLength(14);
         builder.Property<int?>("WeightGrams");
 
+        builder.Property(product => product.Brand).HasMaxLength(Product.MaxBrandLength);
         builder.Property(product => product.OptionNames).HasColumnName("option_names");
 
         builder.OwnsMany(product => product.Images, images =>
@@ -47,6 +48,8 @@ internal sealed class ProductVariantEntityConfiguration : IEntityTypeConfigurati
 
         builder.Property(variant => variant.Sku).HasMaxLength(ProductVariant.MaxSkuLength);
         builder.Property(variant => variant.Ean).HasMaxLength(14);
+        builder.Property(variant => variant.PartNumber).HasMaxLength(ProductVariant.MaxPartNumberLength);
+        builder.Property(variant => variant.Condition).HasConversion<string>().HasMaxLength(20);
         builder.Property(variant => variant.OptionValues).HasColumnName("option_values");
 
         // A SKU is what a warehouse and an invoice call one thing, so it is one thing across the whole company.

@@ -7,6 +7,7 @@ import { ProductIssueSummary } from "../components/ProductIssueSummary";
 import { ProductMediaSection } from "../components/ProductMediaSection";
 import { variantOptions } from "../components/variantOptions";
 import {
+  conditions,
   physicalInput,
   validateProduct,
   type ProductDraft,
@@ -119,12 +120,15 @@ function PhysicalDataSection({
     sku: product.sku,
     ean: product.ean ?? "",
     weightGrams: product.weightGrams?.toString() ?? "",
+    brand: product.brand ?? "",
+    partNumber: product.variants[0]?.partNumber ?? "",
+    condition: product.variants[0]?.condition ?? "",
   });
   const [issues, setIssues] = useState<ProductIssue[]>([]);
   const [saved, setSaved] = useState(false);
   const [error, run, pending] = useAction(reloadProducts);
 
-  function update(field: "ean" | "weightGrams", value: string) {
+  function update(field: "ean" | "weightGrams" | "brand" | "partNumber" | "condition", value: string) {
     setSaved(false);
     setDraft((current) => ({ ...current, [field]: value }));
     setIssues((current) => current.filter((issue) => issue.field !== field));
@@ -147,6 +151,9 @@ function PhysicalDataSection({
         sku: updated.sku,
         ean: updated.ean ?? "",
         weightGrams: updated.weightGrams?.toString() ?? "",
+        brand: updated.brand ?? "",
+        partNumber: updated.variants[0]?.partNumber ?? "",
+        condition: updated.variants[0]?.condition ?? "",
       });
       setSaved(true);
     });
@@ -197,6 +204,42 @@ function PhysicalDataSection({
             aria-invalid={issues.some((issue) => issue.field === "weightGrams") || undefined}
             onChange={(event) => update("weightGrams", event.target.value)}
           />
+        </div>
+        {/* What a shopping feed asks for. A brand is the product's; the rest belong to this form of it. */}
+        <div className="physical-fields-row">
+          <Field
+            id="brand"
+            name="brand"
+            label={t("brand")}
+            hint={t("brandHint")}
+            value={draft.brand}
+            aria-invalid={issues.some((issue) => issue.field === "brand") || undefined}
+            onChange={(event) => update("brand", event.target.value)}
+          />
+          <Field
+            id="partNumber"
+            name="partNumber"
+            label={t("partNumber")}
+            hint={t("partNumberHint")}
+            value={draft.partNumber}
+            aria-invalid={issues.some((issue) => issue.field === "partNumber") || undefined}
+            onChange={(event) => update("partNumber", event.target.value)}
+          />
+          <label htmlFor="condition">
+            {t("condition")}
+            <select
+              id="condition"
+              name="condition"
+              value={draft.condition}
+              onChange={(event) => update("condition", event.target.value)}
+            >
+              {conditions.map((condition) => (
+                <option key={condition} value={condition}>
+                  {condition === "" ? t("conditionUnstated") : t(`condition${condition}`)}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
         <Button
           type="submit"

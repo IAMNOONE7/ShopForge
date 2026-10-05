@@ -21,6 +21,9 @@ export function NewPhysicalProductPage() {
     sku: "",
     ean: "",
     weightGrams: "",
+    brand: "",
+    partNumber: "",
+    condition: "",
   });
   const [issues, setIssues] = useState<ProductIssue[]>([]);
   const [error, run, pending] = useAction(() => undefined);

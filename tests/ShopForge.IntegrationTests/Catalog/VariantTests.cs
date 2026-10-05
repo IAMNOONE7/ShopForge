@@ -37,16 +37,16 @@ public sealed class VariantTests(ShopForgeApiFactory factory)
         var furniture = await FurnitureStore.CreateAsync(factory);
 
         using var created = await furniture.Admin.PostAsJsonAsync(
-            "/api/admin/products", new { Sku = "plain-1", Ean = "8594000000001", WeightGrams = 850 }, CancellationToken);
+            "/api/admin/products", new { Sku = "plain-1", Ean = "8594000000006", WeightGrams = 850 }, CancellationToken);
         var product = await created.Content.ReadFromJsonAsync<ProductView>(CancellationToken);
 
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         Assert.Equal("PLAIN-1", product!.Sku);
-        Assert.Equal("8594000000001", product.Ean);
+        Assert.Equal("8594000000006", product.Ean);
         Assert.Equal(850, product.WeightGrams);
         Assert.Empty(product.OptionNames);
         var only = Assert.Single(product.Variants);
-        Assert.Equal(("PLAIN-1", "8594000000001", 850), (only.Sku, only.Ean, only.WeightGrams));
+        Assert.Equal(("PLAIN-1", "8594000000006", 850), (only.Sku, only.Ean, only.WeightGrams));
     }
 
     // A SKU is what a warehouse and an invoice call one thing, so it belongs to one thing in the whole company.
@@ -157,13 +157,13 @@ public sealed class VariantTests(ShopForgeApiFactory factory)
         var shirt = await ProductAsync(furniture, "PHYS-1");
 
         using var whileSingle = await furniture.Admin.PutAsJsonAsync(
-            $"/api/admin/products/{shirt.Id}", new { Ean = "8594000000002", WeightGrams = 300 }, CancellationToken);
+            $"/api/admin/products/{shirt.Id}", new { Ean = "8594000000013", WeightGrams = 300 }, CancellationToken);
         var second = await AddVariantAsync(furniture, shirt.Id, "PHYS-2", []);
         using var whileSeveral = await furniture.Admin.PutAsJsonAsync(
-            $"/api/admin/products/{shirt.Id}", new { Ean = "8594000000003", WeightGrams = 400 }, CancellationToken);
+            $"/api/admin/products/{shirt.Id}", new { Ean = "8594000000020", WeightGrams = 400 }, CancellationToken);
         using var onTheForm = await furniture.Admin.PutAsJsonAsync(
             $"/api/admin/products/{shirt.Id}/variants/{second}",
-            new { Sku = "PHYS-2", Ean = "8594000000003", WeightGrams = 400, OptionValues = Array.Empty<string>() },
+            new { Sku = "PHYS-2", Ean = "8594000000020", WeightGrams = 400, OptionValues = Array.Empty<string>() },
             CancellationToken);
         var stored = await ProductAsync(furniture, shirt.Id);
 

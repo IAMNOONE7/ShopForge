@@ -52,8 +52,13 @@ internal static class AdminProductEndpoints
     {
         var errors = new RequestErrors()
             .Check(!string.IsNullOrWhiteSpace(request.Sku) && request.Sku.Trim().Length <= 64, "sku", "SKU is required (up to 64 characters).")
-            .Check(IsValidEan(request.Ean), "ean", "EAN must have 8 to 14 digits.")
-            .Check(request.WeightGrams is null or >= 0, "weightGrams", "Weight cannot be negative.");
+            .Check(IsValidEan(request.Ean), "ean", "A barcode must be a GTIN of 8, 12, 13 or 14 digits whose check digit agrees.")
+            .Check(request.WeightGrams is null or >= 0, "weightGrams", "Weight cannot be negative.")
+            .Check(request.PartNumber is null || request.PartNumber.Trim().Length <= ProductVariant.MaxPartNumberLength, "partNumber", "A part number can be up to 70 characters.")
+            .Check(IsValidCondition(request.Condition), "condition", "A condition is New, Refurbished or Used.")
+            .Check(request.Brand is null || request.Brand.Trim().Length <= Product.MaxBrandLength, "brand", "A brand can be up to 70 characters.")
+            .Check(request.PartNumber is null || request.PartNumber.Trim().Length <= ProductVariant.MaxPartNumberLength, "partNumber", "A part number can be up to 70 characters.")
+            .Check(IsValidCondition(request.Condition), "condition", "A condition is New, Refurbished or Used.");
 
         if (errors.Any)
         {
@@ -66,6 +71,8 @@ internal static class AdminProductEndpoints
         }
 
         var product = new Product(storeContext.TenantId!.Value, request.Sku!, request.Ean, request.WeightGrams);
+        product.Rebrand(request.Brand);
+        product.Default.UpdatePhysicalData(request.Ean, request.WeightGrams, request.PartNumber, ConditionFrom(request.Condition));
 
         if (await TakenAsync(dbContext, product.Default.Sku, cancellationToken))
         {
@@ -85,8 +92,13 @@ internal static class AdminProductEndpoints
         CancellationToken cancellationToken)
     {
         var errors = new RequestErrors()
-            .Check(IsValidEan(request.Ean), "ean", "EAN must have 8 to 14 digits.")
-            .Check(request.WeightGrams is null or >= 0, "weightGrams", "Weight cannot be negative.");
+            .Check(IsValidEan(request.Ean), "ean", "A barcode must be a GTIN of 8, 12, 13 or 14 digits whose check digit agrees.")
+            .Check(request.WeightGrams is null or >= 0, "weightGrams", "Weight cannot be negative.")
+            .Check(request.PartNumber is null || request.PartNumber.Trim().Length <= ProductVariant.MaxPartNumberLength, "partNumber", "A part number can be up to 70 characters.")
+            .Check(IsValidCondition(request.Condition), "condition", "A condition is New, Refurbished or Used.")
+            .Check(request.Brand is null || request.Brand.Trim().Length <= Product.MaxBrandLength, "brand", "A brand can be up to 70 characters.")
+            .Check(request.PartNumber is null || request.PartNumber.Trim().Length <= ProductVariant.MaxPartNumberLength, "partNumber", "A part number can be up to 70 characters.")
+            .Check(IsValidCondition(request.Condition), "condition", "A condition is New, Refurbished or Used.");
 
         if (errors.Any)
         {
@@ -100,15 +112,24 @@ internal static class AdminProductEndpoints
             return TypedResults.NotFound();
         }
 
-        // A product sold in several forms has a barcode and a weight per form, so there is nothing here to set.
-        if (product.Variants.Count > 1)
+        // The brand belongs to the product whatever its shape, so it is settable here even for one sold in
+        // several forms — which is the only place it could be set for such a product at all.
+        product.Rebrand(request.Brand);
+
+        // A barcode, a weight, a part number and a condition belong to a form, and a product with several has
+        // no single answer. Nothing is saved on this path: the refusal is the whole response.
+        if (product.Variants.Count > 1 && PerFormDataIn(request))
         {
             return new RequestErrors()
                 .Check(false, "weightGrams", "This product is sold in several forms; set the barcode and weight on each one.")
                 .ToProblem();
         }
 
-        product.Default.UpdatePhysicalData(request.Ean, request.WeightGrams);
+        if (product.Variants.Count == 1)
+        {
+            product.Default.UpdatePhysicalData(request.Ean, request.WeightGrams, request.PartNumber, ConditionFrom(request.Condition));
+        }
+
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return TypedResults.Ok(AdminProductResponse.From(product));
@@ -173,6 +194,7 @@ internal static class AdminProductEndpoints
         }
 
         var variant = product.AddVariant(request.Sku!, request.Ean, request.WeightGrams, Cleaned(request.OptionValues));
+        variant.UpdatePhysicalData(request.Ean, request.WeightGrams, request.PartNumber, ConditionFrom(request.Condition));
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return TypedResults.Created($"/api/admin/products/{productId}/variants/{variant.Id}", AdminVariantResponse.From(variant));
@@ -205,7 +227,7 @@ internal static class AdminProductEndpoints
         }
 
         variant.Rename(sku);
-        variant.UpdatePhysicalData(request.Ean, request.WeightGrams);
+        variant.UpdatePhysicalData(request.Ean, request.WeightGrams, request.PartNumber, ConditionFrom(request.Condition));
         variant.Choose(Cleaned(request.OptionValues));
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -245,8 +267,10 @@ internal static class AdminProductEndpoints
                 !string.IsNullOrWhiteSpace(request.Sku) && request.Sku.Trim().Length <= ProductVariant.MaxSkuLength,
                 "sku",
                 $"SKU is required (up to {ProductVariant.MaxSkuLength} characters).")
-            .Check(IsValidEan(request.Ean), "ean", "EAN must have 8 to 14 digits.")
+            .Check(IsValidEan(request.Ean), "ean", "A barcode must be a GTIN of 8, 12, 13 or 14 digits whose check digit agrees.")
             .Check(request.WeightGrams is null or >= 0, "weightGrams", "Weight cannot be negative.")
+            .Check(request.PartNumber is null || request.PartNumber.Trim().Length <= ProductVariant.MaxPartNumberLength, "partNumber", "A part number can be up to 70 characters.")
+            .Check(IsValidCondition(request.Condition), "condition", "A condition is New, Refurbished or Used.")
             .Check(
                 Cleaned(request.OptionValues).Length == product.OptionNames.Length,
                 "optionValues",
@@ -340,23 +364,49 @@ internal static class AdminProductEndpoints
         return await ImageResults.StreamAsync(filePath, fileStorage, cancellationToken);
     }
 
-    private static bool IsValidEan(string? ean) =>
-        string.IsNullOrWhiteSpace(ean) || ean.Trim() is { Length: >= 8 and <= 14 } trimmed && trimmed.All(char.IsAsciiDigit);
+    private static bool IsValidEan(string? ean) => string.IsNullOrWhiteSpace(ean) || Gtin.IsValid(ean);
+
+    private static bool PerFormDataIn(UpdateProductRequest request) =>
+        request.Ean is not null || request.WeightGrams is not null || request.PartNumber is not null || request.Condition is not null;
+
+    private static bool IsValidCondition(string? condition) =>
+        condition is null || Enum.TryParse<ProductCondition>(condition, ignoreCase: true, out _);
+
+    private static ProductCondition? ConditionFrom(string? condition) =>
+        string.IsNullOrWhiteSpace(condition) ? null : Enum.Parse<ProductCondition>(condition, ignoreCase: true);
 }
 
-internal sealed record CreateProductRequest(string? Sku, string? Ean, int? WeightGrams);
+internal sealed record CreateProductRequest(
+    string? Sku,
+    string? Ean,
+    int? WeightGrams,
+    string? Brand = null,
+    string? PartNumber = null,
+    string? Condition = null);
 
-internal sealed record VariantRequest(string? Sku, string? Ean, int? WeightGrams, IReadOnlyList<string>? OptionValues);
+internal sealed record VariantRequest(
+    string? Sku,
+    string? Ean,
+    int? WeightGrams,
+    IReadOnlyList<string>? OptionValues,
+    string? PartNumber = null,
+    string? Condition = null);
 
 internal sealed record SetProductOptionsRequest(IReadOnlyList<string>? Names, IReadOnlyDictionary<Guid, IReadOnlyList<string>>? Values);
 
-internal sealed record UpdateProductRequest(string? Ean, int? WeightGrams);
+internal sealed record UpdateProductRequest(
+    string? Ean,
+    int? WeightGrams,
+    string? Brand = null,
+    string? PartNumber = null,
+    string? Condition = null);
 
 internal sealed record AdminProductResponse(
     Guid Id,
     string Sku,
     string? Ean,
     int? WeightGrams,
+    string? Brand,
     IReadOnlyList<string> OptionNames,
     List<AdminVariantResponse> Variants,
     List<AdminImageResponse> Images)
@@ -368,15 +418,31 @@ internal sealed record AdminProductResponse(
         product.Default.Sku,
         product.Default.Ean,
         product.Default.WeightGrams,
+        product.Brand,
         product.OptionNames,
         [.. product.Variants.OrderBy(variant => variant.Position).Select(AdminVariantResponse.From)],
         [.. product.Images.OrderBy(image => image.Position).Select(image => AdminImageResponse.From(product.Id, image))]);
 }
 
-internal sealed record AdminVariantResponse(Guid Id, string Sku, string? Ean, int? WeightGrams, IReadOnlyList<string> OptionValues, int Position)
+internal sealed record AdminVariantResponse(
+    Guid Id,
+    string Sku,
+    string? Ean,
+    int? WeightGrams,
+    string? PartNumber,
+    string? Condition,
+    IReadOnlyList<string> OptionValues,
+    int Position)
 {
-    public static AdminVariantResponse From(ProductVariant variant) =>
-        new(variant.Id, variant.Sku, variant.Ean, variant.WeightGrams, variant.OptionValues, variant.Position);
+    public static AdminVariantResponse From(ProductVariant variant) => new(
+        variant.Id,
+        variant.Sku,
+        variant.Ean,
+        variant.WeightGrams,
+        variant.PartNumber,
+        variant.Condition?.ToString(),
+        variant.OptionValues,
+        variant.Position);
 }
 
 internal sealed record AdminImageResponse(Guid Id, string Url, string? AltText, int Position)

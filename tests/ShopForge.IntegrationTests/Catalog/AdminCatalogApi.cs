@@ -12,7 +12,7 @@ internal static class AdminCatalogApi
 
     public static async Task<Guid> CreateProductAsync(this HttpClient admin, string? sku = null)
     {
-        using var response = await admin.PostAsJsonAsync("/api/admin/products", new { Sku = sku ?? UniqueSku(), Ean = "8594000000001", WeightGrams = 850 });
+        using var response = await admin.PostAsJsonAsync("/api/admin/products", new { Sku = sku ?? UniqueSku(), Ean = "8594000000006", WeightGrams = 850 });
         return await IdFromAsync(response);
     }
 

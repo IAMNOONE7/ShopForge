@@ -67,6 +67,8 @@ export type Product = {
   sku: string;
   ean: string | null;
   weightGrams: number | null;
+  // What a shopping feed asks for and refuses a product without. Null until somebody says.
+  brand: string | null;
   optionNames: string[];
   variants: ProductVariant[];
   images: ProductImage[];
@@ -77,6 +79,8 @@ export type ProductVariant = {
   sku: string;
   ean: string | null;
   weightGrams: number | null;
+  partNumber: string | null;
+  condition: string | null;
   optionValues: string[];
   position: number;
 };
@@ -393,8 +397,20 @@ export const api = {
     sku: string;
     ean: string | null;
     weightGrams: number | null;
+    brand: string | null;
+    partNumber: string | null;
+    condition: string | null;
   }) => request<Product>("POST", "/api/admin/products", input),
-  updateProduct: (productId: string, input: { ean: string | null; weightGrams: number | null }) =>
+  updateProduct: (
+    productId: string,
+    input: {
+      ean: string | null;
+      weightGrams: number | null;
+      brand: string | null;
+      partNumber: string | null;
+      condition: string | null;
+    },
+  ) =>
     request<Product>("PUT", `/api/admin/products/${productId}`, input),
   uploadProductImage: (productId: string, file: File, altText: string) =>
     request<ProductImage>(

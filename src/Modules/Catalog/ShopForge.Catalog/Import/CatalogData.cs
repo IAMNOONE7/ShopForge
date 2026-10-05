@@ -118,12 +118,16 @@ internal static class ImportColumns
     public const string Categories = "categories";
     public const string Ean = "ean";
     public const string Weight = "weight";
+    public const string Brand = "brand";
+    public const string PartNumber = "partnumber";
+    public const string Condition = "condition";
 
     // An axis is named by the column header after this prefix, and the cell holds that row's value for it:
     // "option:size" holding "L". Several of them make several axes, in the order the columns appear (D-137).
     public const string OptionPrefix = "option:";
 
-    public static readonly string[] All = [Sku, Name, Slug, Description, Price, Vat, Stock, Visible, SortOrder, Categories, Ean, Weight];
+    public static readonly string[] All =
+        [Sku, Name, Slug, Description, Price, Vat, Stock, Visible, SortOrder, Categories, Ean, Weight, Brand, PartNumber, Condition];
 
     public static bool IsOption(string column) => column.StartsWith(OptionPrefix, StringComparison.Ordinal);
 
