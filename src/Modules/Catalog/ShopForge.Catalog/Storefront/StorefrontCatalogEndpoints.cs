@@ -9,6 +9,7 @@ using ShopForge.Catalog.Images;
 using ShopForge.Shared.Files;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Inventory;
+using ShopForge.Shared.Stores;
 
 namespace ShopForge.Catalog.Storefront;
 
@@ -39,6 +40,7 @@ internal static class StorefrontCatalogEndpoints
         HttpRequest request,
         DbContext dbContext,
         IStockLedger stock,
+        ICurrentStoreSettings storeSettings,
         string? category,
         string? sort,
         int? page,
@@ -47,19 +49,29 @@ internal static class StorefrontCatalogEndpoints
     {
         var pageNumber = Math.Max(page ?? 1, 1);
         var size = Math.Clamp(pageSize ?? 24, 1, MaxPageSize);
+        var settings = await storeSettings.GetAsync(cancellationToken);
+        var page_ = PageMetadata.For(settings.Seo, settings.Name, PageSeoOverrides.None);
+        string? pageText = null;
         Guid? categoryId = null;
 
         if (category is not null)
         {
-            categoryId = await dbContext.Set<Category>()
+            var chosen = await dbContext.Set<Category>()
+                .AsNoTracking()
                 .Where(candidate => candidate.Slug == category)
-                .Select(candidate => (Guid?)candidate.Id)
+                .Select(candidate => new { candidate.Id, candidate.Name, candidate.SeoTitle, candidate.SeoDescription, candidate.PageText })
                 .SingleOrDefaultAsync(cancellationToken);
 
-            if (categoryId is null)
+            if (chosen is null)
             {
                 return TypedResults.NotFound();
             }
+
+            categoryId = chosen.Id;
+            pageText = chosen.PageText;
+
+            // A category has no image of its own, so a link shared from one shows whatever the shop offers.
+            page_ = PageMetadata.For(settings.Seo, chosen.Name, new PageSeoOverrides(chosen.SeoTitle, chosen.SeoDescription, null, NoIndex: false));
         }
 
         var definitions = await dbContext.Set<AttributeDefinition>().AsNoTracking().Include(definition => definition.Options).ToListAsync(cancellationToken);
@@ -142,13 +154,16 @@ internal static class StorefrontCatalogEndpoints
             totalCount,
             pageNumber,
             size,
-            facets));
+            facets,
+            page_,
+            pageText));
     }
 
     private static async Task<Results<Ok<ProductDetailResponse>, NotFound>> GetProductAsync(
         string slug,
         DbContext dbContext,
         IStockLedger stock,
+        ICurrentStoreSettings storeSettings,
         CancellationToken cancellationToken)
     {
         var storeProduct = await dbContext.Set<StoreProduct>()
@@ -183,6 +198,11 @@ internal static class StorefrontCatalogEndpoints
         var variants = product.Variants.OrderBy(variant => variant.Position).ToList();
         var available = await stock.AvailableAsync([.. variants.Select(variant => variant.Id)], cancellationToken);
 
+        var seo = PageMetadata.For(
+            (await storeSettings.GetAsync(cancellationToken)).Seo,
+            storeProduct.Name,
+            new PageSeoOverrides(storeProduct.SeoTitle, storeProduct.SeoDescription, storeProduct.SeoSocialImageUrl, storeProduct.SeoNoIndex));
+
         return TypedResults.Ok(new ProductDetailResponse(
             storeProduct.Id,
             storeProduct.Slug,
@@ -204,7 +224,8 @@ internal static class StorefrontCatalogEndpoints
                 definition.Name,
                 definition.Type,
                 definition.Unit,
-                AttributeValueJson.Write(definition, [.. storeProduct.AttributeValues.Where(value => value.AttributeDefinitionId == definition.Id)], optionNames: true)))]));
+                AttributeValueJson.Write(definition, [.. storeProduct.AttributeValues.Where(value => value.AttributeDefinitionId == definition.Id)], optionNames: true)))],
+            seo));
     }
 
     private static async Task<Results<FileStreamHttpResult, NotFound>> GetImageAsync(
@@ -352,7 +373,16 @@ internal static class StorefrontCatalogEndpoints
 
 internal sealed record StorefrontCategoryResponse(string Name, string Slug);
 
-internal sealed record ProductPageResponse(List<ProductSummaryResponse> Items, int TotalCount, int Page, int PageSize, List<ProductFacetResponse> Filters);
+// A category page is this list filtered by one category, so this is where that page's metadata belongs; with
+// no category it is the shop's own front page (D-165).
+internal sealed record ProductPageResponse(
+    List<ProductSummaryResponse> Items,
+    int TotalCount,
+    int Page,
+    int PageSize,
+    List<ProductFacetResponse> Filters,
+    PageSeo Seo,
+    string? PageText);
 
 internal sealed record ProductSummaryResponse(
     Guid Id,
@@ -398,7 +428,8 @@ internal sealed record ProductDetailResponse(
     int ReviewCount,
     List<ProductImageResponse> Images,
     List<StorefrontCategoryResponse> Categories,
-    List<ProductAttributeResponse> Attributes);
+    List<ProductAttributeResponse> Attributes,
+    PageSeo Seo);
 
 // One form of the product, what it is called along each axis, and what is left of it.
 internal sealed record ProductVariantResponse(Guid Id, IReadOnlyList<string> OptionValues, int Available);

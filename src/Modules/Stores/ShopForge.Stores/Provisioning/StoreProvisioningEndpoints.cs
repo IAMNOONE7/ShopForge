@@ -100,7 +100,10 @@ internal static class StoreProvisioningEndpoints
         var company = request.Company?.ToCompany();
         var errors = ValidateSettings(request.Name, request.Currency, request.Culture, request.Theme)
             .Check(request.ReturnWindowDays is null or (>= 0 and <= 365), "returnWindowDays", "A return window is between zero and 365 days.")
-            .Check(request.Company is null || company is not null, "company", "Legal name, address and registration number are required.");
+            .Check(request.Company is null || company is not null, "company", "Legal name, address and registration number are required.")
+            .Check(request.Seo?.TitleSuffix is null || request.Seo.TitleSuffix.Trim().Length <= 200, "seo.titleSuffix", "A title suffix can be up to 200 characters.")
+            .Check(request.Seo?.Description is null || request.Seo.Description.Trim().Length <= 500, "seo.description", "A description can be up to 500 characters.")
+            .Check(IsAnAddressOrNothing(request.Seo?.SocialImageUrl), "seo.socialImageUrl", "A social image must be an absolute http or https address.");
 
         if (errors.Any)
         {
@@ -121,6 +124,13 @@ internal static class StoreProvisioningEndpoints
             if (company is not null)
             {
                 store.SetCompany(company);
+            }
+
+            // Absent leaves the store's answers alone; present replaces all four, so clearing one is sending
+            // it empty rather than leaving it out.
+            if (request.Seo is { } seo)
+            {
+                store.DescribeToSearchEngines(seo.TitleSuffix, seo.Description, seo.SocialImageUrl, seo.NoIndex);
             }
         }
         catch (InvalidOperationException exception)
@@ -207,6 +217,14 @@ internal static class StoreProvisioningEndpoints
     private static string? PrimaryHostName(Store store) =>
         store.Domains.FirstOrDefault(domain => domain.IsPrimary)?.HostName;
 
+    // A social image is published to whoever shares a link, so a relative path is no use to them; it is an
+    // address or it is nothing.
+    private static bool IsAnAddressOrNothing(string? url) =>
+        string.IsNullOrWhiteSpace(url)
+        || (Uri.TryCreate(url.Trim(), UriKind.Absolute, out var address)
+            && (address.Scheme == Uri.UriSchemeHttp || address.Scheme == Uri.UriSchemeHttps)
+            && url.Trim().Length <= 2000);
+
     private static RequestErrors ValidateSettings(string? name, string? currency, string? culture, ThemeRequest? theme) =>
         new RequestErrors()
             .Check(!string.IsNullOrWhiteSpace(name) && name.Trim().Length <= 200, "name", "Name is required (up to 200 characters).")
@@ -237,7 +255,16 @@ internal static class StoreProvisioningEndpoints
 
 internal sealed record CreateStoreRequest(string? Name, string? HostName, string? Currency, string? Culture, ThemeRequest? Theme);
 
-internal sealed record UpdateStoreRequest(string? Name, string? Currency, string? Culture, ThemeRequest? Theme, int? ReturnWindowDays, CompanyRequest? Company);
+internal sealed record UpdateStoreRequest(
+    string? Name,
+    string? Currency,
+    string? Culture,
+    ThemeRequest? Theme,
+    int? ReturnWindowDays,
+    CompanyRequest? Company,
+    SeoRequest? Seo);
+
+internal sealed record SeoRequest(string? TitleSuffix, string? Description, string? SocialImageUrl, bool NoIndex);
 
 internal sealed record CompanyRequest(
     string? LegalName,

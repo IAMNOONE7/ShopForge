@@ -38,7 +38,8 @@ internal static class AdminStoreEndpoints
                         store.Company.PostalCode,
                         store.Company.Country,
                         store.Company.RegistrationNumber,
-                        store.Company.VatNumber)))
+                        store.Company.VatNumber),
+                new AdminSeoResponse(store.SeoTitleSuffix, store.SeoDescription, store.SeoSocialImageUrl, store.SeoNoIndex)))
             .ToListAsync(cancellationToken);
 
         return TypedResults.Ok(stores);
@@ -55,7 +56,8 @@ internal sealed record AdminStoreResponse(
     string? LogoUrl,
     string? PrimaryHostName,
     int ReturnWindowDays,
-    AdminCompanyResponse? Company)
+    AdminCompanyResponse? Company,
+    AdminSeoResponse Seo)
 {
     public static AdminStoreResponse From(Store store, string? primaryHostName) => new(
         store.Id,
@@ -76,8 +78,12 @@ internal sealed record AdminStoreResponse(
                 store.Company.PostalCode,
                 store.Company.Country,
                 store.Company.RegistrationNumber,
-                store.Company.VatNumber));
+                store.Company.VatNumber),
+        new AdminSeoResponse(store.SeoTitleSuffix, store.SeoDescription, store.SeoSocialImageUrl, store.SeoNoIndex));
 }
+
+// What the store says about its pages when a page says nothing of its own (D-165).
+internal sealed record AdminSeoResponse(string? TitleSuffix, string? Description, string? SocialImageUrl, bool NoIndex);
 
 internal sealed record AdminCompanyResponse(
     string LegalName,

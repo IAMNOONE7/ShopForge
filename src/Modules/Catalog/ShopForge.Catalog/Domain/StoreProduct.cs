@@ -46,6 +46,15 @@ internal sealed class StoreProduct : IStoreOwned
         RatingCount = count;
     }
 
+    // What this page says for itself, each falling back to the store's answer when it is absent (D-165).
+    public string? SeoTitle { get; private set; }
+
+    public string? SeoDescription { get; private set; }
+
+    public string? SeoSocialImageUrl { get; private set; }
+
+    public bool SeoNoIndex { get; private set; }
+
     public bool IsVisible { get; private set; }
 
     public int SortOrder { get; private set; }
@@ -97,6 +106,22 @@ internal sealed class StoreProduct : IStoreOwned
 
         return true;
     }
+
+    public bool DescribeToSearchEngines(string? title, string? description, string? socialImageUrl, bool noIndex)
+    {
+        var tidied = (Tidied(title), Tidied(description), Tidied(socialImageUrl), noIndex);
+
+        if (tidied == (SeoTitle, SeoDescription, SeoSocialImageUrl, SeoNoIndex))
+        {
+            return false;
+        }
+
+        (SeoTitle, SeoDescription, SeoSocialImageUrl, SeoNoIndex) = tidied;
+
+        return true;
+    }
+
+    private static string? Tidied(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     public StoreProductDetails Current => new(Name, Slug, Description, Price, VatRate, IsVisible, SortOrder);
 

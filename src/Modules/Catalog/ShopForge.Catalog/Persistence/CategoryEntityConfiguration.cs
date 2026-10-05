@@ -14,6 +14,8 @@ internal sealed class CategoryEntityConfiguration : IEntityTypeConfiguration<Cat
 
         builder.Property(category => category.Name).HasMaxLength(200);
         builder.Property(category => category.Slug).HasMaxLength(Slugs.MaxLength);
+        builder.Property(category => category.SeoTitle).HasMaxLength(200);
+        builder.Property(category => category.SeoDescription).HasMaxLength(500);
 
         builder.HasIndex(category => new { category.StoreId, category.Slug }).IsUnique();
 

@@ -27,6 +27,30 @@ internal sealed class Category : IStoreOwned
 
     public int SortOrder { get; private set; }
 
+    // A category's own answer, and the words a merchant writes above the products — which 28f puts on the page
+    // and which is the only thing on a category page a crawler can read that is not a list (D-165).
+    public string? SeoTitle { get; private set; }
+
+    public string? SeoDescription { get; private set; }
+
+    public string? PageText { get; private set; }
+
+    public bool DescribeToSearchEngines(string? title, string? description, string? pageText)
+    {
+        var tidied = (Tidied(title), Tidied(description), Tidied(pageText));
+
+        if (tidied == (SeoTitle, SeoDescription, PageText))
+        {
+            return false;
+        }
+
+        (SeoTitle, SeoDescription, PageText) = tidied;
+
+        return true;
+    }
+
+    private static string? Tidied(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
     public IReadOnlyCollection<CategoryAttribute> Attributes => _attributes;
 
     public void Update(string name, string slug, int sortOrder)

@@ -42,7 +42,11 @@ internal static class AdminStoreCatalogEndpoints
                     storeProduct.VatRate,
                     storeProduct.IsVisible,
                     storeProduct.SortOrder,
-                    storeProduct.Categories.Select(assignment => assignment.CategoryId).ToList()))
+                    storeProduct.Categories.Select(assignment => assignment.CategoryId).ToList(),
+                    storeProduct.SeoTitle,
+                    storeProduct.SeoDescription,
+                    storeProduct.SeoSocialImageUrl,
+                    storeProduct.SeoNoIndex))
             .ToListAsync(cancellationToken);
 
         return TypedResults.Ok(products);
@@ -121,6 +125,11 @@ internal static class AdminStoreCatalogEndpoints
         var wasPriced = storeProduct.Price;
         storeProduct.Update(details);
 
+        if (request.Seo is { } seo)
+        {
+            storeProduct.DescribeToSearchEngines(seo.Title, seo.Description, seo.SocialImageUrl, seo.NoIndex);
+        }
+
         // Only the price is worth a line of its own: the rest of an edit is visible in the listing itself, while
         // what something used to cost is not (D-116).
         if (storeProduct.Price != wasPriced)
@@ -178,7 +187,10 @@ internal static class AdminStoreCatalogEndpoints
                 category.Name,
                 category.Slug,
                 category.SortOrder,
-                category.Attributes.OrderBy(assignment => assignment.SortOrder).Select(assignment => assignment.AttributeDefinitionId).ToList()))
+                category.Attributes.OrderBy(assignment => assignment.SortOrder).Select(assignment => assignment.AttributeDefinitionId).ToList(),
+                category.SeoTitle,
+                category.SeoDescription,
+                category.PageText))
             .ToListAsync(cancellationToken);
 
         return TypedResults.Ok(categories);
@@ -205,12 +217,26 @@ internal static class AdminStoreCatalogEndpoints
         }
 
         var category = new Category(storeContext.StoreId!.Value, request.Name!, slug, request.SortOrder);
+
+        if (request.Seo is { } seo)
+        {
+            category.DescribeToSearchEngines(seo.Title, seo.Description, seo.PageText);
+        }
+
         dbContext.Add(category);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return TypedResults.Created(
             $"/api/admin/stores/{category.StoreId}/categories/{category.Id}",
-            new AdminCategoryResponse(category.Id, category.Name, category.Slug, category.SortOrder, []));
+            new AdminCategoryResponse(
+                category.Id,
+                category.Name,
+                category.Slug,
+                category.SortOrder,
+                [],
+                category.SeoTitle,
+                category.SeoDescription,
+                category.PageText));
     }
 
     private static async Task<Results<Ok<AdminCategoryResponse>, ValidationProblem, ProblemHttpResult, NotFound>> UpdateCategoryAsync(
@@ -242,6 +268,12 @@ internal static class AdminStoreCatalogEndpoints
         }
 
         category.Update(request.Name!, slug, request.SortOrder);
+
+        if (request.Seo is { } seo)
+        {
+            category.DescribeToSearchEngines(seo.Title, seo.Description, seo.PageText);
+        }
+
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return TypedResults.Ok(new AdminCategoryResponse(
@@ -249,7 +281,10 @@ internal static class AdminStoreCatalogEndpoints
             category.Name,
             category.Slug,
             category.SortOrder,
-            [.. category.Attributes.OrderBy(assignment => assignment.SortOrder).Select(assignment => assignment.AttributeDefinitionId)]));
+            [.. category.Attributes.OrderBy(assignment => assignment.SortOrder).Select(assignment => assignment.AttributeDefinitionId)],
+            category.SeoTitle,
+            category.SeoDescription,
+            category.PageText));
     }
 
     private static RequestErrors ValidateDetails(string? name, string? slug, decimal price, decimal vatRate) =>
@@ -276,13 +311,34 @@ internal static class AdminStoreCatalogEndpoints
 
 internal sealed record ListProductRequest(Guid ProductId, string? Name, string? Slug, string? Description, decimal Price, decimal VatRate, bool IsVisible, int SortOrder);
 
-internal sealed record UpdateStoreProductRequest(string? Name, string? Slug, string? Description, decimal Price, decimal VatRate, bool IsVisible, int SortOrder);
+internal sealed record UpdateStoreProductRequest(
+    string? Name,
+    string? Slug,
+    string? Description,
+    decimal Price,
+    decimal VatRate,
+    bool IsVisible,
+    int SortOrder,
+    ListingSeoRequest? Seo = null);
+
+// What this page says for itself. Absent leaves what is there alone; present replaces all of it (D-165).
+internal sealed record ListingSeoRequest(string? Title, string? Description, string? SocialImageUrl, bool NoIndex);
+
+internal sealed record CategorySeoRequest(string? Title, string? Description, string? PageText);
 
 internal sealed record AssignCategoriesRequest(List<Guid>? CategoryIds);
 
-internal sealed record CategoryRequest(string? Name, string? Slug, int SortOrder);
+internal sealed record CategoryRequest(string? Name, string? Slug, int SortOrder, CategorySeoRequest? Seo = null);
 
-internal sealed record AdminCategoryResponse(Guid Id, string Name, string Slug, int SortOrder, List<Guid> AttributeIds);
+internal sealed record AdminCategoryResponse(
+    Guid Id,
+    string Name,
+    string Slug,
+    int SortOrder,
+    List<Guid> AttributeIds,
+    string? SeoTitle,
+    string? SeoDescription,
+    string? PageText);
 
 internal sealed record AdminStoreProductResponse(
     Guid Id,
@@ -295,7 +351,11 @@ internal sealed record AdminStoreProductResponse(
     decimal VatRate,
     bool IsVisible,
     int SortOrder,
-    List<Guid> CategoryIds)
+    List<Guid> CategoryIds,
+    string? SeoTitle,
+    string? SeoDescription,
+    string? SeoSocialImageUrl,
+    bool SeoNoIndex)
 {
     public static AdminStoreProductResponse From(StoreProduct storeProduct, Product product) => new(
         storeProduct.Id,
@@ -308,5 +368,9 @@ internal sealed record AdminStoreProductResponse(
         storeProduct.VatRate,
         storeProduct.IsVisible,
         storeProduct.SortOrder,
-        storeProduct.Categories.Select(assignment => assignment.CategoryId).ToList());
+        storeProduct.Categories.Select(assignment => assignment.CategoryId).ToList(),
+        storeProduct.SeoTitle,
+        storeProduct.SeoDescription,
+        storeProduct.SeoSocialImageUrl,
+        storeProduct.SeoNoIndex);
 }

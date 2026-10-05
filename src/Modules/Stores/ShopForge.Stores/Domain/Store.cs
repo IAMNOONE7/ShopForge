@@ -51,6 +51,27 @@ internal sealed class Store : ITenantOwned
     // How long after a delivery the store takes goods back.
     public int ReturnWindowDays { get; private set; } = DefaultReturnWindowDays;
 
+    // What the store says about its pages when a page says nothing of its own, and a switch for a shop that is
+    // not ready to be found at all (D-165). Typed columns rather than a blob, because these decide behaviour
+    // rather than describe presentation (D-021).
+    public string? SeoTitleSuffix { get; private set; }
+
+    public string? SeoDescription { get; private set; }
+
+    public string? SeoSocialImageUrl { get; private set; }
+
+    public bool SeoNoIndex { get; private set; }
+
+    public void DescribeToSearchEngines(string? titleSuffix, string? description, string? socialImageUrl, bool noIndex)
+    {
+        SeoTitleSuffix = Tidied(titleSuffix);
+        SeoDescription = Tidied(description);
+        SeoSocialImageUrl = Tidied(socialImageUrl);
+        SeoNoIndex = noIndex;
+    }
+
+    private static string? Tidied(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
     public IReadOnlyCollection<StoreDomain> Domains => _domains;
 
     // The subdomain a store is given when it is created: the platform owns it, so there is nothing to prove.

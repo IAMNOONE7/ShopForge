@@ -18,8 +18,13 @@ public sealed class LoadBaselineTests(ShopForgeApiFactory factory)
 
     // What a page of the catalog and a product page cost in round trips today. They are exact rather than a
     // ceiling: a query that appears is worth looking at even when it is a cheap one.
-    private const int CatalogQueries = 13;
-    private const int ProductQueries = 7;
+    //
+    // Both went up by one on 2026-10-05, when each page started answering with the metadata a search engine
+    // reads (D-165). That is one read of the store's own row, by primary key, for data the page did not carry
+    // before. Caching it across requests would need invalidating when a merchant edits their shop, which is a
+    // trade worth making when something measures it rather than now.
+    private const int CatalogQueries = 14;
+    private const int ProductQueries = 8;
 
     private static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
 

@@ -17,6 +17,12 @@ internal sealed class StoreEntityConfiguration : IEntityTypeConfiguration<Store>
         builder.Property(store => store.Name).HasMaxLength(200);
         builder.Property(store => store.Currency).HasMaxLength(3).IsFixedLength();
         builder.Property(store => store.Culture).HasMaxLength(35);
+
+        // Search results truncate well before these, but a merchant may write what they like up to a length
+        // the column can hold; what gets shown is the search engine's business (D-165).
+        builder.Property(store => store.SeoTitleSuffix).HasMaxLength(200);
+        builder.Property(store => store.SeoDescription).HasMaxLength(500);
+        builder.Property(store => store.SeoSocialImageUrl).HasMaxLength(2000);
         builder.Property(store => store.LogoPath).HasMaxLength(300);
         builder.Property(store => store.ReturnWindowDays).HasDefaultValue(Domain.Store.DefaultReturnWindowDays);
         builder.Property(store => store.Status).HasConversion<string>().HasMaxLength(20);

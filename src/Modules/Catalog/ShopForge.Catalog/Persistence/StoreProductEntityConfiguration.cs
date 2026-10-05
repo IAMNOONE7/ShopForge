@@ -19,6 +19,9 @@ internal sealed class StoreProductEntityConfiguration : IEntityTypeConfiguration
         builder.Property(storeProduct => storeProduct.Name).HasMaxLength(200);
         builder.Property(storeProduct => storeProduct.Slug).HasMaxLength(Slugs.MaxLength);
         builder.Property(storeProduct => storeProduct.Description).HasMaxLength(10_000);
+        builder.Property(storeProduct => storeProduct.SeoTitle).HasMaxLength(200);
+        builder.Property(storeProduct => storeProduct.SeoDescription).HasMaxLength(500);
+        builder.Property(storeProduct => storeProduct.SeoSocialImageUrl).HasMaxLength(2000);
         builder.Property(storeProduct => storeProduct.Price).HasPrecision(12, 2);
         builder.Property(storeProduct => storeProduct.VatRate).HasPrecision(5, 2);
 
