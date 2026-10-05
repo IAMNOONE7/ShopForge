@@ -84,7 +84,7 @@ const methods: CheckoutMethods = {
       name: "Courier",
       price: 10,
       requiresPickupPoint: false,
-      pickupPointChoice: "list",
+      pickupPointChoice: "none",
     },
     {
       code: "pickup",
@@ -99,6 +99,13 @@ const methods: CheckoutMethods = {
       price: 6,
       requiresPickupPoint: true,
       pickupPointChoice: "carrier-map",
+    },
+    {
+      code: "home-delivery",
+      name: "Home delivery",
+      price: 8,
+      requiresPickupPoint: false,
+      pickupPointChoice: "none",
     },
   ],
 };
@@ -512,6 +519,50 @@ describe("CheckoutPage", () => {
       expect(mocks.placeOrder.mock.calls[0][0]).toMatchObject({
         shippingMethodCode: "z-box",
         pickupPointCode: "4321",
+      });
+    } finally {
+      delete (window as { Packeta?: unknown }).Packeta;
+    }
+  });
+
+  // A box and a doorstep from the same carrier: moving between them must not leave the other one's answer
+  // behind, and the doorstep must not open anything.
+  it("forgets the chosen box when the shopper asks for their door instead", async () => {
+    const user = userEvent.setup();
+    mocks.getCheckoutMethods.mockResolvedValue(methods);
+    mocks.placeOrder.mockResolvedValue({ number: "2026-00002", token: "t", paymentInstructions: null, redirectUrl: null });
+    (window as { Packeta?: unknown }).Packeta = {
+      Widget: {
+        pick: (_key: string, callback: (point: { id: string; name: string }) => void) =>
+          callback({ id: "4321", name: "Z-BOX Hlavní nádraží" }),
+      },
+    };
+
+    try {
+      renderCheckout();
+
+      await screen.findByRole("button", { name: "Place order" });
+      await fillGuestAddress(user);
+      await user.click(screen.getByRole("radio", { name: /Z-BOX/ }));
+      await user.click(screen.getByRole("button", { name: "Choose a pickup point" }));
+      expect(screen.getByText("Z-BOX Hlavní nádraží")).toBeTruthy();
+
+      await user.click(screen.getByRole("radio", { name: /Home delivery/ }));
+      expect(screen.queryByRole("button", { name: /pickup point/ })).toBeNull();
+      expect(screen.queryByText("Z-BOX Hlavní nádraží")).toBeNull();
+
+      // And back again: the box has to be chosen afresh rather than remembered.
+      await user.click(screen.getByRole("radio", { name: /Z-BOX/ }));
+      expect(screen.queryByText("Z-BOX Hlavní nádraží")).toBeNull();
+      expect(screen.getByRole("button", { name: "Choose a pickup point" })).toBeTruthy();
+
+      await user.click(screen.getByRole("radio", { name: /Home delivery/ }));
+      await user.click(screen.getByRole("button", { name: "Place order" }));
+
+      await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(1));
+      expect(mocks.placeOrder.mock.calls[0][0]).toMatchObject({
+        shippingMethodCode: "home-delivery",
+        pickupPointCode: null,
       });
     } finally {
       delete (window as { Packeta?: unknown }).Packeta;

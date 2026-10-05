@@ -213,12 +213,9 @@ function CheckoutForm({
   const chosenPaymentCode =
     methods.paymentMethods.find((method) => method.code === paymentCode)?.code ??
     methods.paymentMethods[0].code;
-  const fromOurList =
-    chosenShipping.requiresPickupPoint &&
-    chosenShipping.pickupPointChoice === "list";
-  const inTheCarriersMap =
-    chosenShipping.requiresPickupPoint &&
-    chosenShipping.pickupPointChoice === "carrier-map";
+  // A method that delivers to the door says so itself, so neither branch has to ask twice.
+  const fromOurList = chosenShipping.pickupPointChoice === "list";
+  const inTheCarriersMap = chosenShipping.pickupPointChoice === "carrier-map";
   const pickupPoints = useRequest(
     "checkout-pickup:" + (fromOurList ? chosenShipping.code : "none"),
     (signal) =>

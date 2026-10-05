@@ -450,11 +450,13 @@ internal static class CheckoutEndpoints
         return named.Length <= OrderLine.MaxProductNameLength ? named : named[..OrderLine.MaxProductNameLength];
     }
 
-    // The two words the shop knows: ask us for a list, or open the carrier's map.
+    // The three words the shop knows: there is nowhere to choose, ask us for a list, or open the carrier's
+    // map. A method that delivers to the door says `none` whoever carries it — the same carrier offering both
+    // a box and a doorstep must not have the doorstep claim a map nobody should open (D-161).
     private static string Choice(ShippingMethod method, IEnumerable<IShippingProvider> shippingProviders) =>
-        shippingProviders.SingleOrDefault(candidate => candidate.Key == method.ProviderKey) is { PickupPoints: PickupPointChoice.InTheCarriersMap }
-            ? "carrier-map"
-            : "list";
+        !method.RequiresPickupPoint ? "none"
+        : shippingProviders.SingleOrDefault(candidate => candidate.Key == method.ProviderKey) is { PickupPoints: PickupPointChoice.InTheCarriersMap } ? "carrier-map"
+        : "list";
 
     // "Is this one of yours" and "are you there at all" are different questions with the same shape, and the
     // checkout has to tell them apart: null is a refusal, silence is not.
@@ -537,15 +539,16 @@ internal sealed record CheckoutMethodsResponse(List<PaymentMethodResponse> Payme
 
 internal sealed record PaymentMethodResponse(string Code, string Name);
 
-// `PickupPointChoice` tells the shop which way to ask: our own list of points, or the carrier's map opened in
-// the shopper's browser. Without it an empty list of points is indistinguishable from a store that configured
-// none (D-158).
+// `PickupPointChoice` tells the shop which way to ask: nowhere, our own list of points, or the carrier's map
+// opened in the shopper's browser. Without it an empty list of points is indistinguishable from a store that
+// configured none (D-158).
 internal sealed record ShippingMethodResponse(
     string Code,
     string Name,
     decimal Price,
     bool RequiresPickupPoint,
     string PickupPointChoice);
+
 
 internal sealed record PickupPointResponse(string Code, string Name, string Line1, string City, string PostalCode, string Country);
 

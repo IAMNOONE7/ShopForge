@@ -163,15 +163,21 @@ public sealed class PacketaConnectionTests : IDisposable
         Assert.Equal("The pickup point could not be checked", problem!.Title);
     }
 
+    // The three kinds a shop has to render differently, each saying which it is rather than leaving the page
+    // to work it out from an empty list.
     [Fact]
-    public async Task A_method_whose_points_live_in_a_map_says_so_rather_than_offering_an_empty_list()
+    public async Task Every_method_says_where_its_points_are_chosen()
     {
         var world = await PacketaStoreAsync(connect: true);
+        await AddCollectionAsync(world.Admin, world.Furniture.Store.StoreId);
 
         var methods = await world.Shopper.GetJsonAsync<MethodsView>("/api/storefront/checkout/methods");
+        var choices = methods.ShippingMethods.ToDictionary(method => method.Code, method => method.PickupPointChoice);
 
-        Assert.Equal("carrier-map", methods.ShippingMethods.Single(method => method.Code == "z-box").PickupPointChoice);
-        Assert.Equal("list", methods.ShippingMethods.Single(method => method.Code == "courier").PickupPointChoice);
+        Assert.Equal("carrier-map", choices["z-box"]);
+        Assert.Equal("list", choices["collection"]);
+        Assert.Equal("none", choices["home-delivery"]);
+        Assert.Equal("none", choices["courier"]);
     }
 
     // The shipping price is the store's row, whatever a browser puts in the body.
@@ -222,6 +228,80 @@ public sealed class PacketaConnectionTests : IDisposable
         Assert.DoesNotContain(logs.Messages, message => message.Contains(ApiPassword, StringComparison.Ordinal));
     }
 
+    // The same carrier, no map, nowhere to choose. Everything Packeta asks for about the recipient — a name,
+    // a telephone number, an e-mail address, a street line, a town and a postal code — is already required of
+    // every order, so a doorstep delivery needs no gate of its own, only proof that it holds.
+    [Fact]
+    public async Task The_same_carrier_delivers_to_the_door_with_nothing_to_choose()
+    {
+        var world = await PacketaStoreAsync(connect: true);
+
+        var methods = await world.Shopper.GetJsonAsync<MethodsView>("/api/storefront/checkout/methods");
+        var home = methods.ShippingMethods.Single(method => method.Code == "home-delivery");
+        using var placed = await world.Shopper.PostAsync("/api/storefront/checkout", HomeDelivery());
+        var order = await world.Shopper.ReadAsync<PlacedOrder>(placed, HttpStatusCode.Created);
+        var stored = await StoredAsync(world, order.Number);
+
+        Assert.False(home.RequiresPickupPoint);
+        Assert.Equal("none", home.PickupPointChoice);
+        Assert.Equal(PacketaShippingProvider.ProviderKey, stored.ShippingProviderKey);
+        Assert.Equal("+420 123 456 789", stored.Phone);
+    }
+
+    // The structural half of "a box is not a home": nothing of the pickup point is left on the order, and the
+    // carrier is never asked about one.
+    [Fact]
+    public async Task A_doorstep_order_keeps_no_pickup_point_and_asks_about_none()
+    {
+        var world = await PacketaStoreAsync(connect: true);
+
+        using var placed = await world.Shopper.PostAsync("/api/storefront/checkout", HomeDelivery());
+        var order = await world.Shopper.ReadAsync<PlacedOrder>(placed, HttpStatusCode.Created);
+        var stored = await StoredAsync(world, order.Number);
+
+        Assert.Null(stored.PickupPointCode);
+        Assert.Null(stored.PickupPointName);
+        Assert.Null(stored.PickupPointAddress);
+        Assert.Null(_packeta.LastChoice);
+    }
+
+    // A parcel going to a door still needs somebody to telephone about it (D-144).
+    [Fact]
+    public async Task A_doorstep_order_without_a_telephone_number_is_refused()
+    {
+        var world = await PacketaStoreAsync(connect: true);
+
+        using var refused = await world.Shopper.PostAsync("/api/storefront/checkout", HomeDelivery(phone: null));
+
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+    }
+
+    // A point chosen for a box has no meaning for a doorstep, so sending one changes nothing: the order goes
+    // to the address, and the carrier is not asked about the point.
+    [Fact]
+    public async Task A_point_sent_with_a_doorstep_order_is_ignored()
+    {
+        var world = await PacketaStoreAsync(connect: true);
+
+        using var placed = await world.Shopper.PostAsync("/api/storefront/checkout", HomeDelivery(pickupPointCode: "99"));
+        var order = await world.Shopper.ReadAsync<PlacedOrder>(placed, HttpStatusCode.Created);
+        var stored = await StoredAsync(world, order.Number);
+
+        Assert.Null(stored.PickupPointCode);
+        Assert.Null(_packeta.LastChoice);
+    }
+
+    private static object HomeDelivery(string? phone = "+420 123 456 789", string? pickupPointCode = null) => new
+    {
+        Email = "buyer@example.test",
+        Phone = phone,
+        BillingAddress = new { FullName = "Alex Buyer", Line1 = "Wilsonova 8", Line2 = (string?)null, City = "Praha", PostalCode = "110 00", Country = "CZ" },
+        ShippingAddress = (object?)null,
+        PaymentMethodCode = "bank-transfer",
+        ShippingMethodCode = "home-delivery",
+        PickupPointCode = pickupPointCode,
+    };
+
     private static object PacketaCheckout() => new
     {
         Email = "buyer@example.test",
@@ -261,19 +341,8 @@ public sealed class PacketaConnectionTests : IDisposable
             }
         }
 
-        using var method = await admin.PostAsJsonAsync(
-            $"/api/admin/stores/{storeId}/shipping-methods",
-            new
-            {
-                Name = "Z-BOX",
-                ProviderKey = PacketaShippingProvider.ProviderKey,
-                Price = 59m,
-                VatRate = 21m,
-                IsActive = true,
-                RequiresPickupPoint = true,
-            },
-            CancellationToken);
-        Assert.Equal(HttpStatusCode.Created, method.StatusCode);
+        await AddMethodAsync(admin, storeId, "Z-BOX", requiresPickupPoint: true);
+        await AddMethodAsync(admin, storeId, "Home delivery", requiresPickupPoint: false);
 
         var shopper = new StorefrontApi(app, furniture.Store);
         using var added = await shopper.PostAsync(
@@ -287,6 +356,36 @@ public sealed class PacketaConnectionTests : IDisposable
         _factory.QueryAsync(world.Furniture.Store, dbContext => dbContext.Set<Order>()
             .AsNoTracking()
             .SingleAsync(order => order.Number == number, CancellationToken));
+
+    // A method of the store's own that collects from a counter: its points are rows we keep, so they come as
+    // a list.
+    private async Task AddCollectionAsync(HttpClient admin, Guid storeId)
+    {
+        using var method = await admin.PostAsJsonAsync(
+            $"/api/admin/stores/{storeId}/shipping-methods",
+            new { Name = "Collection", ProviderKey = "manual", Price = 0m, VatRate = 21m, IsActive = true, RequiresPickupPoint = true },
+            CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, method.StatusCode);
+    }
+
+    private async Task AddMethodAsync(HttpClient admin, Guid storeId, string name, bool requiresPickupPoint)
+    {
+        using var method = await admin.PostAsJsonAsync(
+            $"/api/admin/stores/{storeId}/shipping-methods",
+            new
+            {
+                Name = name,
+                ProviderKey = PacketaShippingProvider.ProviderKey,
+                Price = 59m,
+                VatRate = 21m,
+                IsActive = true,
+                RequiresPickupPoint = requiresPickupPoint,
+            },
+            CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, method.StatusCode);
+    }
 
     private sealed record PacketaWorld(FurnitureStore Furniture, HttpClient Admin, StorefrontApi Shopper);
 
