@@ -15,23 +15,35 @@ public interface IStoreUrls
 // of them this becomes a segment here rather than a rewrite everywhere.
 public sealed record StoreAddress(string Host, string Language)
 {
-    public string Home => Page(string.Empty);
+    // The shapes themselves live in StorePages, because a redirect within one visit has to stay on the host
+    // the shopper is already on — moving them to the primary domain would take their cart cookie away from
+    // them (D-124) — so the same shapes are needed with and without a host.
+    public string Product(string slug) => Page(StorePages.Product(slug));
 
-    // The two shapes the storefront serves. Its router has the matching routes and a test on each side says so,
-    // because changing one without the other is how a sitemap starts advertising pages that do not exist.
-    public string Product(string slug) => Page($"p/{Escaped(slug)}");
+    public string Category(string slug) => Page(StorePages.Category(slug));
 
-    public string Category(string slug) => Page($"c/{Escaped(slug)}");
-
-    public string ContentPage(string slug) => Page($"pages/{Escaped(slug)}");
+    public string ContentPage(string slug) => Page(StorePages.ContentPage(slug));
 
     // An image is served by the API rather than the frontend, so its path is ours either way; what this adds
     // is the host, which a feed or an inbox cannot do without.
-    public string Image(string path) => Page(path.TrimStart('/'));
+    public string Image(string path) => Page(path);
 
-    public string Logo => Page("api/storefront/store/logo");
+    public string Logo => Page("/api/storefront/store/logo");
 
-    private string Page(string path) => $"https://{Host}/{path}";
+    public string Home => Page("/");
+
+    private string Page(string path) => $"https://{Host}{(path.StartsWith('/') ? path : "/" + path)}";
+}
+
+// What each kind of page is called, without a host. One place, used both for the absolute addresses a feed or
+// an inbox needs and for the relative ones a redirect uses (D-149, D-166).
+public static class StorePages
+{
+    public static string Product(string slug) => $"/p/{Escaped(slug)}";
+
+    public static string Category(string slug) => $"/c/{Escaped(slug)}";
+
+    public static string ContentPage(string slug) => $"/pages/{Escaped(slug)}";
 
     private static string Escaped(string slug) => Uri.EscapeDataString(slug);
 }

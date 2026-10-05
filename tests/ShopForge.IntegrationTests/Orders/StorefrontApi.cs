@@ -5,9 +5,11 @@ using Microsoft.AspNetCore.Mvc.Testing;
 namespace ShopForge.IntegrationTests.Orders;
 
 // A storefront visitor: one HttpClient keeps the cart cookie across requests, always against the same store host.
-internal sealed class StorefrontApi(WebApplicationFactory<Program> factory, TestStore store) : IDisposable
+internal sealed class StorefrontApi(WebApplicationFactory<Program> factory, TestStore store, bool followRedirects = true) : IDisposable
 {
-    private readonly HttpClient _client = factory.CreateClient();
+    // A client that follows a redirect cannot tell you there was one, which is the whole subject of some tests.
+    private readonly HttpClient _client = factory.CreateClient(
+        new WebApplicationFactoryClientOptions { AllowAutoRedirect = followRedirects });
 
     public async Task<HttpResponseMessage> GetAsync(string path, (string Name, string Value)? header = null)
     {

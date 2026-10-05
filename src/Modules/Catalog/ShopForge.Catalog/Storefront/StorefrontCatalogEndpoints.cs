@@ -36,7 +36,43 @@ internal static class StorefrontCatalogEndpoints
         return TypedResults.Ok(categories);
     }
 
-    private static async Task<Results<Ok<ProductPageResponse>, NotFound, ValidationProblem>> GetProductsAsync(
+    // A page whose address has changed is not missing; it has moved. This is an API resource, so the redirect
+    // names the API's new address for it rather than the page's: whoever asked wanted this product's details,
+    // and following the redirect gives them exactly that, with the new slug in the answer for the shop to put
+    // in the address bar. The page-level redirect a crawler needs belongs to whatever serves the page (D-166).
+    private static string ProductResource(string slug) => $"/api/storefront/products/{Uri.EscapeDataString(slug)}";
+
+    private static string CategoryResource(string slug) => $"/api/storefront/products?category={Uri.EscapeDataString(slug)}";
+
+    private static async Task<RedirectHttpResult?> MovedAsync(
+        DbContext dbContext,
+        SlugKind kind,
+        string slug,
+        Func<string, string> pageOf,
+        CancellationToken cancellationToken)
+    {
+        var moved = await dbContext.Set<SlugHistory>()
+            .AsNoTracking()
+            .Where(history => history.Kind == kind && history.Slug == slug)
+            .Select(history => history.PointsAt)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (moved == Guid.Empty)
+        {
+            return null;
+        }
+
+        // Where that row is called now, which is the newest name after any number of renames.
+        var nowCalled = kind == SlugKind.Listing
+            ? await dbContext.Set<StoreProduct>().AsNoTracking()
+                .Where(listing => listing.Id == moved && listing.IsVisible).Select(listing => listing.Slug).SingleOrDefaultAsync(cancellationToken)
+            : await dbContext.Set<Category>().AsNoTracking()
+                .Where(category => category.Id == moved).Select(category => category.Slug).SingleOrDefaultAsync(cancellationToken);
+
+        return nowCalled is null ? null : TypedResults.Redirect(pageOf(nowCalled), permanent: true);
+    }
+
+    private static async Task<Results<Ok<ProductPageResponse>, RedirectHttpResult, NotFound, ValidationProblem>> GetProductsAsync(
         HttpRequest request,
         DbContext dbContext,
         IStockLedger stock,
@@ -64,7 +100,9 @@ internal static class StorefrontCatalogEndpoints
 
             if (chosen is null)
             {
-                return TypedResults.NotFound();
+                return await MovedAsync(dbContext, SlugKind.Category, category, CategoryResource, cancellationToken) is { } moved
+                    ? moved
+                    : TypedResults.NotFound();
             }
 
             categoryId = chosen.Id;
@@ -159,7 +197,7 @@ internal static class StorefrontCatalogEndpoints
             pageText));
     }
 
-    private static async Task<Results<Ok<ProductDetailResponse>, NotFound>> GetProductAsync(
+    private static async Task<Results<Ok<ProductDetailResponse>, RedirectHttpResult, NotFound>> GetProductAsync(
         string slug,
         DbContext dbContext,
         IStockLedger stock,
@@ -175,7 +213,11 @@ internal static class StorefrontCatalogEndpoints
 
         if (storeProduct is null)
         {
-            return TypedResults.NotFound();
+            // Somebody wrote this address down before it changed. The trail says where that page went, and a
+            // slug now belonging to a live listing never reaches this (D-166).
+            return await MovedAsync(dbContext, SlugKind.Listing, slug, ProductResource, cancellationToken) is { } moved
+                ? moved
+                : TypedResults.NotFound();
         }
 
         var product = await dbContext.Set<Product>().AsNoTracking().SingleAsync(product => product.Id == storeProduct.ProductId, cancellationToken);

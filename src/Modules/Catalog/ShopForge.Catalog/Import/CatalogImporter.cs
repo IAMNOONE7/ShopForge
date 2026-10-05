@@ -1,16 +1,18 @@
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Catalog.Domain;
+using ShopForge.Catalog.Publishing;
 using ShopForge.Shared.Inventory;
 using ShopForge.Shared.Platform;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Catalog.Import;
 
-internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeContext, IStockLedger stock, ITenantLimits limits)
+internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeContext, IStockLedger stock, ITenantLimits limits, TimeProvider clock)
 {
     private const int MaxIssues = 200;
 
     private readonly List<StockUpdate> _stockUpdates = [];
+    private readonly List<Rename> _renames = [];
 
     private string[] _axes = [];
 
@@ -56,6 +58,8 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
         {
             try
             {
+                // The trail goes in the same save as the rename it records: either both or neither (D-166).
+                await RecordRenamesAsync(cancellationToken);
                 await dbContext.SaveChangesAsync(cancellationToken);
                 await ApplyStockAsync(issues, cancellationToken);
             }
@@ -82,6 +86,22 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
             [.. file.Columns.Where(column =>
                 !ImportColumns.All.Contains(column) && !ImportColumns.IsOption(column) && !catalog.Definitions.ContainsKey(column))],
             [.. issues.Take(MaxIssues)]);
+
+    private async Task RecordRenamesAsync(CancellationToken cancellationToken)
+    {
+        foreach (var rename in _renames)
+        {
+            await SlugTrail.RecordAsync(
+                dbContext,
+                rename.StoreId,
+                SlugKind.Listing,
+                rename.WasCalled,
+                rename.Listing.Slug,
+                rename.Listing.Id,
+                clock.GetUtcNow(),
+                cancellationToken);
+        }
+    }
 
     // Products only have their ids once the catalog is saved, so stock is written afterwards, from the rows that were valid.
     private async Task ApplyStockAsync(List<ImportIssue> issues, CancellationToken cancellationToken)
@@ -182,7 +202,15 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
         }
         else
         {
+            // A file can rename in bulk, which is the easiest way to lose every link to a shop at once. The
+            // trail is written after the rows, where the rest of the deferred work goes.
+            var wasCalled = listing.Slug;
             changed |= listing.Update(details!);
+
+            if (wasCalled != listing.Slug)
+            {
+                _renames.Add(new Rename(listing.StoreId, wasCalled, listing));
+            }
         }
 
         catalog.Slugs[details!.Slug] = listing.Id;
@@ -504,3 +532,6 @@ internal enum RowOutcome
 }
 
 internal sealed record StockUpdate(int Row, ProductVariant Variant, int Quantity);
+
+// A listing whose slug changed during this file, kept until the save that makes the change real.
+internal sealed record Rename(Guid StoreId, string WasCalled, StoreProduct Listing);

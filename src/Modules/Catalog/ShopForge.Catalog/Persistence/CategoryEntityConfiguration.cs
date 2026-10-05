@@ -26,3 +26,18 @@ internal sealed class CategoryEntityConfiguration : IEntityTypeConfiguration<Cat
             .OnDelete(DeleteBehavior.Cascade);
     }
 }
+
+internal sealed class SlugHistoryEntityConfiguration : IEntityTypeConfiguration<SlugHistory>
+{
+    public void Configure(EntityTypeBuilder<SlugHistory> builder)
+    {
+        builder.ToTable("slug_history", CatalogModule.Schema);
+
+        builder.Property(history => history.Slug).HasMaxLength(Slugs.MaxLength);
+        builder.Property(history => history.Kind).HasConversion<string>().HasMaxLength(20);
+
+        // One answer per address: a slug that is given up twice by two different rows has only its latest
+        // owner to send people to.
+        builder.HasIndex(history => new { history.StoreId, history.Kind, history.Slug }).IsUnique();
+    }
+}

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Catalog.Domain;
+using ShopForge.Catalog.Publishing;
 using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Security;
@@ -94,6 +95,7 @@ internal static class AdminStoreCatalogEndpoints
         Guid storeProductId,
         UpdateStoreProductRequest request,
         DbContext dbContext,
+        TimeProvider clock,
         IAuditLog audit,
         CancellationToken cancellationToken)
     {
@@ -123,7 +125,17 @@ internal static class AdminStoreCatalogEndpoints
         }
 
         var wasPriced = storeProduct.Price;
+        var wasCalled = storeProduct.Slug;
         storeProduct.Update(details);
+        await SlugTrail.RecordAsync(
+            dbContext,
+            storeProduct.StoreId,
+            SlugKind.Listing,
+            wasCalled,
+            storeProduct.Slug,
+            storeProduct.Id,
+            clock.GetUtcNow(),
+            cancellationToken);
 
         if (request.Seo is { } seo)
         {
@@ -243,6 +255,7 @@ internal static class AdminStoreCatalogEndpoints
         Guid categoryId,
         CategoryRequest request,
         DbContext dbContext,
+        TimeProvider clock,
         CancellationToken cancellationToken)
     {
         var category = await dbContext.Set<Category>()
@@ -267,7 +280,17 @@ internal static class AdminStoreCatalogEndpoints
             return SlugTaken();
         }
 
+        var wasCalled = category.Slug;
         category.Update(request.Name!, slug, request.SortOrder);
+        await SlugTrail.RecordAsync(
+            dbContext,
+            category.StoreId,
+            SlugKind.Category,
+            wasCalled,
+            category.Slug,
+            category.Id,
+            clock.GetUtcNow(),
+            cancellationToken);
 
         if (request.Seo is { } seo)
         {
