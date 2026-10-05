@@ -141,6 +141,8 @@ export function MethodsSection({ storeId, money, run }: Props) {
                 vatRate: Number(form.get("vatRate")),
                 isActive: form.get("isActive") === "on",
                 requiresPickupPoint: form.get("requiresPickupPoint") === "on",
+                maxWeightGrams: weightFrom(form.get("maxWeightGrams")),
+                countries: countriesFrom(form.get("countries")),
               });
               reloadShipping();
             })
@@ -173,6 +175,25 @@ export function MethodsSection({ storeId, money, run }: Props) {
           <span className="hint">{money.format(method.price)}</span>
           <span className="chip">{method.providerKey}</span>
           <label>
+            {t("methods:maxWeight")}{" "}
+            <input
+              name="maxWeightGrams"
+              type="number"
+              min="1"
+              step="1"
+              defaultValue={method.maxWeightGrams ?? ""}
+              placeholder={t("methods:noLimit")}
+            />
+          </label>
+          <label>
+            {t("methods:countries")}{" "}
+            <input
+              name="countries"
+              defaultValue={method.countries.join(" ")}
+              placeholder={t("methods:everywhere")}
+            />
+          </label>
+          <label>
             <input
               name="requiresPickupPoint"
               type="checkbox"
@@ -201,6 +222,8 @@ export function MethodsSection({ storeId, money, run }: Props) {
               price: Number(form.get("price")),
               vatRate: Number(form.get("vatRate")),
               requiresPickupPoint: form.get("requiresPickupPoint") === "on",
+              maxWeightGrams: weightFrom(form.get("maxWeightGrams")),
+              countries: countriesFrom(form.get("countries")),
             });
             reloadShipping();
           })
@@ -232,6 +255,14 @@ export function MethodsSection({ storeId, money, run }: Props) {
             </option>
           ))}
         </select>
+        <input
+          name="maxWeightGrams"
+          type="number"
+          min="1"
+          step="1"
+          placeholder={t("methods:maxWeight")}
+        />
+        <input name="countries" placeholder={t("methods:countries")} />
         <label>
           <input name="requiresPickupPoint" type="checkbox" />{" "}
           {t("methods:needsPickup")}
@@ -313,4 +344,18 @@ export function MethodsSection({ storeId, money, run }: Props) {
       </form>
     </section>
   );
+}
+
+// An empty box means no limit, which is a different thing from a limit of nothing.
+function weightFrom(value: FormDataEntryValue | null) {
+  const written = String(value ?? "").trim();
+  return written === "" ? null : Number(written);
+}
+
+// Written the way a merchant would: "CZ SK", or nothing at all for everywhere.
+function countriesFrom(value: FormDataEntryValue | null) {
+  return String(value ?? "")
+    .toUpperCase()
+    .split(/[\s,]+/)
+    .filter((country) => country.length > 0);
 }

@@ -251,7 +251,14 @@ function OrderDetail({ storeId, number }: { storeId: string; number: string }) {
       )}
       <p className="hint">
         {t("orders:payment", { method: order.paymentMethod })}{" "}
-        {order.pickupPoint && t("orders:pickup", { point: order.pickupPoint })}{" "}
+        {t("orders:carriedBy", {
+          carrier: order.carrier ?? t("orders:carrierUnknown"),
+        })}{" "}
+        {order.phone && t("orders:phone", { phone: order.phone })}{" "}
+        {/* Where it is actually going: a box has its own address, a doorstep order uses the one below. */}
+        {order.pickupPoint
+          ? t("orders:pickup", { point: order.pickupPoint })
+          : t("orders:toTheAddress")}{" "}
         {order.shipment &&
           t("orders:shipment", {
             carrier: order.shipment.carrier,

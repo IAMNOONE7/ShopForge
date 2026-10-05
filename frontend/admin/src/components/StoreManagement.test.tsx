@@ -85,6 +85,8 @@ function mockReadyReads() {
       vatRate: 21,
       isActive: true,
       requiresPickupPoint: false,
+      maxWeightGrams: null,
+      countries: [],
     },
   ]);
 }
@@ -254,6 +256,8 @@ describe("store management", () => {
         vatRate: 21,
         isActive: true,
         requiresPickupPoint: false,
+        maxWeightGrams: null,
+        countries: [],
       },
     ]);
 

@@ -291,6 +291,35 @@ public sealed class PacketaConnectionTests : IDisposable
         Assert.Null(_packeta.LastChoice);
     }
 
+    // Whoever packs the parcel reads one answer: who is carrying it, and where it is going. A box has its own
+    // address; a doorstep uses the shopper's.
+    [Fact]
+    public async Task The_admin_reads_the_carrier_and_the_destination_for_either_method()
+    {
+        var world = await PacketaStoreAsync(connect: true);
+        var storeId = world.Furniture.Store.StoreId;
+
+        using var toABox = await world.Shopper.PostAsync("/api/storefront/checkout", PacketaCheckout());
+        var boxed = await world.Shopper.ReadAsync<PlacedOrder>(toABox, HttpStatusCode.Created);
+        using var again = await world.Shopper.PostAsync(
+            "/api/storefront/cart/items", new { StoreProductId = world.Furniture.Products["oak-chair"], Quantity = 1 });
+        Assert.Equal(HttpStatusCode.OK, again.StatusCode);
+        using var toADoor = await world.Shopper.PostAsync("/api/storefront/checkout", HomeDelivery());
+        var delivered = await world.Shopper.ReadAsync<PlacedOrder>(toADoor, HttpStatusCode.Created);
+
+        var box = await world.Admin.GetFromJsonAsync<AdminOrderView>(
+            $"/api/admin/stores/{storeId}/orders/{boxed.Number}", CancellationToken);
+        var door = await world.Admin.GetFromJsonAsync<AdminOrderView>(
+            $"/api/admin/stores/{storeId}/orders/{delivered.Number}", CancellationToken);
+
+        Assert.Equal(PacketaShippingProvider.ProviderKey, box!.Carrier);
+        Assert.Equal("Z-BOX Hlavní nádraží, Wilsonova 8, Praha", box.PickupPoint);
+        Assert.Equal(PacketaShippingProvider.ProviderKey, door!.Carrier);
+        Assert.Null(door.PickupPoint);
+        Assert.Equal("Praha", door.ShippingAddress.City);
+        Assert.Equal("+420 123 456 789", door.Phone);
+    }
+
     private static object HomeDelivery(string? phone = "+420 123 456 789", string? pickupPointCode = null) => new
     {
         Email = "buyer@example.test",
@@ -390,6 +419,10 @@ public sealed class PacketaConnectionTests : IDisposable
     private sealed record PacketaWorld(FurnitureStore Furniture, HttpClient Admin, StorefrontApi Shopper);
 
     private sealed record ProblemView(string Title);
+
+    private sealed record AdminOrderView(string Number, string? Carrier, string? Phone, string? PickupPoint, AdminAddressView ShippingAddress);
+
+    private sealed record AdminAddressView(string FullName, string Line1, string City, string PostalCode, string Country);
 
     private sealed record MethodsView(List<ShippingMethodView> ShippingMethods);
 

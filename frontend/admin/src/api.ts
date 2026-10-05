@@ -206,6 +206,9 @@ export type AdminOrderDetail = {
   currency: string;
   paymentMethod: string;
   shippingMethod: string;
+  // Who is carrying it, as the order recorded at the time rather than whatever the method says today.
+  carrier: string | null;
+  phone: string | null;
   shippingPrice: number;
   itemsTotal: number;
   vatTotal: number;
@@ -248,6 +251,9 @@ export type ShippingMethod = {
   vatRate: number;
   isActive: boolean;
   requiresPickupPoint: boolean;
+  // What this method will take. Null and empty mean no limit, which is every method until a store sets one.
+  maxWeightGrams: number | null;
+  countries: string[];
 };
 
 export type PickupPoint = {
@@ -659,6 +665,8 @@ export const api = {
       price: number;
       vatRate: number;
       requiresPickupPoint: boolean;
+      maxWeightGrams: number | null;
+      countries: string[];
     },
   ) =>
     request<ShippingMethod>(
@@ -675,6 +683,8 @@ export const api = {
       vatRate: number;
       isActive: boolean;
       requiresPickupPoint: boolean;
+      maxWeightGrams: number | null;
+      countries: string[];
     },
   ) =>
     request<ShippingMethod>(
