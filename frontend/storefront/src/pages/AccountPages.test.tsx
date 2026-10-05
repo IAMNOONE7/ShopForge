@@ -16,6 +16,7 @@ import { AccountPage } from "./AccountPage";
 const mocks = vi.hoisted(() => ({
   getOrders: vi.fn(),
   getAccountOrder: vi.fn(),
+  getReturns: vi.fn(),
   updateProfile: vi.fn(),
   signOut: vi.fn(),
   downloadAccountDocument: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock("../account", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../account")>()),
   getOrders: mocks.getOrders,
   getAccountOrder: mocks.getAccountOrder,
+  getReturns: mocks.getReturns,
   updateProfile: mocks.updateProfile,
   signOut: mocks.signOut,
 }));
@@ -142,6 +144,7 @@ beforeEach(() => {
   apply.mockReset();
   retry.mockReset();
   Object.values(mocks).forEach((mock) => mock.mockReset());
+  mocks.getReturns.mockResolvedValue({ closesAt: null, returnable: [], returns: [] });
 });
 
 afterEach(cleanup);
@@ -160,6 +163,7 @@ describe("account profile and history", () => {
       screen.getByRole("link", { name: "Sign in" }).getAttribute("href"),
     ).toContain("returnTo=%2Faccount%2Forders%2F2026-00023");
     expect(mocks.getAccountOrder).not.toHaveBeenCalled();
+    expect(mocks.getReturns).not.toHaveBeenCalled();
   });
 
   it("shows all summary facts without assigning the store currency to history", async () => {
@@ -329,7 +333,8 @@ describe("authenticated order detail", () => {
       "2026-00023",
       "INV-2026-00012",
     );
-    expect(screen.queryByText(/send something back/i)).toBeNull();
+    expect(await screen.findByRole("heading", { name: "Sending something back" })).toBeTruthy();
+    expect(await screen.findByText("Nothing on this order can be sent back.")).toBeTruthy();
   });
 
   it("keeps a foreign or missing order private", async () => {

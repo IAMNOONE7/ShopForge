@@ -59,6 +59,7 @@ const cart: Cart = {
     {
       storeProductId: "oak",
       variantId: "oak-variant",
+      optionValues: [],
       name: "Oak chair",
       slug: "oak-chair",
       unitPrice: 120,
@@ -182,6 +183,83 @@ async function fillGuestAddress(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("CheckoutPage", () => {
+  it("replays an unchanged checkout after a lost response with the same key and body", async () => {
+    const user = userEvent.setup();
+    mocks.getCheckoutMethods.mockResolvedValue(methods);
+    mocks.placeOrder
+      .mockRejectedValueOnce(new HttpError("network", null))
+      .mockResolvedValueOnce({
+        number: "2026-0002", token: "11111111-1111-1111-1111-111111111111",
+        paymentInstructions: "Pay on delivery.", redirectUrl: null,
+      });
+    renderCheckout();
+    await screen.findByRole("heading", { name: "Checkout" });
+    await fillGuestAddress(user);
+    await user.click(screen.getByRole("button", { name: "Place order" }));
+    expect(await screen.findByText(/Submitting these unchanged details again uses the same request key/)).toBeTruthy();
+    expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
+    const [firstBody, firstKey] = mocks.placeOrder.mock.calls[0];
+    expect(firstKey).toMatch(/^sf-[a-f0-9]{32}$/);
+
+    await user.click(screen.getByRole("button", { name: "Place order" }));
+    expect(await screen.findByText("Order destination")).toBeTruthy();
+    expect(mocks.placeOrder.mock.calls[1][0]).toBe(firstBody);
+    expect(mocks.placeOrder.mock.calls[1][1]).toBe(firstKey);
+  });
+
+  it("requires explicit review before a changed draft starts a new key", async () => {
+    const user = userEvent.setup();
+    mocks.getCheckoutMethods.mockResolvedValue(methods);
+    mocks.placeOrder
+      .mockRejectedValueOnce(new HttpError("network", null))
+      .mockRejectedValueOnce(new HttpError("http", 400));
+    renderCheckout();
+    await screen.findByRole("heading", { name: "Checkout" });
+    await fillGuestAddress(user);
+    await user.click(screen.getByRole("button", { name: "Place order" }));
+    await screen.findByText(/same request key/);
+    const firstKey = mocks.placeOrder.mock.calls[0][1];
+
+    const phone = screen.getByRole("textbox", { name: "Telephone number" });
+    await user.clear(phone);
+    await user.type(phone, "+420987654321");
+    expect(screen.getByText("The previous order may have been placed")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Place order" }));
+    expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: "Start a new attempt" }));
+    await user.click(screen.getByRole("button", { name: "Place order" }));
+    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(2));
+    expect(mocks.placeOrder.mock.calls[1][1]).not.toBe(firstKey);
+    expect(mocks.placeOrder.mock.calls[1][0].phone).toBe("+420987654321");
+  });
+
+  it("keeps the same request for an in-progress 409 and reviews a mismatched 422", async () => {
+    const user = userEvent.setup();
+    mocks.getCheckoutMethods.mockResolvedValue(methods);
+    mocks.placeOrder
+      .mockRejectedValueOnce(new HttpError("http", 409, { title: "A request with this key is still in progress" }))
+      .mockRejectedValueOnce(new HttpError("http", 422))
+      .mockRejectedValueOnce(new HttpError("http", 400));
+    renderCheckout();
+    await screen.findByRole("heading", { name: "Checkout" });
+    await fillGuestAddress(user);
+    await user.click(screen.getByRole("button", { name: "Place order" }));
+    expect(await screen.findByText("Your request is still processing")).toBeTruthy();
+    expect(mocks.getCart).not.toHaveBeenCalled();
+    const firstKey = mocks.placeOrder.mock.calls[0][1];
+
+    await user.click(screen.getByRole("button", { name: "I checked; allow the same retry" }));
+    await user.click(screen.getByRole("button", { name: "Place order" }));
+    expect(await screen.findByText("Review this order before retrying")).toBeTruthy();
+    expect(mocks.placeOrder.mock.calls[1][1]).toBe(firstKey);
+    await user.click(screen.getByRole("button", { name: "Place order" }));
+    expect(mocks.placeOrder).toHaveBeenCalledTimes(2);
+    await user.click(screen.getByRole("button", { name: "Start a new attempt" }));
+    await user.click(screen.getByRole("button", { name: "Place order" }));
+    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(3));
+    expect(mocks.placeOrder.mock.calls[2][1]).not.toBe(firstKey);
+  });
+
   it("keeps a failed guest draft and serializes rapid order attempts", async () => {
     const user = userEvent.setup();
     const request = deferred<never>();
@@ -199,7 +277,7 @@ describe("CheckoutPage", () => {
     request.reject(new HttpError("http", 503));
     expect(
       await screen.findByText(
-        "No order was retried automatically. Review the form and place it again when you are ready.",
+        "No order was retried automatically. Submitting these unchanged details again uses the same request key.",
       ),
     ).toBeTruthy();
     expect(screen.getByRole("textbox", { name: "E-mail" })).toHaveProperty(
@@ -317,6 +395,7 @@ describe("CheckoutPage", () => {
 
     expect(await screen.findByText("Order destination")).toBeTruthy();
     expect(mocks.placeOrder).toHaveBeenCalledTimes(2);
+    expect(mocks.placeOrder.mock.calls[1][1]).not.toBe(mocks.placeOrder.mock.calls[0][1]);
     expect(mocks.reloadCart).toHaveBeenCalledTimes(1);
     expect(
       JSON.parse(

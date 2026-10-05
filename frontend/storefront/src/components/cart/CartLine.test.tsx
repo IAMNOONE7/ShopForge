@@ -32,6 +32,7 @@ const store: Store = {
 const line: CartLineModel = {
   storeProductId: "product-1",
   variantId: "variant-1",
+  optionValues: [],
   name: "Oak chair",
   slug: "oak-chair",
   unitPrice: 120,
@@ -122,7 +123,7 @@ describe("CartLine", () => {
     await user.type(input, "5");
     await user.click(screen.getByRole("button", { name: "Update quantity of Oak chair" }));
 
-    expect(mocks.setCartQuantity).toHaveBeenCalledWith("product-1", 5);
+    expect(mocks.setCartQuantity).toHaveBeenCalledWith("product-1", "variant-1", 5);
     expect(await screen.findByText("Only 2 items of Oak chair are available. The cart was adjusted.")).toBeTruthy();
     expect(input).toHaveProperty("value", "2");
   });

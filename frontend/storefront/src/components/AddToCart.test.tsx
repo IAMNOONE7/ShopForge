@@ -42,6 +42,7 @@ function cartWith(quantity: number): Cart {
       {
         storeProductId: "product-1",
         variantId: "variant-1",
+        optionValues: [],
         name: "Oak chair",
         slug: "oak-chair",
         unitPrice: 120,

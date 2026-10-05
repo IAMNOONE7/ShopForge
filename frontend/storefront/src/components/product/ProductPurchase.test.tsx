@@ -132,7 +132,7 @@ describe("variant purchase", () => {
       count: 4,
       itemsTotal: 1996,
       items: [{
-        storeProductId: "listing-a", variantId: "medium-blue", name: "Hoodie", slug: "hoodie",
+        storeProductId: "listing-a", variantId: "medium-blue", optionValues: ["Medium", "Blue"], name: "Hoodie", slug: "hoodie",
         unitPrice: 499, quantity: 4, lineTotal: 1996, available: 7, imageUrl: null,
       }],
     });
@@ -156,7 +156,7 @@ describe("variant purchase", () => {
       count: 1,
       itemsTotal: 499,
       items: [{
-        storeProductId: "listing-a", variantId: "only-form", name: "Hoodie", slug: "hoodie",
+        storeProductId: "listing-a", variantId: "only-form", optionValues: [], name: "Hoodie", slug: "hoodie",
         unitPrice: 499, quantity: 1, lineTotal: 499, available: 2, imageUrl: null,
       }],
     });

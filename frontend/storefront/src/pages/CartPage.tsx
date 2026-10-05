@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
-import type { Cart } from "../cart";
+import { cartLineKey, type Cart } from "../cart";
 import { useCart } from "../cartContext";
 import { readCheckoutRecovery } from "../checkoutRecovery";
 import { CartLine } from "../components/cart/CartLine";
@@ -34,8 +34,9 @@ export function CartPage() {
 
   function removed(updated: Cart, index: number, name: string) {
     const next = updated.items[Math.min(index, updated.items.length - 1)];
+    focusedTarget.current = null;
     setFocusTarget(
-      next ? `cart-line-link-${next.storeProductId}` : "cart-empty-heading",
+      next ? `cart-line-link-${cartLineKey(next)}` : "cart-empty-heading",
     );
     setAnnouncement(t("cart:removedAnnouncement", { name }));
   }
@@ -103,7 +104,7 @@ export function CartPage() {
             <ul className="cart-lines">
               {cart.items.map((line, index) => (
                 <CartLine
-                  key={line.storeProductId}
+                  key={cartLineKey(line)}
                   line={line}
                   index={index}
                   onRemoved={removed}

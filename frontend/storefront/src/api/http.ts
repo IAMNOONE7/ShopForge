@@ -43,6 +43,7 @@ export class HttpError extends Error {
 type RequestOptions = {
   method?: string;
   body?: unknown;
+  headers?: Record<string, string>;
   signal?: AbortSignal;
   notifyUnauthorized?: boolean;
 };
@@ -132,15 +133,14 @@ async function send(url: string, options: RequestOptions) {
     options.body === undefined
       ? undefined
       : (formBody ?? JSON.stringify(options.body));
+  const headers = { ...options.headers };
+  if (options.body !== undefined && !formBody) headers["Content-Type"] = "application/json";
   let response: Response;
   try {
     response = await fetch(url, {
       method: options.method ?? "GET",
       signal: options.signal,
-      headers:
-        options.body === undefined || formBody
-          ? undefined
-          : { "Content-Type": "application/json" },
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
       body,
     });
   } catch (error) {

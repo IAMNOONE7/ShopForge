@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router";
 import { getAccountOrder } from "../account";
 import { downloadAccountDocument } from "../api/documents";
 import { authPath } from "../auth";
+import { OrderReturns } from "../components/OrderReturns";
 import { OrderReceipt } from "../components/orders/OrderReceipt";
 import { useOrderRefresh } from "../components/orders/useOrderRefresh";
 import { EmptyState } from "../components/ui/EmptyState";
@@ -125,6 +126,14 @@ function AuthenticatedAccountOrder({ number }: { number: string }) {
       downloadDocument={(document) =>
         downloadAccountDocument(request.data.number, document.number)
       }
-    />
+    >
+      <OrderReturns
+        key={request.data.number}
+        number={request.data.number}
+        orderStatus={request.data.status}
+        currency={request.data.currency}
+        onReturned={refresh}
+      />
+    </OrderReceipt>
   );
 }

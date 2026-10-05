@@ -2,6 +2,8 @@ import { useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import {
+  cartLineKey,
+  cartLineName,
   removeFromCart,
   setCartQuantity,
   type Cart,
@@ -31,6 +33,8 @@ export function CartLine({
   const [message, setMessage] = useState<string | null>(null);
   const lock = useRef(false);
   const [imageFailed, setImageFailed] = useState(false);
+  const identity = cartLineKey(line);
+  const displayName = cartLineName(line);
   const maximum = Math.min(line.available, 99);
   const busy =
     pending || action === "updating" || action === "removing";
@@ -54,7 +58,7 @@ export function CartLine({
     setMessage(null);
     setAction("updating");
     const result = await mutate(() =>
-      setCartQuantity(line.storeProductId, requested),
+      setCartQuantity(line.storeProductId, line.variantId, requested),
     );
     lock.current = false;
 
@@ -64,10 +68,10 @@ export function CartLine({
     }
 
     const updated = result.items.find(
-      (item) => item.storeProductId === line.storeProductId,
+      (item) => cartLineKey(item) === identity,
     );
     if (!updated) {
-      onRemoved(result, index, line.name);
+      onRemoved(result, index, displayName);
       return;
     }
 
@@ -78,7 +82,7 @@ export function CartLine({
         updated.quantity === requested
           ? "cart:quantityUpdated"
           : "cart:quantityAdjusted",
-        { name: line.name, count: updated.quantity },
+        { name: displayName, count: updated.quantity },
       ),
     );
   }
@@ -88,14 +92,14 @@ export function CartLine({
     lock.current = true;
     setMessage(null);
     setAction("removing");
-    const result = await mutate(() => removeFromCart(line.storeProductId));
+    const result = await mutate(() => removeFromCart(line.storeProductId, line.variantId));
     lock.current = false;
 
     if (!result) {
       setAction("failed");
       return;
     }
-    onRemoved(result, index, line.name);
+    onRemoved(result, index, displayName);
   }
 
   return (
@@ -117,13 +121,18 @@ export function CartLine({
       )}
       <div className="cart-line-identity">
         <Link
-          id={`cart-line-link-${line.storeProductId}`}
+          id={`cart-line-link-${identity}`}
           to={`/p/${line.slug}`}
           className="cart-line-name"
           lang={store.culture}
         >
           {line.name}
         </Link>
+        {line.optionValues.length > 0 && (
+          <span className="cart-line-options" lang={store.culture}>
+            {line.optionValues.join(" / ")}
+          </span>
+        )}
         <span className="cart-unit-price">
           {t("cart:unitPrice", { price: formatPrice(line.unitPrice, store) })}
         </span>
@@ -133,10 +142,10 @@ export function CartLine({
         onSubmit={(event) => void update(event)}
         noValidate
       >
-        <label htmlFor={`cart-quantity-${line.storeProductId}`}>
+        <label htmlFor={`cart-quantity-${identity}`}>
           <span>{t("cart:quantityLabel")}</span>
           <input
-            id={`cart-quantity-${line.storeProductId}`}
+            id={`cart-quantity-${identity}`}
             name="quantity"
             type="number"
             inputMode="numeric"
@@ -148,8 +157,8 @@ export function CartLine({
             readOnly={pending}
             aria-disabled={pending || undefined}
             aria-invalid={invalid || undefined}
-            aria-label={t("cart:quantity", { name: line.name })}
-            aria-describedby={`cart-line-status-${line.storeProductId}`}
+            aria-label={t("cart:quantity", { name: displayName })}
+            aria-describedby={`cart-line-status-${identity}`}
             onChange={(event) => {
               setQuantity(event.target.value);
               setInvalid(false);
@@ -161,7 +170,7 @@ export function CartLine({
         <button
           type="submit"
           aria-disabled={busy || undefined}
-          aria-label={t("cart:updateQuantity", { name: line.name })}
+          aria-label={t("cart:updateQuantity", { name: displayName })}
         >
           {action === "updating" ? t("cart:updating") : t("cart:update")}
         </button>
@@ -174,13 +183,13 @@ export function CartLine({
         type="button"
         className="link-button cart-remove"
         aria-disabled={busy || undefined}
-        aria-label={t("cart:removeItem", { name: line.name })}
+        aria-label={t("cart:removeItem", { name: displayName })}
         onClick={() => void remove()}
       >
         {action === "removing" ? t("cart:removing") : t("cart:remove")}
       </button>
       <div
-        id={`cart-line-status-${line.storeProductId}`}
+        id={`cart-line-status-${identity}`}
         className="cart-line-status"
         aria-live="polite"
         aria-atomic="true"

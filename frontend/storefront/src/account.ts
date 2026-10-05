@@ -89,6 +89,7 @@ export const getAccountOrder = (number: string, signal?: AbortSignal) =>
 
 export type ReturnableLine = {
   storeProductId: string;
+  variantId: string;
   productName: string;
   quantity: number;
 };
@@ -113,14 +114,15 @@ export const getReturns = (number: string, signal?: AbortSignal) =>
     { signal },
   );
 
-export const requestReturn = (
-  number: string,
-  lines: { storeProductId: string; quantity: number }[],
-  reason: string | null,
-) =>
+export type ReturnRequest = {
+  lines: { storeProductId: string; variantId: string; quantity: number }[];
+  reason: string | null;
+};
+
+export const requestReturn = (number: string, request: ReturnRequest, idempotencyKey: string) =>
   requestJson<Returns>(
     `/api/storefront/account/orders/${encodeURIComponent(number)}/returns`,
-    { method: "POST", body: { lines, reason } },
+    { method: "POST", body: request, headers: { "Idempotency-Key": idempotencyKey } },
   );
 
 export type WishlistItem = {

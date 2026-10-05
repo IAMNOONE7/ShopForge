@@ -9,6 +9,7 @@ import {
   placeOrder,
   type Cart,
   type CheckoutMethods,
+  type CheckoutRequest,
 } from "../cart";
 import { useCart } from "../cartContext";
 import { rememberCheckout } from "../checkoutRecovery";
@@ -32,6 +33,7 @@ import { LoadingState } from "../components/ui/LoadingState";
 import { RequestError } from "../components/ui/RequestError";
 import { useCustomer } from "../customerContext";
 import type { Customer } from "../account";
+import { attemptFor, changedSince, inFlightWrite, uncertainWrite, type WriteAttempt } from "../idempotency";
 import { useStore } from "../storeContext";
 import { useRequest, type RequestState } from "../useRequest";
 
@@ -196,10 +198,11 @@ function CheckoutForm({
   const [showValidation, setShowValidation] = useState(false);
   const [failed, setFailed] = useState<unknown | null>(null);
   const [refreshFailure, setRefreshFailure] = useState<unknown | null>(null);
-  const [reviewRequired, setReviewRequired] = useState(false);
+  const [reviewKind, setReviewKind] = useState<"cart" | "inFlight" | "mismatch" | null>(null);
   const [refreshingCart, setRefreshingCart] = useState(false);
   const [pending, setPending] = useState(false);
   const submitLock = useRef(false);
+  const [attempt, setAttempt] = useState<WriteAttempt<CheckoutRequest> | null>(null);
   const validationSummary = useRef<HTMLDivElement>(null);
   const reviewNotice = useRef<HTMLDivElement>(null);
 
@@ -250,14 +253,27 @@ function CheckoutForm({
       pickup: t("checkout:pickupIssue"),
     },
   });
-  const mustReview = reviewRequired || adjusted;
+  const requestBody: CheckoutRequest = {
+    email: (customer?.email ?? email).trim(),
+    phone: phone.trim(),
+    billingAddress: toAddress(billing),
+    shippingAddress: shipElsewhere ? toAddress(shippingAddress) : null,
+    paymentMethodCode: chosenPaymentCode,
+    shippingMethodCode: chosenShippingCode,
+    pickupPointCode: chosenShipping.requiresPickupPoint ? chosenPointCode : null,
+  };
+  const changedAfterUncertain = failed !== null && uncertainWrite(failed) &&
+    changedSince(attempt, requestBody);
+  const mustReview = reviewKind !== null || adjusted || changedAfterUncertain;
   const methodsRefreshing = methodsRequest.refreshing;
   const canSubmit =
     issues.length === 0 &&
     !mustReview &&
     !pending &&
     !refreshingCart &&
-    !methodsRefreshing;
+    !methodsRefreshing &&
+    methodsRequest.refreshError === null &&
+    refreshFailure === null;
 
   function chooseShipping(code: string) {
     setShippingCode(code);
@@ -281,8 +297,10 @@ function CheckoutForm({
   }
 
   function reviewChanges() {
+    if (refreshingCart || methodsRefreshing || methodsRequest.refreshError !== null || refreshFailure !== null) return;
+    if (reviewKind !== "inFlight") setAttempt(null);
     acknowledgeAdjustment();
-    setReviewRequired(false);
+    setReviewKind(null);
     setFailed(null);
     setRefreshFailure(null);
   }
@@ -315,17 +333,10 @@ function CheckoutForm({
     setRefreshFailure(null);
     setPending(true);
     try {
-      const order = await placeOrder({
-        email: (customer?.email ?? email).trim(),
-        phone: phone.trim(),
-        billingAddress: toAddress(billing),
-        shippingAddress: shipElsewhere ? toAddress(shippingAddress) : null,
-        paymentMethodCode: chosenPaymentCode,
-        shippingMethodCode: chosenShippingCode,
-        pickupPointCode: chosenShipping.requiresPickupPoint
-          ? chosenPointCode
-          : null,
-      });
+      const current = attemptFor(attempt, requestBody);
+      setAttempt(current);
+      const order = await placeOrder(current.payload, current.key);
+      setAttempt(null);
       const confirmationPath = rememberCheckout(order);
       reloadCart();
       if (order.redirectUrl) {
@@ -338,8 +349,14 @@ function CheckoutForm({
     } catch (error) {
       setFailed(error);
       if (statusOf(error) === 409) {
-        setReviewRequired(true);
-        await refreshAfterConflict();
+        if (inFlightWrite(error)) {
+          setReviewKind("inFlight");
+        } else {
+          setReviewKind("cart");
+          await refreshAfterConflict();
+        }
+      } else if (statusOf(error) === 422) {
+        setReviewKind("mismatch");
       }
     } finally {
       setPending(false);
@@ -377,16 +394,16 @@ function CheckoutForm({
             role="alert"
             tabIndex={-1}
           >
-            <InlineMessage title={t("checkout:reviewTitle")}>
-              <p>{t("checkout:reviewBody")}</p>
+            <InlineMessage title={t(reviewKind === "inFlight" ? "checkout:inFlightTitle" : reviewKind === "mismatch" ? "checkout:keyMismatchTitle" : changedAfterUncertain ? "checkout:uncertainChangedTitle" : "checkout:reviewTitle")}>
+              <p>{t(reviewKind === "inFlight" ? "checkout:inFlightBody" : reviewKind === "mismatch" ? "checkout:keyMismatchBody" : changedAfterUncertain ? "checkout:uncertainChangedBody" : "checkout:reviewBody")}</p>
               <button
                 type="button"
-                disabled={refreshingCart || methodsRefreshing}
+                disabled={refreshingCart || methodsRefreshing || methodsRequest.refreshError !== null || refreshFailure !== null}
                 onClick={reviewChanges}
               >
                 {refreshingCart || methodsRefreshing
                   ? t("checkout:refreshingOrder")
-                  : t("checkout:reviewAction")}
+                  : t(reviewKind === "inFlight" ? "checkout:retryReviewAction" : changedAfterUncertain || reviewKind === "mismatch" ? "checkout:newAttemptAction" : "checkout:reviewAction")}
               </button>
             </InlineMessage>
           </div>
@@ -417,8 +434,8 @@ function CheckoutForm({
         {failed !== null && (
           <>
             <RequestError error={failed} operation="checkout" />
-            {statusOf(failed) !== 409 && (
-              <p className="hint">{t("checkout:noAutomaticRetry")}</p>
+            {!mustReview && (
+              <p className="hint">{t(uncertainWrite(failed) ? "checkout:sameRequestRetry" : "checkout:noAutomaticRetry")}</p>
             )}
           </>
         )}

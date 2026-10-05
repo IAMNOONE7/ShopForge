@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import type { Cart, ShippingMethod } from "../../cart";
+import { cartLineKey, cartLineName, type Cart, type ShippingMethod } from "../../cart";
 import type { Store } from "../../store";
 import { formatPrice } from "../../storeContext";
 
@@ -20,9 +20,9 @@ export function CheckoutSummary({
   const breakdown = (
     <ul className="checkout-breakdown">
       {cart.items.map((line) => (
-        <li key={line.storeProductId}>
+        <li key={cartLineKey(line)}>
           <span>
-            {line.quantity} × <span lang={store.culture}>{line.name}</span>
+            {line.quantity} × <span lang={store.culture}>{cartLineName(line)}</span>
           </span>
           <span>{formatPrice(line.lineTotal, store)}</span>
         </li>

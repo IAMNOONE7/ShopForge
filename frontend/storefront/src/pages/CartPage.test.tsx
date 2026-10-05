@@ -33,6 +33,7 @@ const store: Store = {
 const oak: CartLine = {
   storeProductId: "oak",
   variantId: "oak-variant",
+  optionValues: [],
   name: "Oak chair",
   slug: "oak-chair",
   unitPrice: 120,
@@ -44,6 +45,7 @@ const oak: CartLine = {
 const beech: CartLine = {
   storeProductId: "beech",
   variantId: "beech-variant",
+  optionValues: [],
   name: "Beech table",
   slug: "beech-table",
   unitPrice: 300,
@@ -120,6 +122,41 @@ function renderPage(initial: Cart) {
 }
 
 describe("CartPage", () => {
+  it("keeps two forms of one listing independent when updating and removing", async () => {
+    const user = userEvent.setup();
+    const red: CartLine = {
+      ...oak, storeProductId: "hoodie", variantId: "hoodie-red",
+      optionValues: ["S", "Red"], name: "Hoodie", slug: "hoodie",
+    };
+    const blue: CartLine = {
+      ...red, variantId: "hoodie-blue", optionValues: ["M", "Blue"],
+    };
+    mocks.setCartQuantity.mockResolvedValue(makeCart([
+      { ...red, quantity: 2, lineTotal: 240 }, blue,
+    ]));
+    mocks.removeFromCart.mockResolvedValue(makeCart([blue]));
+    renderPage(makeCart([red, blue]));
+
+    expect(screen.getByText("S / Red")).toBeTruthy();
+    expect(screen.getByText("M / Blue")).toBeTruthy();
+    const redQuantity = screen.getByRole("spinbutton", { name: "Quantity of Hoodie (S / Red)" });
+    const blueQuantity = screen.getByRole("spinbutton", { name: "Quantity of Hoodie (M / Blue)" });
+    await user.clear(redQuantity);
+    await user.type(redQuantity, "2");
+    await user.click(screen.getByRole("button", { name: "Update quantity of Hoodie (S / Red)" }));
+    expect(mocks.setCartQuantity).toHaveBeenCalledWith("hoodie", "hoodie-red", 2);
+    await waitFor(() => expect(redQuantity).toHaveProperty("value", "2"));
+    expect(blueQuantity).toHaveProperty("value", "1");
+
+    await user.click(screen.getByRole("button", { name: "Remove Hoodie (S / Red) from cart" }));
+    expect(mocks.removeFromCart).toHaveBeenCalledWith("hoodie", "hoodie-red");
+    await waitFor(() => expect(document.activeElement).toBe(
+      document.getElementById("cart-line-link-hoodie:hoodie-blue"),
+    ));
+    expect(screen.getByText("M / Blue")).toBeTruthy();
+    expect(screen.queryByText("S / Red")).toBeNull();
+  });
+
   it("keeps a provider-cancelled order discoverable from the cart", () => {
     const path =
       "/order/2026-1?token=01a0ddab-3a87-70e9-8b84-6513eff79718";

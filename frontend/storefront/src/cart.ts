@@ -3,6 +3,7 @@ import { requestJson } from "./api/http";
 export type CartLine = {
   storeProductId: string;
   variantId: string;
+  optionValues: string[];
   name: string;
   slug: string;
   unitPrice: number;
@@ -11,6 +12,14 @@ export type CartLine = {
   available: number;
   imageUrl: string | null;
 };
+
+export const cartLineKey = (line: Pick<CartLine, "storeProductId" | "variantId">) =>
+  `${line.storeProductId}:${line.variantId}`;
+
+export const cartLineName = (line: Pick<CartLine, "name" | "optionValues">) =>
+  line.optionValues.length > 0
+    ? `${line.name} (${line.optionValues.join(" / ")})`
+    : line.name;
 
 export type CartDiscount = {
   code: string;
@@ -136,14 +145,14 @@ export const addToCart = (storeProductId: string, variantId: string, quantity: n
     body: { storeProductId, variantId, quantity },
   });
 
-export const setCartQuantity = (storeProductId: string, quantity: number) =>
-  requestJson<Cart>(`/api/storefront/cart/items/${storeProductId}`, {
+export const setCartQuantity = (storeProductId: string, variantId: string, quantity: number) =>
+  requestJson<Cart>(`/api/storefront/cart/items/${encodeURIComponent(storeProductId)}?variantId=${encodeURIComponent(variantId)}`, {
     method: "PUT",
     body: { quantity },
   });
 
-export const removeFromCart = (storeProductId: string) =>
-  requestJson<Cart>(`/api/storefront/cart/items/${storeProductId}`, {
+export const removeFromCart = (storeProductId: string, variantId: string) =>
+  requestJson<Cart>(`/api/storefront/cart/items/${encodeURIComponent(storeProductId)}?variantId=${encodeURIComponent(variantId)}`, {
     method: "DELETE",
   });
 
@@ -165,10 +174,11 @@ export const getPickupPoints = (methodCode: string, signal?: AbortSignal) =>
     { signal },
   );
 
-export const placeOrder = (request: CheckoutRequest) =>
+export const placeOrder = (request: CheckoutRequest, idempotencyKey: string) =>
   requestJson<PlacedOrder>("/api/storefront/checkout", {
     method: "POST",
     body: request,
+    headers: { "Idempotency-Key": idempotencyKey },
   });
 
 export const getOrder = (number: string, token: string, signal: AbortSignal) =>
