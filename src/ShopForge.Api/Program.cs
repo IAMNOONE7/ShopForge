@@ -69,6 +69,8 @@ builder.Services.AddRateLimiter(options =>
         Window(context, "writes", builder.Configuration.GetValue("RateLimiting:Writes:PermitLimit", 120)));
     options.AddPolicy(RateLimits.Expensive, context =>
         Window(context, "expensive", builder.Configuration.GetValue("RateLimiting:Expensive:PermitLimit", 10)));
+    options.AddPolicy(RateLimits.Crawlers, context =>
+        Window(context, "crawlers", builder.Configuration.GetValue("RateLimiting:Crawlers:PermitLimit", 300)));
 
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
         context.Request.Path.StartsWithSegments("/health")

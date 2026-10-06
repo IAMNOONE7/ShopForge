@@ -10,4 +10,8 @@ public static class RateLimits
 
     // Work that costs the platform real money or time: an import, a rendered document.
     public const string Expensive = "expensive";
+
+    // A crawler reading a sitemap or a feed. It comes back often and in bursts, and it is not writing
+    // anything, so sharing a shopper's window would throttle it into failure (D-126, D-167).
+    public const string Crawlers = "crawlers";
 }
