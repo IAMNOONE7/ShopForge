@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Catalog.Admin;
+using ShopForge.Catalog.Feeds;
 using ShopForge.Catalog.Import;
 using ShopForge.Catalog.Privacy;
 using ShopForge.Catalog.Publishing;
@@ -10,6 +11,7 @@ using ShopForge.Catalog.Reviews;
 using ShopForge.Catalog.Seo;
 using ShopForge.Catalog.Storefront;
 using ShopForge.Shared.Catalog;
+using ShopForge.Shared.Maintenance;
 using ShopForge.Shared.Platform;
 using ShopForge.Shared.Privacy;
 using ShopForge.Shared.Security;
@@ -31,6 +33,8 @@ public static class CatalogModule
         services.AddScoped<ITenantUsage, ProductUsage>();
         services.AddScoped<ProductRatings>();
         services.AddScoped<ICustomerData, CustomerReviewData>();
+        services.AddScoped<IProductFeeds, ProductFeeds>();
+        services.AddScoped<IStoreMaintenance, FeedRefresh>();
 
         return services;
     }
@@ -48,6 +52,7 @@ public static class CatalogModule
         storeAdmin.MapAdminReviews();
         storeAdmin.MapAdminAttributes();
         storeAdmin.MapCatalogImport();
+        storeAdmin.MapAdminFeeds();
 
         return storeAdmin;
     }
@@ -59,6 +64,7 @@ public static class CatalogModule
 
         // Their own window: a crawler's rhythm is not a shopper's (D-167).
         storefront.MapGroup(string.Empty).RequireRateLimiting(RateLimits.Crawlers).MapSeoDocuments();
+        storefront.MapProductFeeds();
 
         return storefront;
     }

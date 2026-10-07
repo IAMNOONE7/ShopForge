@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using ShopForge.Catalog.Domain;
+using ShopForge.Catalog.Feeds;
 
 namespace ShopForge.Catalog.Persistence;
 
@@ -39,5 +40,23 @@ internal sealed class SlugHistoryEntityConfiguration : IEntityTypeConfiguration<
         // One answer per address: a slug that is given up twice by two different rows has only its latest
         // owner to send people to.
         builder.HasIndex(history => new { history.StoreId, history.Kind, history.Slug }).IsUnique();
+    }
+}
+
+internal sealed class StoreFeedEntityConfiguration : IEntityTypeConfiguration<StoreFeed>
+{
+    public void Configure(EntityTypeBuilder<StoreFeed> builder)
+    {
+        builder.ToTable("store_feeds", CatalogModule.Schema);
+
+        builder.Property(feed => feed.Feed).HasMaxLength(30);
+        builder.Property(feed => feed.Token).HasMaxLength(100);
+        builder.Property(feed => feed.FilePath).HasMaxLength(300);
+        builder.Property(feed => feed.LastError).HasMaxLength(500);
+
+        // One arrangement per shop per engine, and the token is how a collection is answered, so it has to
+        // find its row without a store in hand.
+        builder.HasIndex(feed => new { feed.StoreId, feed.Feed }).IsUnique();
+        builder.HasIndex(feed => feed.Token).IsUnique();
     }
 }
