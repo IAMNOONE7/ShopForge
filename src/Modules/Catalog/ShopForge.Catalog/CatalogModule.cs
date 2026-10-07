@@ -6,6 +6,7 @@ using ShopForge.Catalog.Admin;
 using ShopForge.Catalog.Feeds;
 using ShopForge.Catalog.Feeds.Google;
 using ShopForge.Catalog.Feeds.Heureka;
+using ShopForge.Catalog.Feeds.Zbozi;
 using ShopForge.Catalog.Import;
 using ShopForge.Catalog.Privacy;
 using ShopForge.Catalog.Publishing;
@@ -39,6 +40,7 @@ public static class CatalogModule
         services.AddScoped<IProductFeeds, ProductFeeds>();
         services.AddSingleton<IProductFeedFormat, GoogleMerchantFeed>();
         services.AddSingleton<IProductFeedFormat, HeurekaFeed>();
+        services.AddSingleton<IProductFeedFormat, ZboziFeed>();
         services.AddScoped<IStoreMaintenance, FeedRefresh>();
 
         return services;
