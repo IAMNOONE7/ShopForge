@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Catalog.Domain;
 using ShopForge.Shared.Inventory;
+using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Catalog.Development;

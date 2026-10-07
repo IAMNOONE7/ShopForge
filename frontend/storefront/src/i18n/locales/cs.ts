@@ -134,6 +134,12 @@ const resources = {
     registerAgainSuffix: "a získat nový odkaz.",
     anonymousReviewAuthor: "Zákazník",
   },
+  content: {
+    loading: "Načítání stránky",
+    notFoundTitle: "Stránka nenalezena",
+    notFoundBody: "Tato stránka není dostupná.",
+    unavailableTitle: "Stránku se nepodařilo načíst",
+  },
   catalog: {
     loadingProducts: "Načítání produktů…",
     loadingProduct: "Načítání produktu…",

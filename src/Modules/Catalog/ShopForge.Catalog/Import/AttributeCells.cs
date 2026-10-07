@@ -1,4 +1,5 @@
 using ShopForge.Catalog.Domain;
+using ShopForge.Shared.Stores;
 
 namespace ShopForge.Catalog.Import;
 

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Catalog.Domain;
+using ShopForge.Shared.Stores;
 
 namespace ShopForge.Catalog.Import;
 
@@ -55,7 +56,7 @@ internal sealed class CatalogData
             .ToList();
 
         var fileSlugs = file.Rows
-            .Select(row => row.Has(ImportColumns.Slug) ? row[ImportColumns.Slug].Text : Domain.Slugs.Create(row[ImportColumns.Name].Text))
+            .Select(row => row.Has(ImportColumns.Slug) ? row[ImportColumns.Slug].Text : ShopForge.Shared.Stores.Slugs.Create(row[ImportColumns.Name].Text))
             .Where(slug => slug.Length > 0)
             .Distinct()
             .ToList();

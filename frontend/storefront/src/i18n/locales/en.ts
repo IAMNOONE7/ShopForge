@@ -134,6 +134,12 @@ const resources = {
     registerAgainSuffix: "to get a new one.",
     anonymousReviewAuthor: "A customer",
   },
+  content: {
+    loading: "Loading page",
+    notFoundTitle: "Page not found",
+    notFoundBody: "This page is not available.",
+    unavailableTitle: "This page could not be loaded",
+  },
   catalog: {
     loadingProducts: "Loading products…",
     loadingProduct: "Loading product…",

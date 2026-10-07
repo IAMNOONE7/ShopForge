@@ -42,6 +42,8 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
         ("POST", "domains/{domain}/verify", null),
         ("POST", "domains/{domain}/primary", null),
         ("DELETE", "domains/{domain}", null),
+        ("PUT", "pages/{page}", """{"slug":"taken","title":"Taken","body":"Taken.","isPublished":true}"""),
+        ("DELETE", "pages/{page}", null),
     ];
 
     // Tenant-scoped routes, called by another company's owner with the first company's ids.
@@ -309,7 +311,8 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
             await ImageIdAsync(furniture),
             domains!.Single().Id,
             await UserIdAsync(furniture),
-            await InvitationIdAsync(furniture));
+            await InvitationIdAsync(furniture),
+            await ContentPageIdAsync(furniture));
     }
 
     private async Task<(string Order, Guid Review, Guid Return)> PurchaseAsync(FurnitureStore furniture, StorefrontApi buyer)
@@ -402,6 +405,17 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
         return (await invited.Content.ReadFromJsonAsync<Named>(CancellationToken))!.Id;
     }
 
+    private async Task<Guid> ContentPageIdAsync(FurnitureStore furniture)
+    {
+        using var created = await furniture.Admin.PostAsJsonAsync(
+            $"/api/admin/stores/{furniture.Store.StoreId}/pages",
+            new { Slug = "terms", Title = "Terms", Body = "Ours.", IsPublished = true },
+            CancellationToken);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+        return (await created.Content.ReadFromJsonAsync<Named>(CancellationToken))!.Id;
+    }
+
     private sealed record World(
         HttpClient Owner,
         HttpClient Stranger,
@@ -419,7 +433,8 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
         Guid Image,
         Guid Domain,
         Guid User,
-        Guid Invitation)
+        Guid Invitation,
+        Guid ContentPage)
     {
         public string Fill(string route) => route
             .Replace("{storeProduct}", StoreProduct.ToString(), StringComparison.Ordinal)
@@ -435,7 +450,8 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
             .Replace("{feed}", "heureka", StringComparison.Ordinal)
             .Replace("{domain}", Domain.ToString(), StringComparison.Ordinal)
             .Replace("{user}", User.ToString(), StringComparison.Ordinal)
-            .Replace("{invitation}", Invitation.ToString(), StringComparison.Ordinal);
+            .Replace("{invitation}", Invitation.ToString(), StringComparison.Ordinal)
+            .Replace("{page}", ContentPage.ToString(), StringComparison.Ordinal);
     }
 
     private sealed record Named(Guid Id, string? Email);

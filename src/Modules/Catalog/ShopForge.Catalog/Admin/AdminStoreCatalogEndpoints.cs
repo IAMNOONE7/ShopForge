@@ -9,6 +9,7 @@ using ShopForge.Catalog.Publishing;
 using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Security;
+using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Catalog.Admin;

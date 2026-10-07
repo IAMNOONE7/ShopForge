@@ -80,6 +80,22 @@ export type ProductDetail = {
   attributes: ProductAttribute[];
 };
 
+// A page of the shop's own words. The body is text, never markup, so it is put on screen as paragraphs and
+// nothing in it is interpreted (D-175).
+export type ContentPage = {
+  slug: string;
+  title: string;
+  body: string;
+  seo: { title: string; description: string | null; noIndex: boolean; canonical: string | null };
+};
+
+export function getContentPage(slug: string, signal: AbortSignal) {
+  return requestJson<ContentPage>(
+    `/api/storefront/pages/${encodeURIComponent(slug)}`,
+    { signal },
+  );
+}
+
 export function getCategories(signal: AbortSignal) {
   return requestJson<Category[]>("/api/storefront/categories", { signal });
 }

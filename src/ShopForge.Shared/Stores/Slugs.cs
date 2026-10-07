@@ -1,9 +1,11 @@
 using System.Globalization;
 using System.Text;
 
-namespace ShopForge.Catalog.Domain;
+namespace ShopForge.Shared.Stores;
 
-internal static class Slugs
+// What a slug may contain, beside the shapes that put one in an address (D-149): a page's name in a URL is one
+// contract, and every module that gives something a name needs the same answer about it (D-175).
+public static class Slugs
 {
     public const int MaxLength = 120;
 

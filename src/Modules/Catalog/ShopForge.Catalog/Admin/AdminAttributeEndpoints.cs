@@ -8,6 +8,7 @@ using ShopForge.Catalog.Attributes;
 using ShopForge.Catalog.Domain;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Security;
+using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Catalog.Admin;

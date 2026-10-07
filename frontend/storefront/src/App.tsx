@@ -13,6 +13,7 @@ import { CartPage } from "./pages/CartPage";
 import { CheckoutPage } from "./pages/CheckoutPage";
 import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
 import { OrderPage } from "./pages/OrderPage";
+import { ContentPage } from "./pages/ContentPage";
 import { ProductDetailPage } from "./pages/ProductDetailPage";
 import { ProductListPage } from "./pages/ProductListPage";
 import { RegisterPage } from "./pages/RegisterPage";
@@ -111,6 +112,7 @@ function App() {
                     <Route index element={<ProductListPage />} />
                     <Route path={publicRoutes.category} element={<ProductListPage />} />
                     <Route path={publicRoutes.product} element={<ProductDetailPage />} />
+                    <Route path={publicRoutes.contentPage} element={<ContentPage />} />
                     <Route path="cart" element={<CartPage />} />
                     <Route path="checkout" element={<CheckoutPage />} />
                     <Route path="order/:number" element={<OrderPage />} />

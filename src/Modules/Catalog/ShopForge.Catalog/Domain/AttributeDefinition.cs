@@ -1,3 +1,4 @@
+using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Catalog.Domain;

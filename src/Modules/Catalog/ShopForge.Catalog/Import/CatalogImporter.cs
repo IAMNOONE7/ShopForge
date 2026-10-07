@@ -3,6 +3,7 @@ using ShopForge.Catalog.Domain;
 using ShopForge.Catalog.Publishing;
 using ShopForge.Shared.Inventory;
 using ShopForge.Shared.Platform;
+using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Catalog.Import;

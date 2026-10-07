@@ -76,10 +76,11 @@ internal static class SitemapEndpoints
         DbContext dbContext,
         ICurrentStoreSettings storeSettings,
         IStoreUrls urls,
+        IStoreContentPages contentPages,
         IConfiguration configuration,
         CancellationToken cancellationToken)
     {
-        if (await PagesAsync(dbContext, storeSettings, urls, cancellationToken) is not { } pages)
+        if (await PagesAsync(dbContext, storeSettings, urls, contentPages, cancellationToken) is not { } pages)
         {
             return TypedResults.NotFound();
         }
@@ -108,10 +109,11 @@ internal static class SitemapEndpoints
         DbContext dbContext,
         ICurrentStoreSettings storeSettings,
         IStoreUrls urls,
+        IStoreContentPages contentPages,
         IConfiguration configuration,
         CancellationToken cancellationToken)
     {
-        if (chunk < 1 || await PagesAsync(dbContext, storeSettings, urls, cancellationToken) is not { } pages)
+        if (chunk < 1 || await PagesAsync(dbContext, storeSettings, urls, contentPages, cancellationToken) is not { } pages)
         {
             return TypedResults.NotFound();
         }
@@ -128,6 +130,7 @@ internal static class SitemapEndpoints
         DbContext dbContext,
         ICurrentStoreSettings storeSettings,
         IStoreUrls urls,
+        IStoreContentPages contentPages,
         CancellationToken cancellationToken)
     {
         var settings = await storeSettings.GetAsync(cancellationToken);
@@ -152,10 +155,15 @@ internal static class SitemapEndpoints
             .Select(category => category.Slug)
             .ToListAsync(cancellationToken);
 
+        // The shop's own words, which belong to the store rather than to the catalogue, so they arrive through
+        // a seam. A draft and a page that has asked to be left alone are both already excluded (D-175).
+        var pages = await contentPages.AdvertisedSlugsAsync(cancellationToken);
+
         return
         [
             new Page(address.Host, address.Home),
             .. categories.Select(slug => new Page(address.Host, address.Category(slug))),
+            .. pages.Select(slug => new Page(address.Host, address.ContentPage(slug))),
             .. listings.Select(slug => new Page(address.Host, address.Product(slug))),
         ];
     }

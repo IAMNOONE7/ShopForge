@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using ShopForge.Catalog.Domain;
 using ShopForge.Catalog.Feeds;
+using ShopForge.Shared.Stores;
 
 namespace ShopForge.Catalog.Persistence;
 

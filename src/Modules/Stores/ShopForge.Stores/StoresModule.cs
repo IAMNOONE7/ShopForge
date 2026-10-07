@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Shared.Platform;
 using ShopForge.Shared.Stores;
 using ShopForge.Stores.Admin;
+using ShopForge.Stores.Content;
 using ShopForge.Stores.Logos;
 using ShopForge.Stores.Platform;
 using ShopForge.Stores.Provisioning;
@@ -27,6 +28,7 @@ public static class StoresModule
         services.AddScoped<IStorePublishCheck, StoreCompanyPublishCheck>();
         services.AddScoped<ICurrentStoreSettings, CurrentStoreSettings>();
         services.AddScoped<IStoreUrls, StoreUrls>();
+        services.AddScoped<IStoreContentPages, StoreContentPages>();
         services.AddScoped<IStoreDirectory, StoreDirectory>();
         services.AddScoped<ITenantDirectory, TenantDirectory>();
         services.AddScoped<ITenantUsage, StoreUsage>();
@@ -65,6 +67,7 @@ public static class StoresModule
         storeAdmin.MapAdminStoreLogo();
         storeAdmin.MapStoreLifecycle();
         storeAdmin.MapStoreDomainEndpoints();
+        storeAdmin.MapAdminContentPages();
 
         return storeAdmin;
     }
@@ -81,6 +84,7 @@ public static class StoresModule
     {
         storefront.MapStorefrontStore();
         storefront.MapStorefrontLogo();
+        storefront.MapStorefrontContentPages();
 
         return storefront;
     }
