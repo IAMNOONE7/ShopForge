@@ -26,6 +26,11 @@ public sealed class LoadBaselineTests(ShopForgeApiFactory factory)
     private const int CatalogQueries = 14;
     private const int ProductQueries = 8;
 
+    // A category page reads every category of the shop in one query and finds the one it was asked for in
+    // memory, which is what the single-category read used to cost. The number must therefore not move with
+    // how deep the tree is or how many categories sit beneath the one being looked at (D-172).
+    private const int CategoryQueries = 10;
+
     private static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
 
     [Fact]
@@ -36,7 +41,7 @@ public sealed class LoadBaselineTests(ShopForgeApiFactory factory)
 
         var listing = await MeasureAsync("catalog, first page", Reads, () => shopper.GetAsync("/api/storefront/products"));
         var deepPage = await MeasureAsync("catalog, fifth page", Reads, () => shopper.GetAsync("/api/storefront/products?page=5"));
-        var filtered = await MeasureAsync("catalog, filtered", Reads, () => shopper.GetAsync("/api/storefront/products?material=oak"));
+        var filtered = await MeasureAsync("catalog, filtered", Reads, () => shopper.GetAsync("/api/storefront/products?f.material=oak"));
         var detail = await MeasureAsync("product page", Reads, () => shopper.GetAsync("/api/storefront/products/oak-chair"));
         var checkout = await CheckoutBaselineAsync(furniture);
 
@@ -48,6 +53,7 @@ public sealed class LoadBaselineTests(ShopForgeApiFactory factory)
         // times however many products are on it; the day that stops being true, this is what says so.
         Assert.Equal(CatalogQueries, queries.Catalog);
         Assert.Equal(ProductQueries, queries.Product);
+        Assert.Equal(CategoryQueries, queries.Category);
 
         Assert.All([listing, deepPage, filtered, detail], scenario => Assert.True(
             scenario.Median < TimeSpan.FromMilliseconds(100),
@@ -57,9 +63,11 @@ public sealed class LoadBaselineTests(ShopForgeApiFactory factory)
             $"{checkout.Name} took {checkout.Median.TotalMilliseconds:F0} ms at the median, which is far above its baseline.");
     }
 
-    // The same two pages against a catalog of four products and one of a hundred and twenty: the number of
-    // round trips must be the same, because it must not depend on how much a shop sells.
-    private async Task<(int Catalog, int Product)> QueriesAsync(FurnitureStore furniture)
+    // The same pages against a catalog of four products and one of a hundred and twenty: the number of round
+    // trips must be the same, because it must not depend on how much a shop sells. The category page is
+    // measured against a flat shop and a nested one for the same reason — it must not depend on the shape of
+    // the tree either.
+    private async Task<(int Catalog, int Product, int Category)> QueriesAsync(FurnitureStore furniture)
     {
         var small = await FurnitureStore.CreateAsync(factory);
 
@@ -68,10 +76,24 @@ public sealed class LoadBaselineTests(ShopForgeApiFactory factory)
         var product = await CountedAsync(furniture, "/api/storefront/products/oak-chair");
         var productOfFour = await CountedAsync(small, "/api/storefront/products/oak-chair");
 
+        var flat = await CountedAsync(small, "/api/storefront/products?category=chairs");
+        var nested = await CountedAsync(await NestedShopAsync(), "/api/storefront/products?category=chairs");
+
         Assert.Equal(catalogOfFour, catalog);
         Assert.Equal(productOfFour, product);
+        Assert.Equal(flat, nested);
 
-        return (catalog, product);
+        return (catalog, product, nested);
+    }
+
+    // Chairs with two levels beneath it, so the category page is measured against a tree rather than a list.
+    private async Task<FurnitureStore> NestedShopAsync()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+        var dining = await furniture.Admin.CreateCategoryAsync(furniture.Store.StoreId, "Dining", furniture.ChairsCategoryId);
+        await furniture.Admin.CreateCategoryAsync(furniture.Store.StoreId, "Stacking", dining);
+
+        return furniture;
     }
 
     private async Task<int> CountedAsync(FurnitureStore furniture, string path)

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Catalog.Attributes;
+using ShopForge.Catalog.Categories;
 using ShopForge.Catalog.Domain;
 using ShopForge.Catalog.Images;
 using ShopForge.Shared.Files;
@@ -27,13 +28,11 @@ internal static class StorefrontCatalogEndpoints
 
     private static async Task<Ok<List<StorefrontCategoryResponse>>> GetCategoriesAsync(DbContext dbContext, CancellationToken cancellationToken)
     {
-        var categories = await dbContext.Set<Category>()
-            .OrderBy(category => category.SortOrder)
-            .ThenBy(category => category.Name)
-            .Select(category => new StorefrontCategoryResponse(category.Name, category.Slug))
-            .ToListAsync(cancellationToken);
+        var categories = await StoreCategories.ReadAsync(dbContext, cancellationToken);
 
-        return TypedResults.Ok(categories);
+        // Flat, in tree order, each one naming its parent and carrying the path down to it. A menu can be
+        // nested from that in one pass, and nothing that already read this list has to change to keep working.
+        return TypedResults.Ok(categories.InTreeOrder().Select(row => Crumbed(categories, row)).ToList());
     }
 
     // A page whose address has changed is not missing; it has moved. This is an API resource, so the redirect
@@ -88,15 +87,16 @@ internal static class StorefrontCatalogEndpoints
         var settings = await storeSettings.GetAsync(cancellationToken);
         var page_ = PageMetadata.For(settings.Seo, settings.Name, PageSeoOverrides.None);
         string? pageText = null;
-        Guid? categoryId = null;
+        List<Guid> categoryIds = [];
+        List<StorefrontCategoryResponse> path = [];
+        List<StorefrontCategoryResponse> children = [];
 
         if (category is not null)
         {
-            var chosen = await dbContext.Set<Category>()
-                .AsNoTracking()
-                .Where(candidate => candidate.Slug == category)
-                .Select(candidate => new { candidate.Id, candidate.Name, candidate.SeoTitle, candidate.SeoDescription, candidate.PageText })
-                .SingleOrDefaultAsync(cancellationToken);
+            // Every category of this shop, which is the one query the chosen one used to cost on its own and
+            // now also answers what is above it, beneath it and directly under it (D-172).
+            var categories = await StoreCategories.ReadAsync(dbContext, cancellationToken);
+            var chosen = categories.Called(category);
 
             if (chosen is null)
             {
@@ -105,8 +105,13 @@ internal static class StorefrontCatalogEndpoints
                     : TypedResults.NotFound();
             }
 
-            categoryId = chosen.Id;
             pageText = chosen.PageText;
+
+            // The page sells what this category sells and what everything beneath it sells, each thing once
+            // (D-146). Counts, facets, sorting and paging all read this same set.
+            categoryIds = [.. categories.Shape.AndBeneath(chosen.Id)];
+            path = [.. categories.PathTo(chosen.Id).Select(row => new StorefrontCategoryResponse(row.Name, row.Slug, null, []))];
+            children = [.. categories.ChildrenOf(chosen.Id).Select(row => new StorefrontCategoryResponse(row.Name, row.Slug, chosen.Slug, []))];
 
             // A category has no image of its own, so a link shared from one shows whatever the shop offers.
             page_ = PageMetadata.For(settings.Seo, chosen.Name, new PageSeoOverrides(chosen.SeoTitle, chosen.SeoDescription, null, NoIndex: false));
@@ -138,7 +143,7 @@ internal static class StorefrontCatalogEndpoints
             return errors.ToProblem();
         }
 
-        var query = new ProductQuery(dbContext, categoryId, filters);
+        var query = new ProductQuery(dbContext, categoryIds, filters);
         var products = query.Products();
         var totalCount = await products.CountAsync(cancellationToken);
         var items = await query.Sort(products, productSort!)
@@ -172,7 +177,7 @@ internal static class StorefrontCatalogEndpoints
         var available = await stock.AvailableAsync([.. items.SelectMany(item => item.VariantIds)], cancellationToken);
         var facets = new List<ProductFacetResponse>();
 
-        foreach (var definition in await FacetDefinitionsAsync(dbContext, categoryId, definitions, cancellationToken))
+        foreach (var definition in await FacetDefinitionsAsync(dbContext, categoryIds, definitions, cancellationToken))
         {
             facets.Add(await FacetAsync(query, definition, filters.SingleOrDefault(filter => filter.Definition == definition), cancellationToken));
         }
@@ -194,7 +199,9 @@ internal static class StorefrontCatalogEndpoints
             size,
             facets,
             page_,
-            pageText));
+            pageText,
+            path,
+            children));
     }
 
     private static async Task<Results<Ok<ProductDetailResponse>, RedirectHttpResult, NotFound>> GetProductAsync(
@@ -221,12 +228,14 @@ internal static class StorefrontCatalogEndpoints
         }
 
         var product = await dbContext.Set<Product>().AsNoTracking().SingleAsync(product => product.Id == storeProduct.ProductId, cancellationToken);
-        var categoryIds = storeProduct.Categories.Select(assignment => assignment.CategoryId).ToList();
-        var categories = await dbContext.Set<Category>()
-            .Where(category => categoryIds.Contains(category.Id))
-            .OrderBy(category => category.SortOrder)
-            .Select(category => new StorefrontCategoryResponse(category.Name, category.Slug))
-            .ToListAsync(cancellationToken);
+        // The same single query as before, widened to every category of the shop so each one the product is
+        // in can carry the trail above it — which is what a breadcrumb on a product page is drawn from.
+        var categoryIds = storeProduct.Categories.Select(assignment => assignment.CategoryId).ToHashSet();
+        var tree = await StoreCategories.ReadAsync(dbContext, cancellationToken);
+        var categories = tree.InTreeOrder()
+            .Where(row => categoryIds.Contains(row.Id))
+            .Select(row => Crumbed(tree, row))
+            .ToList();
 
         var definitionIds = storeProduct.AttributeValues.Select(value => value.AttributeDefinitionId).Distinct().ToList();
         var definitions = await dbContext.Set<AttributeDefinition>()
@@ -299,24 +308,39 @@ internal static class StorefrontCatalogEndpoints
         return result;
     }
 
+    // The filters on a page describe the products on that page. A parent sells what its children sell, so it
+    // offers what they offer too: a shopper looking at four chairs under Furniture can narrow them by material
+    // without first having to notice that Chairs is where the filter lives (D-172). Said once for a leaf,
+    // which is every category until a merchant nests one.
     private static async Task<List<AttributeDefinition>> FacetDefinitionsAsync(
         DbContext dbContext,
-        Guid? categoryId,
+        IReadOnlyList<Guid> categoryIds,
         List<AttributeDefinition> definitions,
         CancellationToken cancellationToken)
     {
-        if (categoryId is null)
+        if (categoryIds.Count == 0)
         {
             return [.. definitions.Where(definition => definition.IsFilterable).OrderBy(definition => definition.SortOrder).ThenBy(definition => definition.Name)];
         }
 
-        var categoryAttributeIds = await dbContext.Set<CategoryAttribute>()
-            .Where(assignment => assignment.CategoryId == categoryId)
-            .OrderBy(assignment => assignment.SortOrder)
-            .Select(assignment => assignment.AttributeDefinitionId)
+        var assignments = await dbContext.Set<CategoryAttribute>()
+            .Where(assignment => categoryIds.Contains(assignment.CategoryId))
+            .Select(assignment => new { assignment.AttributeDefinitionId, assignment.SortOrder })
             .ToListAsync(cancellationToken);
 
-        return [.. categoryAttributeIds.Select(id => definitions.Single(definition => definition.Id == id)).Where(definition => definition.IsFilterable)];
+        // Where one category in the set is in play this is exactly the order that category was given; where
+        // several are, the earliest place an attribute was put decides, and the shop's own order breaks ties.
+        return
+        [
+            .. assignments
+                .GroupBy(assignment => assignment.AttributeDefinitionId)
+                .Select(group => new { Definition = definitions.Single(definition => definition.Id == group.Key), Placed = group.Min(assignment => assignment.SortOrder) })
+                .Where(facet => facet.Definition.IsFilterable)
+                .OrderBy(facet => facet.Placed)
+                .ThenBy(facet => facet.Definition.SortOrder)
+                .ThenBy(facet => facet.Definition.Name)
+                .Select(facet => facet.Definition),
+        ];
     }
 
     private static async Task<ProductFacetResponse> FacetAsync(
@@ -409,11 +433,24 @@ internal static class StorefrontCatalogEndpoints
             : null;
     }
 
+    private static StorefrontCategoryResponse Crumbed(StoreCategoryTree categories, CategoryRow row) =>
+        new(row.Name,
+            row.Slug,
+            row.ParentId is { } parentId ? categories.Row(parentId).Slug : null,
+            [.. categories.PathTo(row.Id).Select(crumb => new StorefrontCategoryResponse(crumb.Name, crumb.Slug, null, []))]);
+
     private static string? ImageUrl(Guid storeProductId, Guid? imageId) =>
         imageId is null ? null : $"/api/storefront/products/{storeProductId}/images/{imageId}";
 }
 
-internal sealed record StorefrontCategoryResponse(string Name, string Slug);
+// A category says where it sits as well as what it is called: who it is under, and the trail from the top
+// down to it so a breadcrumb can be drawn without asking again (D-172). The crumbs in a path carry no path of
+// their own, which is what stops the shape repeating itself all the way down.
+internal sealed record StorefrontCategoryResponse(
+    string Name,
+    string Slug,
+    string? ParentSlug,
+    List<StorefrontCategoryResponse> Path);
 
 // A category page is this list filtered by one category, so this is where that page's metadata belongs; with
 // no category it is the shop's own front page (D-165).
@@ -424,7 +461,9 @@ internal sealed record ProductPageResponse(
     int PageSize,
     List<ProductFacetResponse> Filters,
     PageSeo Seo,
-    string? PageText);
+    string? PageText,
+    List<StorefrontCategoryResponse> Path,
+    List<StorefrontCategoryResponse> Children);
 
 internal sealed record ProductSummaryResponse(
     Guid Id,

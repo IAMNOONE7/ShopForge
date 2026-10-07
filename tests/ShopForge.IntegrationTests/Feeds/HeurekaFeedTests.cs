@@ -80,6 +80,36 @@ public sealed class HeurekaFeedTests(ShopForgeApiFactory factory)
         Assert.Null(item.Element("CATEGORYTEXT"));
     }
 
+    // A merchant who says what "Furniture" is called on Heureka has said something true about every chair
+    // beneath it, and should not have to say it again for each leaf (D-172).
+    [Fact]
+    public async Task A_category_nobody_has_mapped_takes_what_its_parent_was_mapped_as()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+        var top = await furniture.Admin.CreateCategoryAsync(furniture.Store.StoreId, "Furniture");
+        await MoveUnderAsync(furniture, furniture.ChairsCategoryId, top);
+        await MapAsync(furniture, "Nábytek", categoryId: top);
+
+        var item = Item(await RunAsync(furniture), FurnitureStore.SkuOf("oak-chair"));
+
+        Assert.Equal("Nábytek", item.Element("CATEGORYTEXT")!.Value);
+    }
+
+    // And the nearer answer is the better one: a leaf that has been named does not take its parent's name.
+    [Fact]
+    public async Task A_category_of_its_own_beats_the_one_above_it()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+        var top = await furniture.Admin.CreateCategoryAsync(furniture.Store.StoreId, "Furniture");
+        await MoveUnderAsync(furniture, furniture.ChairsCategoryId, top);
+        await MapAsync(furniture, "Nábytek", categoryId: top);
+        await MapAsync(furniture, "Nábytek | Židle");
+
+        var item = Item(await RunAsync(furniture), FurnitureStore.SkuOf("oak-chair"));
+
+        Assert.Equal("Nábytek | Židle", item.Element("CATEGORYTEXT")!.Value);
+    }
+
     // The work still to do, in one list: every category, with what it has been called or nothing.
     [Fact]
     public async Task The_mapping_list_names_what_is_still_unmapped()
@@ -140,10 +170,24 @@ public sealed class HeurekaFeedTests(ShopForgeApiFactory factory)
     private static XElement Item(XElement feed, string sku) =>
         feed.Elements("SHOPITEM").Single(item => item.Element("ITEM_ID")!.Value == sku);
 
-    private async Task MapAsync(FurnitureStore furniture, string? engineCategory, string feed = "heureka")
+    private async Task MoveUnderAsync(FurnitureStore furniture, Guid categoryId, Guid parentId)
+    {
+        var categories = await furniture.Admin.GetFromJsonAsync<List<MovedCategory>>(
+            $"/api/admin/stores/{furniture.Store.StoreId}/categories", CancellationToken);
+        var category = categories!.Single(candidate => candidate.Id == categoryId);
+
+        using var moved = await furniture.Admin.PutAsJsonAsync(
+            $"/api/admin/stores/{furniture.Store.StoreId}/categories/{categoryId}",
+            new { category.Name, category.Slug, category.SortOrder, ParentId = parentId },
+            CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, moved.StatusCode);
+    }
+
+    private async Task MapAsync(FurnitureStore furniture, string? engineCategory, string feed = "heureka", Guid? categoryId = null)
     {
         using var mapped = await furniture.Admin.PutAsJsonAsync(
-            $"/api/admin/stores/{furniture.Store.StoreId}/feeds/{feed}/categories/{furniture.ChairsCategoryId}",
+            $"/api/admin/stores/{furniture.Store.StoreId}/feeds/{feed}/categories/{categoryId ?? furniture.ChairsCategoryId}",
             new { EngineCategory = engineCategory },
             CancellationToken);
 
@@ -196,6 +240,8 @@ public sealed class HeurekaFeedTests(ShopForgeApiFactory factory)
     private sealed record FeedView(string Feed, bool IsEnabled, string? Url);
 
     private sealed record MappedView(Guid CategoryId, string Name, string? EngineCategory);
+
+    private sealed record MovedCategory(Guid Id, string Name, string Slug, int SortOrder);
 
     private sealed record AttributeView(Guid Id, string Name, string? Unit, bool IsFilterable, bool IsVisibleOnProductPage, int SortOrder);
 }

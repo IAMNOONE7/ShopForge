@@ -27,6 +27,21 @@ internal sealed class Category : IStoreOwned
 
     public int SortOrder { get; private set; }
 
+    // Who this one sits under, or nothing for a category at the top. The rules about where it may sit need the
+    // other categories to answer, so they live in CategoryTree and this only refuses the one a category can
+    // see for itself (D-172).
+    public Guid? ParentId { get; private set; }
+
+    public void MoveTo(Guid? parentId)
+    {
+        if (parentId == Id)
+        {
+            throw new InvalidOperationException("A category cannot be its own parent.");
+        }
+
+        ParentId = parentId;
+    }
+
     // A category's own answer, and the words a merchant writes above the products — which 28f puts on the page
     // and which is the only thing on a category page a crawler can read that is not a list (D-165).
     public string? SeoTitle { get; private set; }

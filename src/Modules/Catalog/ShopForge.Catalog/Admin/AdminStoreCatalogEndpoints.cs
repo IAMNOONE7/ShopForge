@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using ShopForge.Catalog.Categories;
 using ShopForge.Catalog.Domain;
 using ShopForge.Catalog.Publishing;
 using ShopForge.Shared.Auditing;
@@ -199,13 +200,18 @@ internal static class AdminStoreCatalogEndpoints
                 category.Name,
                 category.Slug,
                 category.SortOrder,
+                category.ParentId,
                 category.Attributes.OrderBy(assignment => assignment.SortOrder).Select(assignment => assignment.AttributeDefinitionId).ToList(),
                 category.SeoTitle,
                 category.SeoDescription,
                 category.PageText))
             .ToListAsync(cancellationToken);
 
-        return TypedResults.Ok(categories);
+        // Parents before their children, so the editor can indent the list as it arrives.
+        var shape = CategoryTree.Of([.. categories.Select(category => new CategoryPlace(category.Id, category.ParentId))]);
+        var order = shape.Everything().Select((id, position) => (id, position)).ToDictionary(entry => entry.id, entry => entry.position);
+
+        return TypedResults.Ok(categories.OrderBy(category => order[category.Id]).ToList());
     }
 
     private static async Task<Results<Created<AdminCategoryResponse>, ValidationProblem, ProblemHttpResult>> CreateCategoryAsync(
@@ -228,7 +234,23 @@ internal static class AdminStoreCatalogEndpoints
             return SlugTaken();
         }
 
+        if (request.ParentId is { } wantedParent)
+        {
+            var shape = await StoreCategories.ShapeAsync(dbContext, cancellationToken);
+
+            if (!shape.Knows(wantedParent))
+            {
+                return NoSuchParent();
+            }
+
+            if (!shape.CanHoldAChild(wantedParent))
+            {
+                return TooDeep();
+            }
+        }
+
         var category = new Category(storeContext.StoreId!.Value, request.Name!, slug, request.SortOrder);
+        category.MoveTo(request.ParentId);
 
         if (request.Seo is { } seo)
         {
@@ -245,6 +267,7 @@ internal static class AdminStoreCatalogEndpoints
                 category.Name,
                 category.Slug,
                 category.SortOrder,
+                category.ParentId,
                 [],
                 category.SeoTitle,
                 category.SeoDescription,
@@ -280,6 +303,31 @@ internal static class AdminStoreCatalogEndpoints
             return SlugTaken();
         }
 
+        if (request.ParentId != category.ParentId)
+        {
+            var shape = await StoreCategories.ShapeAsync(dbContext, cancellationToken);
+
+            if (request.ParentId is { } wantedParent && !shape.Knows(wantedParent))
+            {
+                return NoSuchParent();
+            }
+
+            // The tree says whether this move is allowed, because neither end of it can tell on its own: a
+            // category cannot go beneath something it contains, and a shallow branch moved under a deep one
+            // can break the depth limit while neither of them breaks it alone (D-172).
+            if (!shape.CanAdopt(category.Id, request.ParentId))
+            {
+                if (request.ParentId == category.Id)
+                {
+                    return ItsOwnParent();
+                }
+
+                return shape.AndBeneath(category.Id).Contains(request.ParentId!.Value) ? WouldBeItsOwnAncestor() : TooDeep();
+            }
+
+            category.MoveTo(request.ParentId);
+        }
+
         var wasCalled = category.Slug;
         category.Update(request.Name!, slug, request.SortOrder);
         await SlugTrail.RecordAsync(
@@ -304,6 +352,7 @@ internal static class AdminStoreCatalogEndpoints
             category.Name,
             category.Slug,
             category.SortOrder,
+            category.ParentId,
             [.. category.Attributes.OrderBy(assignment => assignment.SortOrder).Select(assignment => assignment.AttributeDefinitionId)],
             category.SeoTitle,
             category.SeoDescription,
@@ -330,6 +379,18 @@ internal static class AdminStoreCatalogEndpoints
 
     private static ProblemHttpResult SlugTaken() =>
         TypedResults.Problem(statusCode: StatusCodes.Status409Conflict, title: "The slug is already used in this store");
+
+    private static ValidationProblem NoSuchParent() =>
+        new RequestErrors().Check(false, "parentId", "That parent category was not found.").ToProblem();
+
+    private static ValidationProblem ItsOwnParent() =>
+        new RequestErrors().Check(false, "parentId", "A category cannot be its own parent.").ToProblem();
+
+    private static ValidationProblem WouldBeItsOwnAncestor() =>
+        new RequestErrors().Check(false, "parentId", "A category cannot sit beneath one of its own.").ToProblem();
+
+    private static ValidationProblem TooDeep() =>
+        new RequestErrors().Check(false, "parentId", $"Categories can be nested up to {CategoryTree.MaxDepth} levels deep.").ToProblem();
 }
 
 internal sealed record ListProductRequest(Guid ProductId, string? Name, string? Slug, string? Description, decimal Price, decimal VatRate, bool IsVisible, int SortOrder);
@@ -351,13 +412,14 @@ internal sealed record CategorySeoRequest(string? Title, string? Description, st
 
 internal sealed record AssignCategoriesRequest(List<Guid>? CategoryIds);
 
-internal sealed record CategoryRequest(string? Name, string? Slug, int SortOrder, CategorySeoRequest? Seo = null);
+internal sealed record CategoryRequest(string? Name, string? Slug, int SortOrder, CategorySeoRequest? Seo = null, Guid? ParentId = null);
 
 internal sealed record AdminCategoryResponse(
     Guid Id,
     string Name,
     string Slug,
     int SortOrder,
+    Guid? ParentId,
     List<Guid> AttributeIds,
     string? SeoTitle,
     string? SeoDescription,

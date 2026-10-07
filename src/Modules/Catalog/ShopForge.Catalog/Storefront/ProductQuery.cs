@@ -3,7 +3,10 @@ using ShopForge.Catalog.Domain;
 
 namespace ShopForge.Catalog.Storefront;
 
-internal sealed class ProductQuery(DbContext dbContext, Guid? categoryId, IReadOnlyList<ProductFilter> filters)
+// The categories are a set rather than one, because a category page shows what every category beneath it
+// sells too (D-146). An `Any` over the assignments names each product once however many of them match, which
+// is what keeps a count, a facet and a page of results talking about the same products.
+internal sealed class ProductQuery(DbContext dbContext, IReadOnlyList<Guid> categoryIds, IReadOnlyList<ProductFilter> filters)
 {
     public IQueryable<StoreProduct> Products() => Filtered(except: null);
 
@@ -63,9 +66,9 @@ internal sealed class ProductQuery(DbContext dbContext, Guid? categoryId, IReadO
     {
         var products = dbContext.Set<StoreProduct>().Where(product => product.IsVisible);
 
-        if (categoryId is not null)
+        if (categoryIds.Count > 0)
         {
-            products = products.Where(product => product.Categories.Any(assignment => assignment.CategoryId == categoryId));
+            products = products.Where(product => product.Categories.Any(assignment => categoryIds.Contains(assignment.CategoryId)));
         }
 
         foreach (var filter in filters.Where(filter => filter.Definition != except))

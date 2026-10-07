@@ -19,6 +19,16 @@ internal sealed class CategoryEntityConfiguration : IEntityTypeConfiguration<Cat
         builder.Property(category => category.SeoDescription).HasMaxLength(500);
 
         builder.HasIndex(category => new { category.StoreId, category.Slug }).IsUnique();
+        builder.HasIndex(category => new { category.StoreId, category.ParentId });
+
+        // A parent is a category of the same store, and one with children cannot be deleted out from under
+        // them. The shape of the tree is the application's to police; that it points at something real is the
+        // database's.
+        builder.HasOne<Category>()
+            .WithMany()
+            .HasForeignKey(category => new { category.StoreId, category.ParentId })
+            .HasPrincipalKey(category => new { category.StoreId, category.Id })
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasMany(category => category.Attributes)
             .WithOne()

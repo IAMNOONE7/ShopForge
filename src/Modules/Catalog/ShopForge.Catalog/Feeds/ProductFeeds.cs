@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using ShopForge.Catalog.Attributes;
+using ShopForge.Catalog.Categories;
 using ShopForge.Catalog.Domain;
 using ShopForge.Catalog.Feeds.Google;
 using ShopForge.Shared.Feeds;
@@ -171,6 +172,9 @@ internal sealed class ProductFeeds(
             .AsNoTracking()
             .Where(mapping => mapping.Feed == feed)
             .ToDictionaryAsync(mapping => mapping.CategoryId, mapping => mapping.EngineCategory, cancellationToken);
+        // Where each category sits, so a thing in a leaf nobody has mapped can still be published under what
+        // its parent was mapped as. Read once for the run, like the mappings themselves.
+        var shape = await StoreCategories.ShapeAsync(dbContext, cancellationToken);
         var published = await dbContext.Set<AttributeDefinition>()
             .AsNoTracking()
             .Include(definition => definition.Options)
@@ -194,10 +198,16 @@ internal sealed class ProductFeeds(
 
                 written++;
 
-                // The first category the merchant has mapped for this engine. A thing in several categories
-                // has one answer to give, and the shop's own order is as good a tie-break as any.
+                // The first category the merchant has mapped for this engine, looking up the tree from each
+                // one the thing is in: a merchant who maps "Furniture" has said something true about every
+                // chair beneath it, and should not have to say it again for each leaf (D-172). The nearest
+                // ancestor wins, because the more specific answer is the better one. A thing in several
+                // categories has one answer to give, and the shop's own order is as good a tie-break as any.
                 var engineCategory = listing.CategoryIds
-                    .Select(categoryId => mapped.GetValueOrDefault(categoryId))
+                    .Select(categoryId => shape.PathTo(categoryId)
+                        .Reverse()
+                        .Select(mapped.GetValueOrDefault)
+                        .FirstOrDefault(name => name is not null))
                     .FirstOrDefault(name => name is not null);
                 var parameters = published
                     .Select(definition => new

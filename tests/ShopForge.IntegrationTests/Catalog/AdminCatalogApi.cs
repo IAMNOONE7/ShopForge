@@ -59,9 +59,10 @@ internal static class AdminCatalogApi
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
-    public static async Task<Guid> CreateCategoryAsync(this HttpClient admin, Guid storeId, string name)
+    public static async Task<Guid> CreateCategoryAsync(this HttpClient admin, Guid storeId, string name, Guid? parentId = null)
     {
-        using var response = await admin.PostAsJsonAsync($"/api/admin/stores/{storeId}/categories", new { Name = name, SortOrder = 0 });
+        using var response = await admin.PostAsJsonAsync(
+            $"/api/admin/stores/{storeId}/categories", new { Name = name, SortOrder = 0, ParentId = parentId });
         return await IdFromAsync(response);
     }
 
