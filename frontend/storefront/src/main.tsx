@@ -9,6 +9,7 @@ import "./styles/discovery.css";
 import "./styles/catalog.css";
 import "./styles/product.css";
 import "./styles/shopping.css";
+import "./styles/customer.css";
 import App from "./App.tsx";
 
 async function render() {

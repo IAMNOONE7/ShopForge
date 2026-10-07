@@ -69,7 +69,7 @@ export function AccountProfile({
     >
       <div className="account-section-heading">
         <div>
-          <h2 id="account-profile-heading">{t("account:details")}</h2>
+          <h2 id="account-profile-heading" tabIndex={-1}>{t("account:details")}</h2>
           <p>{t("account:detailsIntro")}</p>
         </div>
       </div>

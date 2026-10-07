@@ -72,6 +72,9 @@ const resources = {
     fieldInvalid: "Check this field.",
   },
   errors: {
+    pageLoadTitle: "This page could not be loaded",
+    pageLoadBody: "Reload the page to try again.",
+    reloadPage: "Reload page",
     genericTitle: "Something went wrong",
     genericBody: "Please try again in a moment.",
     request: "This information could not be loaded. Please try again.",
@@ -99,6 +102,8 @@ const resources = {
     pageNotFoundBody: "This page does not exist.",
   },
   auth: {
+    signInIntro: "See your orders and keep your profile up to date.",
+    registerIntro: "Save your contact details and follow your orders with this store.",
     email: "E-mail",
     password: "Password",
     newPassword: "New password",
@@ -437,6 +442,11 @@ const resources = {
     countryExample: "IE",
   },
   orders: {
+    receipt: "Your order",
+    navigation: "Order sections",
+    checkingUpdates: "We’ll check for payment and document updates here.",
+    preparingDownload: "Preparing download…",
+    discountRecorded: "{{name}} ({{code}}) was applied. The amounts shown are the saved order totals.",
     loading: "Loading order…",
     notFoundTitle: "Order not found",
     guestNotFound: "This order is unavailable here. Check the complete link from your confirmation e-mail.",
@@ -547,6 +557,7 @@ const resources = {
     unknown: "Document",
   },
   account: {
+    navigation: "Account sections",
     title: "Your account",
     loading: "Loading your account…",
     signInPrompt: "Sign in to see your profile and orders.",

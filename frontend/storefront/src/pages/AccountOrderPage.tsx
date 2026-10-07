@@ -58,7 +58,7 @@ export function AccountOrderPage() {
     );
   }
 
-  return <AuthenticatedAccountOrder number={number} />;
+  return <AuthenticatedAccountOrder key={customerState.customer.email + ":" + number} number={number} />;
 }
 
 function AuthenticatedAccountOrder({ number }: { number: string }) {

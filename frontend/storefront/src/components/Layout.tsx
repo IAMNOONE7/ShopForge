@@ -7,6 +7,7 @@ import { useStore } from "../storeContext";
 import { useRequest } from "../useRequest";
 import { RequestError } from "./ui/RequestError";
 import { RouteEffects } from "./RouteEffects";
+import { RouteContent } from "./RouteContent";
 import { StoreBrand } from "./StoreBrand";
 import { categoryTree } from "./categoryTree";
 import { categoryPath } from "../publicPages";
@@ -101,7 +102,7 @@ export function Layout() {
             />
           </div>
         )}
-        <Outlet context={categoryList} />
+        <RouteContent><Outlet context={categoryList} /></RouteContent>
       </main>
       <footer className="store-footer">
         <div className="store-footer-inner container">

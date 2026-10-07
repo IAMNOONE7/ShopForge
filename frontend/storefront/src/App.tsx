@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BrowserRouter, Route, Routes } from "react-router";
 import { CartProvider } from "./components/CartProvider";
@@ -7,23 +7,24 @@ import { Layout } from "./components/Layout";
 import { Message } from "./components/Message";
 import { LoadingState } from "./components/ui/LoadingState";
 import { RequestError } from "./components/ui/RequestError";
-import { AccountOrderPage } from "./pages/AccountOrderPage";
-import { AccountPage } from "./pages/AccountPage";
 import { CartPage } from "./pages/CartPage";
 import { CheckoutPage } from "./pages/CheckoutPage";
-import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
-import { OrderPage } from "./pages/OrderPage";
 import { ContentPage } from "./pages/ContentPage";
 import { ProductDetailPage } from "./pages/ProductDetailPage";
 import { ProductListPage } from "./pages/ProductListPage";
-import { RegisterPage } from "./pages/RegisterPage";
-import { ResetPasswordPage } from "./pages/ResetPasswordPage";
-import { SignInPage } from "./pages/SignInPage";
-import { VerifyEmailPage } from "./pages/VerifyEmailPage";
 import { applyStore, fetchStore, type Store } from "./store";
 import { StoreContext } from "./storeContext";
 import { statusOf } from "./api/errors";
 import { publicRoutes } from "./publicPages";
+
+const AccountOrderPage = lazy(() => import("./pages/AccountOrderPage").then((module) => ({ default: module.AccountOrderPage })));
+const AccountPage = lazy(() => import("./pages/AccountPage").then((module) => ({ default: module.AccountPage })));
+const ForgotPasswordPage = lazy(() => import("./pages/ForgotPasswordPage").then((module) => ({ default: module.ForgotPasswordPage })));
+const OrderPage = lazy(() => import("./pages/OrderPage").then((module) => ({ default: module.OrderPage })));
+const RegisterPage = lazy(() => import("./pages/RegisterPage").then((module) => ({ default: module.RegisterPage })));
+const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage").then((module) => ({ default: module.ResetPasswordPage })));
+const SignInPage = lazy(() => import("./pages/SignInPage").then((module) => ({ default: module.SignInPage })));
+const VerifyEmailPage = lazy(() => import("./pages/VerifyEmailPage").then((module) => ({ default: module.VerifyEmailPage })));
 
 type StoreState =
   | { status: "loading" }

@@ -70,6 +70,7 @@ export function RegisterPage() {
   return (
     <AuthLayout
       title={t("auth:createAccount")}
+      introduction={<p>{t("auth:registerIntro")}</p>}
       footer={
         <p>
           {t("auth:alreadyRegistered")} {" "}

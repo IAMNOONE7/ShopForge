@@ -1,10 +1,9 @@
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
-import { getOrders, type CustomerOrder } from "../../account";
+import { getOrders } from "../../account";
 import { useStore } from "../../storeContext";
 import { useRequest } from "../../useRequest";
-import { formatDate } from "../../utils/format";
-import { OrderStatusBadge } from "../orders/OrderStatusBadge";
+import { OrderHistoryList } from "./OrderHistoryList";
 import { LoadingState } from "../ui/LoadingState";
 import { RequestError } from "../ui/RequestError";
 
@@ -24,7 +23,7 @@ export function AccountOrderHistory({
     >
       <div className="account-section-heading">
         <div>
-          <h2 id="account-orders-heading">{t("account:orders")}</h2>
+          <h2 id="account-orders-heading" tabIndex={-1}>{t("account:orders")}</h2>
           <p>{t("account:ordersIntro")}</p>
         </div>
       </div>
@@ -55,72 +54,9 @@ export function AccountOrderHistory({
         </div>
       )}
       {orders.status === "ready" && orders.data.length > 0 && (
-        <OrderHistoryTable orders={orders.data} culture={store.culture} />
+        <OrderHistoryList orders={orders.data} culture={store.culture} />
       )}
     </section>
   );
 }
 
-function OrderHistoryTable({
-  orders,
-  culture,
-}: {
-  orders: CustomerOrder[];
-  culture: string;
-}) {
-  const { t } = useTranslation(["account", "orders"]);
-
-  return (
-    <div className="account-orders-wrap">
-      <table className="account-orders-table">
-        <thead>
-          <tr>
-            <th scope="col">{t("account:orderNumber")}</th>
-            <th scope="col">{t("account:orderDate")}</th>
-            <th scope="col">{t("account:orderStatus")}</th>
-            <th scope="col">{t("account:orderItems")}</th>
-            <th scope="col">
-              <span className="sr-only">{t("account:orderDetail")}</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {orders.map((order) => {
-            const path = `/account/orders/${encodeURIComponent(order.number)}`;
-            return (
-              <tr key={order.number}>
-                <th scope="row" data-label={t("account:orderNumber")}>
-                  <Link
-                    to={path}
-                    aria-label={t("account:viewOrder", {
-                      number: order.number,
-                    })}
-                  >
-                    {order.number}
-                  </Link>
-                </th>
-                <td data-label={t("account:orderDate")}>
-                  <time dateTime={order.placedAt}>
-                    {formatDate(order.placedAt, culture)}
-                  </time>
-                </td>
-                <td data-label={t("account:orderStatus")}>
-                  <OrderStatusBadge value={order.status} />
-                </td>
-                <td data-label={t("account:orderItems")}>
-                  {t("orders:itemCount", { count: order.items })}
-                </td>
-                <td
-                  className="account-order-action"
-                  data-label={t("account:orderDetail")}
-                >
-                  <Link to={path}>{t("account:orderDetail")}</Link>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}

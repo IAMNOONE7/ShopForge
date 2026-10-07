@@ -52,6 +52,7 @@ export function SignInPage() {
   return (
     <AuthLayout
       title={t("auth:signIn")}
+      introduction={<p>{t("auth:signInIntro")}</p>}
       footer={
         <p>
           <Link to={authPath("/account/register", returnTo)}>

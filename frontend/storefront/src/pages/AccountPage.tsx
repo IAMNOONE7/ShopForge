@@ -56,6 +56,7 @@ export function AccountPage() {
 
   return (
     <AuthenticatedAccount
+      key={customerState.customer.email}
       customer={customerState.customer}
       apply={customerState.apply}
     />
@@ -96,6 +97,7 @@ function AuthenticatedAccount({
     <div className="account">
       <header className="account-header">
         <div>
+          <p className="customer-eyebrow">{t("account:title")}</p>
           <h1>{t("account:hello", { name: customer.firstName })}</h1>
           <p>{t("account:signedInAs", { email: customer.email })}</p>
         </div>
@@ -112,9 +114,14 @@ function AuthenticatedAccount({
       {signOutError !== null && (
         <RequestError error={signOutError} operation="write" />
       )}
+      <nav className="customer-sections" aria-label={t("account:navigation")}>
+        <a href="#account-orders-heading">{t("account:orders")}</a>
+        <a href="#account-profile-heading">{t("account:details")}</a>
+        <Link to="/">{t("navigation:allProducts")}</Link>
+      </nav>
       <div className="account-layout">
-        <AccountProfile customer={customer} onUpdated={apply} />
         <AccountOrderHistory customerKey={customer.email} />
+        <AccountProfile customer={customer} onUpdated={apply} />
       </div>
     </div>
   );

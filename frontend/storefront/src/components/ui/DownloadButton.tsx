@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { RequestError } from "./RequestError";
 
 export function DownloadButton({
@@ -8,6 +9,7 @@ export function DownloadButton({
   children: React.ReactNode;
   download: () => Promise<void>;
 }) {
+  const { t } = useTranslation("orders");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown | null>(null);
   const lock = useRef(false);
@@ -28,7 +30,7 @@ export function DownloadButton({
   }
 
   return (
-    <span>
+    <div className="document-download">
       <button
         type="button"
         className="link-button"
@@ -36,9 +38,9 @@ export function DownloadButton({
         aria-busy={pending}
         onClick={() => void start()}
       >
-        {children}
+        {pending ? t("preparingDownload") : children}
       </button>
       {error !== null && <RequestError error={error} operation="download" />}
-    </span>
+    </div>
   );
 }

@@ -137,7 +137,7 @@ export function OrderReturns({
 
   return (
     <section className="order-panel returns" aria-labelledby="returns-heading">
-      <h2 id="returns-heading">{t("returnTitle")}</h2>
+      <h2 id="returns-heading" tabIndex={-1}>{t("returnTitle")}</h2>
       {answer.status === "loading" && <LoadingState label={t("returnLoading")} lines={2} />}
       {(answer.status === "error" || answer.status === "not-found") && (
         <RequestError error={answer.error} operation="read" onRetry={answer.reload} />

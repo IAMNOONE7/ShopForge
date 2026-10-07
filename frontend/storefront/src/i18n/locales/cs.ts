@@ -72,6 +72,9 @@ const resources = {
     fieldInvalid: "Zkontrolujte toto pole.",
   },
   errors: {
+    pageLoadTitle: "Stránku se nepodařilo načíst",
+    pageLoadBody: "Obnovte stránku a zkuste to znovu.",
+    reloadPage: "Obnovit stránku",
     genericTitle: "Něco se nepovedlo",
     genericBody: "Zkuste to prosím za chvíli znovu.",
     request: "Tyto informace se nepodařilo načíst. Zkuste to znovu.",
@@ -100,6 +103,8 @@ const resources = {
     pageNotFoundBody: "Tato stránka neexistuje.",
   },
   auth: {
+    signInIntro: "Prohlédněte si objednávky a aktualizujte svůj profil.",
+    registerIntro: "Uložte své kontaktní údaje a sledujte objednávky v tomto obchodě.",
     email: "E-mail",
     password: "Heslo",
     newPassword: "Nové heslo",
@@ -437,6 +442,11 @@ const resources = {
     countryExample: "CZ",
   },
   orders: {
+    receipt: "Vaše objednávka",
+    navigation: "Části objednávky",
+    checkingUpdates: "Zde budeme kontrolovat aktualizace platby a dokladů.",
+    preparingDownload: "Příprava stažení…",
+    discountRecorded: "{{name}} ({{code}}) byl použit. Zobrazené částky jsou uložené ceny objednávky.",
     loading: "Načítání objednávky…",
     notFoundTitle: "Objednávka nenalezena",
     guestNotFound: "Tato objednávka zde není dostupná. Zkontrolujte celý odkaz v potvrzovacím e-mailu.",
@@ -543,6 +553,7 @@ const resources = {
   },
   documents: { Invoice: "Faktura", CreditNote: "Dobropis", unknown: "Dokument" },
   account: {
+    navigation: "Části účtu",
     title: "Váš účet",
     loading: "Načítání účtu…",
     signInPrompt: "Přihlaste se a zobrazte svůj profil a objednávky.",

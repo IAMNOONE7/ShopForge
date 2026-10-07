@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router";
@@ -71,8 +71,8 @@ function customerState(
   };
 }
 
-function renderAccount(state: CustomerState, path = "/account") {
-  return render(
+function accountView(state: CustomerState, path: string) {
+  return (
     <MemoryRouter initialEntries={[path]}>
       <StoreContext value={store}>
         <CustomerContext value={state}>
@@ -86,8 +86,12 @@ function renderAccount(state: CustomerState, path = "/account") {
           </Routes>
         </CustomerContext>
       </StoreContext>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+}
+
+function renderAccount(state: CustomerState, path = "/account") {
+  return render(accountView(state, path));
 }
 
 function makeOrder(): Order {
@@ -151,6 +155,22 @@ afterEach(cleanup);
 afterAll(() => i18n.changeLanguage("en"));
 
 describe("account profile and history", () => {
+  it("replaces the previous customer's unsaved profile when the authenticated identity changes", async () => {
+    mocks.getOrders.mockResolvedValue([]);
+    const user = userEvent.setup();
+    const view = renderAccount(customerState({ status: "authenticated", customer }));
+    const firstName = await screen.findByRole("textbox", { name: "First name" });
+    await user.clear(firstName);
+    await user.type(firstName, "Unsaved private draft");
+    const next = { ...customer, email: "grace@example.test", firstName: "Grace" };
+    view.rerender(accountView(customerState({ status: "authenticated", customer: next }), "/account"));
+    expect(screen.getByRole("textbox", { name: "First name" })).toHaveProperty("value", "Grace");
+    expect(screen.getByRole("textbox", { name: "E-mail" })).toHaveProperty("value", next.email);
+    expect(document.body.textContent).not.toContain("ada@example.test");
+    expect(screen.getByRole("textbox", { name: "First name" })).not.toHaveProperty("value", "Unsaved private draft");
+    expect(mocks.updateProfile).not.toHaveBeenCalled();
+  });
+
   it("does not start private reads while the session is unresolved or anonymous", () => {
     renderAccount(customerState({ status: "checking" }));
     expect(screen.getByText("Loading your account…")).toBeTruthy();
@@ -216,7 +236,7 @@ describe("account profile and history", () => {
     expect(
       await screen.findByText("You have no orders with this store yet."),
     ).toBeTruthy();
-    expect(screen.getByRole("link", { name: "All products" })).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Order history" })).getByRole("link", { name: "All products" })).toBeTruthy();
   });
 
   it("preserves the profile draft and keeps e-mail read-only after failure", async () => {
@@ -305,6 +325,21 @@ describe("account profile and history", () => {
 });
 
 describe("authenticated order detail", () => {
+  it("discards the previous customer's receipt while the next customer's same-number read resolves", async () => {
+    mocks.getAccountOrder.mockResolvedValueOnce(makeOrder());
+    const path = "/account/orders/2026-00023";
+    const view = renderAccount(customerState({ status: "authenticated", customer }), path);
+    await screen.findByText("Beech side table");
+    const pending = deferred<Order>();
+    mocks.getAccountOrder.mockReturnValue(pending.promise);
+    const next = { ...customer, email: "grace@example.test", firstName: "Grace" };
+    view.rerender(accountView(customerState({ status: "authenticated", customer: next }), path));
+    expect(screen.queryByText("Beech side table")).toBeNull();
+    expect(document.body.textContent).not.toContain(customer.email);
+    pending.reject(new HttpError("http", 404));
+    expect(await screen.findByRole("heading", { name: "Order not found" })).toBeTruthy();
+  });
+
   it("reloads without a guest token and downloads through the account endpoint", async () => {
     mocks.getAccountOrder.mockResolvedValue(makeOrder());
     mocks.downloadAccountDocument.mockResolvedValue(undefined);
