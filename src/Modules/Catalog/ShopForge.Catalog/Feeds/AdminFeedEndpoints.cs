@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using ShopForge.Catalog.Feeds.Google;
 using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Feeds;
 using ShopForge.Shared.Security;
@@ -22,6 +23,7 @@ internal static class AdminFeedEndpoints
         feeds.MapGet("/", GetFeedsAsync);
         feeds.MapPut("/{feed}", SaveAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
         feeds.MapPost("/{feed}/token", RotateAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
+        feeds.MapGet("/{feed}/check", CheckAsync);
         feeds.MapPost("/{feed}/run", RunAsync).RequireAuthorization(AdminPolicies.CatalogManagement).RequireRateLimiting(RateLimits.Expensive);
 
         return storeAdmin;
@@ -94,6 +96,14 @@ internal static class AdminFeedEndpoints
 
         return TypedResults.Ok(AdminFeedResponse.From(feed, arrangement, await urls.FindAsync(cancellationToken)));
     }
+
+    private static async Task<Results<Ok<List<FeedProblem>>, NotFound>> CheckAsync(
+        string feed,
+        IProductFeeds feeds,
+        CancellationToken cancellationToken) =>
+        await feeds.CheckAsync(feed, cancellationToken) is { } problems
+            ? TypedResults.Ok(problems)
+            : TypedResults.NotFound();
 
     private static async Task<Results<Ok<AdminFeedResponse>, NotFound, ProblemHttpResult>> RunAsync(
         string feed,

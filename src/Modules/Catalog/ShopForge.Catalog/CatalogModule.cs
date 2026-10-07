@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Catalog.Admin;
 using ShopForge.Catalog.Feeds;
+using ShopForge.Catalog.Feeds.Google;
 using ShopForge.Catalog.Import;
 using ShopForge.Catalog.Privacy;
 using ShopForge.Catalog.Publishing;
@@ -11,6 +12,7 @@ using ShopForge.Catalog.Reviews;
 using ShopForge.Catalog.Seo;
 using ShopForge.Catalog.Storefront;
 using ShopForge.Shared.Catalog;
+using ShopForge.Shared.Feeds;
 using ShopForge.Shared.Maintenance;
 using ShopForge.Shared.Platform;
 using ShopForge.Shared.Privacy;
@@ -34,6 +36,7 @@ public static class CatalogModule
         services.AddScoped<ProductRatings>();
         services.AddScoped<ICustomerData, CustomerReviewData>();
         services.AddScoped<IProductFeeds, ProductFeeds>();
+        services.AddSingleton<IProductFeedFormat, GoogleMerchantFeed>();
         services.AddScoped<IStoreMaintenance, FeedRefresh>();
 
         return services;

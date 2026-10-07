@@ -1,9 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using ShopForge.Catalog.Domain;
+using ShopForge.Catalog.Feeds.Google;
 using ShopForge.Shared.Feeds;
 using ShopForge.Shared.Files;
 using ShopForge.Shared.Inventory;
+using ShopForge.Shared.Shipping;
 using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
 
@@ -18,10 +20,41 @@ internal sealed class ProductFeeds(
     ICurrentStoreSettings storeSettings,
     IStoreUrls urls,
     IStockLedger stock,
+    IStoreShippingRates shipping,
     IFileStorage files,
     TimeProvider clock,
     ILogger<ProductFeeds> logger) : IProductFeeds
 {
+    // Reads the same gathering the run uses, and writes nothing. Only Google has rules of its own so far; a
+    // second format with its own will say so here rather than every caller learning both.
+    public async Task<List<FeedProblem>?> CheckAsync(string feed, CancellationToken cancellationToken)
+    {
+        if (feed != GoogleMerchantFeed.FeedKey)
+        {
+            return null;
+        }
+
+        var address = await urls.FindAsync(cancellationToken);
+
+        if (address is null)
+        {
+            return null;
+        }
+
+        var settings = await storeSettings.GetAsync(cancellationToken);
+        var problems = new List<FeedProblem>();
+
+        await foreach (var product in ProductsAsync(address, settings.Currency, _ => { }, () => { }, cancellationToken))
+        {
+            if (GoogleFeedChecks.Problems(product) is { Count: > 0 } found)
+            {
+                problems.Add(new FeedProblem(product.Sku, product.Name, found));
+            }
+        }
+
+        return problems;
+    }
+
     public async Task<FeedRun?> RunAsync(string feed, CancellationToken cancellationToken)
     {
         var format = formats.SingleOrDefault(candidate => candidate.Key == feed);
@@ -56,7 +89,12 @@ internal sealed class ProductFeeds(
             var buffer = new MemoryStream();
             await format.WriteAsync(
                 buffer,
-                new FeedStore(settings.Name, address.Language, settings.Currency, address.Home),
+                new FeedStore(
+                    settings.Name,
+                    address.Language,
+                    settings.Currency,
+                    address.Home,
+                    await shipping.FindAsync(cancellationToken)),
                 ProductsAsync(address, settings.Currency, count => written = count, () => skipped++, cancellationToken),
                 cancellationToken);
 
@@ -115,8 +153,9 @@ internal sealed class ProductFeeds(
                         variant.PartNumber,
                         variant.Condition,
                     }).ToList(),
-                    ImageId = product.Images.OrderBy(image => image.Position).Select(image => (Guid?)image.Id).FirstOrDefault(),
+                    ImageIds = product.Images.OrderBy(image => image.Position).Select(image => image.Id).ToList(),
                     listing.Id,
+                    listing.ProductId,
                 })
             .ToListAsync(cancellationToken);
 
@@ -138,6 +177,10 @@ internal sealed class ProductFeeds(
 
                 written++;
 
+                var images = listing.ImageIds
+                    .Select(imageId => address.Image($"/api/storefront/products/{listing.Id}/images/{imageId}"))
+                    .ToList();
+
                 yield return new FeedProduct(
                     variant.Sku,
                     listing.Name,
@@ -145,12 +188,15 @@ internal sealed class ProductFeeds(
                     listing.Price,
                     currency,
                     address.Product(listing.Slug),
-                    listing.ImageId is null ? null : address.Image($"/api/storefront/products/{listing.Id}/images/{listing.ImageId}"),
+                    images.FirstOrDefault(),
+                    [.. images.Skip(1)],
                     listing.Brand,
                     variant.Ean,
                     variant.PartNumber,
                     variant.Condition?.ToString(),
-                    available.GetValueOrDefault(variant.Id));
+                    available.GetValueOrDefault(variant.Id),
+                    listing.ProductId.ToString(),
+                    listing.Variants.Count > 1);
             }
         }
 

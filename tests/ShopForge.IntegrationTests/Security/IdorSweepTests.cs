@@ -206,6 +206,7 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
         ["/api/admin/stores/{storeId:guid}/feeds/{feed}"] = "keyed by the name of a shopping engine",
         ["/api/admin/stores/{storeId:guid}/feeds/{feed}/token"] = "keyed by the name of a shopping engine",
         ["/api/admin/stores/{storeId:guid}/feeds/{feed}/run"] = "keyed by the name of a shopping engine",
+        ["/api/admin/stores/{storeId:guid}/feeds/{feed}/check"] = "keyed by the name of a shopping engine",
 
         // A dead letter has to be delivered and then fail before it can be named, which no fixture here
         // arranges; the query behind it is store-filtered like every other (D-123).

@@ -1,3 +1,5 @@
+using ShopForge.Shared.Shipping;
+
 namespace ShopForge.Shared.Feeds;
 
 // One shopping engine's idea of what a product feed looks like. Three of them want the same facts in three
@@ -15,8 +17,14 @@ public interface IProductFeedFormat
     Task WriteAsync(Stream destination, FeedStore store, IAsyncEnumerable<FeedProduct> products, CancellationToken cancellationToken);
 }
 
-// What every feed says about the shop itself.
-public sealed record FeedStore(string Name, string Language, string Currency, string HomeUrl);
+// What every feed says about the shop itself, including what it charges to deliver — which is only what the
+// shop has actually said, never a guess (D-169).
+public sealed record FeedStore(
+    string Name,
+    string Language,
+    string Currency,
+    string HomeUrl,
+    IReadOnlyList<ShippingRate> Shipping);
 
 // What every feed says about one thing for sale. A format takes what it needs and leaves the rest; what it
 // must not do is go looking for more, because then the gathering would differ per format.
@@ -28,8 +36,14 @@ public sealed record FeedProduct(
     string Currency,
     string Url,
     string? ImageUrl,
+    IReadOnlyList<string> MoreImageUrls,
     string? Brand,
     string? Gtin,
     string? PartNumber,
     string? Condition,
-    int Available);
+    int Available,
+
+    // The product this form belongs to, and whether it has siblings. A feed ties variants together so a
+    // shopping engine shows one thing in several sizes rather than several things (D-169).
+    string GroupId,
+    bool HasSiblings);
