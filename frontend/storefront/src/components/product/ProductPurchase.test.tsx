@@ -59,12 +59,12 @@ const product: ProductDetail = {
   attributes: [],
 };
 
-function renderPurchase(item: ProductDetail = product) {
+function renderPurchase(item: ProductDetail = product, state = cartState) {
   return render(
     <MemoryRouter>
       <StoreContext value={store}>
         <CustomerContext value={guest}>
-          <CartContext value={cartState}>
+          <CartContext value={state}>
             <ProductPurchase product={item} />
           </CartContext>
         </CustomerContext>
@@ -84,6 +84,21 @@ afterEach(() => {
 afterAll(() => i18n.changeLanguage("en"));
 
 describe("variant purchase", () => {
+  it("shows the exact completed choice and keeps options and quantity locked during a cart mutation", async () => {
+    const user = userEvent.setup();
+    const view = renderPurchase();
+    await user.click(screen.getByRole("radio", { name: "Medium" }));
+    expect(screen.queryByText("Medium / Red")).toBeNull();
+    await user.click(screen.getByRole("radio", { name: "Red" }));
+    expect(screen.getByText("Medium / Red").getAttribute("lang")).toBe("cs-CZ");
+    expect(screen.getByText("Selected options")).toBeTruthy();
+    view.unmount();
+    renderPurchase(product, { ...cartState, pending: true });
+    expect(screen.getByRole("group", { name: "Size" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("group", { name: "Colour" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("spinbutton", { name: "Quantity" })).toHaveProperty("disabled", true);
+    expect(mocks.addToCart).not.toHaveBeenCalled();
+  });
   it("requires every option, clears an impossible combination, and blocks sold-out forms", async () => {
     const user = userEvent.setup();
     renderPurchase();

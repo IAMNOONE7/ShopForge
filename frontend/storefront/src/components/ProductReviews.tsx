@@ -9,7 +9,7 @@ import { formatDate } from "../utils/format";
 import { Stars } from "./Stars";
 import { RequestError } from "./ui/RequestError";
 
-export function ProductReviews({ slug }: { slug: string }) {
+export function ProductReviews({ slug, reviewCount = 0 }: { slug: string; reviewCount?: number }) {
   const { t } = useTranslation(["catalog", "auth"]);
   const store = useStore();
   const { customer } = useCustomer();
@@ -47,21 +47,20 @@ export function ProductReviews({ slug }: { slug: string }) {
     }
   }
 
-  if (answer.status === "error")
-    return (
-      <RequestError
-        error={answer.error}
-        operation="read"
-        onRetry={answer.reload}
-      />
-    );
-  if (answer.status !== "ready") return null;
-  const { canWrite, reviews } = answer.data;
-  if (reviews.length === 0 && !canWrite && !sent) return null;
+  if (answer.status === "not-found") return null;
+  if (answer.status === "loading" && reviewCount === 0 && !sent) return null;
+  const canWrite = answer.status === "ready" && answer.data.canWrite;
+  const reviews = answer.status === "ready" ? answer.data.reviews : [];
+  if (answer.status === "ready" && reviews.length === 0 && !canWrite && !sent && reviewCount === 0) return null;
 
   return (
-    <section className="reviews">
-      <h2>{t("catalog:customerReviews")}</h2>
+    <section className="reviews" aria-labelledby="product-reviews-heading">
+      <h2 id="product-reviews-heading" tabIndex={-1}>{t("catalog:customerReviews")}</h2>
+      {answer.status === "loading" && <p role="status">{t("catalog:loadingReviews")}</p>}
+      {answer.status === "error" && (
+        <RequestError error={answer.error} operation="read" onRetry={answer.reload} />
+      )}
+      {answer.status === "ready" && reviews.length === 0 && reviewCount > 0 && <p className="hint">{t("catalog:noReviews")}</p>}
       {reviews.map((review) => (
         <article
           key={`${review.author}-${review.writtenAt}`}
@@ -70,10 +69,10 @@ export function ProductReviews({ slug }: { slug: string }) {
           <p className="review-head">
             <Stars rating={review.rating} />
             <span className="hint">
-              {review.author} · {formatDate(review.writtenAt, store.culture)}
+              <bdi>{review.author}</bdi> · <time dateTime={review.writtenAt}>{formatDate(review.writtenAt, store.culture)}</time>
             </span>
           </p>
-          <p>{review.text}</p>
+          <p className="review-text">{review.text}</p>
         </article>
       ))}
       {canWrite && !sent && (

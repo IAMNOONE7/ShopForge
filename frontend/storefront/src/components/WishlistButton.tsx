@@ -77,7 +77,7 @@ export function WishlistButton({ storeProductId }: { storeProductId: string }) {
   }
 
   return (
-    <span>
+    <div className="product-wishlist">
       <button
         type="button"
         className="link-button"
@@ -90,6 +90,6 @@ export function WishlistButton({ storeProductId }: { storeProductId: string }) {
       {state.error !== null && (
         <RequestError error={state.error} operation="write" />
       )}
-    </span>
+    </div>
   );
 }

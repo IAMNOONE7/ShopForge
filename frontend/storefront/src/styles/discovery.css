@@ -428,12 +428,14 @@
 
 @media (max-width: 36rem) {
   .store-header-inner {
+    display: flex;
+    flex-wrap: wrap;
     min-height: 0;
-    grid-template-columns: minmax(0, 1fr) auto auto;
     gap: var(--space-2) var(--space-3);
   }
 
   .store-brand {
+    flex: 1 1 100%;
     min-height: 3rem;
   }
 
@@ -443,8 +445,18 @@
   }
 
   .account-link {
+    flex: 1 1 min-content;
     min-width: 0;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
+  }
+
+  .cart-link {
+    margin-left: 0;
+  }
+
+  .mobile-navigation {
+    min-width: 0;
+    margin-left: auto;
   }
 
   .account-link svg,
@@ -453,8 +465,8 @@
     height: 1.125rem;
   }
 
-.account-link,
-.cart-link {
+  .account-link,
+  .cart-link {
     gap: var(--space-1);
   }
 

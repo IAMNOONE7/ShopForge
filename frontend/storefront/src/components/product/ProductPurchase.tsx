@@ -58,7 +58,7 @@ export function ProductPurchase({ product }: { product: ProductDetail }) {
   }
 
   return (
-    <>
+    <section className="product-purchase" aria-label={t("purchaseOptions")}>
       {needsChoice && optionsUsable && (
         <div className="product-variant-picker">
           {product.optionNames.map((name, index) => {
@@ -96,6 +96,12 @@ export function ProductPurchase({ product }: { product: ProductDetail }) {
           )}
         </div>
       )}
+      {variant && variant.optionValues.length > 0 && (
+        <p className="product-selected-options">
+          <span>{t("selectedOptions")}</span>
+          <bdi lang={store.culture}>{variant.optionValues.join(" / ")}</bdi>
+        </p>
+      )}
       <p
         className={"availability " + (available === null ? "pending" : available === 0 ? "unavailable" : "available")}
         aria-live="polite"
@@ -114,6 +120,6 @@ export function ProductPurchase({ product }: { product: ProductDetail }) {
         )}
         <WishlistButton storeProductId={product.id} />
       </div>
-    </>
+    </section>
   );
 }

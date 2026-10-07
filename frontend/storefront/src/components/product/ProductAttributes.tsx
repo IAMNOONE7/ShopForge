@@ -16,7 +16,7 @@ export function ProductAttributes({
 
   return (
     <section className="product-section" aria-labelledby="product-details-heading">
-      <h2 id="product-details-heading">{t("catalog:productDetails")}</h2>
+      <h2 id="product-details-heading" tabIndex={-1}>{t("catalog:productDetails")}</h2>
       <div className="product-attributes-wrap">
         <table className="product-attributes">
           <tbody>

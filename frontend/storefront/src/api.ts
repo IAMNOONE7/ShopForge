@@ -80,7 +80,7 @@ export type ProductDetail = {
   rating: number;
   reviewCount: number;
   images: { url: string; altText: string | null }[];
-  categories: Category[];
+  categories: (Category & { path: Category[] })[];
   attributes: ProductAttribute[];
 };
 
