@@ -80,6 +80,8 @@ public static class DependencyInjection
         services.AddScoped<IMaintenanceOutsideStores, IdempotencyCleanup>();
         services.AddSingleton<StoreMaintenance>();
         services.AddHostedService<MaintenanceWorker>();
+        services.AddSingleton<StoreCatchUp>();
+        services.AddHostedService<CatchUpWorker>();
 
         AddSecretStore(services, configuration);
         AddComgate(services, configuration);
@@ -114,7 +116,9 @@ public static class DependencyInjection
 
         services.AddHttpClient<IComgatePayments, ComgateHttpPayments>(client => client.BaseAddress = new Uri(baseAddress));
         services.AddScoped<IPaymentProvider, ComgatePaymentProvider>();
+        services.AddScoped<ComgateTransactions>();
         services.AddScoped<IPaymentNotifications, ComgateNotifications>();
+        services.AddScoped<IPaymentEnquiries, ComgateEnquiries>();
     }
 
     // The same arrangement as Comgate's, for the same reason: the account belongs to the store, so the carrier

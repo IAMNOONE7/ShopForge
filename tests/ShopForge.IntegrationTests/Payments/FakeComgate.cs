@@ -19,6 +19,9 @@ internal sealed class FakeComgate : IComgatePayments
 
     public bool AskedAbout { get; private set; }
 
+    // Forget having been asked, so a test can say "and it was not asked again".
+    public void Forget() => AskedAbout = false;
+
     public Task<ComgateCreated> CreateAsync(ComgateMerchant merchant, ComgatePayment payment, CancellationToken cancellationToken)
     {
         LastMerchant = merchant;

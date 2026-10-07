@@ -55,7 +55,30 @@ internal static class AdminOrderEndpoints
 
     // Every answer about an order lists the documents it has, so the admin never has to reload to see a new one.
     private static async Task<AdminOrderDetailResponse> DetailAsync(DbContext dbContext, Order order, CancellationToken cancellationToken) =>
-        AdminOrderDetailResponse.From(order, await Documents.OfAsync(dbContext, order.Number, cancellationToken));
+        AdminOrderDetailResponse.From(
+            order,
+            await Documents.OfAsync(dbContext, order.Number, cancellationToken),
+            await AttemptsAsync(dbContext, order.Number, cancellationToken));
+
+    // Every try at paying this order, newest first: what the gateway called it, what became of it, and which
+    // of the gateway's environments it went through. No secret is readable from any of it — an attempt holds a
+    // transaction id and a redirect the shopper was already sent to, and nothing else (D-139, D-176).
+    private static async Task<List<AdminPaymentAttemptResponse>> AttemptsAsync(
+        DbContext dbContext, string orderNumber, CancellationToken cancellationToken) =>
+        await dbContext.Set<PaymentAttempt>()
+            .AsNoTracking()
+            .Where(attempt => attempt.OrderNumber == orderNumber)
+            .OrderByDescending(attempt => attempt.StartedAt)
+            .Select(attempt => new AdminPaymentAttemptResponse(
+                attempt.Provider,
+                attempt.Reference,
+                attempt.Status.ToString(),
+                attempt.Environment,
+                attempt.Amount,
+                attempt.Currency,
+                attempt.StartedAt,
+                attempt.ChangedAt))
+            .ToListAsync(cancellationToken);
 
     // Payment for the manual methods is confirmed by hand; the reserved stock leaves the warehouse at that moment.
     private static Task<Results<Ok<AdminOrderDetailResponse>, NotFound, ProblemHttpResult>> ConfirmPaymentAsync(
@@ -315,10 +338,16 @@ internal sealed record AdminOrderDetailResponse(
     AdminAddressResponse ShippingAddress,
     string? PickupPoint,
     AdminShipmentResponse? Shipment,
+    // What the order itself says was paid, beside every try at paying it. A merchant chasing money that never
+    // arrived needs both: the order's own answer, and the story of how it got there (D-176).
+    string? PaymentReference,
+    DateTimeOffset? PaidAt,
+    List<AdminPaymentAttemptResponse> PaymentAttempts,
     List<DocumentResponse> Documents,
     List<AdminOrderLineResponse> Lines)
 {
-    public static AdminOrderDetailResponse From(Order order, List<DocumentResponse> documents) => new(
+    public static AdminOrderDetailResponse From(
+        Order order, List<DocumentResponse> documents, List<AdminPaymentAttemptResponse> attempts) => new(
         order.Number,
         order.PlacedAt,
         order.Status.ToString(),
@@ -339,6 +368,9 @@ internal sealed record AdminOrderDetailResponse(
         order.Shipment is null
             ? null
             : new AdminShipmentResponse(order.Shipment.Carrier, order.Shipment.TrackingNumber, order.Shipment.TrackingUrl, order.Shipment.ShippedAt),
+        order.PaymentReference,
+        order.PaidAt,
+        attempts,
         documents,
         [.. order.Lines.Select(line => new AdminOrderLineResponse(line.ProductName, line.UnitPrice, line.VatRate, line.Quantity, line.LineTotal))]);
 }
@@ -350,6 +382,17 @@ internal sealed record AdminAddressResponse(string FullName, string Line1, strin
 }
 
 internal sealed record AdminOrderLineResponse(string ProductName, decimal UnitPrice, decimal VatRate, int Quantity, decimal LineTotal);
+
+// One try at paying, as the admin sees it. Everything here is already known to whoever can see the order.
+internal sealed record AdminPaymentAttemptResponse(
+    string Provider,
+    string? Reference,
+    string Status,
+    string? Environment,
+    decimal Amount,
+    string Currency,
+    DateTimeOffset StartedAt,
+    DateTimeOffset ChangedAt);
 
 internal sealed record ShipmentCreationRequest(string? TrackingNumber);
 

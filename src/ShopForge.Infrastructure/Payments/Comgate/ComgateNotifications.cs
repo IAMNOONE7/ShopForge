@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using ShopForge.Shared.Connections;
 using ShopForge.Shared.Payments;
-using ShopForge.Shared.Security;
 using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
 
@@ -13,11 +12,9 @@ namespace ShopForge.Infrastructure.Payments.Comgate;
 // everything after that is read from Comgate with that merchant's credentials and compared with what we sent
 // (D-141). Nothing in the payload is believed on its own — not the status, not the amount, not the reference.
 internal sealed class ComgateNotifications(
-    IComgatePayments payments,
+    ComgateTransactions transactions,
     IPaymentAttempts attempts,
     IMerchantConnections merchants,
-    IProviderConnections connections,
-    ISecretStore secrets,
     IStoreDirectory stores,
     StoreContext storeContext,
     ILogger<ComgateNotifications> logger) : IPaymentNotifications
@@ -56,71 +53,11 @@ internal sealed class ComgateNotifications(
         // is that store's and no other. The handler sets the same scope again afterwards, harmlessly.
         storeContext.Set(store.StoreId, store.TenantId);
 
-        if (await MerchantAsync(cancellationToken) is not { } merchant)
-        {
-            logger.LogWarning("Store {StoreId} has no usable Comgate connection to check transaction {TransactionId} with.", attempt.StoreId, transactionId);
-
-            return null;
-        }
-
-        // A check that cannot be made is not a check that failed: letting this throw gives Comgate a 500 and a
-        // retry, where answering "bad request" would tell it to stop asking.
-        var transaction = await payments.FindAsync(merchant.Merchant, transactionId, cancellationToken);
-
-        if (transaction is null)
-        {
-            logger.LogWarning("Comgate does not know transaction {TransactionId}, which a push named.", transactionId);
-
-            return null;
-        }
-
-        if (Disagreement(transaction, attempt, merchant.IsTest) is { } disagreement)
-        {
-            logger.LogWarning(
-                "A Comgate push for transaction {TransactionId} disagrees with what was sent: {Disagreement}.",
-                transactionId,
-                disagreement);
-
-            return null;
-        }
-
-        // One event per transaction and state: a repeated message about the same state is recorded once and
-        // ignored (D-058), while a payment that goes pending and then pays is two things that both happened.
-        return new PaymentNotification(
-            $"{transactionId}:{transaction.Status.ToUpperInvariant()}",
-            attempt.StoreId,
-            attempt.OrderNumber,
-            Result(transaction.Status),
-            transactionId);
-    }
-
-    // Everything the transaction must agree with before an order moves. The first disagreement is the one
-    // reported, because a caller who got one of these wrong is not helped by a list.
-    private static string? Disagreement(ComgateTransaction transaction, RecordedAttempt attempt, bool expectedTest) =>
-        !string.Equals(transaction.ReferenceId, attempt.OrderNumber, StringComparison.Ordinal) ? "a different order"
-        : !string.Equals(transaction.Currency, attempt.Currency, StringComparison.OrdinalIgnoreCase) ? "a different currency"
-        : transaction.PriceInMinorUnits != MinorUnits.Of(attempt.Amount, attempt.Currency) ? "a different amount"
-        : transaction.Test != expectedTest ? "the other environment"
-        : null;
-
-    private static PaymentResult Result(string status) => status.Trim().ToUpperInvariant() switch
-    {
-        "PAID" => PaymentResult.Paid,
-        "CANCELLED" => PaymentResult.Failed,
-        "AUTHORIZED" => PaymentResult.Authorized,
-        _ => PaymentResult.Pending,
-    };
-
-    private async Task<(ComgateMerchant Merchant, bool IsTest)?> MerchantAsync(CancellationToken cancellationToken)
-    {
-        if (await connections.FindAsync(Key, cancellationToken) is not { } connection || !connection.IsUsable)
-        {
-            return null;
-        }
-
-        return await secrets.FindAsync(connection.SecretName!, cancellationToken) is { Length: > 0 } secret
-            ? (new ComgateMerchant(connection.MerchantId, secret), connection.Environment == ProviderEnvironment.Test)
-            : null;
+        // What Comgate says when asked, checked against what was sent. The sweep asks the same question
+        // through the same code, which is why a push and a sweep cannot both move the order (D-176).
+        return await transactions.ReadAsync(
+            new PaymentEnquiry(attempt.StoreId, attempt.OrderNumber, transactionId, attempt.Amount, attempt.Currency),
+            cancellationToken);
     }
 
     private static async Task<PushedPayment?> Posted(HttpRequest request, CancellationToken cancellationToken)

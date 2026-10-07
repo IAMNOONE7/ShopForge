@@ -190,6 +190,7 @@ internal sealed class PaymentAttemptEntityConfiguration : IEntityTypeConfigurati
         builder.Property(attempt => attempt.Amount).HasPrecision(12, 2);
         builder.Property(attempt => attempt.RedirectUrl).HasMaxLength(2000);
         builder.Property(attempt => attempt.Status).HasConversion<string>().HasMaxLength(20);
+        builder.Property(attempt => attempt.Environment).HasMaxLength(10);
         builder.Ignore(attempt => attempt.IsFinished);
 
         builder.HasIndex(attempt => new { attempt.StoreId, attempt.OrderNumber });

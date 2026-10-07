@@ -63,6 +63,13 @@ internal sealed class PaymentAttempt : IStoreOwned
 
     public DateTimeOffset ChangedAt { get; private set; }
 
+    // Which of the provider's environments this went through — "test" or "live" — learned the first time
+    // anybody hears back about the attempt, because that is the first moment a connection is read for it. Null
+    // for a method the store settles itself, which has no gateway to be in either environment of (D-176).
+    public string? Environment { get; private set; }
+
+    public void Went(string environment) => Environment = environment;
+
     public bool IsFinished => Status is PaymentAttemptStatus.Paid or PaymentAttemptStatus.Failed;
 
     // An attempt that has finished stays finished: a late or duplicated message about it changes nothing, the

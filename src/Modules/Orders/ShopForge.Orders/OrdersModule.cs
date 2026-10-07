@@ -54,6 +54,8 @@ public static class OrdersModule
         services.AddScoped<IEventHandler<ReturnDecided>, OrderNotifications>();
         services.AddScoped<IEventHandler<ReturnRefunded>, OrderNotifications>();
         services.AddScoped<IStoreMaintenance, CartCleanup>();
+        services.AddScoped<PaymentResults>();
+        services.AddScoped<IStoreCatchUp, PaymentReconciliation>();
         services.AddSingleton<ExpiredOrders>();
         services.AddHostedService<ExpiredOrderSweeper>();
 
