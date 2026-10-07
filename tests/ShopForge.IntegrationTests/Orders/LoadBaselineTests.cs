@@ -23,13 +23,18 @@ public sealed class LoadBaselineTests(ShopForgeApiFactory factory)
     // reads (D-165). That is one read of the store's own row, by primary key, for data the page did not carry
     // before. Caching it across requests would need invalidating when a merchant edits their shop, which is a
     // trade worth making when something measures it rather than now.
-    private const int CatalogQueries = 14;
+    // 14 → 15 on 2026-10-07, when the forms of each thing on the page moved out of the projection and into a
+    // query beside it. A search is a raw query at the root and EF cannot correlate a collection against one,
+    // so the choice was one more round trip or no search at all (D-178). It is a round trip for the whole
+    // page rather than one per row, which is what this number exists to protect.
+    private const int CatalogQueries = 15;
     private const int ProductQueries = 8;
 
     // A category page reads every category of the shop in one query and finds the one it was asked for in
     // memory, which is what the single-category read used to cost. The number must therefore not move with
-    // how deep the tree is or how many categories sit beneath the one being looked at (D-172).
-    private const int CategoryQueries = 10;
+    // how deep the tree is or how many categories sit beneath the one being looked at (D-172). It moved by
+    // one with the catalogue page, and for the same reason (D-178).
+    private const int CategoryQueries = 11;
 
     private static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
 

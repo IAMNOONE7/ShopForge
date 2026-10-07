@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Catalog.Attributes;
 using ShopForge.Catalog.Domain;
+using ShopForge.Catalog.Search;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Security;
 using ShopForge.Shared.Stores;
@@ -41,7 +42,7 @@ internal static class AdminAttributeEndpoints
     {
         var code = request.Code ?? Slugs.Create(request.Name ?? "");
         var options = request.Options ?? [];
-        var errors = ValidateSettings(request.Name, request.Type, request.IsFilterable)
+        var errors = ValidateSettings(request.Name, request.Type, request.IsFilterable, request.IsSearchable)
             .Check(Slugs.IsValid(code), "code", "Code may contain lower-case letters, digits and single hyphens.")
             .Check(options.Count == 0 || request.Type is AttributeType.Select or AttributeType.MultiSelect, "options", "Only select attributes have options.")
             .Check(options.All(option => Slugs.Create(option).Length > 0), "options", "Every option needs a name with letters or digits.")
@@ -74,24 +75,33 @@ internal static class AdminAttributeEndpoints
         Guid attributeId,
         UpdateAttributeRequest request,
         DbContext dbContext,
+        SearchIndex search,
         CancellationToken cancellationToken)
     {
         var definition = await Definitions(dbContext).SingleOrDefaultAsync(definition => definition.Id == attributeId, cancellationToken);
+        var wasSearched = definition?.IsSearchable ?? false;
 
         if (definition is null)
         {
             return TypedResults.NotFound();
         }
 
-        var errors = ValidateSettings(request.Name, definition.Type, request.IsFilterable);
+        var errors = ValidateSettings(request.Name, definition.Type, request.IsFilterable, request.IsSearchable);
 
         if (errors.Any)
         {
             return errors.ToProblem();
         }
 
-        definition.Update(request.Name!, new AttributeSettings(request.Unit, request.IsFilterable, request.IsVisibleOnProductPage, request.SortOrder, request.IsInFeeds));
+        definition.Update(request.Name!, new AttributeSettings(request.Unit, request.IsFilterable, request.IsVisibleOnProductPage, request.SortOrder, request.IsInFeeds, request.IsSearchable));
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        // A measurement that has started or stopped being searched changes what every listing of this shop
+        // answers to, not just one of them.
+        if (wasSearched != definition.IsSearchable)
+        {
+            await search.RefreshStoreAsync(cancellationToken);
+        }
 
         return TypedResults.Ok(AdminAttributeResponse.From(definition));
     }
@@ -183,6 +193,7 @@ internal static class AdminAttributeEndpoints
         Guid storeProductId,
         ProductAttributesRequest request,
         DbContext dbContext,
+        SearchIndex search,
         CancellationToken cancellationToken)
     {
         var storeProduct = await dbContext.Set<StoreProduct>()
@@ -221,6 +232,9 @@ internal static class AdminAttributeEndpoints
         storeProduct.ReplaceAttributeValues(values);
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        // Words a merchant typed into a searchable measurement are words a shopper can type back.
+        await search.RefreshAsync(storeProduct.Id, cancellationToken);
+
         return TypedResults.Ok(ProductAttributesResponse.From(storeProduct, definitions));
     }
 
@@ -230,14 +244,15 @@ internal static class AdminAttributeEndpoints
             .OrderBy(definition => definition.SortOrder)
             .ThenBy(definition => definition.Name);
 
-    private static RequestErrors ValidateSettings(string? name, AttributeType? type, bool isFilterable) =>
+    private static RequestErrors ValidateSettings(string? name, AttributeType? type, bool isFilterable, bool isSearchable = false) =>
         new RequestErrors()
             .Check(!string.IsNullOrWhiteSpace(name) && name.Trim().Length <= 200, "name", "Name is required (up to 200 characters).")
             .Check(type is not null && Enum.IsDefined(type.Value), "type", "Type is required.")
-            .Check(!(isFilterable && type == AttributeType.Text), "isFilterable", "Text attributes cannot be used as filters.");
+            .Check(!(isFilterable && type == AttributeType.Text), "isFilterable", "Text attributes cannot be used as filters.")
+            .Check(!isSearchable || type == AttributeType.Text, "isSearchable", "Only text attributes have words to search.");
 
     private static AttributeSettings ToSettings(CreateAttributeRequest request) =>
-        new(request.Unit, request.IsFilterable, request.IsVisibleOnProductPage, request.SortOrder, request.IsInFeeds);
+        new(request.Unit, request.IsFilterable, request.IsVisibleOnProductPage, request.SortOrder, request.IsInFeeds, request.IsSearchable);
 
     private static string ExpectedValue(AttributeType type) => type switch
     {
@@ -260,9 +275,11 @@ internal sealed record CreateAttributeRequest(
     bool IsVisibleOnProductPage,
     int SortOrder,
     List<string>? Options,
-    bool IsInFeeds = false);
+    bool IsInFeeds = false,
+    bool IsSearchable = false);
 
-internal sealed record UpdateAttributeRequest(string? Name, string? Unit, bool IsFilterable, bool IsVisibleOnProductPage, int SortOrder, bool IsInFeeds = false);
+internal sealed record UpdateAttributeRequest(
+    string? Name, string? Unit, bool IsFilterable, bool IsVisibleOnProductPage, int SortOrder, bool IsInFeeds = false, bool IsSearchable = false);
 
 internal sealed record AddOptionRequest(string? Name, string? Code);
 
@@ -294,6 +311,7 @@ internal sealed record AdminAttributeResponse(
     bool IsVisibleOnProductPage,
     int SortOrder,
     bool IsInFeeds,
+    bool IsSearchable,
     List<AdminOptionResponse> Options)
 {
     public static AdminAttributeResponse From(AttributeDefinition definition) => new(
@@ -306,5 +324,6 @@ internal sealed record AdminAttributeResponse(
         definition.IsVisibleOnProductPage,
         definition.SortOrder,
         definition.IsInFeeds,
+        definition.IsSearchable,
         [.. definition.Options.OrderBy(option => option.SortOrder).Select(option => new AdminOptionResponse(option.Id, option.Code, option.Name))]);
 }

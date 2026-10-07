@@ -18,6 +18,7 @@ internal sealed class AttributeDefinitionEntityConfiguration : IEntityTypeConfig
         builder.Property(definition => definition.Unit).HasMaxLength(20);
         builder.Property(definition => definition.Type).HasConversion<string>().HasMaxLength(20);
         builder.Ignore(definition => definition.HasOptions);
+        builder.Ignore(definition => definition.CanBeSearched);
 
         builder.HasIndex(definition => new { definition.StoreId, definition.Code }).IsUnique();
 

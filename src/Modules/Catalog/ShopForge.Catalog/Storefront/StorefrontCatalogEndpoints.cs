@@ -7,10 +7,12 @@ using ShopForge.Catalog.Attributes;
 using ShopForge.Catalog.Categories;
 using ShopForge.Catalog.Domain;
 using ShopForge.Catalog.Images;
+using ShopForge.Catalog.Search;
 using ShopForge.Shared.Files;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Inventory;
 using ShopForge.Shared.Stores;
+using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Catalog.Storefront;
 
@@ -76,8 +78,11 @@ internal static class StorefrontCatalogEndpoints
         DbContext dbContext,
         IStockLedger stock,
         ICurrentStoreSettings storeSettings,
+        IStoreContext storeContext,
+        ISearchLog searchLog,
         string? category,
         string? sort,
+        string? q,
         int? page,
         int? pageSize,
         CancellationToken cancellationToken)
@@ -139,8 +144,9 @@ internal static class StorefrontCatalogEndpoints
             }
         }
 
-        var productSort = ParseSort(sort, definitions);
-        errors.Check(productSort is not null, "sort", "Use price, name, rating or attr.<code>, optionally prefixed with '-'.");
+        var search = SearchTerms.Of(dbContext, storeContext, settings, q);
+        var productSort = ParseSort(sort, definitions, search is not null);
+        errors.Check(productSort is not null, "sort", "Use relevance, price, name, rating or attr.<code>, optionally prefixed with '-'.");
 
         if (errors.Any)
         {
@@ -149,14 +155,16 @@ internal static class StorefrontCatalogEndpoints
 
         // Whether this is the list itself or one view of it. A sort that nobody asked for is the shop's own
         // order, which is the list as it stands rather than a reordering of it.
-        var narrowedOrReordered = filters.Count > 0 || productSort!.Key != "default";
+        // A search is a view of the list like a filter is: it points at the list rather than becoming an
+        // address worth indexing of its own (D-174).
+        var narrowedOrReordered = filters.Count > 0 || search is not null || productSort!.Key != "default";
         var page_ = PageMetadata.For(
             settings.Seo,
             pageName,
             overrides,
             listUrl is null ? null : PagedPages.Canonical(listUrl, pageNumber, narrowedOrReordered));
 
-        var query = new ProductQuery(dbContext, categoryIds, filters);
+        var query = new ProductQuery(dbContext, categoryIds, filters, search);
         var products = query.Products();
         var totalCount = await products.CountAsync(cancellationToken);
         var items = await query.Sort(products, productSort!)
@@ -177,22 +185,37 @@ internal static class StorefrontCatalogEndpoints
                     .OrderBy(image => image.Position)
                     .Select(image => (Guid?)image.Id)
                     .FirstOrDefault(),
-                VariantIds = dbContext.Set<Product>()
-                    .Where(product => product.Id == storeProduct.ProductId)
-                    .SelectMany(product => product.Variants)
-                    .Select(variant => variant.Id)
-                    .ToList(),
             })
             .ToListAsync(cancellationToken);
 
+        // The forms of each thing on the page, read beside it rather than as a collection inside the
+        // projection: a search is a raw query at the root, and EF cannot correlate a collection against one
+        // (D-178). It is one more round trip for the page and the baseline records it.
+        var productIds = items.Select(item => item.ProductId).ToList();
+        var variantIds = await dbContext.Set<Product>()
+            .AsNoTracking()
+            .Where(product => productIds.Contains(product.Id))
+            .SelectMany(product => product.Variants.Select(variant => new { product.Id, VariantId = variant.Id }))
+            .ToListAsync(cancellationToken);
+        var formsOf = variantIds
+            .GroupBy(row => row.Id)
+            .ToDictionary(group => group.Key, group => group.Select(row => row.VariantId).ToList());
+
         // A card says what the shopper could buy, which is every form of it added up; the product page is where
         // one form is chosen (D-135).
-        var available = await stock.AvailableAsync([.. items.SelectMany(item => item.VariantIds)], cancellationToken);
+        var available = await stock.AvailableAsync([.. formsOf.Values.SelectMany(forms => forms)], cancellationToken);
         var facets = new List<ProductFacetResponse>();
 
         foreach (var definition in await FacetDefinitionsAsync(dbContext, categoryIds, definitions, cancellationToken))
         {
             facets.Add(await FacetAsync(query, definition, filters.SingleOrDefault(filter => filter.Definition == definition), cancellationToken));
+        }
+
+        // What shoppers look for and whether the shop had it, which is the question Stage 33 will ask of it.
+        // Nothing about who typed it is recorded (D-178).
+        if (search is { } typed)
+        {
+            await searchLog.RecordAsync(typed.Typed, totalCount, cancellationToken);
         }
 
         return TypedResults.Ok(new ProductPageResponse(
@@ -202,7 +225,7 @@ internal static class StorefrontCatalogEndpoints
                     item.Slug,
                     item.Name,
                     item.Price,
-                    item.VariantIds.Sum(available.GetValueOrDefault),
+                    formsOf.GetValueOrDefault(item.ProductId, []).Sum(available.GetValueOrDefault),
                     item.RatingAverage,
                     item.RatingCount,
                     ImageUrl(item.Id, item.ImageId))),
@@ -432,15 +455,22 @@ internal static class StorefrontCatalogEndpoints
         }
     }
 
-    private static ProductSort? ParseSort(string? sort, List<AttributeDefinition> definitions)
+    private static ProductSort? ParseSort(string? sort, List<AttributeDefinition> definitions, bool searching)
     {
         if (string.IsNullOrEmpty(sort))
         {
-            return new ProductSort("default", Descending: false, Attribute: null);
+            // Having typed something, the best answer first is what a shopper means by no instruction at all.
+            return new ProductSort(searching ? "relevance" : "default", Descending: false, Attribute: null);
         }
 
         var descending = sort.StartsWith('-');
         var key = descending ? sort[1..] : sort;
+
+        // Relevance only orders a list somebody has searched; on a plain listing there is nothing to rank.
+        if (key == "relevance")
+        {
+            return searching ? new ProductSort(key, descending, Attribute: null) : null;
+        }
 
         if (key is "price" or "name" or "rating")
         {

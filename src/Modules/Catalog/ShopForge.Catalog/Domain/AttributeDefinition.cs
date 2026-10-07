@@ -48,6 +48,12 @@ internal sealed class AttributeDefinition : IStoreOwned
     // other way round (D-170).
     public bool IsInFeeds { get; private set; }
 
+    // Whether what a shopper types is matched against this attribute's words. Only text has words worth
+    // matching: a width of 45 is found by filtering, not by typing (D-178).
+    public bool IsSearchable { get; private set; }
+
+    public bool CanBeSearched => Type == AttributeType.Text;
+
     public int SortOrder { get; private set; }
 
     public IReadOnlyList<AttributeOption> Options => _options;
@@ -63,11 +69,17 @@ internal sealed class AttributeDefinition : IStoreOwned
             throw new ArgumentException("Text attributes cannot be used as filters.", nameof(settings));
         }
 
+        if (settings.IsSearchable && !CanBeSearched)
+        {
+            throw new ArgumentException($"{Type} attributes have no words to search.", nameof(settings));
+        }
+
         Name = name.Trim();
         Unit = string.IsNullOrWhiteSpace(settings.Unit) ? null : settings.Unit.Trim();
         IsFilterable = settings.IsFilterable;
         IsVisibleOnProductPage = settings.IsVisibleOnProductPage;
         IsInFeeds = settings.IsInFeeds;
+        IsSearchable = settings.IsSearchable;
         SortOrder = settings.SortOrder;
     }
 
@@ -115,4 +127,5 @@ internal sealed class AttributeDefinition : IStoreOwned
     }
 }
 
-internal sealed record AttributeSettings(string? Unit, bool IsFilterable, bool IsVisibleOnProductPage, int SortOrder, bool IsInFeeds = false);
+internal sealed record AttributeSettings(
+    string? Unit, bool IsFilterable, bool IsVisibleOnProductPage, int SortOrder, bool IsInFeeds = false, bool IsSearchable = false);

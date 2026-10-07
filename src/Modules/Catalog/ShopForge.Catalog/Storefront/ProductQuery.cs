@@ -1,12 +1,17 @@
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Catalog.Domain;
+using ShopForge.Catalog.Search;
 
 namespace ShopForge.Catalog.Storefront;
 
 // The categories are a set rather than one, because a category page shows what every category beneath it
 // sells too (D-146). An `Any` over the assignments names each product once however many of them match, which
 // is what keeps a count, a facet and a page of results talking about the same products.
-internal sealed class ProductQuery(DbContext dbContext, IReadOnlyList<Guid> categoryIds, IReadOnlyList<ProductFilter> filters)
+internal sealed class ProductQuery(
+    DbContext dbContext,
+    IReadOnlyList<Guid> categoryIds,
+    IReadOnlyList<ProductFilter> filters,
+    SearchTerms? search = null)
 {
     public IQueryable<StoreProduct> Products() => Filtered(except: null);
 
@@ -23,6 +28,9 @@ internal sealed class ProductQuery(DbContext dbContext, IReadOnlyList<Guid> cate
 
     public IQueryable<StoreProduct> Sort(IQueryable<StoreProduct> products, ProductSort sort) => (sort.Key, sort.Descending) switch
     {
+        // The best match first, which is only an order when somebody has typed something; a shop's own order
+        // is what a listing page means by "default".
+        ("relevance", _) when search is { } typed => ByRelevance(products, typed),
         ("price", false) => products.OrderBy(product => product.Price).ThenBy(product => product.Id),
         ("price", true) => products.OrderByDescending(product => product.Price).ThenBy(product => product.Id),
         ("name", false) => products.OrderBy(product => product.Name).ThenBy(product => product.Id),
@@ -33,6 +41,14 @@ internal sealed class ProductQuery(DbContext dbContext, IReadOnlyList<Guid> cate
         ("attribute", _) => ByAttribute(products, sort.Attribute!, sort.Descending),
         _ => products.OrderBy(product => product.SortOrder).ThenBy(product => product.Name).ThenBy(product => product.Id),
     };
+
+    // Ranked by how well each listing answers what was typed, with the shop's own order breaking ties so that
+    // two equally good answers do not swap places between pages.
+    private IQueryable<StoreProduct> ByRelevance(IQueryable<StoreProduct> products, SearchTerms typed) =>
+        from product in products
+        join hit in typed.Ranked() on product.Id equals hit.Id
+        orderby hit.Rank descending, product.SortOrder, product.Id
+        select product;
 
     // A left join lets PostgreSQL sort with hash joins instead of a correlated lookup per product
     // (about 7x faster at 50,000 products). Products without a value come last in both directions.
@@ -64,12 +80,15 @@ internal sealed class ProductQuery(DbContext dbContext, IReadOnlyList<Guid> cate
 
     private IQueryable<StoreProduct> Filtered(AttributeDefinition? except)
     {
-        var products = dbContext.Set<StoreProduct>().Where(product => product.IsVisible);
+        // A search is the root of the query when there is one: it is an entity query like the catalogue is, so
+        // everything below composes onto it identically (D-178).
+        var products = (search?.Matching() ?? dbContext.Set<StoreProduct>()).Where(product => product.IsVisible);
 
         if (categoryIds.Count > 0)
         {
             products = products.Where(product => product.Categories.Any(assignment => categoryIds.Contains(assignment.CategoryId)));
         }
+
 
         foreach (var filter in filters.Where(filter => filter.Definition != except))
         {

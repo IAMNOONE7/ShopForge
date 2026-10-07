@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using ShopForge.Catalog.Categories;
 using ShopForge.Catalog.Domain;
 using ShopForge.Catalog.Publishing;
+using ShopForge.Catalog.Search;
 using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Security;
@@ -59,6 +60,7 @@ internal static class AdminStoreCatalogEndpoints
         ListProductRequest request,
         DbContext dbContext,
         IStoreContext storeContext,
+        SearchIndex search,
         CancellationToken cancellationToken)
     {
         var errors = ValidateDetails(request.Name, request.Slug, request.Price, request.VatRate);
@@ -87,6 +89,7 @@ internal static class AdminStoreCatalogEndpoints
         var storeProduct = new StoreProduct(storeContext.StoreId!.Value, product!, details);
         dbContext.Add(storeProduct);
         await dbContext.SaveChangesAsync(cancellationToken);
+        await search.RefreshAsync(storeProduct.Id, cancellationToken);
 
         return TypedResults.Created(
             $"/api/admin/stores/{storeProduct.StoreId}/products/{storeProduct.Id}",
@@ -99,6 +102,7 @@ internal static class AdminStoreCatalogEndpoints
         DbContext dbContext,
         TimeProvider clock,
         IAuditLog audit,
+        SearchIndex search,
         CancellationToken cancellationToken)
     {
         var storeProduct = await dbContext.Set<StoreProduct>()
@@ -152,6 +156,9 @@ internal static class AdminStoreCatalogEndpoints
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        // A name or a description that has changed is a different answer to what somebody types.
+        await search.RefreshAsync(storeProduct.Id, cancellationToken);
 
         var product = await dbContext.Set<Product>().AsNoTracking().SingleAsync(product => product.Id == storeProduct.ProductId, cancellationToken);
 
