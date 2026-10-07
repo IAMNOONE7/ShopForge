@@ -89,7 +89,7 @@ internal static class AdminAttributeEndpoints
             return errors.ToProblem();
         }
 
-        definition.Update(request.Name!, new AttributeSettings(request.Unit, request.IsFilterable, request.IsVisibleOnProductPage, request.SortOrder));
+        definition.Update(request.Name!, new AttributeSettings(request.Unit, request.IsFilterable, request.IsVisibleOnProductPage, request.SortOrder, request.IsInFeeds));
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return TypedResults.Ok(AdminAttributeResponse.From(definition));
@@ -236,7 +236,7 @@ internal static class AdminAttributeEndpoints
             .Check(!(isFilterable && type == AttributeType.Text), "isFilterable", "Text attributes cannot be used as filters.");
 
     private static AttributeSettings ToSettings(CreateAttributeRequest request) =>
-        new(request.Unit, request.IsFilterable, request.IsVisibleOnProductPage, request.SortOrder);
+        new(request.Unit, request.IsFilterable, request.IsVisibleOnProductPage, request.SortOrder, request.IsInFeeds);
 
     private static string ExpectedValue(AttributeType type) => type switch
     {
@@ -258,9 +258,10 @@ internal sealed record CreateAttributeRequest(
     bool IsFilterable,
     bool IsVisibleOnProductPage,
     int SortOrder,
-    List<string>? Options);
+    List<string>? Options,
+    bool IsInFeeds = false);
 
-internal sealed record UpdateAttributeRequest(string? Name, string? Unit, bool IsFilterable, bool IsVisibleOnProductPage, int SortOrder);
+internal sealed record UpdateAttributeRequest(string? Name, string? Unit, bool IsFilterable, bool IsVisibleOnProductPage, int SortOrder, bool IsInFeeds = false);
 
 internal sealed record AddOptionRequest(string? Name, string? Code);
 
@@ -291,6 +292,7 @@ internal sealed record AdminAttributeResponse(
     bool IsFilterable,
     bool IsVisibleOnProductPage,
     int SortOrder,
+    bool IsInFeeds,
     List<AdminOptionResponse> Options)
 {
     public static AdminAttributeResponse From(AttributeDefinition definition) => new(
@@ -302,5 +304,6 @@ internal sealed record AdminAttributeResponse(
         definition.IsFilterable,
         definition.IsVisibleOnProductPage,
         definition.SortOrder,
+        definition.IsInFeeds,
         [.. definition.Options.OrderBy(option => option.SortOrder).Select(option => new AdminOptionResponse(option.Id, option.Code, option.Name))]);
 }

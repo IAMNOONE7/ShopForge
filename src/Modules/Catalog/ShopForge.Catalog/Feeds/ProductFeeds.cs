@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using ShopForge.Catalog.Attributes;
 using ShopForge.Catalog.Domain;
 using ShopForge.Catalog.Feeds.Google;
 using ShopForge.Shared.Feeds;
@@ -44,7 +45,7 @@ internal sealed class ProductFeeds(
         var settings = await storeSettings.GetAsync(cancellationToken);
         var problems = new List<FeedProblem>();
 
-        await foreach (var product in ProductsAsync(address, settings.Currency, _ => { }, () => { }, cancellationToken))
+        await foreach (var product in ProductsAsync(feed, address, settings.Currency, _ => { }, () => { }, cancellationToken))
         {
             if (GoogleFeedChecks.Problems(product) is { Count: > 0 } found)
             {
@@ -95,7 +96,7 @@ internal sealed class ProductFeeds(
                     settings.Currency,
                     address.Home,
                     await shipping.FindAsync(cancellationToken)),
-                ProductsAsync(address, settings.Currency, count => written = count, () => skipped++, cancellationToken),
+                ProductsAsync(feed, address, settings.Currency, count => written = count, () => skipped++, cancellationToken),
                 cancellationToken);
 
             buffer.Position = 0;
@@ -127,6 +128,7 @@ internal sealed class ProductFeeds(
     // advertised — an engine is told the availability rather than left to guess from an absence — but one the
     // shop has hidden, or asked search engines to leave alone, is not in a feed either (D-165).
     private async IAsyncEnumerable<FeedProduct> ProductsAsync(
+        string feed,
         StoreAddress address,
         string currency,
         Action<int> counted,
@@ -156,10 +158,25 @@ internal sealed class ProductFeeds(
                     ImageIds = product.Images.OrderBy(image => image.Position).Select(image => image.Id).ToList(),
                     listing.Id,
                     listing.ProductId,
+                    CategoryIds = listing.Categories.Select(assignment => assignment.CategoryId).ToList(),
+                    Values = listing.AttributeValues.ToList(),
                 })
             .ToListAsync(cancellationToken);
 
         var available = await stock.AvailableAsync([.. listings.SelectMany(listing => listing.Variants.Select(variant => variant.Id))], cancellationToken);
+
+        // What this engine calls each of the shop's categories, where the merchant has said (D-170), and the
+        // measurements the shop has chosen to publish. Both read once for the whole run.
+        var mapped = await dbContext.Set<CategoryFeedMapping>()
+            .AsNoTracking()
+            .Where(mapping => mapping.Feed == feed)
+            .ToDictionaryAsync(mapping => mapping.CategoryId, mapping => mapping.EngineCategory, cancellationToken);
+        var published = await dbContext.Set<AttributeDefinition>()
+            .AsNoTracking()
+            .Include(definition => definition.Options)
+            .Where(definition => definition.IsInFeeds)
+            .OrderBy(definition => definition.SortOrder)
+            .ToListAsync(cancellationToken);
         var written = 0;
 
         foreach (var listing in listings)
@@ -176,6 +193,23 @@ internal sealed class ProductFeeds(
                 }
 
                 written++;
+
+                // The first category the merchant has mapped for this engine. A thing in several categories
+                // has one answer to give, and the shop's own order is as good a tie-break as any.
+                var engineCategory = listing.CategoryIds
+                    .Select(categoryId => mapped.GetValueOrDefault(categoryId))
+                    .FirstOrDefault(name => name is not null);
+                var parameters = published
+                    .Select(definition => new
+                    {
+                        definition.Name,
+                        definition.Unit,
+                        Value = AttributeValueJson.Write(definition, [.. listing.Values.Where(value => value.AttributeDefinitionId == definition.Id)], optionNames: true),
+                    })
+                    .Where(parameter => parameter.Value is not null)
+                    .Select(parameter => new FeedParameter(parameter.Name, Printed(parameter.Value!), parameter.Unit))
+                    .Where(parameter => parameter.Value.Length > 0)
+                    .ToList();
 
                 var images = listing.ImageIds
                     .Select(imageId => address.Image($"/api/storefront/products/{listing.Id}/images/{imageId}"))
@@ -196,12 +230,25 @@ internal sealed class ProductFeeds(
                     variant.Condition?.ToString(),
                     available.GetValueOrDefault(variant.Id),
                     listing.ProductId.ToString(),
-                    listing.Variants.Count > 1);
+                    listing.Variants.Count > 1,
+                    engineCategory,
+                    parameters);
             }
         }
 
         counted(written);
     }
+
+    // A feed carries words, so a value becomes the words a person would read: a date as a date, a yes as a
+    // yes, several chosen options as a list.
+    private static string Printed(object value) => value switch
+    {
+        bool flag => flag ? "yes" : "no",
+        DateOnly date => date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+        decimal number => number.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture),
+        IEnumerable<string> many => string.Join(", ", many),
+        _ => System.Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty,
+    };
 
     // One path per shop and feed, overwritten each run: the current document is the only one anybody wants.
     internal static string PathOf(Guid storeId, string feed) => $"feeds/{storeId:n}/{feed}.xml";

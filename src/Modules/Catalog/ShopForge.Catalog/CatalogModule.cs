@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Catalog.Admin;
 using ShopForge.Catalog.Feeds;
 using ShopForge.Catalog.Feeds.Google;
+using ShopForge.Catalog.Feeds.Heureka;
 using ShopForge.Catalog.Import;
 using ShopForge.Catalog.Privacy;
 using ShopForge.Catalog.Publishing;
@@ -37,6 +38,7 @@ public static class CatalogModule
         services.AddScoped<ICustomerData, CustomerReviewData>();
         services.AddScoped<IProductFeeds, ProductFeeds>();
         services.AddSingleton<IProductFeedFormat, GoogleMerchantFeed>();
+        services.AddSingleton<IProductFeedFormat, HeurekaFeed>();
         services.AddScoped<IStoreMaintenance, FeedRefresh>();
 
         return services;

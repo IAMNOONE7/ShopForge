@@ -46,4 +46,15 @@ public sealed record FeedProduct(
     // The product this form belongs to, and whether it has siblings. A feed ties variants together so a
     // shopping engine shows one thing in several sizes rather than several things (D-169).
     string GroupId,
-    bool HasSiblings);
+    bool HasSiblings,
+
+    // What this engine calls the category this thing is in, when the merchant has said. Absent means nobody
+    // has mapped it, and a feed leaves the field out rather than publishing the shop's own taxonomy into
+    // somebody else's field (D-170).
+    string? EngineCategory,
+
+    // The measurements a shop has chosen to publish, in the order it put them in.
+    IReadOnlyList<FeedParameter> Parameters);
+
+// One named measurement of a thing, with its unit where it has one: "Width", "45", "cm".
+public sealed record FeedParameter(string Name, string Value, string? Unit);

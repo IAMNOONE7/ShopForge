@@ -60,3 +60,17 @@ internal sealed class StoreFeedEntityConfiguration : IEntityTypeConfiguration<St
         builder.HasIndex(feed => feed.Token).IsUnique();
     }
 }
+
+internal sealed class CategoryFeedMappingEntityConfiguration : IEntityTypeConfiguration<CategoryFeedMapping>
+{
+    public void Configure(EntityTypeBuilder<CategoryFeedMapping> builder)
+    {
+        builder.ToTable("category_feed_mappings", CatalogModule.Schema);
+
+        builder.Property(mapping => mapping.Feed).HasMaxLength(30);
+        builder.Property(mapping => mapping.EngineCategory).HasMaxLength(CategoryFeedMapping.MaxCategoryLength);
+
+        // One answer per category per engine.
+        builder.HasIndex(mapping => new { mapping.StoreId, mapping.CategoryId, mapping.Feed }).IsUnique();
+    }
+}

@@ -42,6 +42,11 @@ internal sealed class AttributeDefinition : IStoreOwned
 
     public bool IsVisibleOnProductPage { get; private set; }
 
+    // Whether this goes into a shopping feed as a parameter. Separate from being visible on the page, because
+    // a shop may want a measurement in a comparison table that it does not clutter its own page with — and the
+    // other way round (D-170).
+    public bool IsInFeeds { get; private set; }
+
     public int SortOrder { get; private set; }
 
     public IReadOnlyList<AttributeOption> Options => _options;
@@ -61,6 +66,7 @@ internal sealed class AttributeDefinition : IStoreOwned
         Unit = string.IsNullOrWhiteSpace(settings.Unit) ? null : settings.Unit.Trim();
         IsFilterable = settings.IsFilterable;
         IsVisibleOnProductPage = settings.IsVisibleOnProductPage;
+        IsInFeeds = settings.IsInFeeds;
         SortOrder = settings.SortOrder;
     }
 
@@ -108,4 +114,4 @@ internal sealed class AttributeDefinition : IStoreOwned
     }
 }
 
-internal sealed record AttributeSettings(string? Unit, bool IsFilterable, bool IsVisibleOnProductPage, int SortOrder);
+internal sealed record AttributeSettings(string? Unit, bool IsFilterable, bool IsVisibleOnProductPage, int SortOrder, bool IsInFeeds = false);

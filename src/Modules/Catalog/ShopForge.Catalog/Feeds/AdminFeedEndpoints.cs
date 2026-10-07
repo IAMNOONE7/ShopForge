@@ -3,9 +3,11 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using ShopForge.Catalog.Domain;
 using ShopForge.Catalog.Feeds.Google;
 using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Feeds;
+using ShopForge.Shared.Http;
 using ShopForge.Shared.Security;
 using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
@@ -24,6 +26,8 @@ internal static class AdminFeedEndpoints
         feeds.MapPut("/{feed}", SaveAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
         feeds.MapPost("/{feed}/token", RotateAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
         feeds.MapGet("/{feed}/check", CheckAsync);
+        feeds.MapGet("/{feed}/categories", CategoriesAsync);
+        feeds.MapPut("/{feed}/categories/{categoryId:guid}", MapCategoryAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
         feeds.MapPost("/{feed}/run", RunAsync).RequireAuthorization(AdminPolicies.CatalogManagement).RequireRateLimiting(RateLimits.Expensive);
 
         return storeAdmin;
@@ -105,6 +109,81 @@ internal static class AdminFeedEndpoints
             ? TypedResults.Ok(problems)
             : TypedResults.NotFound();
 
+    // Every category of the shop, with what this engine calls it where the merchant has said. The ones that
+    // say nothing are the work still to do, and listing them all together is how it gets done once (D-170).
+    private static async Task<Ok<List<MappedCategoryResponse>>> CategoriesAsync(
+        string feed,
+        DbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var mapped = await dbContext.Set<CategoryFeedMapping>()
+            .AsNoTracking()
+            .Where(mapping => mapping.Feed == feed)
+            .ToDictionaryAsync(mapping => mapping.CategoryId, mapping => mapping.EngineCategory, cancellationToken);
+
+        var categories = await dbContext.Set<Category>()
+            .AsNoTracking()
+            .OrderBy(category => category.SortOrder)
+            .ThenBy(category => category.Name)
+            .Select(category => new { category.Id, category.Name })
+            .ToListAsync(cancellationToken);
+
+        return TypedResults.Ok(categories
+            .Select(category => new MappedCategoryResponse(category.Id, category.Name, mapped.GetValueOrDefault(category.Id)))
+            .ToList());
+    }
+
+    private static async Task<Results<Ok<MappedCategoryResponse>, ValidationProblem, NotFound>> MapCategoryAsync(
+        string feed,
+        Guid categoryId,
+        MapCategoryRequest request,
+        DbContext dbContext,
+        IStoreContext storeContext,
+        IEnumerable<IProductFeedFormat> formats,
+        CancellationToken cancellationToken)
+    {
+        var category = await dbContext.Set<Category>().AsNoTracking().SingleOrDefaultAsync(candidate => candidate.Id == categoryId, cancellationToken);
+
+        if (category is null || formats.All(format => format.Key != feed))
+        {
+            return TypedResults.NotFound();
+        }
+
+        var errors = new RequestErrors().Check(
+            request.EngineCategory is null || request.EngineCategory.Trim().Length <= CategoryFeedMapping.MaxCategoryLength,
+            "engineCategory",
+            $"A category can be up to {CategoryFeedMapping.MaxCategoryLength} characters.");
+
+        if (errors.Any)
+        {
+            return errors.ToProblem();
+        }
+
+        var mapping = await dbContext.Set<CategoryFeedMapping>()
+            .SingleOrDefaultAsync(candidate => candidate.CategoryId == categoryId && candidate.Feed == feed, cancellationToken);
+
+        // Emptied means unmapped, which is a thing a merchant may want to do after getting it wrong.
+        if (string.IsNullOrWhiteSpace(request.EngineCategory))
+        {
+            if (mapping is not null)
+            {
+                dbContext.Remove(mapping);
+            }
+        }
+        else if (mapping is null)
+        {
+            dbContext.Add(new CategoryFeedMapping(storeContext.StoreId!.Value, categoryId, feed, request.EngineCategory));
+        }
+        else
+        {
+            mapping.Rename(request.EngineCategory);
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return TypedResults.Ok(new MappedCategoryResponse(categoryId, category.Name, request.EngineCategory?.Trim()));
+    }
+
     private static async Task<Results<Ok<AdminFeedResponse>, NotFound, ProblemHttpResult>> RunAsync(
         string feed,
         DbContext dbContext,
@@ -133,6 +212,10 @@ internal static class AdminFeedEndpoints
 }
 
 internal sealed record FeedRequest(bool IsEnabled);
+
+internal sealed record MapCategoryRequest(string? EngineCategory);
+
+internal sealed record MappedCategoryResponse(Guid CategoryId, string Name, string? EngineCategory);
 
 internal sealed record AdminFeedResponse(
     string Feed,

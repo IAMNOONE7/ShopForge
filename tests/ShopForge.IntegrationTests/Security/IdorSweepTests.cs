@@ -25,6 +25,7 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
         ("PUT", "products/{storeProduct}/attributes", """{"values":{}}"""),
         ("PUT", "categories/{category}", """{"name":"Taken","slug":"taken","sortOrder":0}"""),
         ("PUT", "categories/{category}/attributes", """{"attributeIds":[]}"""),
+        ("PUT", "feeds/{feed}/categories/{category}", """{"engineCategory":"Taken"}"""),
         ("PUT", "attributes/{attribute}", """{"name":"Taken","isFilterable":true,"isVisibleOnProductPage":true,"unit":null,"sortOrder":0}"""),
         ("POST", "attributes/{attribute}/options", """{"name":"Taken"}"""),
         ("POST", "reviews/{review}/publish", null),
@@ -207,6 +208,7 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
         ["/api/admin/stores/{storeId:guid}/feeds/{feed}/token"] = "keyed by the name of a shopping engine",
         ["/api/admin/stores/{storeId:guid}/feeds/{feed}/run"] = "keyed by the name of a shopping engine",
         ["/api/admin/stores/{storeId:guid}/feeds/{feed}/check"] = "keyed by the name of a shopping engine",
+        ["/api/admin/stores/{storeId:guid}/feeds/{feed}/categories"] = "keyed by the name of a shopping engine",
 
         // A dead letter has to be delivered and then fail before it can be named, which no fixture here
         // arranges; the query behind it is store-filtered like every other (D-123).
@@ -430,6 +432,7 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
             .Replace("{order}", Order, StringComparison.Ordinal)
             .Replace("{document}", Document, StringComparison.Ordinal)
             .Replace("{image}", Image.ToString(), StringComparison.Ordinal)
+            .Replace("{feed}", "heureka", StringComparison.Ordinal)
             .Replace("{domain}", Domain.ToString(), StringComparison.Ordinal)
             .Replace("{user}", User.ToString(), StringComparison.Ordinal)
             .Replace("{invitation}", Invitation.ToString(), StringComparison.Ordinal);
