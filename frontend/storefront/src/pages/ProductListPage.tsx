@@ -18,6 +18,7 @@ import {
 import { CatalogLoading } from "../components/catalog/CatalogLoading";
 import { Pagination } from "../components/catalog/Pagination";
 import { ProductCard } from "../components/ProductCard";
+import { HomeDiscovery } from "../components/HomeDiscovery";
 import { EmptyState } from "../components/ui/EmptyState";
 import { InlineMessage } from "../components/ui/InlineMessage";
 import { RequestError } from "../components/ui/RequestError";
@@ -39,11 +40,24 @@ export function ProductListPage() {
     },
   );
   const retainedData = products.transitionData ?? null;
-
+  // Keep the established root catalog URLs. A filtered/sorted/paged visit opens directly
+  // on its results, while a fresh home visit adds the store's discovery entry points.
+  const showDiscovery = !slug && !Array.from(searchParams.keys()).some(
+    (key) => key === "page" || key === "sort" || key === "category" || key === "q" || key.startsWith("f."),
+  );
+  const currentData = products.status === "ready" ? products.data : retainedData;
   const displayTitle = slug
-    ? (categories.find((category) => category.slug === slug)?.name ??
-      t("navigation:products"))
+    ? (categories.find((category) => category.slug === slug)?.name ?? t("navigation:products"))
     : t("navigation:allProducts");
+  const Heading = showDiscovery ? "h2" : "h1";
+  const pageHeading = (
+    <>
+      {showDiscovery && (
+        <HomeDiscovery categories={categories} product={currentData?.items.find((product) => product.imageUrl)} />
+      )}
+      <Heading id="shop-products" className="catalog-heading" tabIndex={-1}>{displayTitle}</Heading>
+    </>
+  );
 
   function changeFilter(code: string, value: string | null) {
     setSearchParams(withParam(searchParams, filterKey(code), value));
@@ -85,7 +99,7 @@ export function ProductListPage() {
   if (products.status === "loading" && retainedData === null) {
     return (
       <>
-        <h1>{displayTitle}</h1>
+        {pageHeading}
         <CatalogLoading label={t("catalog:loadingProducts")} />
       </>
     );
@@ -106,7 +120,7 @@ export function ProductListPage() {
     const invalidQuery = statusOf(products.error) === 400;
     return (
       <>
-        <h1>{displayTitle}</h1>
+        {pageHeading}
         {invalidQuery && (
           <InlineMessage tone="error" title={t("catalog:invalidQueryTitle")}>
             <p>{t("catalog:invalidQueryBody")}</p>
@@ -142,7 +156,7 @@ export function ProductListPage() {
 
   return (
     <>
-      <h1>{displayTitle}</h1>
+      {pageHeading}
       {refreshError !== null && (
         <RequestError
           error={refreshError}

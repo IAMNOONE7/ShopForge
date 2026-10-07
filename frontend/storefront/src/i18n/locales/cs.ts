@@ -39,6 +39,17 @@ const resources = {
     administration: "Administrace",
     products: "Produkty",
     newStore: "Nový obchod",
+    backToTop: "Zpět nahoru",
+    footerCategories: "Kategorie v zápatí",
+    shopping: "Nakupování",
+    allInCategory: "Vše z kategorie {{name}}",
+    moreCategories: "Další kategorie",
+  },
+  discovery: {
+    shop: "Obchod",
+    exploreProducts: "Prohlédnout produkty",
+    browseCategories: "Procházet podle kategorií",
+    imageUnavailable: "Obrázek není dostupný",
   },
   validation: {
     passwordMinimum: "Použijte 10–128 znaků.",

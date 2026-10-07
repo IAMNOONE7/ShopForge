@@ -48,6 +48,13 @@ function Shell() {
 }
 
 describe("route effects", () => {
+  it("uses the store name once for the discovery home title", async () => {
+    render(<MemoryRouter><RouteEffects store={store} categories={[]} />
+      <main id="main-content"><h1>{store.name}</h1></main>
+    </MemoryRouter>);
+    await waitFor(() => expect(document.title).toBe(store.name));
+  });
+
   it("updates the store title and focuses the new route heading after navigation", async () => {
     const user = userEvent.setup();
     render(

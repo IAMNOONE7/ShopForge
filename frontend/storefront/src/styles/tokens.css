@@ -7,6 +7,8 @@
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif;
   --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --font-display: "Helvetica Neue", Arial, var(--font-sans);
+  --text-display: clamp(2.75rem, 1.2rem + 5vw, 5.75rem);
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
   --text-base: 1rem;
@@ -29,15 +31,15 @@
   --radius-panel: clamp(0px, var(--radius), 24px);
   --radius-round: 999px;
 
-  --color-canvas: #f7f8fa;
+  --color-canvas: color-mix(in srgb, var(--color-secondary) 6%, #ffffff);
   --color-surface: #ffffff;
   --color-surface-subtle: #f1f3f6;
-  --color-text: #182230;
+  --color-text: color-mix(in srgb, var(--color-primary) 16%, #182230);
   --color-text-muted: #5d6878;
   --color-border: #cbd3dd;
   --color-border-strong: #8b98a8;
-  --color-action: #243b53;
-  --color-action-hover: #102a43;
+  --color-action: var(--color-text);
+  --color-action-hover: color-mix(in srgb, var(--color-primary) 20%, #101820);
   --color-action-text: #ffffff;
   --color-link: #175a87;
   --color-focus: #0875d1;
@@ -49,7 +51,7 @@
   --color-info-surface: #eff6ff;
   --color-brand-surface: color-mix(
     in srgb,
-    var(--color-primary) 10%,
+    var(--color-primary) 6%,
     var(--color-surface)
   );
   --color-brand-border: color-mix(
@@ -59,8 +61,8 @@
   );
   --color-store-surface: color-mix(
     in srgb,
-    var(--color-secondary) 20%,
-    var(--color-surface)
+    var(--color-primary) 4%,
+    color-mix(in srgb, var(--color-secondary) 6%, var(--color-surface))
   );
   --shadow-sm: 0 1px 2px rgb(16 24 40 / 6%);
   --shadow-md: 0 10px 28px rgb(16 24 40 / 10%);

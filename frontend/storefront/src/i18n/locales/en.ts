@@ -39,6 +39,17 @@ const resources = {
     administration: "Administration",
     products: "Products",
     newStore: "New store",
+    backToTop: "Back to top",
+    footerCategories: "Footer categories",
+    shopping: "Shopping",
+    allInCategory: "All {{name}}",
+    moreCategories: "More categories",
+  },
+  discovery: {
+    shop: "The shop",
+    exploreProducts: "Explore products",
+    browseCategories: "Browse by category",
+    imageUnavailable: "Image unavailable",
   },
   validation: {
     passwordMinimum: "Use 10–128 characters.",

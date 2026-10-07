@@ -61,7 +61,9 @@ export function RouteEffects({
     function update() {
       const heading = main?.querySelector<HTMLElement>("h1");
       const page = heading?.textContent?.trim() || fallbackTitle;
-      document.title = t("navigation:pageTitle", { page, store: store.name });
+      document.title = location.pathname === "/" && page === store.name
+        ? store.name
+        : t("navigation:pageTitle", { page, store: store.name });
       if (!shouldFocus || focused || !heading) return;
       focused = true;
       if (!heading.hasAttribute("tabindex"))

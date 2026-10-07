@@ -7,6 +7,9 @@ import { useStore } from "../storeContext";
 import { useRequest } from "../useRequest";
 import { RequestError } from "./ui/RequestError";
 import { RouteEffects } from "./RouteEffects";
+import { StoreBrand } from "./StoreBrand";
+import { categoryTree } from "./categoryTree";
+import { categoryPath } from "../publicPages";
 import {
   CategoryNavigation,
   MobileNavigation,
@@ -46,26 +49,19 @@ export function Layout() {
       </a>
       <header className="store-header">
         <div className="store-header-inner container">
-          <Link to="/" className="store-brand" lang={store.culture}>
-            {store.logoUrl ? (
-              <img
-                src={store.logoUrl}
-                alt={store.name}
-                className="store-logo"
-              />
-            ) : (
-              store.name
-            )}
-          </Link>
-          <CategoryNavigation
-            state={categoryState}
-            className="store-nav desktop-navigation"
-            contentLanguage={store.culture}
-          />
+          <StoreBrand />
           <NavLink to={accountTo} className="account-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+              <circle cx="12" cy="8" r="3.5" />
+              <path d="M4.5 21v-2a7.5 7.5 0 0 1 15 0v2" />
+            </svg>
             {accountLabel}
           </NavLink>
           <NavLink to="/cart" className="cart-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+              <path d="M4 7h16l-1 14H5L4 7Z" />
+              <path d="M8 8V6a4 4 0 0 1 8 0v2" />
+            </svg>
             {t("cart")}
             {cartStatus === "ready" && cart && cart.count > 0 && (
               <span className="cart-count">{cart.count}</span>
@@ -74,6 +70,14 @@ export function Layout() {
           <MobileNavigation
             key={location.pathname}
             state={categoryState}
+            contentLanguage={store.culture}
+          />
+        </div>
+        <div className="store-category-bar desktop-navigation">
+          <CategoryNavigation
+            state={categoryState}
+            className="store-nav container"
+            variant="desktop"
             contentLanguage={store.culture}
           />
         </div>
@@ -101,10 +105,22 @@ export function Layout() {
       </main>
       <footer className="store-footer">
         <div className="store-footer-inner container">
-          <Link to="/" className="footer-brand" lang={store.culture}>
-            {store.name}
-          </Link>
-          <nav aria-label={t("footerNavigation")}>
+          <div className="footer-identity">
+            <Link to="/" className="footer-brand" lang={store.culture}>
+              {store.name}
+            </Link>
+            <a href="#main-content" className="footer-top">{t("backToTop")} <span aria-hidden="true">↑</span></a>
+          </div>
+          {categoryList.length > 0 && (
+            <nav className="footer-links" aria-label={t("footerCategories")}>
+              <h2>{t("categories")}</h2>
+              {categoryTree(categoryList).map(({ category }) => (
+                <Link key={category.slug} to={categoryPath(category.slug)} lang={store.culture}>{category.name}</Link>
+              ))}
+            </nav>
+          )}
+          <nav className="footer-links" aria-label={t("footerNavigation")}>
+            <h2>{t("shopping")}</h2>
             <Link to="/">{t("allProducts")}</Link>
             <Link to={accountTo}>{accountLabel}</Link>
             <Link to="/cart">{t("cart")}</Link>

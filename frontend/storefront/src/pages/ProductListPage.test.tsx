@@ -22,6 +22,14 @@ import { HttpError } from "../api/http";
 import { i18n, initializeI18n } from "../i18n";
 import type { RequestState } from "../useRequest";
 import { ProductListPage } from "./ProductListPage";
+import { StoreContext } from "../storeContext";
+import type { Store } from "../store";
+
+const store: Store = {
+  id: "store-a", name: "Test Store", currency: "CZK", culture: "cs-CZ",
+  logoUrl: null, providerKeys: [],
+  theme: { primaryColor: "#8b5a2b", secondaryColor: "#f5f0e8", borderRadius: 8 },
+};
 
 const request = vi.hoisted(() => ({
   state: null as RequestState<ProductPage> | null,
@@ -39,7 +47,7 @@ afterEach(cleanup);
 afterAll(() => i18n.changeLanguage("en"));
 
 function CatalogLayout() {
-  return <Outlet context={[]} />;
+  return <StoreContext value={store}><Outlet context={[]} /></StoreContext>;
 }
 
 function Location() {
@@ -68,6 +76,23 @@ function renderPage(url: string) {
 }
 
 describe("ProductListPage recovery", () => {
+  it("adds discovery only to a fresh home visit and preserves the catalog empty state", () => {
+    request.state = { status: "ready", data: { items: [], totalCount: 0, page: 1, pageSize: 24, filters: [] },
+      refreshing: false, refreshError: null, reload: vi.fn() };
+    renderPage("/?campaign=fall");
+    expect(screen.getByRole("heading", { level: 1, name: store.name })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 2, name: "All products" })).toBeTruthy();
+    expect(screen.getByText("/?campaign=fall")).toBeTruthy();
+    expect(document.querySelectorAll("h1")).toHaveLength(1);
+  });
+
+  it("opens a sorted root URL directly on its results", () => {
+    request.state = { status: "loading", reload: vi.fn() };
+    renderPage("/?sort=price");
+    expect(screen.getByRole("heading", { level: 1, name: "All products" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Explore products" })).toBeNull();
+  });
+
   it("offers page 1 when the requested page is outside the real result range", async () => {
     const user = userEvent.setup();
     request.state = {

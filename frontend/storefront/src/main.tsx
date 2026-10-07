@@ -5,6 +5,7 @@ import { initializeI18n } from "./i18n";
 import "./styles/tokens.css";
 import "./styles/base.css";
 import "./index.css";
+import "./styles/discovery.css";
 import App from "./App.tsx";
 
 async function render() {

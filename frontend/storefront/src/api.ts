@@ -3,6 +3,7 @@ import { requestJson } from "./api/http";
 export type Category = {
   name: string;
   slug: string;
+  parentSlug: string | null;
 };
 
 export type ProductSummary = {
