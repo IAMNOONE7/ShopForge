@@ -6,6 +6,7 @@ import "./styles/tokens.css";
 import "./styles/base.css";
 import "./index.css";
 import "./styles/discovery.css";
+import "./styles/catalog.css";
 import App from "./App.tsx";
 
 async function render() {

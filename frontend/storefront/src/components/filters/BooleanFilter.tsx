@@ -51,7 +51,7 @@ export function BooleanFilter({
               onChange(choice.value === "any" ? null : choice.value)
             }
           />
-          <span>{choice.label}</span>
+          <span className="filter-option-name">{choice.label}</span>{" "}
           {choice.count !== null && (
             <span className="filter-count">({choice.count})</span>
           )}

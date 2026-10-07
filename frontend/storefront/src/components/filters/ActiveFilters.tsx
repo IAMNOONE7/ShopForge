@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { Facet } from "../../api";
 import { optionValueWithout } from "./filterParams";
+import { useStore } from "../../storeContext";
 
 type Props = {
   facets: Facet[];
@@ -10,6 +11,13 @@ type Props = {
 
 export function ActiveFilters({ facets, onChange, onClear }: Props) {
   const { t } = useTranslation(["catalog", "common"]);
+  const store = useStore();
+  function bound(value: number | string) {
+    const number = Number(value);
+    return Number.isFinite(number)
+      ? new Intl.NumberFormat(store.culture, { maximumFractionDigits: 20 }).format(number)
+      : String(value);
+  }
   const filters = facets.flatMap((facet) => {
     if (facet.options) {
       return facet.options
@@ -41,15 +49,15 @@ export function ActiveFilters({ facets, onChange, onClear }: Props) {
       const value =
         facet.selectedMin !== null && facet.selectedMax !== null
           ? t("catalog:activeRange", {
-              from: `${facet.selectedMin}${unit}`,
-              to: `${facet.selectedMax}${unit}`,
+              from: `${bound(facet.selectedMin)}${unit}`,
+              to: `${bound(facet.selectedMax)}${unit}`,
             })
           : facet.selectedMin !== null
             ? t("catalog:activeRangeFrom", {
-                value: `${facet.selectedMin}${unit}`,
+                value: `${bound(facet.selectedMin)}${unit}`,
               })
             : t("catalog:activeRangeTo", {
-                value: `${facet.selectedMax}${unit}`,
+                value: `${bound(facet.selectedMax!)}${unit}`,
               });
       return [
         {
@@ -87,4 +95,3 @@ export function ActiveFilters({ facets, onChange, onClear }: Props) {
     </section>
   );
 }
-

@@ -53,6 +53,20 @@ afterEach(cleanup);
 afterAll(() => i18n.changeLanguage("en"));
 
 describe("catalog facet controls", () => {
+  it("keeps range drafts and focused controls through refreshes, then follows applied URL changes", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<RangeFilter facet={rangeFacet} onChange={vi.fn()} />);
+    const input = screen.getByRole("spinbutton", { name: "Width from" }) as HTMLInputElement;
+    await user.type(input, "42.5");
+    rerender(<RangeFilter facet={{ ...rangeFacet, max: 120 }} onChange={vi.fn()} />);
+    expect(input.value).toBe("42.5");
+    expect(document.activeElement).toBe(input);
+    rerender(<RangeFilter facet={{ ...rangeFacet, selectedMin: "50", selectedMax: "90" }} onChange={vi.fn()} />);
+    expect(input.value).toBe("50");
+    expect(document.activeElement).toBe(input);
+    expect((screen.getByRole("spinbutton", { name: "Width to" }) as HTMLInputElement).value).toBe("90");
+  });
+
   it("offers any, true, and false boolean values", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

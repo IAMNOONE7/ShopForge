@@ -16,6 +16,7 @@ import {
   withoutFilters,
 } from "../components/filters/filterParams";
 import { CatalogLoading } from "../components/catalog/CatalogLoading";
+import { CatalogHeader } from "../components/catalog/CatalogHeader";
 import { Pagination } from "../components/catalog/Pagination";
 import { ProductCard } from "../components/ProductCard";
 import { HomeDiscovery } from "../components/HomeDiscovery";
@@ -23,14 +24,17 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { InlineMessage } from "../components/ui/InlineMessage";
 import { RequestError } from "../components/ui/RequestError";
 import { useRequest } from "../useRequest";
+import { useStore } from "../storeContext";
 
 export function ProductListPage() {
   const { t } = useTranslation(["catalog", "errors", "navigation"]);
+  const store = useStore();
   const { slug } = useParams();
   const categories = useOutletContext<Category[]>();
   const [searchParams, setSearchParams] = useSearchParams();
   const sortId = useId();
-  const scope = slug ?? "";
+  const categorySlug = slug ?? searchParams.get("category") ?? undefined;
+  const scope = categorySlug ?? "";
   const products = useRequest(
     `products:${scope}?${searchParams}`,
     (signal) => getProducts(slug, searchParams, signal),
@@ -43,19 +47,25 @@ export function ProductListPage() {
   // Keep the established root catalog URLs. A filtered/sorted/paged visit opens directly
   // on its results, while a fresh home visit adds the store's discovery entry points.
   const showDiscovery = !slug && !Array.from(searchParams.keys()).some(
-    (key) => key === "page" || key === "sort" || key === "category" || key === "q" || key.startsWith("f."),
+    (key) => key === "page" || key === "pageSize" || key === "sort" || key === "category" || key === "q" || key.startsWith("f."),
   );
   const currentData = products.status === "ready" ? products.data : retainedData;
-  const displayTitle = slug
-    ? (categories.find((category) => category.slug === slug)?.name ?? t("navigation:products"))
+  const displayTitle = categorySlug
+    ? (currentData?.path.at(-1)?.name ?? categories.find((category) => category.slug === categorySlug)?.name ?? t("navigation:products"))
     : t("navigation:allProducts");
-  const Heading = showDiscovery ? "h2" : "h1";
   const pageHeading = (
     <>
       {showDiscovery && (
         <HomeDiscovery categories={categories} product={currentData?.items.find((product) => product.imageUrl)} />
       )}
-      <Heading id="shop-products" className="catalog-heading" tabIndex={-1}>{displayTitle}</Heading>
+      <CatalogHeader
+        title={displayTitle}
+        category={Boolean(categorySlug)}
+        path={currentData?.path ?? []}
+        subcategories={currentData?.children ?? []}
+        pageText={currentData?.pageText ?? null}
+        headingLevel={showDiscovery ? 2 : 1}
+      />
     </>
   );
 
@@ -164,19 +174,15 @@ export function ProductListPage() {
           onRetry={products.reload}
         />
       )}
-      <ActiveFilters
-        facets={facets}
-        onChange={changeFilter}
-        onClear={clearFilters}
-      />
-      <div className="catalog">
-        <aside className="catalog-filter-rail">
+      <div className={`catalog${facets.length === 0 ? " catalog-without-filters" : ""}`}>
+        {facets.length > 0 && <aside className="catalog-filter-rail">
           <FilterPanel
             facets={facets}
             onChange={changeFilter}
             onClear={clearFilters}
+            contentLanguage={store.culture}
           />
-        </aside>
+        </aside>}
         <section
           className="catalog-results"
           aria-labelledby="catalog-result-summary"
@@ -203,6 +209,9 @@ export function ProductListPage() {
                 activeCount={selectedCount}
                 onChange={changeFilter}
                 onClear={clearFilters}
+                resultCount={data.totalCount}
+                refreshing={isRefreshing}
+                contentLanguage={store.culture}
               />
             </div>
             <label className="catalog-sort" htmlFor={sortId}>
@@ -225,6 +234,12 @@ export function ProductListPage() {
             </label>
           </div>
 
+          <ActiveFilters
+            facets={facets}
+            onChange={changeFilter}
+            onClear={clearFilters}
+          />
+
           <div className={isRefreshing ? "catalog-content refreshing" : "catalog-content"}>
             {outOfRange ? (
               <EmptyState
@@ -245,14 +260,14 @@ export function ProductListPage() {
               </EmptyState>
             ) : data.items.length === 0 ? (
               <CatalogEmptyState
-                category={Boolean(slug)}
+                category={Boolean(categorySlug)}
                 filtered={filtered}
                 clearFilters={clearFilters}
               />
             ) : (
               <div className="product-grid">
-                {data.items.map((product) => (
-                  <ProductCard key={product.id} product={product} />
+                {data.items.map((product, index) => (
+                  <ProductCard key={product.id} product={product} priority={index === 0 && !showDiscovery} />
                 ))}
               </div>
             )}

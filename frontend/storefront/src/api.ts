@@ -49,6 +49,9 @@ export type ProductPage = {
   page: number;
   pageSize: number;
   filters: Facet[];
+  path: Category[];
+  children: Category[];
+  pageText: string | null;
 };
 
 export type ProductAttribute = {

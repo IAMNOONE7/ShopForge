@@ -3,9 +3,11 @@ import type { Facet } from "../../api";
 export function OptionsFilter({
   facet,
   onChange,
+  contentLanguage,
 }: {
   facet: Facet;
   onChange: (value: string | null) => void;
+  contentLanguage?: string;
 }) {
   const selected = (facet.options ?? [])
     .filter((option) => option.selected)
@@ -28,7 +30,10 @@ export function OptionsFilter({
             disabled={option.count === 0 && !option.selected}
             onChange={(event) => toggle(option.code, event.target.checked)}
           />
-          {option.name} <span className="filter-count">({option.count})</span>
+          <span className="filter-option-name" lang={contentLanguage}>
+            {option.name}
+          </span>{" "}
+          <span className="filter-count">({option.count})</span>
         </label>
       ))}
     </>

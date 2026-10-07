@@ -10,7 +10,23 @@ export function RangeFilter({
   onChange: (value: string | null) => void;
 }) {
   const { t } = useTranslation(["catalog", "common"]);
-  const [invalid, setInvalid] = useState(false);
+  const selection = `${facet.selectedMin ?? ""}:${facet.selectedMax ?? ""}`;
+  const [draft, setDraft] = useState({
+    selection,
+    minimum: String(facet.selectedMin ?? ""),
+    maximum: String(facet.selectedMax ?? ""),
+    invalid: false,
+  });
+  // Applied URL changes reset the draft without replacing a focused input. A
+  // same-range refresh keeps unfinished typing intact.
+  if (draft.selection !== selection) {
+    setDraft({
+      selection,
+      minimum: String(facet.selectedMin ?? ""),
+      maximum: String(facet.selectedMax ?? ""),
+      invalid: false,
+    });
+  }
   const errorId = useId();
   const inputType = facet.type === "date" ? "date" : "number";
   const step = facet.type === "decimal" ? "any" : undefined;
@@ -33,11 +49,11 @@ export function RangeFilter({
       );
 
     if (outOfOrder || malformed) {
-      setInvalid(true);
+      setDraft((current) => ({ ...current, invalid: true }));
       return;
     }
 
-    setInvalid(false);
+    setDraft((current) => ({ ...current, invalid: false }));
     onChange(minimum || maximum ? `${minimum}..${maximum}` : null);
   }
 
@@ -50,34 +66,45 @@ export function RangeFilter({
   }
 
   return (
-    <form
-      className="range-filter"
-      key={`${facet.selectedMin}-${facet.selectedMax}`}
-      noValidate
-      onSubmit={submit}
-    >
-      <input
-        name="min"
-        type={inputType}
-        step={step}
-        placeholder={String(facet.min ?? "")}
-        defaultValue={facet.selectedMin ?? ""}
-        aria-label={t("catalog:rangeFrom", { name: facet.name })}
-        aria-invalid={invalid || undefined}
-        aria-describedby={invalid ? errorId : undefined}
-      />
+    <form className="range-filter" noValidate onSubmit={submit}>
+      <label className="range-bound">
+        <span>{t("catalog:rangeMinimum")}</span>
+        <input
+          name="min"
+          type={inputType}
+          step={step}
+          placeholder={String(facet.min ?? "")}
+          value={draft.minimum}
+          onChange={(event) => setDraft((current) => ({
+            ...current,
+            minimum: event.target.value,
+            invalid: false,
+          }))}
+          aria-label={t("catalog:rangeFrom", { name: facet.name })}
+          aria-invalid={draft.invalid || undefined}
+          aria-describedby={draft.invalid ? errorId : undefined}
+        />
+      </label>
       <span aria-hidden="true">–</span>
-      <input
-        name="max"
-        type={inputType}
-        step={step}
-        placeholder={String(facet.max ?? "")}
-        defaultValue={facet.selectedMax ?? ""}
-        aria-label={t("catalog:rangeTo", { name: facet.name })}
-        aria-invalid={invalid || undefined}
-        aria-describedby={invalid ? errorId : undefined}
-      />
-      {invalid && (
+      <label className="range-bound">
+        <span>{t("catalog:rangeMaximum")}</span>
+        <input
+          name="max"
+          type={inputType}
+          step={step}
+          placeholder={String(facet.max ?? "")}
+          value={draft.maximum}
+          onChange={(event) => setDraft((current) => ({
+            ...current,
+            maximum: event.target.value,
+            invalid: false,
+          }))}
+          aria-label={t("catalog:rangeTo", { name: facet.name })}
+          aria-invalid={draft.invalid || undefined}
+          aria-describedby={draft.invalid ? errorId : undefined}
+        />
+      </label>
+      {draft.invalid && (
         <span id={errorId} className="filter-validation" role="alert">
           {t("catalog:rangeInvalid")}
         </span>

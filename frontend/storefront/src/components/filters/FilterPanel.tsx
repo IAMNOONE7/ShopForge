@@ -10,6 +10,7 @@ type FilterPanelProps = {
   onChange: (code: string, value: string | null) => void;
   onClear: () => void;
   showHeading?: boolean;
+  contentLanguage?: string;
 };
 
 export function FilterPanel({
@@ -17,6 +18,7 @@ export function FilterPanel({
   onChange,
   onClear,
   showHeading = true,
+  contentLanguage,
 }: FilterPanelProps) {
   const { t } = useTranslation("catalog");
   const headingId = useId();
@@ -34,10 +36,15 @@ export function FilterPanel({
       className="filter-panel"
       aria-labelledby={showHeading ? headingId : undefined}
     >
-      {showHeading && <h2 id={headingId}>{t("filters")}</h2>}
+      {showHeading && (
+        <div className="filter-panel-heading">
+          <h2 id={headingId}>{t("filters")}</h2>
+          {hasSelection && <button type="button" className="link-button" onClick={onClear}>{t("clearFilters")}</button>}
+        </div>
+      )}
       {facets.map((facet) => (
         <fieldset key={facet.code}>
-          <legend>
+          <legend lang={contentLanguage}>
             {facet.name}
             {facet.unit && ` (${facet.unit})`}
           </legend>
@@ -45,6 +52,7 @@ export function FilterPanel({
             <OptionsFilter
               facet={facet}
               onChange={(value) => onChange(facet.code, value)}
+              contentLanguage={contentLanguage}
             />
           ) : facet.type === "boolean" ? (
             <BooleanFilter
@@ -59,7 +67,7 @@ export function FilterPanel({
           )}
         </fieldset>
       ))}
-      {hasSelection && (
+      {hasSelection && !showHeading && (
         <button type="button" className="link-button" onClick={onClear}>
           {t("clearFilters")}
         </button>
