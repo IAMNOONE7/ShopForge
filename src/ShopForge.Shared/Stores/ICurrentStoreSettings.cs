@@ -12,7 +12,11 @@ public sealed record StoreSettings(
     int ReturnWindowDays,
     SellerDetails? Seller,
     StoreBranding Branding,
-    StoreSeo Seo);
+    StoreSeo Seo,
+    // Where the shop lives, or nothing if no domain of its own is proved yet. It is read here because this
+    // query already has the store's row open, which is what lets a page compose absolute addresses without
+    // paying for them (D-173).
+    StoreAddress? Address = null);
 
 // How the store looks to somebody who is not on its website: its colour and its logo, with an address the logo can
 // actually be fetched from, because a relative path means nothing in an inbox (D-121).

@@ -201,7 +201,8 @@ internal static class StorefrontCatalogEndpoints
             page_,
             pageText,
             path,
-            children));
+            children,
+            CategoryLinkedData(settings, path)));
     }
 
     private static async Task<Results<Ok<ProductDetailResponse>, RedirectHttpResult, NotFound>> GetProductAsync(
@@ -249,10 +250,12 @@ internal static class StorefrontCatalogEndpoints
         var variants = product.Variants.OrderBy(variant => variant.Position).ToList();
         var available = await stock.AvailableAsync([.. variants.Select(variant => variant.Id)], cancellationToken);
 
+        var settings = await storeSettings.GetAsync(cancellationToken);
         var seo = PageMetadata.For(
-            (await storeSettings.GetAsync(cancellationToken)).Seo,
+            settings.Seo,
             storeProduct.Name,
             new PageSeoOverrides(storeProduct.SeoTitle, storeProduct.SeoDescription, storeProduct.SeoSocialImageUrl, storeProduct.SeoNoIndex));
+        var images = product.Images.OrderBy(image => image.Position).Select(image => ImageUrl(storeProduct.Id, image.Id)!).ToList();
 
         return TypedResults.Ok(new ProductDetailResponse(
             storeProduct.Id,
@@ -270,6 +273,9 @@ internal static class StorefrontCatalogEndpoints
             storeProduct.RatingCount,
             [.. product.Images.OrderBy(image => image.Position).Select(image => new ProductImageResponse(ImageUrl(storeProduct.Id, image.Id)!, image.AltText))],
             categories,
+            ProductLinkedData(settings, storeProduct.Slug, storeProduct.Name, storeProduct.Description, storeProduct.Price,
+                variants.Sum(variant => available.GetValueOrDefault(variant.Id)), variants, images, product.Brand,
+                storeProduct.RatingAverage, storeProduct.RatingCount, categories),
             [.. definitions.Select(definition => new ProductAttributeResponse(
                 definition.Code,
                 definition.Name,
@@ -433,6 +439,100 @@ internal static class StorefrontCatalogEndpoints
             : null;
     }
 
+    // What a product page declares itself to be: the thing for sale, and the trail down to it from the shop's
+    // front page (D-173).
+    private static List<object> ProductLinkedData(
+        StoreSettings settings,
+        string slug,
+        string name,
+        string? description,
+        decimal price,
+        int availableInAllForms,
+        List<ProductVariant> variants,
+        List<string> imagePaths,
+        string? brand,
+        decimal rating,
+        int reviewCount,
+        List<StorefrontCategoryResponse> categories)
+    {
+        if (settings.Address is not { } address)
+        {
+            return [];
+        }
+
+        var first = variants[0];
+
+        // A barcode and a manufacturer's number name one particular thing. Where a listing is sold in several
+        // forms the page describes the listing, so declaring one form's identifiers for all of them would be
+        // a false statement about the others; the SKU of the first form stays, because something has to say
+        // which row this is (D-163).
+        var oneForm = variants.Count == 1;
+
+        var documents = new List<object>
+        {
+            StructuredData.Product(address, new ProductFacts(
+                name,
+                description,
+                slug,
+                first.Sku,
+                price,
+                settings.Currency,
+                availableInAllForms,
+                variants.Count,
+                [.. imagePaths.Select(address.Image)],
+                brand,
+                oneForm ? first.Ean : null,
+                oneForm ? first.PartNumber : null,
+                oneForm ? first.Condition?.ToString() : null,
+                rating,
+                reviewCount)),
+        };
+
+        // A thing in several categories has one trail to offer, and the shop's own order is the tie-break the
+        // feed uses for the same question (D-172).
+        if (categories.FirstOrDefault() is { } category)
+        {
+            documents.Add(StructuredData.Breadcrumbs(
+                address,
+                settings.Name,
+                [
+                    .. category.Path.Select(crumb => new Crumb(crumb.Name, address.Category(crumb.Slug))),
+                    new Crumb(name, address.Product(slug)),
+                ]));
+        }
+
+        return documents;
+    }
+
+    // What this page declares itself to be. A category page is a trail down to a list; the front page, which
+    // is the same list with nothing chosen, is where the shop says who it is (D-173). A shop with no proved
+    // domain declares nothing at all, because every address in these documents is absolute and there is none
+    // to build (D-164).
+    private static List<object> CategoryLinkedData(StoreSettings settings, List<StorefrontCategoryResponse> path)
+    {
+        if (settings.Address is not { } address)
+        {
+            return [];
+        }
+
+        if (path.Count == 0)
+        {
+            return
+            [
+                StructuredData.Organization(address, settings.Name, settings.Seller, settings.Branding.LogoUrl),
+                StructuredData.WebSite(address, settings.Name),
+            ];
+        }
+
+        return
+        [
+            StructuredData.Breadcrumbs(
+                address,
+                settings.Name,
+                [.. path.Select(crumb => new Crumb(crumb.Name, address.Category(crumb.Slug)))]),
+        ];
+    }
+
     private static StorefrontCategoryResponse Crumbed(StoreCategoryTree categories, CategoryRow row) =>
         new(row.Name,
             row.Slug,
@@ -463,7 +563,8 @@ internal sealed record ProductPageResponse(
     PageSeo Seo,
     string? PageText,
     List<StorefrontCategoryResponse> Path,
-    List<StorefrontCategoryResponse> Children);
+    List<StorefrontCategoryResponse> Children,
+    List<object> JsonLd);
 
 internal sealed record ProductSummaryResponse(
     Guid Id,
@@ -509,6 +610,7 @@ internal sealed record ProductDetailResponse(
     int ReviewCount,
     List<ProductImageResponse> Images,
     List<StorefrontCategoryResponse> Categories,
+    List<object> JsonLd,
     List<ProductAttributeResponse> Attributes,
     PageSeo Seo);
 
