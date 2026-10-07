@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Inventory.Domain;
+using ShopForge.Shared.Admin;
 using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Catalog;
 using ShopForge.Shared.Http;
@@ -29,10 +30,13 @@ internal static class AdminStockEndpoints
             .Select(item => new StockResponse(item.VariantId, item.QuantityOnHand, item.QuantityReserved, item.QuantityOnHand - item.QuantityReserved))
             .ToListAsync(cancellationToken));
 
-    private static async Task<Results<Ok<List<StockMovementResponse>>, NotFound>> GetMovementsAsync(
+    private static async Task<Results<Ok<AdminListResponse<StockMovementResponse>>, NotFound>> GetMovementsAsync(
         Guid variantId,
         DbContext dbContext,
         ITenantProducts products,
+        int? page,
+        int? pageSize,
+        string? sort,
         CancellationToken cancellationToken)
     {
         // The movements themselves are the company's and nothing of another's could be read here, but answering
@@ -42,12 +46,22 @@ internal static class AdminStockEndpoints
             return TypedResults.NotFound();
         }
 
-        return TypedResults.Ok(await dbContext.Set<StockMovement>()
+        // A year of movements for a thing that sells is a list to walk, not fifty rows and silence about the
+        // rest (D-179). Newest first, because an adjustment is usually about something that just happened.
+        var asked = AdminListQuery.Of(page, pageSize, sort, terms: null);
+        var movements = dbContext.Set<StockMovement>()
             .Where(movement => movement.VariantId == variantId)
             .OrderByDescending(movement => movement.OccurredAt)
-            .Take(50)
+            .ThenBy(movement => movement.Id);
+
+        var total = await movements.CountAsync(cancellationToken);
+        var wanted = await movements
+            .Skip(asked.Skipped)
+            .Take(asked.Taken)
             .Select(movement => new StockMovementResponse(movement.OccurredAt, movement.Quantity, movement.Reason.ToString(), movement.Reference))
-            .ToListAsync(cancellationToken));
+            .ToListAsync(cancellationToken);
+
+        return TypedResults.Ok(new AdminListResponse<StockMovementResponse>(wanted, total, asked.Page, asked.PageSize));
     }
 
     private static async Task<Results<Ok<StockResponse>, ValidationProblem, NotFound, ProblemHttpResult>> SetStockAsync(

@@ -287,8 +287,7 @@ public sealed class CatalogSearchTests(ShopForgeApiFactory factory)
 
     private async Task<ListingView> ListingAsync(FurnitureStore furniture, string slug)
     {
-        var listings = await furniture.Admin.GetFromJsonAsync<List<ListingView>>(
-            $"/api/admin/stores/{furniture.Store.StoreId}/products", CancellationToken);
+        var listings = await furniture.Admin.AdminListAsync<ListingView>($"/api/admin/stores/{furniture.Store.StoreId}/products", CancellationToken);
 
         return listings!.Single(candidate => candidate.Slug == slug);
     }

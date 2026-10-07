@@ -8,6 +8,7 @@ using ShopForge.Orders.Invoicing;
 using ShopForge.Orders.Returns;
 using ShopForge.Orders.Shipping;
 using ShopForge.Orders.Storefront;
+using ShopForge.Shared.Admin;
 using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Catalog;
 using ShopForge.Shared.Diagnostics;
@@ -32,15 +33,50 @@ internal static class AdminOrderEndpoints
         storeAdmin.MapPost("/orders/{number}/refund", RefundAsync).RequireAuthorization(AdminPolicies.StoreManagement).Idempotent();
     }
 
-    private static async Task<Ok<List<AdminOrderResponse>>> GetOrdersAsync(DbContext dbContext, CancellationToken cancellationToken)
+    // A year of orders is a list somebody has to work through, not one to truncate at two hundred and hope
+    // the rest were not wanted (D-179).
+    private static async Task<Ok<AdminListResponse<AdminOrderResponse>>> GetOrdersAsync(
+        DbContext dbContext,
+        int? page,
+        int? pageSize,
+        string? sort,
+        string? q,
+        CancellationToken cancellationToken)
     {
-        var orders = await dbContext.Set<Order>()
-            .AsNoTracking()
-            .OrderByDescending(order => order.PlacedAt)
-            .Take(200)
-            .ToListAsync(cancellationToken);
+        var query = AdminListQuery.Of(page, pageSize, sort, q);
+        var orders = dbContext.Set<Order>().AsNoTracking();
 
-        return TypedResults.Ok(orders.Select(AdminOrderResponse.From).ToList());
+        // An order is looked for by its number, by who placed it, or by their name on it — the three things a
+        // merchant has in front of them when a customer is on the telephone.
+        if (query.Pattern is { } pattern)
+        {
+            orders = orders.Where(order =>
+                EF.Functions.Like(order.Number.ToLower(), pattern)
+                || EF.Functions.Like(order.Email.ToLower(), pattern)
+                || EF.Functions.Like(order.BillingAddress.FullName.ToLower(), pattern));
+        }
+
+        orders = (query.SortKey, query.Descending) switch
+        {
+            ("placed", false) => orders.OrderBy(order => order.PlacedAt).ThenBy(order => order.Number),
+            // There is deliberately no sort by what the order came to: an order's money is worked out from its
+            // lines rather than stored, so the database has nothing to order by. It would need a column, and
+            // a column that can disagree with the lines it is a sum of is worse than a missing sort (D-179).
+            ("placed", true) => orders.OrderByDescending(order => order.PlacedAt).ThenByDescending(order => order.Number),
+            ("status", false) => orders.OrderBy(order => order.Status).ThenByDescending(order => order.Number),
+            ("status", true) => orders.OrderByDescending(order => order.Status).ThenByDescending(order => order.Number),
+
+            // Newest first is what a merchant opening the screen wants, so it is also what no instruction
+            // means. The number breaks the tie in the same direction: two orders placed in the same instant
+            // read as one before the other, and the later number is the later order.
+            _ => orders.OrderByDescending(order => order.PlacedAt).ThenByDescending(order => order.Number),
+        };
+
+        var total = await orders.CountAsync(cancellationToken);
+        var wanted = await orders.Skip(query.Skipped).Take(query.Taken).ToListAsync(cancellationToken);
+
+        return TypedResults.Ok(new AdminListResponse<AdminOrderResponse>(
+            [.. wanted.Select(AdminOrderResponse.From)], total, query.Page, query.PageSize));
     }
 
     private static async Task<Results<Ok<AdminOrderDetailResponse>, NotFound>> GetOrderAsync(

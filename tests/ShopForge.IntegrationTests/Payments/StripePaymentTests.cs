@@ -232,8 +232,7 @@ public sealed class StripePaymentTests : IDisposable
     }
 
     private async Task<List<MovementView>> MovementsAsync(FurnitureStore store, Guid productId) =>
-        (await store.Admin.GetFromJsonAsync<List<MovementView>>(
-            $"/api/admin/stock/{await store.Admin.DefaultVariantIdAsync(productId)}/movements", CancellationToken))!;
+        (await store.Admin.AdminListAsync<MovementView>($"/api/admin/stock/{await store.Admin.DefaultVariantIdAsync(productId)}/movements", CancellationToken))!;
 
     private static async Task AddToCartAsync(StorefrontApi shopper, Guid storeProductId, int quantity)
     {

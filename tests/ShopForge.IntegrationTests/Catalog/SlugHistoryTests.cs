@@ -117,8 +117,7 @@ public sealed class SlugHistoryTests(ShopForgeApiFactory factory)
 
     private async Task RenameListingAsync(FurnitureStore furniture, string from, string to)
     {
-        var listings = await furniture.Admin.GetFromJsonAsync<List<ListingView>>(
-            $"/api/admin/stores/{furniture.Store.StoreId}/products", CancellationToken);
+        var listings = await furniture.Admin.AdminListAsync<ListingView>($"/api/admin/stores/{furniture.Store.StoreId}/products", CancellationToken);
         var listing = listings!.Single(candidate => candidate.Slug == from);
 
         using var saved = await furniture.Admin.PutAsJsonAsync(

@@ -7,6 +7,7 @@ using ShopForge.Catalog.Categories;
 using ShopForge.Catalog.Domain;
 using ShopForge.Catalog.Publishing;
 using ShopForge.Catalog.Search;
+using ShopForge.Shared.Admin;
 using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Security;
@@ -29,31 +30,68 @@ internal static class AdminStoreCatalogEndpoints
         storeAdmin.MapPut("/categories/{categoryId:guid}", UpdateCategoryAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
     }
 
-    private static async Task<Ok<List<AdminStoreProductResponse>>> GetStoreProductsAsync(DbContext dbContext, CancellationToken cancellationToken)
+    // A thousand listings is a list to work through a page at a time, and to look through by name or code
+    // (D-179). The shopper's own search is a different question with its own index; this is the merchant
+    // looking for a row they already know exists.
+    //
+    // The narrowing and the ordering are done on the rows, before they become responses: a projection that
+    // carries a subquery and a collection cannot also be filtered.
+    private static async Task<Ok<AdminListResponse<AdminStoreProductResponse>>> GetStoreProductsAsync(
+        DbContext dbContext,
+        int? page,
+        int? pageSize,
+        string? sort,
+        string? q,
+        CancellationToken cancellationToken)
     {
-        var products = await (
-                from storeProduct in dbContext.Set<StoreProduct>()
-                join product in dbContext.Set<Product>() on storeProduct.ProductId equals product.Id
-                orderby storeProduct.SortOrder, storeProduct.Name
-                select new AdminStoreProductResponse(
-                    storeProduct.Id,
-                    product.Id,
-                    product.Variants.OrderBy(variant => variant.Position).First().Sku,
-                    storeProduct.Name,
-                    storeProduct.Slug,
-                    storeProduct.Description,
-                    storeProduct.Price,
-                    storeProduct.VatRate,
-                    storeProduct.IsVisible,
-                    storeProduct.SortOrder,
-                    storeProduct.Categories.Select(assignment => assignment.CategoryId).ToList(),
-                    storeProduct.SeoTitle,
-                    storeProduct.SeoDescription,
-                    storeProduct.SeoSocialImageUrl,
-                    storeProduct.SeoNoIndex))
+        var listed = AdminListQuery.Of(page, pageSize, sort, q);
+        var listings = dbContext.Set<StoreProduct>().AsNoTracking();
+
+        if (listed.Pattern is { } pattern)
+        {
+            listings = listings.Where(listing =>
+                EF.Functions.Like(listing.Name.ToLower(), pattern)
+                || EF.Functions.Like(listing.Slug.ToLower(), pattern)
+                || dbContext.Set<Product>()
+                    .Where(product => product.Id == listing.ProductId)
+                    .SelectMany(product => product.Variants)
+                    .Any(variant => variant.Sku != null && EF.Functions.Like(variant.Sku.ToLower(), pattern)));
+        }
+
+        listings = (listed.SortKey, listed.Descending) switch
+        {
+            ("name", false) => listings.OrderBy(listing => listing.Name).ThenBy(listing => listing.Id),
+            ("name", true) => listings.OrderByDescending(listing => listing.Name).ThenBy(listing => listing.Id),
+            ("price", false) => listings.OrderBy(listing => listing.Price).ThenBy(listing => listing.Id),
+            ("price", true) => listings.OrderByDescending(listing => listing.Price).ThenBy(listing => listing.Id),
+
+            // The shop's own order, which is what this screen is for arranging.
+            _ => listings.OrderBy(listing => listing.SortOrder).ThenBy(listing => listing.Name).ThenBy(listing => listing.Id),
+        };
+
+        var total = await listings.CountAsync(cancellationToken);
+        var wanted = await listings
+            .Skip(listed.Skipped)
+            .Take(listed.Taken)
+            .Join(dbContext.Set<Product>(), listing => listing.ProductId, product => product.Id, (listing, product) => new AdminStoreProductResponse(
+                listing.Id,
+                product.Id,
+                product.Variants.OrderBy(variant => variant.Position).First().Sku,
+                listing.Name,
+                listing.Slug,
+                listing.Description,
+                listing.Price,
+                listing.VatRate,
+                listing.IsVisible,
+                listing.SortOrder,
+                listing.Categories.Select(assignment => assignment.CategoryId).ToList(),
+                listing.SeoTitle,
+                listing.SeoDescription,
+                listing.SeoSocialImageUrl,
+                listing.SeoNoIndex))
             .ToListAsync(cancellationToken);
 
-        return TypedResults.Ok(products);
+        return TypedResults.Ok(new AdminListResponse<AdminStoreProductResponse>(wanted, total, listed.Page, listed.PageSize));
     }
 
     private static async Task<Results<Created<AdminStoreProductResponse>, ValidationProblem, ProblemHttpResult>> ListProductAsync(

@@ -134,8 +134,7 @@ public sealed class PageMetadataTests(ShopForgeApiFactory factory)
     private async Task DescribeListingAsync(FurnitureStore furniture, string slug, string? title, string? description, bool noIndex)
     {
         var storeProductId = furniture.Products[slug];
-        var listings = await furniture.Admin.GetFromJsonAsync<List<ListingView>>(
-            $"/api/admin/stores/{furniture.Store.StoreId}/products", CancellationToken);
+        var listings = await furniture.Admin.AdminListAsync<ListingView>($"/api/admin/stores/{furniture.Store.StoreId}/products", CancellationToken);
         var listing = listings!.Single(candidate => candidate.Id == storeProductId);
 
         using var saved = await furniture.Admin.PutAsJsonAsync(

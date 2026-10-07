@@ -331,8 +331,7 @@ public sealed class StockTests(ShopForgeApiFactory factory)
 
     private async Task<List<MovementView>> MovementsAsync(FurnitureStore furniture, string slug)
     {
-        var movements = await furniture.Admin.GetFromJsonAsync<List<MovementView>>(
-            $"/api/admin/stock/{furniture.VariantIds[slug]}/movements", CancellationToken);
+        var movements = await furniture.Admin.AdminListAsync<MovementView>($"/api/admin/stock/{furniture.VariantIds[slug]}/movements", CancellationToken);
 
         return movements!;
     }

@@ -22,8 +22,7 @@ public sealed class CheckoutTests(ShopForgeApiFactory factory)
         var answers = await Task.WhenAll(
             shopper.PostAsync("/api/storefront/checkout", Checkout.Request()),
             shopper.PostAsync("/api/storefront/checkout", Checkout.Request()));
-        var orders = await furniture.Admin.GetFromJsonAsync<List<PlacedOrderRow>>(
-            $"/api/admin/stores/{furniture.Store.StoreId}/orders", TestContext.Current.CancellationToken);
+        var orders = await furniture.Admin.AdminListAsync<PlacedOrderRow>($"/api/admin/stores/{furniture.Store.StoreId}/orders", TestContext.Current.CancellationToken);
 
         Assert.Equal([HttpStatusCode.Created, HttpStatusCode.Conflict], answers.Select(answer => answer.StatusCode).Order());
         Assert.Single(orders!);
@@ -169,10 +168,8 @@ public sealed class CheckoutTests(ShopForgeApiFactory factory)
         await AddToCartAsync(shopper, furniture.Products["oak-chair"], 3);
         var order = await PlaceOrderAsync(shopper);
 
-        var ownOrders = await furniture.Admin.GetFromJsonAsync<List<AdminOrder>>(
-            $"/api/admin/stores/{furniture.Store.StoreId}/orders", CancellationToken);
-        var otherStoreOrders = await furniture.Admin.GetFromJsonAsync<List<AdminOrder>>(
-            $"/api/admin/stores/{furniture.OtherStore.StoreId}/orders", CancellationToken);
+        var ownOrders = await furniture.Admin.AdminListAsync<AdminOrder>($"/api/admin/stores/{furniture.Store.StoreId}/orders", CancellationToken);
+        var otherStoreOrders = await furniture.Admin.AdminListAsync<AdminOrder>($"/api/admin/stores/{furniture.OtherStore.StoreId}/orders", CancellationToken);
         var detail = await furniture.Admin.GetFromJsonAsync<AdminOrderDetail>(
             $"/api/admin/stores/{furniture.Store.StoreId}/orders/{order.Number}", CancellationToken);
 
