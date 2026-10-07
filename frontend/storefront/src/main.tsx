@@ -8,6 +8,7 @@ import "./index.css";
 import "./styles/discovery.css";
 import "./styles/catalog.css";
 import "./styles/product.css";
+import "./styles/shopping.css";
 import App from "./App.tsx";
 
 async function render() {

@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { PaymentMethod, ShippingMethod } from "../../cart";
 import type { Store } from "../../store";
-import { formatPrice } from "../../storeContext";
+import { formatPrice, useStore } from "../../storeContext";
 
 export function ShippingMethodSelection({
   methods,
@@ -20,7 +20,7 @@ export function ShippingMethodSelection({
 
   return (
     <fieldset className="checkout-section checkout-methods">
-      <legend>{t("shipping")}</legend>
+      <legend id="checkout-shipping-heading" tabIndex={-1}>{t("shipping")}</legend>
       <div className="checkout-options">
         {methods.map((method) => (
           <label key={method.code} className="checkout-option">
@@ -34,7 +34,7 @@ export function ShippingMethodSelection({
               onChange={() => onChange(method.code)}
             />
             <span className="checkout-option-copy">
-              <span>{method.name}</span>
+              <span lang={store.culture}>{method.name}</span>
               <strong>{formatPrice(method.price, store)}</strong>
             </span>
           </label>
@@ -56,10 +56,11 @@ export function PaymentMethodSelection({
   onChange: (code: string) => void;
 }) {
   const { t } = useTranslation("checkout");
+  const store = useStore();
 
   return (
     <fieldset className="checkout-section checkout-methods">
-      <legend>{t("payment")}</legend>
+      <legend id="checkout-payment-heading" tabIndex={-1}>{t("payment")}</legend>
       <div className="checkout-options">
         {methods.map((method) => (
           <label key={method.code} className="checkout-option">
@@ -72,7 +73,7 @@ export function PaymentMethodSelection({
               required
               onChange={() => onChange(method.code)}
             />
-            <span>{method.name}</span>
+            <span lang={store.culture}>{method.name}</span>
           </label>
         ))}
       </div>

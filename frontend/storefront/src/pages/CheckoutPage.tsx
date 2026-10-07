@@ -21,6 +21,8 @@ import {
   type AddressDraft,
 } from "../components/checkout/address";
 import { CheckoutSummary } from "../components/checkout/CheckoutSummary";
+import { CheckoutReview } from "../components/checkout/CheckoutReview";
+import { ShoppingProgress } from "../components/ShoppingProgress";
 import {
   PaymentMethodSelection,
   ShippingMethodSelection,
@@ -134,6 +136,7 @@ export function CheckoutPage() {
   return (
     <CheckoutForm
       cart={cartState.cart}
+      cartPending={cartState.pending}
       methods={methods.data}
       methodsRequest={methods}
       customer={customerState.customer}
@@ -152,6 +155,7 @@ type CheckoutIssue = {
 
 function CheckoutForm({
   cart,
+  cartPending,
   methods,
   methodsRequest,
   customer,
@@ -161,6 +165,7 @@ function CheckoutForm({
   acknowledgeAdjustment,
 }: {
   cart: Cart;
+  cartPending: boolean;
   methods: CheckoutMethods;
   methodsRequest: Extract<
     RequestState<CheckoutMethods>,
@@ -210,9 +215,10 @@ function CheckoutForm({
     methods.shippingMethods.find((method) => method.code === shippingCode) ??
     methods.shippingMethods[0];
   const chosenShippingCode = chosenShipping.code;
-  const chosenPaymentCode =
-    methods.paymentMethods.find((method) => method.code === paymentCode)?.code ??
-    methods.paymentMethods[0].code;
+  const chosenPayment =
+    methods.paymentMethods.find((method) => method.code === paymentCode) ??
+    methods.paymentMethods[0];
+  const chosenPaymentCode = chosenPayment.code;
   // A method that delivers to the door says so itself, so neither branch has to ask twice.
   const fromOurList = chosenShipping.pickupPointChoice === "list";
   const inTheCarriersMap = chosenShipping.pickupPointChoice === "carrier-map";
@@ -222,6 +228,12 @@ function CheckoutForm({
       fromOurList ? getPickupPoints(chosenShipping.code, signal) : Promise.resolve([]),
   );
   const chosenPointCode = inTheCarriersMap ? (mapPoint?.id ?? "") : pickupPointCode;
+  const listedPoint = fromOurList && pickupPoints.status === "ready"
+    ? pickupPoints.data.find((point) => point.code === pickupPointCode)
+    : undefined;
+  const pickupLabel = inTheCarriersMap ? mapPoint?.label ?? null : listedPoint
+    ? `${listedPoint.name} — ${listedPoint.line1}, ${listedPoint.postalCode} ${listedPoint.city}, ${listedPoint.country}`
+    : null;
   // The carrier issued this key to be used in this page; without it its map cannot be opened at all.
   const carrierKey =
     store.providerKeys.find((published) => published.provider === "packeta")?.key ??
@@ -263,10 +275,14 @@ function CheckoutForm({
     changedSince(attempt, requestBody);
   const mustReview = reviewKind !== null || adjusted || changedAfterUncertain;
   const methodsRefreshing = methodsRequest.refreshing;
+  const pickupUnavailable = fromOurList && pickupPoints.status === "ready" &&
+    (pickupPoints.refreshing || pickupPoints.refreshError !== null);
   const canSubmit =
     issues.length === 0 &&
     !mustReview &&
     !pending &&
+    !cartPending &&
+    !pickupUnavailable &&
     !refreshingCart &&
     !methodsRefreshing &&
     methodsRequest.refreshError === null &&
@@ -307,7 +323,7 @@ function CheckoutForm({
       '[name="' + CSS.escape(target) + '"]',
     );
     field?.focus();
-    field?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    field?.scrollIntoView?.({ block: "center" });
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -324,6 +340,8 @@ function CheckoutForm({
       window.requestAnimationFrame(() => validationSummary.current?.focus());
       return;
     }
+
+    if (!canSubmit) return;
 
     submitLock.current = true;
     setFailed(null);
@@ -362,232 +380,243 @@ function CheckoutForm({
   }
 
   return (
-    <form
-      className="checkout"
-      noValidate
-      aria-busy={pending || undefined}
-      onSubmit={(event) => void submit(event)}
-    >
-      <div className="checkout-fields">
-        <h1>{t("checkout:title")}</h1>
-        {methodsRequest.refreshError !== null && (
-          <RequestError
-            error={methodsRequest.refreshError}
-            operation="read"
-            onRetry={methodsRequest.reload}
-          />
-        )}
-        {refreshFailure !== null && (
-          <RequestError
-            error={refreshFailure}
-            operation="read"
-            onRetry={() => void refreshAfterConflict()}
-          />
-        )}
-        {mustReview && (
-          <div
-            className="checkout-review"
-            ref={reviewNotice}
-            role="alert"
-            tabIndex={-1}
-          >
-            <InlineMessage title={t(reviewKind === "inFlight" ? "checkout:inFlightTitle" : reviewKind === "mismatch" ? "checkout:keyMismatchTitle" : changedAfterUncertain ? "checkout:uncertainChangedTitle" : "checkout:reviewTitle")}>
-              <p>{t(reviewKind === "inFlight" ? "checkout:inFlightBody" : reviewKind === "mismatch" ? "checkout:keyMismatchBody" : changedAfterUncertain ? "checkout:uncertainChangedBody" : "checkout:reviewBody")}</p>
-              <button
-                type="button"
-                disabled={refreshingCart || methodsRefreshing || methodsRequest.refreshError !== null || refreshFailure !== null}
-                onClick={reviewChanges}
-              >
-                {refreshingCart || methodsRefreshing
-                  ? t("checkout:refreshingOrder")
-                  : t(reviewKind === "inFlight" ? "checkout:retryReviewAction" : changedAfterUncertain || reviewKind === "mismatch" ? "checkout:newAttemptAction" : "checkout:reviewAction")}
-              </button>
-            </InlineMessage>
-          </div>
-        )}
-        {showValidation && issues.length > 0 && (
-          <div
-            className="checkout-validation"
-            ref={validationSummary}
-            role="alert"
-            tabIndex={-1}
-          >
-            <p>{t("checkout:validationSummary")}</p>
-            <ul>
-              {issues.map((issue) => (
-                <li key={issue.target}>
-                  <button
-                    type="button"
-                    className="link-button"
-                    onClick={() => focusTarget(issue.target)}
-                  >
-                    {issue.message}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {failed !== null && (
-          <>
-            <RequestError error={failed} operation="checkout" />
-            {!mustReview && (
-              <p className="hint">{t(uncertainWrite(failed) ? "checkout:sameRequestRetry" : "checkout:noAutomaticRetry")}</p>
-            )}
-          </>
-        )}
-
-        <section
-          className="checkout-section checkout-contact"
-          aria-labelledby="checkout-contact-heading"
-        >
-          <h2 id="checkout-contact-heading">{t("checkout:contact")}</h2>
-          <label>
-            <span>{t("auth:email")}</span>
-            <input
-              name="email"
-              type="email"
-              autoComplete="email"
-              value={customer?.email ?? email}
-              readOnly={customer !== null}
-              required
-              aria-invalid={
-                (showValidation &&
-                  !isEmail(customer?.email ?? email)) ||
-                undefined
-              }
-              onChange={(event) => setEmail(event.target.value)}
+    <section className="shopping-checkout-page" aria-labelledby="checkout-heading">
+      <ShoppingProgress current="checkout" />
+      <header className="shopping-page-heading">
+        <h1 id="checkout-heading">{t("checkout:title")}</h1>
+        <Link to="/cart">{t("checkout:backToCart")}</Link>
+      </header>
+      <form
+        className="checkout"
+        noValidate
+        aria-busy={pending || undefined}
+        onSubmit={(event) => void submit(event)}
+      >
+        <fieldset className="checkout-fields" disabled={pending || cartPending}>
+          <legend className="sr-only">{t("checkout:orderDetails")}</legend>
+          {methodsRequest.refreshError !== null && (
+            <RequestError
+              error={methodsRequest.refreshError}
+              operation="read"
+              onRetry={methodsRequest.reload}
             />
-          </label>
-          <label>
-            <span>{t("checkout:phone")}</span>
-            <input
-              name="phone"
-              type="tel"
-              autoComplete="tel"
-              value={phone}
-              required
-              aria-invalid={(showValidation && !isPhone(phone)) || undefined}
-              aria-describedby="checkout-phone-hint"
-              onChange={(event) => setPhone(event.target.value)}
-            />
-          </label>
-          <p className="hint" id="checkout-phone-hint">
-            {t("checkout:phoneHint")}
-          </p>
-          {customer === null && (
-            <p className="hint">
-              <Trans
-                ns="checkout"
-                i18nKey="guestPrompt"
-                components={{ signIn: <Link to="/account/sign-in?returnTo=%2Fcheckout" /> }}
-              />
-            </p>
           )}
-        </section>
+          {refreshFailure !== null && (
+            <RequestError
+              error={refreshFailure}
+              operation="read"
+              onRetry={() => void refreshAfterConflict()}
+            />
+          )}
+          {mustReview && (
+            <div
+              className="checkout-review"
+              ref={reviewNotice}
+              role="alert"
+              tabIndex={-1}
+            >
+              <InlineMessage title={t(reviewKind === "inFlight" ? "checkout:inFlightTitle" : reviewKind === "mismatch" ? "checkout:keyMismatchTitle" : changedAfterUncertain ? "checkout:uncertainChangedTitle" : "checkout:reviewTitle")}>
+                <p>{t(reviewKind === "inFlight" ? "checkout:inFlightBody" : reviewKind === "mismatch" ? "checkout:keyMismatchBody" : changedAfterUncertain ? "checkout:uncertainChangedBody" : "checkout:reviewBody")}</p>
+                <button
+                  type="button"
+                  disabled={refreshingCart || methodsRefreshing || methodsRequest.refreshError !== null || refreshFailure !== null}
+                  onClick={reviewChanges}
+                >
+                  {refreshingCart || methodsRefreshing
+                    ? t("checkout:refreshingOrder")
+                    : t(reviewKind === "inFlight" ? "checkout:retryReviewAction" : changedAfterUncertain || reviewKind === "mismatch" ? "checkout:newAttemptAction" : "checkout:reviewAction")}
+                </button>
+              </InlineMessage>
+            </div>
+          )}
+          {showValidation && issues.length > 0 && (
+            <div
+              className="checkout-validation"
+              ref={validationSummary}
+              role="alert"
+              tabIndex={-1}
+            >
+              <p>{t("checkout:validationSummary")}</p>
+              <ul>
+                {issues.map((issue) => (
+                  <li key={issue.target}>
+                    <button
+                      type="button"
+                      className="link-button"
+                      onClick={() => focusTarget(issue.target)}
+                    >
+                      {issue.message}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {failed !== null && (
+            <>
+              <RequestError error={failed} operation="checkout" />
+              {!mustReview && (
+                <p className="hint">{t(uncertainWrite(failed) ? "checkout:sameRequestRetry" : "checkout:noAutomaticRetry")}</p>
+              )}
+            </>
+          )}
 
-        <fieldset className="checkout-section">
-          <legend>{t("checkout:billingAddress")}</legend>
-          <AddressFields
-            prefix="billing"
-            value={billing}
-            onChange={setBilling}
-            showErrors={showValidation}
-          />
-        </fieldset>
+          <section
+            className="checkout-section checkout-contact"
+            aria-labelledby="checkout-contact-heading"
+          >
+            <h2 id="checkout-contact-heading" tabIndex={-1}>{t("checkout:contact")}</h2>
+            <label>
+              <span>{t("auth:email")}</span>
+              <input
+                name="email"
+                type="email"
+                autoComplete="email"
+                value={customer?.email ?? email}
+                readOnly={customer !== null}
+                required
+                aria-invalid={
+                  (showValidation &&
+                    !isEmail(customer?.email ?? email)) ||
+                  undefined
+                }
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>{t("checkout:phone")}</span>
+              <input
+                name="phone"
+                type="tel"
+                autoComplete="tel"
+                value={phone}
+                required
+                aria-invalid={(showValidation && !isPhone(phone)) || undefined}
+                aria-describedby="checkout-phone-hint"
+                onChange={(event) => setPhone(event.target.value)}
+              />
+            </label>
+            <p className="hint" id="checkout-phone-hint">
+              {t("checkout:phoneHint")}
+            </p>
+            {customer === null && (
+              <p className="hint">
+                <Trans
+                  ns="checkout"
+                  i18nKey="guestPrompt"
+                  components={{ signIn: <Link to="/account/sign-in?returnTo=%2Fcheckout" /> }}
+                />
+              </p>
+            )}
+          </section>
 
-        <label className="checkout-toggle">
-          <input
-            type="checkbox"
-            checked={shipElsewhere}
-            disabled={pending}
-            onChange={(event) => {
-              setShipElsewhere(event.target.checked);
-              setShowValidation(false);
-            }}
-          />
-          <span>{t("checkout:shipElsewhere")}</span>
-        </label>
-
-        {shipElsewhere && (
           <fieldset className="checkout-section">
-            <legend>{t("checkout:shippingAddress")}</legend>
+            <legend id="checkout-billing-heading" tabIndex={-1}>{t("checkout:billingAddress")}</legend>
             <AddressFields
-              prefix="shipping"
-              value={shippingAddress}
-              onChange={setShippingAddress}
+              prefix="billing"
+              value={billing}
+              onChange={setBilling}
               showErrors={showValidation}
             />
           </fieldset>
-        )}
 
-        <ShippingMethodSelection
-          methods={methods.shippingMethods}
-          selectedCode={chosenShippingCode}
+          <label className="checkout-toggle">
+            <input
+              type="checkbox"
+              checked={shipElsewhere}
+              disabled={pending}
+              onChange={(event) => {
+                setShipElsewhere(event.target.checked);
+                setShowValidation(false);
+              }}
+            />
+            <span>{t("checkout:shipElsewhere")}</span>
+          </label>
+
+          {shipElsewhere && (
+            <fieldset className="checkout-section">
+              <legend id="checkout-shipping-address-heading" tabIndex={-1}>{t("checkout:shippingAddress")}</legend>
+              <AddressFields
+                prefix="shipping"
+                value={shippingAddress}
+                onChange={setShippingAddress}
+                showErrors={showValidation}
+              />
+            </fieldset>
+          )}
+
+          <ShippingMethodSelection
+            methods={methods.shippingMethods}
+            selectedCode={chosenShippingCode}
+            store={store}
+            disabled={pending}
+            onChange={chooseShipping}
+          />
+
+          {fromOurList && (
+            <PickupPointSelect
+              points={pickupPoints}
+              value={pickupPointCode}
+              disabled={pending}
+              showError={showValidation}
+              onChange={setPickupPointCode}
+            />
+          )}
+
+          {inTheCarriersMap && (
+            <CarrierMapPicker
+              key={chosenShippingCode}
+              apiKey={carrierKey}
+              language={store.culture.split("-")[0]}
+              chosen={mapPoint}
+              disabled={pending}
+              showError={showValidation}
+              onChoose={setMapPoint}
+            />
+          )}
+
+          <PaymentMethodSelection
+            methods={methods.paymentMethods}
+            selectedCode={chosenPaymentCode}
+            disabled={pending}
+            onChange={setPaymentCode}
+          />
+          <CheckoutReview request={requestBody} shippingName={chosenShipping.name} paymentName={chosenPayment.name}
+            complete={issues.length === 0}
+            pickupLabel={pickupLabel} />
+        </fieldset>
+
+        <CheckoutSummary
+          cart={cart}
+          shipping={chosenShipping}
           store={store}
-          disabled={pending}
-          onChange={chooseShipping}
-        />
-
-        {fromOurList && (
-          <PickupPointSelect
-            points={pickupPoints}
-            value={pickupPointCode}
-            disabled={pending}
-            showError={showValidation}
-            onChange={setPickupPointCode}
-          />
-        )}
-
-        {inTheCarriersMap && (
-          <CarrierMapPicker
-            apiKey={carrierKey}
-            language={store.culture.split("-")[0]}
-            chosen={mapPoint}
-            disabled={pending}
-            showError={showValidation}
-            onChoose={setMapPoint}
-          />
-        )}
-
-        <PaymentMethodSelection
-          methods={methods.paymentMethods}
-          selectedCode={chosenPaymentCode}
-          disabled={pending}
-          onChange={setPaymentCode}
-        />
-      </div>
-
-      <CheckoutSummary
-        cart={cart}
-        shipping={chosenShipping}
-        store={store}
-        pending={pending}
-      />
-
-      <div className="checkout-actions">
-        <button
-          type="submit"
-          className="button checkout-submit"
-          disabled={pending || refreshingCart || methodsRefreshing}
-          aria-disabled={!canSubmit || undefined}
-          aria-describedby={
-            !canSubmit && !pending && !mustReview
-              ? "checkout-submit-hint"
-              : undefined
-          }
+          pending={pending}
         >
-          {pending
-            ? t("checkout:placingOrder")
-            : t("checkout:placeOrder")}
-        </button>
-        {!canSubmit && !pending && !mustReview && (
-          <p id="checkout-submit-hint" className="hint">
-            {t("checkout:completeOrder")}
-          </p>
-        )}
-      </div>
-    </form>
+          <div className="checkout-actions">
+            <button
+              type="submit"
+              className="button checkout-submit"
+              disabled={pending || cartPending || refreshingCart || methodsRefreshing || (fromOurList && pickupPoints.status === "ready" && pickupPoints.refreshing)}
+              aria-disabled={!canSubmit || undefined}
+              aria-describedby={
+                !canSubmit && !pending && !mustReview
+                  ? "checkout-submit-hint"
+                  : undefined
+              }
+            >
+              {pending
+                ? t("checkout:placingOrder")
+                : t("checkout:placeOrder")}
+            </button>
+            {!canSubmit && !pending && !mustReview && (
+              <p id="checkout-submit-hint" className="hint">
+                {t(cartPending ? "cart:updatingCart" : "checkout:completeOrder")}
+              </p>
+            )}
+          </div>
+        </CheckoutSummary>
+      </form>
+    </section>
   );
 }
 

@@ -9,6 +9,7 @@ import { CartSummary } from "../components/cart/CartSummary";
 import { DiscountField } from "../components/DiscountField";
 import { LoadingState } from "../components/ui/LoadingState";
 import { RequestError } from "../components/ui/RequestError";
+import { ShoppingProgress } from "../components/ShoppingProgress";
 
 export function CartPage() {
   const { t } = useTranslation(["cart", "catalog", "navigation"]);
@@ -60,7 +61,11 @@ export function CartPage() {
 
   return (
     <section className="cart" aria-labelledby="cart-heading">
-      <h1 id="cart-heading">{t("navigation:cart")}</h1>
+      <ShoppingProgress current="cart" />
+      <header className="shopping-page-heading">
+        <h1 id="cart-heading">{t("navigation:cart")}</h1>
+        <Link to="/">{t("cart:continueShopping")}</Link>
+      </header>
       <p className="sr-only" aria-live="polite" aria-atomic="true">
         {announcement}
       </p>
@@ -101,7 +106,7 @@ export function CartPage() {
       ) : (
         <div className="cart-layout">
           <div className="cart-items">
-            <ul className="cart-lines">
+            <ul className="cart-lines" aria-label={t("cart:items")}>
               {cart.items.map((line, index) => (
                 <CartLine
                   key={cartLineKey(line)}

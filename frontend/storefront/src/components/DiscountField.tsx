@@ -1,77 +1,72 @@
-import { useState, type FormEvent } from "react";
+import { useId, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { applyDiscount, removeDiscount } from "../cart";
 import { useCart } from "../cartContext";
-import { formatPrice, useStore } from "../storeContext";
+import { useStore } from "../storeContext";
 
 export function DiscountField() {
   const { t } = useTranslation("cart");
   const store = useStore();
   const { cart, mutate, pending } = useCart();
-  const [problem, setProblem] = useState(false);
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setProblem(false);
-    const form = new FormData(event.currentTarget);
-    const result = await mutate(() =>
-      applyDiscount(String(form.get("code")).trim()),
-    );
-    setProblem(result === null);
+  const [code, setCode] = useState("");
+  const [problem, setProblem] = useState<"apply" | "remove" | null>(null);
+  const [announcement, setAnnouncement] = useState("");
+  const [action, setAction] = useState<"apply" | "remove" | null>(null);
+  const locked = useRef(false);
+  const status = useId();
+  const busy = pending || action !== null;
+
+  async function change(kind: "apply" | "remove") {
+    if (locked.current || pending) return;
+    if (kind === "apply" && !code.trim()) { setProblem("apply"); return; }
+    locked.current = true;
+    setProblem(null);
+    setAnnouncement("");
+    setAction(kind);
+    try {
+      const result = await mutate(kind === "apply" ? () => applyDiscount(code.trim()) : removeDiscount);
+      setProblem(result === null ? kind : null);
+      if (result) {
+        setCode("");
+        setAnnouncement(kind === "remove" ? t("discountRemoved") : result.discount ? t("discountApplied", { code: result.discount.code }) : "");
+      }
+    } finally {
+      locked.current = false;
+      setAction(null);
+    }
   }
-  async function remove() {
-    setProblem(false);
-    const result = await mutate(removeDiscount);
-    setProblem(result === null);
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void change("apply");
   }
   if (!cart) return null;
-  if (cart.discount)
-    return (
-      <p className="discount applied">
-        <span>
-          {cart.discount.name} (<strong>{cart.discount.code}</strong>) −
-          {formatPrice(cart.discount.amount, store)}
-        </span>
-        <button
-          type="button"
-          className="link-button"
-          disabled={pending}
-          onClick={() => void remove()}
-        >
-          {t("discountRemove")}
-        </button>
-        {problem && <span className="error">{t("discountFailed")}</span>}
-      </p>
-    );
-  const failed = problem || Boolean(cart.discountProblem);
+  const failed = problem !== null || Boolean(cart.discountProblem);
   return (
-    <form
-      onSubmit={(event) => void submit(event)}
-      className="discount"
-      aria-busy={pending}
-    >
-      <label>
-        <span className="visually-hidden">{t("discountCode")}</span>
-        <input
-          name="code"
-          placeholder={t("discountCode")}
-          autoComplete="off"
-          required
-        />
-      </label>
-      <button type="submit" disabled={pending}>
-        {t("discountApply")}
-      </button>
-      {failed && <span className="error">{t("discountFailed")}</span>}
-      {cart.discountProblem && !problem && (
-        <button
-          type="button"
-          className="link-button"
-          disabled={pending}
-          onClick={() => void remove()}
-        >
-          {t("discountRemove")}
-        </button>
+    <section className="cart-discount" aria-label={t("discountCode")}>
+      {cart.discount ? (
+        <div className="discount applied">
+          <div><span>{t("codeApplied")}</span><strong><bdi lang={store.culture}>{cart.discount.code}</bdi></strong></div>
+          <button type="button" className="link-button" disabled={busy} onClick={() => void change("remove")}>
+            {action === "remove" ? t("removing") : t("discountRemove")}
+          </button>
+        </div>
+      ) : (
+        <form onSubmit={submit} className="discount" aria-busy={busy || undefined} noValidate>
+          <label>
+            <span>{t("discountCode")}</span>
+            <input name="code" value={code} autoComplete="off" required readOnly={busy}
+              aria-invalid={failed || undefined} aria-describedby={status}
+              onChange={(event) => { setCode(event.target.value); setProblem(null); setAnnouncement(""); }} />
+          </label>
+          <button type="submit" disabled={busy}>{action === "apply" ? t("discountApplying") : t("discountApply")}</button>
+          {cart.discountProblem && <button type="button" className="link-button" disabled={busy} onClick={() => void change("remove")}>{t("discountRemove")}</button>}
+        </form>
       )}
-    </form>
+      <div id={status} className="discount-status" aria-live="polite" aria-atomic="true">
+        {failed && <p className="error">{t(problem === "remove" ? "discountRemoveFailed" : "discountFailed")}</p>}
+        {announcement && <span className="sr-only">{announcement}</span>}
+      </div>
+    </section>
   );
 }

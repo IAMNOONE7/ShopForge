@@ -113,7 +113,8 @@ export function CartLine({
           src={line.imageUrl}
           alt=""
           width="96"
-          height="72"
+          height="96"
+          loading="lazy"
           className="cart-thumbnail"
           onError={() => setImageFailed(true)}
         />

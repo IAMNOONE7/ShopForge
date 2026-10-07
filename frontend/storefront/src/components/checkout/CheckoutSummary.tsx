@@ -1,70 +1,40 @@
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { cartLineKey, cartLineName, type Cart, type ShippingMethod } from "../../cart";
+import { Link } from "react-router";
+import { cartLineKey, type Cart } from "../../cart";
+import type { ShippingMethod } from "../../cart";
 import type { Store } from "../../store";
 import { formatPrice } from "../../storeContext";
+import { productPath } from "../../publicPages";
+import { CartTotals } from "../cart/CartTotals";
 
-export function CheckoutSummary({
-  cart,
-  shipping,
-  store,
-  pending,
-}: {
+export function CheckoutSummary({ cart, shipping, store, pending, children }: {
   cart: Cart;
   shipping: ShippingMethod;
   store: Store;
   pending: boolean;
+  children: ReactNode;
 }) {
   const { t } = useTranslation(["checkout", "cart"]);
-  const total = cart.itemsTotal + shipping.price;
-
-  const breakdown = (
-    <ul className="checkout-breakdown">
-      {cart.items.map((line) => (
-        <li key={cartLineKey(line)}>
-          <span>
-            {line.quantity} × <span lang={store.culture}>{cartLineName(line)}</span>
-          </span>
-          <span>{formatPrice(line.lineTotal, store)}</span>
-        </li>
-      ))}
-      {cart.discount && (
-        <li className="checkout-discount">
-          <span>{cart.discount.name}</span>
-          <span>−{formatPrice(cart.discount.amount, store)}</span>
-        </li>
-      )}
-      <li>
-        <span>{shipping.name}</span>
-        <span>{formatPrice(shipping.price, store)}</span>
-      </li>
-    </ul>
-  );
-
   return (
-    <aside
-      className="checkout-summary"
-      aria-labelledby="checkout-summary-heading"
-      aria-busy={pending || undefined}
-    >
+    <aside className="checkout-summary" aria-labelledby="checkout-summary-heading" aria-busy={pending || undefined}>
       <h2 id="checkout-summary-heading">{t("checkout:yourOrder")}</h2>
-      <div className="checkout-items-desktop">{breakdown}</div>
-      <details className="checkout-items-mobile">
-        <summary>
-          <span>{t("cart:itemCount", { count: cart.count })}</span>
-          <span>{t("checkout:viewItems")}</span>
-        </summary>
-        {breakdown}
-      </details>
-      <div className="checkout-total">
-        <span>{t("cart:total")}</span>
-        <strong>{formatPrice(total, store)}</strong>
-      </div>
-      <p className="hint">{t("checkout:pricesIncludeVat")}</p>
-      {pending && (
-        <p className="checkout-submitting" role="status">
-          {t("checkout:placingOrder")}
-        </p>
-      )}
+      <ul className="checkout-breakdown" aria-label={t("cart:items")}>
+        {cart.items.map((line) => (
+          <li key={cartLineKey(line)}>
+            <div>
+              <Link to={productPath(line.slug)} lang={store.culture}>{line.name}</Link>
+              {line.optionValues.length > 0 && <bdi className="checkout-line-options" lang={store.culture}>{line.optionValues.join(" / ")}</bdi>}
+              <span className="hint">{t("cart:quantityLabel")}: {line.quantity}</span>
+            </div>
+            <span>{formatPrice(line.lineTotal, store)}</span>
+          </li>
+        ))}
+      </ul>
+      <Link className="checkout-edit-cart" to="/cart">{t("checkout:editCart")}</Link>
+      <CartTotals cart={cart} shipping={shipping} />
+      {pending && <p className="checkout-submitting" role="status">{t("checkout:placingOrder")}</p>}
+      {children}
     </aside>
   );
 }

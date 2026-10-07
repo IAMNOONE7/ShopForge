@@ -35,7 +35,7 @@ export function RequestError({
   function focusField(name: string) {
     const field = findField(name);
     field?.focus();
-    field?.scrollIntoView({ block: "center", behavior: "smooth" });
+    field?.scrollIntoView({ block: "center" });
   }
 
   async function copyReference() {

@@ -47,7 +47,10 @@ export function CarrierMapPicker({
   const [unavailable, setUnavailable] = useState(false);
   const alive = useRef(true);
 
-  useEffect(() => () => void (alive.current = false), []);
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
 
   if (apiKey === null) {
     return (
@@ -59,11 +62,13 @@ export function CarrierMapPicker({
   }
 
   async function open() {
+    if (disabled || opening) return;
     setOpening(true);
     setUnavailable(false);
 
     try {
       const packeta = await library_();
+      if (!alive.current) return;
       packeta.Widget.pick(
         apiKey!,
         (point) => {
@@ -89,7 +94,7 @@ export function CarrierMapPicker({
       <h3>{t("pickupPoint")}</h3>
       {chosen !== null && <p className="checkout-chosen-point">{chosen.label}</p>}
       <p className="inline-form">
-        <button type="button" disabled={disabled || opening} onClick={() => void open()}>
+        <button type="button" name="pickupPointCode" disabled={disabled || opening} onClick={() => void open()}>
           {opening
             ? t("openingCarrierMap")
             : chosen === null

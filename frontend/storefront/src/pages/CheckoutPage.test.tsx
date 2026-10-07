@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   afterAll,
@@ -138,11 +138,12 @@ function Contexts({
 }) {
   const [currentCart, setCurrentCart] = useState(cart);
   const [adjusted, setAdjusted] = useState(false);
+  const [busy, setBusy] = useState(false);
   const cartValue: CartState = {
     status: "ready",
     cart: currentCart,
     error: null,
-    pending: false,
+    pending: busy,
     adjusted,
     acknowledgeAdjustment: () => setAdjusted(false),
     apply: setCurrentCart,
@@ -160,7 +161,10 @@ function Contexts({
   return (
     <StoreContext value={store}>
       <CustomerContext value={customerValue}>
-        <CartContext value={cartValue}>{children}</CartContext>
+        <CartContext value={cartValue}>
+          <button onClick={() => setBusy(true)}>Simulate cart update</button>
+          {children}
+        </CartContext>
       </CustomerContext>
     </StoreContext>
   );
@@ -190,6 +194,61 @@ async function fillGuestAddress(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("CheckoutPage", () => {
+  it("reviews the submitted contact and separate delivery address with exact method and edit destinations", async () => {
+    const user = userEvent.setup();
+    mocks.getCheckoutMethods.mockResolvedValue(methods);
+    renderCheckout();
+    await screen.findByRole("heading", { name: "Checkout" });
+    await fillGuestAddress(user);
+    await user.click(screen.getByRole("checkbox", { name: "Ship to a different address" }));
+    const shipping = screen.getByRole("group", { name: "Shipping address" });
+    for (const [name, value] of [["Full name", "Delivery Buyer"], ["Street and number", "2 New Road"], ["City", "Cork"], ["Postal code", "C01"], ["Country", "IE"]]) {
+      await user.type(within(shipping).getByRole("textbox", { name: new RegExp("^" + name) }), value);
+    }
+    const review = screen.getByRole("region", { name: "Check your details" });
+    expect(within(review).getByText("guest@example.com")).toBeTruthy();
+    expect(within(review).getByText("Delivery Buyer")).toBeTruthy();
+    expect(within(review).getByText(/2 New Road/)).toBeTruthy();
+    expect(within(review).queryByText("1 Main Street")).toBeNull();
+    expect(within(review).getByRole("link", { name: "Edit address" }).getAttribute("href")).toBe("#checkout-shipping-address-heading");
+    expect(within(review).getByRole("link", { name: "Edit contact" }).getAttribute("href")).toBe("#checkout-contact-heading");
+    expect(screen.getByText("Estimated total")).toBeTruthy();
+    expect(document.querySelector(".checkout-total strong")?.textContent).toBe("€130.00");
+    expect(document.querySelector(".shopping-progress [aria-current=step]")?.textContent).toContain("Checkout");
+    expect(mocks.placeOrder).not.toHaveBeenCalled();
+  });
+
+  it("keeps checkout inactive while a cart write is unresolved", async () => {
+    const user = userEvent.setup();
+    mocks.getCheckoutMethods.mockResolvedValue(methods);
+    renderCheckout();
+    const submit = await screen.findByRole("button", { name: "Place order" });
+    await fillGuestAddress(user);
+    await user.click(screen.getByRole("button", { name: "Simulate cart update" }));
+    expect(submit).toHaveProperty("disabled", true);
+    expect(screen.getByRole("textbox", { name: "E-mail" }).matches(":disabled")).toBe(true);
+    expect(screen.getByText("Updating cart…")).toBeTruthy();
+    fireEvent.submit(document.querySelector("form.checkout")!);
+    expect(mocks.placeOrder).not.toHaveBeenCalled();
+  });
+
+  it("requires a successful method refresh after a conflict even when a form submission is forced", async () => {
+    const user = userEvent.setup();
+    mocks.getCheckoutMethods.mockResolvedValueOnce(methods).mockRejectedValue(new HttpError("network", null));
+    mocks.getCart.mockResolvedValue(cart);
+    mocks.placeOrder.mockRejectedValue(new HttpError("http", 409));
+    renderCheckout();
+    await screen.findByRole("heading", { name: "Checkout" });
+    await fillGuestAddress(user);
+    await user.click(screen.getByRole("button", { name: "Place order" }));
+    const review = await screen.findByRole("button", { name: "I reviewed these changes" });
+    await waitFor(() => expect(mocks.getCheckoutMethods).toHaveBeenCalledTimes(2));
+    expect(review).toHaveProperty("disabled", true);
+    fireEvent.submit(document.querySelector("form.checkout")!);
+    expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("textbox", { name: "E-mail" })).toHaveProperty("value", "guest@example.com");
+  });
+
   it("replays an unchanged checkout after a lost response with the same key and body", async () => {
     const user = userEvent.setup();
     mocks.getCheckoutMethods.mockResolvedValue(methods);
@@ -280,6 +339,8 @@ describe("CheckoutPage", () => {
     await user.click(submit);
     submit.click();
     expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("textbox", { name: "E-mail" }).matches(":disabled")).toBe(true);
+    expect(screen.getByRole("textbox", { name: "Street and number" }).matches(":disabled")).toBe(true);
 
     request.reject(new HttpError("http", 503));
     expect(
@@ -545,7 +606,7 @@ describe("CheckoutPage", () => {
       await fillGuestAddress(user);
       await user.click(screen.getByRole("radio", { name: /Z-BOX/ }));
       await user.click(screen.getByRole("button", { name: "Choose a pickup point" }));
-      expect(screen.getByText("Z-BOX Hlavní nádraží")).toBeTruthy();
+      expect(within(screen.getByRole("region", { name: "Check your details" })).getByText("Z-BOX Hlavní nádraží")).toBeTruthy();
 
       await user.click(screen.getByRole("radio", { name: /Home delivery/ }));
       expect(screen.queryByRole("button", { name: /pickup point/ })).toBeNull();
