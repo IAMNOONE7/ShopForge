@@ -37,6 +37,24 @@ internal sealed class FakeComgate : IComgatePayments
         return Task.FromResult(new ComgateCreated($"trans-{Guid.NewGuid():N}", $"https://pay.comgate.test/{payment.ReferenceId}/{Created}"));
     }
 
+    // What was asked to be given back, in the order it was asked, so a test can say "once, and this much".
+    public List<(string TransactionId, long Amount, string Currency)> Refunded { get; } = [];
+
+    public Task RefundAsync(
+        ComgateMerchant merchant, string transactionId, long amountInMinorUnits, string currency, CancellationToken cancellationToken)
+    {
+        LastMerchant = merchant;
+
+        if (Fails)
+        {
+            return Task.FromException(new HttpRequestException("Comgate is unreachable."));
+        }
+
+        Refunded.Add((transactionId, amountInMinorUnits, currency));
+
+        return Task.CompletedTask;
+    }
+
     public Task<ComgateTransaction?> FindAsync(ComgateMerchant merchant, string transactionId, CancellationToken cancellationToken)
     {
         AskedAbout = true;

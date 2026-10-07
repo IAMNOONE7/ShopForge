@@ -17,6 +17,10 @@ internal interface IComgatePayments
     // What Comgate says the transaction is now. A push tells us to look; this is the looking, and it is the
     // only answer believed (D-141).
     Task<ComgateTransaction?> FindAsync(ComgateMerchant merchant, string transactionId, CancellationToken cancellationToken);
+
+    // Giving money back. Comgate refuses more than the transaction holds, so a refusal is a refusal and is
+    // left to travel as one — the shop has already written down what it owes (D-177).
+    Task RefundAsync(ComgateMerchant merchant, string transactionId, long amountInMinorUnits, string currency, CancellationToken cancellationToken);
 }
 
 // Who the payment is taken for. The secret is read from the store's secret store at the moment of the call and
@@ -108,6 +112,27 @@ internal sealed class ComgateHttpPayments(HttpClient client) : IComgatePayments
             : null;
     }
 
+    public async Task RefundAsync(
+        ComgateMerchant merchant,
+        string transactionId,
+        long amountInMinorUnits,
+        string currency,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "v2.0/refund.json")
+        {
+            Content = JsonContent.Create(new RefundRequest_(transactionId, amountInMinorUnits, currency)),
+        };
+
+        request.Headers.Authorization = Basic(merchant);
+
+        using var response = await client.SendAsync(request, cancellationToken);
+
+        // Nothing is read from the answer: a refund either happened or the call failed, and a failed call must
+        // reach the caller rather than be turned into a quiet success.
+        response.EnsureSuccessStatusCode();
+    }
+
     private static AuthenticationHeaderValue Basic(ComgateMerchant merchant) => new(
         "Basic",
         Convert.ToBase64String(Encoding.UTF8.GetBytes($"{merchant.MerchantId}:{merchant.Secret}")));
@@ -119,6 +144,11 @@ internal sealed class ComgateHttpPayments(HttpClient client) : IComgatePayments
         [property: JsonPropertyName("curr")] string? Currency,
         [property: JsonPropertyName("refId")] string? ReferenceId,
         [property: JsonPropertyName("test")] bool Test);
+
+    private sealed record RefundRequest_(
+        [property: JsonPropertyName("transId")] string TransactionId,
+        [property: JsonPropertyName("amount")] long Amount,
+        [property: JsonPropertyName("curr")] string Currency);
 
     private sealed record CreateRequest(
         [property: JsonPropertyName("price")] long Price,
