@@ -85,7 +85,9 @@ internal static class StorefrontCatalogEndpoints
         var pageNumber = Math.Max(page ?? 1, 1);
         var size = Math.Clamp(pageSize ?? 24, 1, MaxPageSize);
         var settings = await storeSettings.GetAsync(cancellationToken);
-        var page_ = PageMetadata.For(settings.Seo, settings.Name, PageSeoOverrides.None);
+        var listUrl = settings.Address?.Home;
+        var pageName = settings.Name;
+        var overrides = PageSeoOverrides.None;
         string? pageText = null;
         List<Guid> categoryIds = [];
         List<StorefrontCategoryResponse> path = [];
@@ -110,11 +112,13 @@ internal static class StorefrontCatalogEndpoints
             // The page sells what this category sells and what everything beneath it sells, each thing once
             // (D-146). Counts, facets, sorting and paging all read this same set.
             categoryIds = [.. categories.Shape.AndBeneath(chosen.Id)];
+            listUrl = settings.Address?.Category(chosen.Slug);
             path = [.. categories.PathTo(chosen.Id).Select(row => new StorefrontCategoryResponse(row.Name, row.Slug, null, []))];
             children = [.. categories.ChildrenOf(chosen.Id).Select(row => new StorefrontCategoryResponse(row.Name, row.Slug, chosen.Slug, []))];
 
             // A category has no image of its own, so a link shared from one shows whatever the shop offers.
-            page_ = PageMetadata.For(settings.Seo, chosen.Name, new PageSeoOverrides(chosen.SeoTitle, chosen.SeoDescription, null, NoIndex: false));
+            pageName = chosen.Name;
+            overrides = new PageSeoOverrides(chosen.SeoTitle, chosen.SeoDescription, null, NoIndex: false);
         }
 
         var definitions = await dbContext.Set<AttributeDefinition>().AsNoTracking().Include(definition => definition.Options).ToListAsync(cancellationToken);
@@ -142,6 +146,15 @@ internal static class StorefrontCatalogEndpoints
         {
             return errors.ToProblem();
         }
+
+        // Whether this is the list itself or one view of it. A sort that nobody asked for is the shop's own
+        // order, which is the list as it stands rather than a reordering of it.
+        var narrowedOrReordered = filters.Count > 0 || productSort!.Key != "default";
+        var page_ = PageMetadata.For(
+            settings.Seo,
+            pageName,
+            overrides,
+            listUrl is null ? null : PagedPages.Canonical(listUrl, pageNumber, narrowedOrReordered));
 
         var query = new ProductQuery(dbContext, categoryIds, filters);
         var products = query.Products();
@@ -202,7 +215,9 @@ internal static class StorefrontCatalogEndpoints
             pageText,
             path,
             children,
-            CategoryLinkedData(settings, path)));
+            CategoryLinkedData(settings, path),
+            listUrl is null ? null : PagedPages.Previous(listUrl, pageNumber, narrowedOrReordered),
+            listUrl is null ? null : PagedPages.Next(listUrl, pageNumber, size, totalCount, narrowedOrReordered)));
     }
 
     private static async Task<Results<Ok<ProductDetailResponse>, RedirectHttpResult, NotFound>> GetProductAsync(
@@ -254,7 +269,10 @@ internal static class StorefrontCatalogEndpoints
         var seo = PageMetadata.For(
             settings.Seo,
             storeProduct.Name,
-            new PageSeoOverrides(storeProduct.SeoTitle, storeProduct.SeoDescription, storeProduct.SeoSocialImageUrl, storeProduct.SeoNoIndex));
+            new PageSeoOverrides(storeProduct.SeoTitle, storeProduct.SeoDescription, storeProduct.SeoSocialImageUrl, storeProduct.SeoNoIndex),
+
+            // One address, whichever category a shopper came through and whatever a crawler found a link on.
+            settings.Address?.Product(storeProduct.Slug));
         var images = product.Images.OrderBy(image => image.Position).Select(image => ImageUrl(storeProduct.Id, image.Id)!).ToList();
 
         return TypedResults.Ok(new ProductDetailResponse(
@@ -564,7 +582,10 @@ internal sealed record ProductPageResponse(
     string? PageText,
     List<StorefrontCategoryResponse> Path,
     List<StorefrontCategoryResponse> Children,
-    List<object> JsonLd);
+    List<object> JsonLd,
+    // How a reader walks the list, and nothing on a view of it that canonicalises away (D-174).
+    string? PreviousPage,
+    string? NextPage);
 
 internal sealed record ProductSummaryResponse(
     Guid Id,

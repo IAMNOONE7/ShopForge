@@ -58,8 +58,13 @@ internal static class SitemapEndpoints
             "Disallow: /checkout",
             "Disallow: /account",
             "Disallow: /order/",
+            // Both positions of each, because a robots pattern is matched against the address as written: a
+            // rule naming "?f." never matches "?page=2&f.material=oak", and a filter is as crawlable in the
+            // second query parameter as in the first (D-174).
             "Disallow: /*?f.",
+            "Disallow: /*&f.",
             "Disallow: /*?sort=",
+            "Disallow: /*&sort=",
             string.Empty,
             $"Sitemap: https://{address.Host}/api/storefront/sitemap.xml",
         };
