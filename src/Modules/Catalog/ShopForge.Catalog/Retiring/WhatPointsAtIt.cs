@@ -56,6 +56,45 @@ internal sealed class WhatPointsAtIt(DbContext dbContext, ISoldListings sold)
         return null;
     }
 
+    // A measurement is held by the listings that have one and by the categories that offer it as a filter.
+    // The count is in the message: "fourteen listings have a width" tells a merchant what clearing it costs,
+    // where "it is in use" tells them nothing (D-181).
+    public async Task<string?> HoldingAnAttributeAsync(Guid attributeId, CancellationToken cancellationToken)
+    {
+        var listings = await dbContext.Set<ProductAttributeValue>()
+            .Where(value => value.AttributeDefinitionId == attributeId)
+            .Select(value => value.StoreProductId)
+            .Distinct()
+            .CountAsync(cancellationToken);
+
+        if (listings > 0)
+        {
+            return $"{listings} listing{(listings == 1 ? "" : "s")} {(listings == 1 ? "has" : "have")} a value for it";
+        }
+
+        var categories = await dbContext.Set<CategoryAttribute>()
+            .CountAsync(assignment => assignment.AttributeDefinitionId == attributeId, cancellationToken);
+
+        return categories > 0
+            ? $"{categories} categor{(categories == 1 ? "y" : "ies")} offer{(categories == 1 ? "s" : "")} it as a filter"
+            : null;
+    }
+
+    // An option is held only by what has been chosen: a value naming it. Take the option away and a listing
+    // would point at nothing.
+    public async Task<string?> HoldingAnOptionAsync(Guid optionId, CancellationToken cancellationToken)
+    {
+        var listings = await dbContext.Set<ProductAttributeValue>()
+            .Where(value => value.OptionId == optionId)
+            .Select(value => value.StoreProductId)
+            .Distinct()
+            .CountAsync(cancellationToken);
+
+        return listings > 0
+            ? $"{listings} listing{(listings == 1 ? "" : "s")} {(listings == 1 ? "is" : "are")} set to it"
+            : null;
+    }
+
     public async Task<string?> HoldingAProductAsync(Guid productId, CancellationToken cancellationToken)
     {
         if (await dbContext.Set<StoreProduct>().IgnoreQueryFilters().AnyAsync(

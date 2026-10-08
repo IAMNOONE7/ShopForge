@@ -27,6 +27,10 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
         ("PUT", "categories/{category}/attributes", """{"attributeIds":[]}"""),
         ("PUT", "feeds/{feed}/categories/{category}", """{"engineCategory":"Taken"}"""),
         ("PUT", "attributes/{attribute}", """{"name":"Taken","isFilterable":true,"isVisibleOnProductPage":true,"unit":null,"sortOrder":0}"""),
+        ("PUT", "attributes/{attribute}/options", """{"optionIds":[]}"""),
+        ("PUT", "attributes/{attribute}/options/{option}", """{"name":"Taken"}"""),
+        ("DELETE", "attributes/{attribute}/options/{option}", null),
+        ("DELETE", "attributes/{attribute}", null),
         ("POST", "attributes/{attribute}/options", """{"name":"Taken"}"""),
         ("POST", "reviews/{review}/publish", null),
         ("POST", "reviews/{review}/reject", null),
@@ -292,7 +296,7 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
         var stranger = await FurnitureStore.CreateAsync(factory);
         var storeId = furniture.Store.StoreId;
 
-        var attributes = await furniture.Admin.GetFromJsonAsync<List<Named>>(
+        var attributes = await furniture.Admin.GetFromJsonAsync<List<AttributeWithOptions>>(
             $"/api/admin/stores/{storeId}/attributes", CancellationToken);
         var domains = await furniture.Admin.GetFromJsonAsync<List<Named>>(
             $"/api/admin/stores/{storeId}/domains", CancellationToken);
@@ -308,7 +312,7 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
             furniture.Products["oak-chair"],
             furniture.ProductIds["oak-chair"],
             furniture.ChairsCategoryId,
-            attributes![0].Id,
+            WithOptions(attributes!).Id,
             reviewId,
             returnId,
             orderNumber,
@@ -318,7 +322,8 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
             domains!.Single().Id,
             await UserIdAsync(furniture),
             await InvitationIdAsync(furniture),
-            await ContentPageIdAsync(furniture));
+            await ContentPageIdAsync(furniture),
+            WithOptions(attributes!).Options[0].Id);
     }
 
     private async Task<(string Order, Guid Review, Guid Return)> PurchaseAsync(FurnitureStore furniture, StorefrontApi buyer)
@@ -411,6 +416,10 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
         return (await invited.Content.ReadFromJsonAsync<Named>(CancellationToken))!.Id;
     }
 
+    // The swept attribute has to be one with options, because two of the routes name one of them.
+    private static AttributeWithOptions WithOptions(List<AttributeWithOptions> attributes) =>
+        attributes.First(attribute => attribute.Options.Count > 0);
+
     private async Task<Guid> ContentPageIdAsync(FurnitureStore furniture)
     {
         using var created = await furniture.Admin.PostAsJsonAsync(
@@ -440,7 +449,8 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
         Guid Domain,
         Guid User,
         Guid Invitation,
-        Guid ContentPage)
+        Guid ContentPage,
+        Guid AttributeOption)
     {
         public string Fill(string route) => route
             .Replace("{storeProduct}", StoreProduct.ToString(), StringComparison.Ordinal)
@@ -457,8 +467,11 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
             .Replace("{domain}", Domain.ToString(), StringComparison.Ordinal)
             .Replace("{user}", User.ToString(), StringComparison.Ordinal)
             .Replace("{invitation}", Invitation.ToString(), StringComparison.Ordinal)
+            .Replace("{option}", AttributeOption.ToString(), StringComparison.Ordinal)
             .Replace("{page}", ContentPage.ToString(), StringComparison.Ordinal);
     }
+
+    private sealed record AttributeWithOptions(Guid Id, List<Named> Options);
 
     private sealed record Named(Guid Id, string? Email);
 

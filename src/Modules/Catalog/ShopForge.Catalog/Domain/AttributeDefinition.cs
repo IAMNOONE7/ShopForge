@@ -83,6 +83,30 @@ internal sealed class AttributeDefinition : IStoreOwned
         SortOrder = settings.SortOrder;
     }
 
+    // The order a shopper reads them in. Anything the caller does not name keeps the order it had, after the
+    // ones that were named, so a partial list reorders the top of the list rather than scrambling the rest.
+    public void ReorderOptions(IReadOnlyList<Guid> order)
+    {
+        var position = 0;
+
+        foreach (var id in order)
+        {
+            if (_options.SingleOrDefault(option => option.Id == id) is { } named)
+            {
+                named.MoveTo(position++);
+            }
+        }
+
+        foreach (var rest in _options.Where(option => !order.Contains(option.Id)).OrderBy(option => option.SortOrder).ToList())
+        {
+            rest.MoveTo(position++);
+        }
+    }
+
+    public AttributeOption? Option(Guid optionId) => _options.SingleOrDefault(option => option.Id == optionId);
+
+    public bool RemoveOption(Guid optionId) => _options.RemoveAll(option => option.Id == optionId) > 0;
+
     public AttributeOption AddOption(string name, string code)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);

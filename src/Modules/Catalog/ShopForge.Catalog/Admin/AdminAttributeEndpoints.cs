@@ -6,7 +6,9 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Catalog.Attributes;
 using ShopForge.Catalog.Domain;
+using ShopForge.Catalog.Retiring;
 using ShopForge.Catalog.Search;
+using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Security;
 using ShopForge.Shared.Stores;
@@ -22,6 +24,10 @@ internal static class AdminAttributeEndpoints
         storeAdmin.MapPost("/attributes", CreateAttributeAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
         storeAdmin.MapPut("/attributes/{attributeId:guid}", UpdateAttributeAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
         storeAdmin.MapPost("/attributes/{attributeId:guid}/options", AddOptionAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
+        storeAdmin.MapPut("/attributes/{attributeId:guid}/options", ReorderOptionsAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
+        storeAdmin.MapPut("/attributes/{attributeId:guid}/options/{optionId:guid}", RenameOptionAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
+        storeAdmin.MapDelete("/attributes/{attributeId:guid}/options/{optionId:guid}", RemoveOptionAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
+        storeAdmin.MapDelete("/attributes/{attributeId:guid}", RemoveAttributeAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
         storeAdmin.MapPut("/categories/{categoryId:guid}/attributes", AssignCategoryAttributesAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
         storeAdmin.MapGet("/products/{storeProductId:guid}/attributes", GetProductAttributesAsync);
         storeAdmin.MapPut("/products/{storeProductId:guid}/attributes", SetProductAttributesAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
@@ -244,6 +250,133 @@ internal static class AdminAttributeEndpoints
             .OrderBy(definition => definition.SortOrder)
             .ThenBy(definition => definition.Name);
 
+
+    // Correcting the words. The code is not touched: it is in a filter somebody has bookmarked and in a feed
+    // somebody else publishes, so a spelling fix must not move it (D-181).
+    private static async Task<Results<Ok<AdminAttributeResponse>, ValidationProblem, NotFound>> RenameOptionAsync(
+        Guid attributeId,
+        Guid optionId,
+        RenameOptionRequest request,
+        DbContext dbContext,
+        IAuditLog audit,
+        CancellationToken cancellationToken)
+    {
+        var definition = await Definitions(dbContext).SingleOrDefaultAsync(definition => definition.Id == attributeId, cancellationToken);
+
+        if (definition?.Option(optionId) is not { } option)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var errors = new RequestErrors()
+            .Check(!string.IsNullOrWhiteSpace(request.Name) && request.Name.Trim().Length <= 200, "name", "Name is required (up to 200 characters).");
+
+        if (errors.Any)
+        {
+            return errors.ToProblem();
+        }
+
+        option.Rename(request.Name!);
+        audit.Record("catalog.attribute.option.renamed", $"{definition.Code}/{option.Code}");
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return TypedResults.Ok(AdminAttributeResponse.From(definition));
+    }
+
+    // The order a shopper reads the choices in. Options the caller does not name keep their order after the
+    // ones it does, so naming two of nine moves those two to the top rather than scrambling the rest.
+    private static async Task<Results<Ok<AdminAttributeResponse>, NotFound>> ReorderOptionsAsync(
+        Guid attributeId,
+        ReorderOptionsRequest request,
+        DbContext dbContext,
+        IAuditLog audit,
+        CancellationToken cancellationToken)
+    {
+        var definition = await Definitions(dbContext).SingleOrDefaultAsync(definition => definition.Id == attributeId, cancellationToken);
+
+        if (definition is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        definition.ReorderOptions(request.OptionIds ?? []);
+        audit.Record("catalog.attribute.options.reordered", definition.Code);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return TypedResults.Ok(AdminAttributeResponse.From(definition));
+    }
+
+    // An option a listing is set to cannot go: the listing would be pointing at nothing. The count says what
+    // changing them costs (D-181).
+    private static async Task<Results<NoContent, NotFound, ProblemHttpResult>> RemoveOptionAsync(
+        Guid attributeId,
+        Guid optionId,
+        DbContext dbContext,
+        WhatPointsAtIt holding,
+        IAuditLog audit,
+        CancellationToken cancellationToken)
+    {
+        var definition = await Definitions(dbContext).SingleOrDefaultAsync(definition => definition.Id == attributeId, cancellationToken);
+
+        if (definition?.Option(optionId) is not { } option)
+        {
+            return TypedResults.NotFound();
+        }
+
+        if (await holding.HoldingAnOptionAsync(optionId, cancellationToken) is { } reason)
+        {
+            return StillInUse("option", reason, "Change those listings first.");
+        }
+
+        var code = option.Code;
+        definition.RemoveOption(optionId);
+        audit.Record("catalog.attribute.option.removed", $"{definition.Code}/{code}");
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return TypedResults.NoContent();
+    }
+
+    // A measurement nobody has filled in is a mistake to take away; one with values in it is data, and the
+    // refusal says how much of it there is.
+    private static async Task<Results<NoContent, NotFound, ProblemHttpResult>> RemoveAttributeAsync(
+        Guid attributeId,
+        DbContext dbContext,
+        WhatPointsAtIt holding,
+        IAuditLog audit,
+        SearchIndex search,
+        CancellationToken cancellationToken)
+    {
+        var definition = await Definitions(dbContext).SingleOrDefaultAsync(definition => definition.Id == attributeId, cancellationToken);
+
+        if (definition is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        if (await holding.HoldingAnAttributeAsync(attributeId, cancellationToken) is { } reason)
+        {
+            return StillInUse("attribute", reason, "Clear them first, or leave it in place and stop showing it.");
+        }
+
+        var wasSearched = definition.IsSearchable;
+        dbContext.Remove(definition);
+        audit.Record("catalog.attribute.removed", definition.Code);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        if (wasSearched)
+        {
+            await search.RefreshStoreAsync(cancellationToken);
+        }
+
+        return TypedResults.NoContent();
+    }
+
+    private static ProblemHttpResult StillInUse(string what, string reason, string instead) =>
+        TypedResults.Problem(
+            statusCode: StatusCodes.Status409Conflict,
+            title: $"This {what} cannot be removed",
+            detail: $"It cannot be removed because {reason}. {instead}");
+
     private static RequestErrors ValidateSettings(string? name, AttributeType? type, bool isFilterable, bool isSearchable = false) =>
         new RequestErrors()
             .Check(!string.IsNullOrWhiteSpace(name) && name.Trim().Length <= 200, "name", "Name is required (up to 200 characters).")
@@ -280,6 +413,10 @@ internal sealed record CreateAttributeRequest(
 
 internal sealed record UpdateAttributeRequest(
     string? Name, string? Unit, bool IsFilterable, bool IsVisibleOnProductPage, int SortOrder, bool IsInFeeds = false, bool IsSearchable = false);
+
+internal sealed record RenameOptionRequest(string? Name);
+
+internal sealed record ReorderOptionsRequest(List<Guid>? OptionIds);
 
 internal sealed record AddOptionRequest(string? Name, string? Code);
 
