@@ -170,6 +170,13 @@ describe("focused store listings", () => {
     await waitFor(() => expect((screen.getByRole("button", { name: "Edit attribute values" }) as HTMLButtonElement).disabled).toBe(false));
   });
 
+  it("focuses the first attribute control even when it is a select and restores the opener on cancel", async () => {
+    const user = userEvent.setup(); reads(); vi.mocked(api.attributes).mockResolvedValue([definition("select", "select"), definition("decimal", "decimal")]);
+    route(); const opener = await screen.findByRole("button", { name: "Edit attribute values" }); await user.click(opener);
+    expect(document.activeElement).toBe(screen.getByRole("combobox", { name: "select" }));
+    await user.click(within(editor()).getByRole("button", { name: "Cancel" })); await waitFor(() => expect(document.activeElement).toBe(opener));
+  });
+
   it("locks duplicate saves and only retries the failed read after a confirmed write", async () => {
     const user = userEvent.setup(); reads(); let resolve!: (value: StoreProduct) => void;
     const save = vi.spyOn(api, "updateStoreProduct").mockReturnValue(new Promise((done) => { resolve = done; }));

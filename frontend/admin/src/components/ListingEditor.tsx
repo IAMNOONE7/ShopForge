@@ -40,7 +40,7 @@ export function ListingEditor({ storeId, currency, item, categories, definitions
     || (editor.kind === "values" && ((definitions.status === "ready" && JSON.stringify(editor.definitions) !== JSON.stringify(definitions.data))
       || (values.status === "ready" && JSON.stringify(editor.values) !== JSON.stringify(values.data.values)))));
   const disabled = !allowed || pending || refreshing || refreshFailed || stale;
-  useEffect(() => { if (editor) (root.current?.querySelector<HTMLElement>("input") ?? root.current?.querySelector<HTMLElement>("h2"))?.focus(); }, [editor]);
+  useEffect(() => { if (editor) (root.current?.querySelector<HTMLElement>("input, select, textarea") ?? root.current?.querySelector<HTMLElement>("h2"))?.focus(); }, [editor]);
   function open(kind: Editor["kind"], button: HTMLButtonElement) {
     if (disabled || editor || (kind === "categories" && !categoriesReady) || (kind === "values" && !valuesReady)) return;
     opener.current = button; setSaved(false); setAttempted(false);
