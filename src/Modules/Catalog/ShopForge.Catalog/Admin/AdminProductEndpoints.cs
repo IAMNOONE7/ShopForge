@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Catalog.Domain;
 using ShopForge.Catalog.Images;
+using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Files;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Platform;
@@ -32,6 +33,8 @@ internal static class AdminProductEndpoints
         products.MapPost("/{productId:guid}/images", UploadImageAsync)
             .RequireAuthorization(AdminPolicies.CatalogManagement)
             .DisableAntiforgery();
+        products.MapPut("/{productId:guid}/images", ReorderImagesAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
+        products.MapPut("/{productId:guid}/images/{imageId:guid}", DescribeImageAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
         products.MapDelete("/{productId:guid}/images/{imageId:guid}", DeleteImageAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
         products.MapGet("/{productId:guid}/images/{imageId:guid}", GetImageAsync);
     }
@@ -326,6 +329,65 @@ internal static class AdminProductEndpoints
         return TypedResults.Created($"/api/admin/products/{productId}/images/{image.Id}", AdminImageResponse.From(productId, image));
     }
 
+
+    // The order they are shown in, which also decides the thumbnail: the first picture is the one a card and
+    // a shopping feed carry (D-182).
+    private static async Task<Results<Ok<List<AdminImageResponse>>, NotFound>> ReorderImagesAsync(
+        Guid productId,
+        ReorderImagesRequest request,
+        DbContext dbContext,
+        IAuditLog audit,
+        CancellationToken cancellationToken)
+    {
+        var product = await dbContext.Set<Product>().SingleOrDefaultAsync(product => product.Id == productId, cancellationToken);
+
+        if (product is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        product.ReorderImages(request.ImageIds ?? []);
+        audit.Record("catalog.product.images.reordered", productId.ToString());
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return TypedResults.Ok(Described(productId, product));
+    }
+
+    // Saying what the picture shows. Nobody writes it at upload and everybody wants to afterwards, which is
+    // the whole reason this exists separately.
+    private static async Task<Results<Ok<AdminImageResponse>, ValidationProblem, NotFound>> DescribeImageAsync(
+        Guid productId,
+        Guid imageId,
+        DescribeImageRequest request,
+        DbContext dbContext,
+        IAuditLog audit,
+        CancellationToken cancellationToken)
+    {
+        var product = await dbContext.Set<Product>().SingleOrDefaultAsync(product => product.Id == productId, cancellationToken);
+
+        if (product?.Image(imageId) is not { } image)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var errors = new RequestErrors()
+            .Check((request.AltText ?? string.Empty).Trim().Length <= 200, "altText", "A description can be up to 200 characters.");
+
+        if (errors.Any)
+        {
+            return errors.ToProblem();
+        }
+
+        image.Describe(request.AltText);
+        audit.Record("catalog.product.image.described", productId.ToString());
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return TypedResults.Ok(AdminImageResponse.From(productId, image));
+    }
+
+    private static List<AdminImageResponse> Described(Guid productId, Product product) =>
+        [.. product.Images.OrderBy(image => image.Position).Select(image => AdminImageResponse.From(productId, image))];
+
     private static async Task<Results<NoContent, NotFound>> DeleteImageAsync(
         Guid productId,
         Guid imageId,
@@ -444,6 +506,10 @@ internal sealed record AdminVariantResponse(
         variant.OptionValues,
         variant.Position);
 }
+
+internal sealed record ReorderImagesRequest(List<Guid>? ImageIds);
+
+internal sealed record DescribeImageRequest(string? AltText);
 
 internal sealed record AdminImageResponse(Guid Id, string Url, string? AltText, int Position)
 {

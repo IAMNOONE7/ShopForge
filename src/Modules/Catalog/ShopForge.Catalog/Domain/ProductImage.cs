@@ -30,4 +30,9 @@ internal sealed class ProductImage
     public int Position { get; private set; }
 
     internal void MoveTo(int position) => Position = position;
+
+    // What somebody using a screen reader is told the picture shows, and what stands in its place when it
+    // fails to load. Describing it is the kind of thing nobody does at upload and everybody does later, so it
+    // has to be changeable afterwards (D-182).
+    internal void Describe(string? altText) => AltText = string.IsNullOrWhiteSpace(altText) ? null : altText.Trim();
 }

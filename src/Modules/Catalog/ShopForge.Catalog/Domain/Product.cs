@@ -150,6 +150,32 @@ internal sealed class Product : ITenantOwned, IArchivable
         return image;
     }
 
+    public ProductImage? Image(Guid imageId) => _images.SingleOrDefault(image => image.Id == imageId);
+
+    // The order a shopper flicks through them in, which is also which one is the thumbnail: the first
+    // picture is the one a card and a feed show (D-169, D-182). Anything the caller does not name keeps its
+    // order behind the ones it does, the same way an attribute's options do (D-181).
+    public void ReorderImages(IReadOnlyList<Guid> order)
+    {
+        var position = 0;
+
+        foreach (var id in order)
+        {
+            if (_images.SingleOrDefault(image => image.Id == id) is { } named)
+            {
+                named.MoveTo(position++);
+            }
+        }
+
+        foreach (var rest in Remaining(order))
+        {
+            rest.MoveTo(position++);
+        }
+    }
+
+    private List<ProductImage> Remaining(IReadOnlyList<Guid> order) =>
+        [.. _images.Where(image => !order.Contains(image.Id)).OrderBy(image => image.Position)];
+
     public ProductImage? RemoveImage(Guid imageId)
     {
         var image = _images.SingleOrDefault(image => image.Id == imageId);
@@ -158,9 +184,13 @@ internal sealed class Product : ITenantOwned, IArchivable
         {
             _images.Remove(image);
 
-            for (var position = 0; position < _images.Count; position++)
+            // In the order they were in, not the order they happen to be loaded in: renumbering by the list's
+            // own order would reshuffle the remaining pictures every time one was deleted (D-182).
+            var position = 0;
+
+            foreach (var kept in _images.OrderBy(kept => kept.Position).ToList())
             {
-                _images[position].MoveTo(position);
+                kept.MoveTo(position++);
             }
         }
 

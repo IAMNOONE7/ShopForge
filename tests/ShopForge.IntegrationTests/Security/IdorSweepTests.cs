@@ -65,6 +65,8 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
         ("GET", "products/{product}/images/{image}", null),
         ("DELETE", "products/{product}/images/{image}", null),
         ("POST", "products/{product}/images", Image),
+        ("PUT", "products/{product}/images", """{"imageIds":[]}"""),
+        ("PUT", "products/{product}/images/{image}", """{"altText":"Taken"}"""),
         ("PUT", "products/{product}/options", """{"names":[],"values":{}}"""),
         ("POST", "products/{product}/variants", """{"sku":"TAKEN-VARIANT","ean":null,"weightGrams":null,"optionValues":[]}"""),
         ("PUT", "products/{product}/variants/{variant}", """{"sku":"TAKEN-VARIANT","ean":null,"weightGrams":null,"optionValues":[]}"""),
