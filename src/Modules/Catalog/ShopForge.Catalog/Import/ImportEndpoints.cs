@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Catalog.Domain;
+using ShopForge.Catalog.Export;
 using ShopForge.Shared.Inventory;
 using ShopForge.Shared.Platform;
 using ShopForge.Shared.Security;
@@ -29,6 +30,11 @@ internal static class ImportEndpoints
             .WithMetadata(new RequestSizeLimitAttribute(ImportFile.MaxBytes))
             .DisableAntiforgery();
         storeAdmin.MapGet("/import/template", GetTemplateAsync);
+
+        // Reading the catalogue out costs what reading it in costs, so it shares the narrow window (D-126).
+        storeAdmin.MapGet("/export", ExportAsync)
+            .RequireAuthorization(AdminPolicies.CatalogManagement)
+            .RequireRateLimiting(RateLimits.Expensive);
     }
 
     private static async Task<Results<Ok<ImportReport>, ValidationProblem>> ImportAsync(
@@ -84,6 +90,14 @@ internal static class ImportEndpoints
 
         return TypedResults.File(stream, SpreadsheetContentType, "shopforge-import-template.xlsx");
     }
+
+    // The catalogue in the columns the importer reads, so a merchant can take it out, change it in a
+    // spreadsheet and send it back (D-185).
+    private static async Task<FileStreamHttpResult> ExportAsync(DbContext dbContext, CancellationToken cancellationToken) =>
+        TypedResults.File(
+            await CatalogExport.WriteAsync(dbContext, cancellationToken),
+            SpreadsheetContentType,
+            $"shopforge-catalogue-{DateTime.UtcNow:yyyy-MM-dd}.xlsx");
 
     private static ValidationProblem InvalidFile(string message) =>
         TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["file"] = [message] });

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Orders.Domain;
+using ShopForge.Orders.Export;
 using ShopForge.Orders.Invoicing;
 using ShopForge.Orders.Returns;
 using ShopForge.Orders.Shipping;
@@ -31,6 +32,9 @@ internal static class AdminOrderEndpoints
         storeAdmin.MapPost("/orders/{number}/cancel", CancelAsync).RequireAuthorization(AdminPolicies.StoreManagement);
         storeAdmin.MapPost("/orders/{number}/shipment", CreateShipmentAsync).RequireAuthorization(AdminPolicies.StoreManagement);
         storeAdmin.MapPost("/orders/{number}/refund", RefundAsync).RequireAuthorization(AdminPolicies.StoreManagement).Idempotent();
+        storeAdmin.MapGet("/orders/export", ExportAsync)
+            .RequireAuthorization(AdminPolicies.StoreManagement)
+            .RequireRateLimiting(RateLimits.Expensive);
     }
 
     // A year of orders is a list somebody has to work through, not one to truncate at two hundred and hope
@@ -90,6 +94,18 @@ internal static class AdminOrderEndpoints
     }
 
     // Every answer about an order lists the documents it has, so the admin never has to reload to see a new one.
+    // A year of orders for the accountant, or a month of them. Without a window it is the most recent of
+    // whatever there is, because a file built in memory has a size past which it is an outage (D-185).
+    private static async Task<FileStreamHttpResult> ExportAsync(
+        DbContext dbContext,
+        DateTimeOffset? from,
+        DateTimeOffset? to,
+        CancellationToken cancellationToken) =>
+        TypedResults.File(
+            await OrderExport.WriteAsync(dbContext, from, to, cancellationToken),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"shopforge-orders-{DateTime.UtcNow:yyyy-MM-dd}.xlsx");
+
     private static async Task<AdminOrderDetailResponse> DetailAsync(DbContext dbContext, Order order, CancellationToken cancellationToken) =>
         AdminOrderDetailResponse.From(
             order,
