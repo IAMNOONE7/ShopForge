@@ -1,3 +1,4 @@
+using ShopForge.Shared.Payments;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Orders.Domain;
@@ -16,7 +17,7 @@ internal sealed class Invoice : IStoreOwned
         string number,
         InvoiceKind kind,
         string orderNumber,
-        string currency,
+        Currency currency,
         Seller seller,
         Address buyer,
         string buyerEmail,
@@ -53,7 +54,7 @@ internal sealed class Invoice : IStoreOwned
     // Which return this credit note pays back, so an order can have one per return and none is issued twice (D-097).
     public Guid? ReturnId { get; private set; }
 
-    public string Currency { get; private set; } = null!;
+    public Currency Currency { get; private set; } = null!;
 
     public Seller Seller { get; private set; } = null!;
 
@@ -72,7 +73,7 @@ internal sealed class Invoice : IStoreOwned
 
     public decimal Total => _lines.Sum(line => line.LineTotal);
 
-    public decimal VatTotal => _lines.Sum(line => Money.VatOf(line.LineTotal, line.VatRate));
+    public decimal VatTotal => _lines.Sum(line => Money.VatOf(line.LineTotal, line.VatRate, Currency));
 
     public decimal NetTotal => Total - VatTotal;
 
@@ -96,7 +97,7 @@ internal sealed class Invoice : IStoreOwned
             .Select(group =>
             {
                 var gross = group.Sum(line => line.LineTotal);
-                var vat = Money.VatOf(gross, group.Key);
+                var vat = Money.VatOf(gross, group.Key, Currency);
 
                 return new VatRateTotal(group.Key, gross - vat, vat, gross);
             }),

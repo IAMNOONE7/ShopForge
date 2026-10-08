@@ -60,7 +60,7 @@ internal static class CheckoutEndpoints
         // Where the parcel is going is not known yet — the shopper is still being shown their choices — so a
         // method limited by destination stays on offer here and is refused at checkout if it turns out not to
         // serve the address (D-145).
-        var carts = new Carts(httpContext, dbContext, storeContext, products, stock, discounts, clock);
+        var carts = new Carts(httpContext, dbContext, storeContext, products, stock, discounts, storeSettings, clock);
         var cart = await carts.FindAsync(cancellationToken);
         var parcel = new Parcel(
             cart is null ? null : (await carts.ContentsAsync(cart, cancellationToken)).WeightGrams,
@@ -134,7 +134,7 @@ internal static class CheckoutEndpoints
         TimeProvider clock,
         CancellationToken cancellationToken)
     {
-        var carts = new Carts(httpContext, dbContext, storeContext, products, stock, discounts, clock);
+        var carts = new Carts(httpContext, dbContext, storeContext, products, stock, discounts, storeSettings, clock);
         var cart = await carts.FindAsync(cancellationToken);
         var contents = cart is null ? null : await carts.ContentsAsync(cart, cancellationToken);
 
@@ -250,7 +250,7 @@ internal static class CheckoutEndpoints
         var discount = contents.Discount?.Discount;
         var allocation = discount is null
             ? null
-            : DiscountAllocation.For(discount, [.. contents.Items.Select(item => item.LineTotal)], shipping!.Price);
+            : DiscountAllocation.For(discount, [.. contents.Items.Select(item => item.LineTotal)], shipping!.Price, contents.Currency);
 
         if (discount is not null)
         {
@@ -361,7 +361,7 @@ internal static class CheckoutEndpoints
             placedAt));
 
         // The event goes in with the order, so a confirmation is never sent for an order that was rolled back (D-065).
-        outbox.Enqueue(new OrderPlaced(order.Number, order.Email, order.GrandTotal, order.Currency, instructions.Message));
+        outbox.Enqueue(new OrderPlaced(order.Number, order.Email, order.GrandTotal, order.Currency.Code, instructions.Message));
         metrics.OrderPlaced(payment.Code);
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -577,7 +577,7 @@ internal sealed record OrderResponse(
         order.PlacedAt,
         order.Status.ToString(),
         order.Email,
-        order.Currency,
+        order.Currency.Code,
         order.PaymentMethodName,
         order.ShippingMethodName,
         order.ShippingCharged,

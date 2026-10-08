@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Orders.Domain;
+using ShopForge.Shared.Payments;
 using ShopForge.Shared.Tenancy;
 using ShopForge.Stores.Domain;
 
@@ -11,6 +12,10 @@ internal sealed record TestStore(Guid StoreId, Guid TenantId, string Name, strin
 internal static class TestStores
 {
     public static string UniqueHostName(string label = "shop") => $"{label}-{Guid.NewGuid():N}.test";
+
+    // A shop that charges in something other than euros, for the money that does not have two decimals (D-186).
+    public static Task<TestStore> CreateInCurrencyAsync(IServiceProvider services, string currency) =>
+        CreateAsync(services, new Tenant("Test tenant"), $"{currency} store", addTenant: true, currency);
 
     public static async Task<(TestStore A, TestStore B)> CreateTwoStoresOfOneTenantAsync(IServiceProvider services)
     {
@@ -33,9 +38,10 @@ internal static class TestStores
         return scope;
     }
 
-    private static async Task<TestStore> CreateAsync(IServiceProvider services, Tenant tenant, string name, bool addTenant)
+    private static async Task<TestStore> CreateAsync(IServiceProvider services, Tenant tenant, string name, bool addTenant, string code = "EUR")
     {
-        var store = new Store(tenant.Id, name, "EUR", "en-IE", new StoreTheme("#112233", "#FFFFFF", 4));
+        var currency = Currency.Of(code);
+        var store = new Store(tenant.Id, name, code, "en-IE", new StoreTheme("#112233", "#FFFFFF", 4));
         var domain = store.AddDomain(UniqueHostName(), DateTimeOffset.UtcNow);
         store.SetCompany(new StoreCompany("Test Furniture s.r.o.", "1 Workshop Lane", "Brno", "602 00", "CZ", "12345678", "CZ12345678"));
         store.Publish();
@@ -51,7 +57,7 @@ internal static class TestStores
 
         dbContext.Add(store);
         dbContext.Add(new PaymentMethod(store.Id, "bank-transfer", "Bank transfer", "manual"));
-        dbContext.Add(new ShippingMethod(store.Id, "courier", "Courier", "manual", price: 4.90m, vatRate: 21m));
+        dbContext.Add(new ShippingMethod(store.Id, "courier", "Courier", "manual", currency.Round(4.90m), vatRate: 21m, currency));
         await dbContext.SaveChangesAsync();
 
         return new TestStore(store.Id, store.TenantId, store.Name, domain.HostName, domain.Id);

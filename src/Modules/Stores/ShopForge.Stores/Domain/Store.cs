@@ -1,5 +1,6 @@
 using System.Globalization;
 using ShopForge.Shared.Files;
+using ShopForge.Shared.Payments;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Stores.Domain;
@@ -22,7 +23,7 @@ internal sealed class Store : ITenantOwned
         Id = Guid.CreateVersion7();
         TenantId = tenantId;
         Name = name.Trim();
-        Currency = ToCurrencyCode(currency);
+        Currency = ToCurrency(currency);
         Culture = CultureInfo.GetCultureInfo(culture, predefinedOnly: true).Name;
         Theme = theme;
         Status = StoreStatus.Draft;
@@ -35,7 +36,7 @@ internal sealed class Store : ITenantOwned
 
     public string Name { get; private set; } = null!;
 
-    public string Currency { get; private set; } = null!;
+    public Currency Currency { get; private set; } = null!;
 
     public string Culture { get; private set; } = null!;
 
@@ -118,12 +119,12 @@ internal sealed class Store : ITenantOwned
 
         if (currency is not null)
         {
-            if (Status != StoreStatus.Draft && ToCurrencyCode(currency) != Currency)
+            if (Status != StoreStatus.Draft && ToCurrency(currency) != Currency)
             {
                 throw new InvalidOperationException("The currency of a published store cannot be changed.");
             }
 
-            Currency = ToCurrencyCode(currency);
+            Currency = ToCurrency(currency);
         }
 
         Name = name.Trim();
@@ -144,12 +145,9 @@ internal sealed class Store : ITenantOwned
         return previousPath;
     }
 
-    private static string ToCurrencyCode(string currency)
-    {
-        var code = currency.Trim().ToUpperInvariant();
-
-        return code.Length == 3 && code.All(char.IsAsciiLetterUpper)
-            ? code
-            : throw new ArgumentException($"'{currency}' is not an ISO 4217 currency code.", nameof(currency));
-    }
+    // A currency ShopForge cannot charge in is refused while the shop is still a draft, rather than accepted
+    // here and discovered at the checkout of a published shop (D-186). The type is spelled out because this
+    // class has a member of the same name.
+    private static Currency ToCurrency(string currency) =>
+        ShopForge.Shared.Payments.Currency.Of(currency);
 }

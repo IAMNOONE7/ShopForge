@@ -9,4 +9,4 @@ public interface IPaymentRefunds
     Task RefundAsync(RefundRequest request, CancellationToken cancellationToken);
 }
 
-public sealed record RefundRequest(string OrderNumber, string PaymentReference, decimal Amount, string Currency);
+public sealed record RefundRequest(string OrderNumber, string PaymentReference, decimal Amount, Currency Currency);

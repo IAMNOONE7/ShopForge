@@ -87,7 +87,6 @@ internal sealed class OrderEntityConfiguration : IEntityTypeConfiguration<Order>
             lines.Property(line => line.Discount).HasPrecision(12, 2);
             lines.Property(line => line.VatRate).HasPrecision(5, 2);
             lines.Ignore(line => line.LineTotal);
-            lines.Ignore(line => line.VatAmount);
         });
     }
 

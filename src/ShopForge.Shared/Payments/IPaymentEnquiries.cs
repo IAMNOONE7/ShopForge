@@ -17,4 +17,4 @@ public interface IPaymentEnquiries
 }
 
 // What was sent, so the provider's answer can be checked against it rather than believed.
-public sealed record PaymentEnquiry(Guid StoreId, string OrderNumber, string Reference, decimal Amount, string Currency);
+public sealed record PaymentEnquiry(Guid StoreId, string OrderNumber, string Reference, decimal Amount, Currency Currency);

@@ -26,7 +26,9 @@ public static class DevelopmentOrders
                 continue;
             }
 
-            await scope.ServiceProvider.GetRequiredService<IStoreInitializer>().InitializeAsync(cancellationToken);
+            var settings = await scope.ServiceProvider.GetRequiredService<ICurrentStoreSettings>().GetAsync(cancellationToken);
+
+            await scope.ServiceProvider.GetRequiredService<IStoreInitializer>().InitializeAsync(new NewStore(settings.Currency), cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
         }
     }

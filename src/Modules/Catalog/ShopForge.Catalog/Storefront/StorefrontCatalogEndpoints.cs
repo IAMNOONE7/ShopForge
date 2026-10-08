@@ -524,7 +524,7 @@ internal static class StorefrontCatalogEndpoints
                 slug,
                 first.Sku,
                 price,
-                settings.Currency,
+                settings.Currency.Code,
                 availableInAllForms,
                 variants.Count,
                 [.. imagePaths.Select(address.Image)],

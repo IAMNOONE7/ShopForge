@@ -23,7 +23,5 @@ internal sealed class StripeRefunds(IRefunds refunds) : IPaymentRefunds
     public string Key => StripePaymentProvider.ProviderKey;
 
     public Task RefundAsync(RefundRequest request, CancellationToken cancellationToken) =>
-        refunds.CreateAsync(request.PaymentReference, MinorUnits(request.Amount), cancellationToken);
-
-    private static long MinorUnits(decimal amount) => (long)decimal.Round(amount * 100, 0, MidpointRounding.AwayFromZero);
+        refunds.CreateAsync(request.PaymentReference, request.Currency.ToMinorUnits(request.Amount), cancellationToken);
 }

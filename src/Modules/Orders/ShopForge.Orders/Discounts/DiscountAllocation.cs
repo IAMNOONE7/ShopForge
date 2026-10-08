@@ -1,10 +1,12 @@
+using ShopForge.Shared.Payments;
+
 namespace ShopForge.Orders.Domain;
 
 // A discount is taken off the lines, never off the total: prices are gross and each line has its own VAT rate, so
 // the only way the VAT summary can stay right is to know what was charged for each line (D-085).
 internal static class DiscountAllocation
 {
-    public static DiscountResult For(Discount discount, IReadOnlyList<decimal> lineTotals, decimal shippingPrice)
+    public static DiscountResult For(Discount discount, IReadOnlyList<decimal> lineTotals, decimal shippingPrice, Currency currency)
     {
         if (discount.Kind == DiscountKind.FreeShipping)
         {
@@ -13,16 +15,16 @@ internal static class DiscountAllocation
 
         var itemsTotal = lineTotals.Sum();
         var amount = discount.Kind == DiscountKind.Percentage
-            ? decimal.Round(itemsTotal * discount.Value / 100m, 2, MidpointRounding.AwayFromZero)
+            ? currency.Round(itemsTotal * discount.Value / 100m)
             : Math.Min(discount.Value, itemsTotal);
 
-        return new DiscountResult(Spread(amount, lineTotals), 0m);
+        return new DiscountResult(Spread(amount, lineTotals, currency), 0m);
     }
 
-    // Each line gets its share rounded down to the currency's two decimals, never more than the line costs. That
-    // leaves a few hundredths over, which are handed to the lines that still have room, biggest first, until the
-    // parts add up to the discount exactly rather than approximately.
-    private static IReadOnlyList<decimal> Spread(decimal amount, IReadOnlyList<decimal> lineTotals)
+    // Each line gets its share rounded down to the currency's own places, never more than the line costs. That
+    // leaves a little over, which is handed to the lines that still have room, biggest first, until the parts add
+    // up to the discount exactly rather than approximately.
+    private static IReadOnlyList<decimal> Spread(decimal amount, IReadOnlyList<decimal> lineTotals, Currency currency)
     {
         var itemsTotal = lineTotals.Sum();
 
@@ -32,7 +34,7 @@ internal static class DiscountAllocation
         }
 
         var shares = lineTotals
-            .Select(lineTotal => Math.Min(lineTotal, decimal.Round(amount * lineTotal / itemsTotal, 2, MidpointRounding.ToZero)))
+            .Select(lineTotal => Math.Min(lineTotal, currency.RoundDown(amount * lineTotal / itemsTotal)))
             .ToList();
 
         var remainder = amount - shares.Sum();

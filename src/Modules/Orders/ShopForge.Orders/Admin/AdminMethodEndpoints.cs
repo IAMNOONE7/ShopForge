@@ -10,6 +10,7 @@ using ShopForge.Shared.Http;
 using ShopForge.Shared.Payments;
 using ShopForge.Shared.Security;
 using ShopForge.Shared.Shipping;
+using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Orders.Admin;
@@ -121,11 +122,13 @@ internal static class AdminMethodEndpoints
         DbContext dbContext,
         IStoreContext storeContext,
         IEnumerable<IShippingProvider> providers,
+        ICurrentStoreSettings storeSettings,
         CancellationToken cancellationToken)
     {
+        var currency = (await storeSettings.GetAsync(cancellationToken)).Currency;
         var code = Codes.Of(request.Name);
         var providerKey = request.ProviderKey ?? StoreShippingProvider.ProviderKey;
-        var errors = ValidateShipping(request)
+        var errors = ValidateShipping(request, currency)
             .Check(code is not null, "name", "The name must contain letters or digits.")
             .Check(providers.Any(provider => provider.Key == providerKey), "providerKey", "That shipping provider is not available.");
 
@@ -146,6 +149,7 @@ internal static class AdminMethodEndpoints
             providerKey,
             request.Price,
             request.VatRate,
+            currency,
             request.RequiresPickupPoint,
             request.MaxWeightGrams,
             request.Countries);
@@ -161,9 +165,11 @@ internal static class AdminMethodEndpoints
         string code,
         ShippingMethodRequest request,
         DbContext dbContext,
+        ICurrentStoreSettings storeSettings,
         CancellationToken cancellationToken)
     {
-        var errors = ValidateShipping(request);
+        var currency = (await storeSettings.GetAsync(cancellationToken)).Currency;
+        var errors = ValidateShipping(request, currency);
 
         if (errors.Any)
         {
@@ -183,6 +189,7 @@ internal static class AdminMethodEndpoints
             request.VatRate,
             request.IsActive,
             request.RequiresPickupPoint,
+            currency,
             request.MaxWeightGrams,
             request.Countries);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -205,9 +212,9 @@ internal static class AdminMethodEndpoints
     private static RequestErrors ValidateName(string? name) =>
         new RequestErrors().Check(!string.IsNullOrWhiteSpace(name) && name.Trim().Length <= 100, "name", "Name is required (up to 100 characters).");
 
-    private static RequestErrors ValidateShipping(ShippingMethodRequest request) =>
+    private static RequestErrors ValidateShipping(ShippingMethodRequest request, Currency currency) =>
         ValidateName(request.Name)
-            .Check(request.Price >= 0 && decimal.Round(request.Price, 2) == request.Price, "price", "Price must be zero or more, with at most two decimals.")
+            .Check(request.Price >= 0 && currency.Holds(request.Price), "price", $"Price must be zero or more, with at most {currency.Decimals} decimals.")
             .Check(request.VatRate is >= 0 and <= 100, "vatRate", "The VAT rate must be between 0 and 100.")
             .Check(request.MaxWeightGrams is null or > 0, "maxWeightGrams", "A weight limit must be more than nothing.")
             .Check(

@@ -34,7 +34,7 @@ internal sealed class CustomerOrderData(DbContext dbContext) : ICustomerData
             .AsNoTracking()
             .Where(invoice => numbers.Contains(invoice.OrderNumber))
             .OrderBy(invoice => invoice.IssuedAt)
-            .Select(invoice => new InvoiceExport(invoice.Number, invoice.Kind.ToString(), invoice.OrderNumber, invoice.Currency, invoice.Total, invoice.IssuedAt))
+            .Select(invoice => new InvoiceExport(invoice.Number, invoice.Kind.ToString(), invoice.OrderNumber, invoice.Currency.Code, invoice.Total, invoice.IssuedAt))
             .ToListAsync(cancellationToken);
 
         return
@@ -83,7 +83,7 @@ internal sealed class CustomerOrderData(DbContext dbContext) : ICustomerData
     private static OrderExport Export(Order order) => new(
         order.Number,
         order.Status.ToString(),
-        order.Currency,
+        order.Currency.Code,
         order.GrandTotal,
         order.PlacedAt,
         order.Email,

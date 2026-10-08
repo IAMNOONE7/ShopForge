@@ -40,7 +40,7 @@ internal sealed class ComgateRefunds(
                 $"Comgate transaction {request.PaymentReference} is {transaction.Status}, which is not a payment to refund.");
         }
 
-        var amount = MinorUnits.Of(request.Amount, request.Currency);
+        var amount = request.Currency.ToMinorUnits(request.Amount);
 
         // More than the transaction holds is a sum that came from somewhere this adapter cannot see. Comgate
         // would refuse it too; refusing here says which number was wrong.
@@ -57,7 +57,7 @@ internal sealed class ComgateRefunds(
             request.PaymentReference,
             request.OrderNumber);
 
-        await payments.RefundAsync(merchant, request.PaymentReference, amount, request.Currency, cancellationToken);
+        await payments.RefundAsync(merchant, request.PaymentReference, amount, request.Currency.Code, cancellationToken);
     }
 
     private async Task<ComgateMerchant?> MerchantAsync(CancellationToken cancellationToken)

@@ -62,8 +62,8 @@ internal sealed class ComgateTransactions(
     // reported, because a caller who got one of these wrong is not helped by a list.
     private static string? Disagreement(ComgateTransaction transaction, PaymentEnquiry enquiry, bool expectedTest) =>
         !string.Equals(transaction.ReferenceId, enquiry.OrderNumber, StringComparison.Ordinal) ? "a different order"
-        : !string.Equals(transaction.Currency, enquiry.Currency, StringComparison.OrdinalIgnoreCase) ? "a different currency"
-        : transaction.PriceInMinorUnits != MinorUnits.Of(enquiry.Amount, enquiry.Currency) ? "a different amount"
+        : !string.Equals(transaction.Currency, enquiry.Currency.Code, StringComparison.OrdinalIgnoreCase) ? "a different currency"
+        : transaction.PriceInMinorUnits != enquiry.Currency.ToMinorUnits(enquiry.Amount) ? "a different amount"
         : transaction.Test != expectedTest ? "the other environment"
         : null;
 

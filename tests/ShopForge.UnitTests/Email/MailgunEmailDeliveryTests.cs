@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
 using ShopForge.Infrastructure.Email;
 using ShopForge.Shared.Email;
+using ShopForge.Shared.Payments;
 using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
 
@@ -144,6 +145,6 @@ public sealed class MailgunEmailDeliveryTests
     private sealed class FixedStoreSettings(string name) : ICurrentStoreSettings
     {
         public Task<StoreSettings> GetAsync(CancellationToken cancellationToken) =>
-            Task.FromResult(new StoreSettings(name, "EUR", "en-IE", 14, null, new StoreBranding("#112233", null), StoreSeo.None));
+            Task.FromResult(new StoreSettings(name, Currency.Of("EUR"), "en-IE", 14, null, new StoreBranding("#112233", null), StoreSeo.None));
     }
 }

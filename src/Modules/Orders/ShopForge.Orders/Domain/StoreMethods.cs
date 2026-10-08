@@ -1,3 +1,4 @@
+using ShopForge.Shared.Payments;
 using ShopForge.Shared.Shipping;
 using ShopForge.Shared.Tenancy;
 
@@ -55,6 +56,7 @@ internal sealed class ShippingMethod : IStoreOwned
         string providerKey,
         decimal price,
         decimal vatRate,
+        Currency currency,
         bool requiresPickupPoint = false,
         int? maxWeightGrams = null,
         IReadOnlyList<string>? countries = null)
@@ -65,7 +67,7 @@ internal sealed class ShippingMethod : IStoreOwned
         StoreId = storeId;
         Code = code;
         ProviderKey = providerKey;
-        Update(name, price, vatRate, isActive: true, requiresPickupPoint, maxWeightGrams, countries);
+        Update(name, price, vatRate, isActive: true, requiresPickupPoint, currency, maxWeightGrams, countries);
     }
 
     public Guid Id { get; private set; }
@@ -99,14 +101,15 @@ internal sealed class ShippingMethod : IStoreOwned
         decimal vatRate,
         bool isActive,
         bool requiresPickupPoint,
+        Currency currency,
         int? maxWeightGrams = null,
         IReadOnlyList<string>? countries = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
-        if (price < 0 || decimal.Round(price, 2) != price)
+        if (price < 0 || !currency.Holds(price))
         {
-            throw new ArgumentOutOfRangeException(nameof(price), "Price must be zero or more with at most two decimals.");
+            throw new ArgumentOutOfRangeException(nameof(price), $"Price must be zero or more with at most {currency.Decimals} decimals.");
         }
 
         if (vatRate is < 0 or > 100)

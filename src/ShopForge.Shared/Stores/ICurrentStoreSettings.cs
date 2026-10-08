@@ -1,3 +1,5 @@
+using ShopForge.Shared.Payments;
+
 namespace ShopForge.Shared.Stores;
 
 public interface ICurrentStoreSettings
@@ -7,7 +9,7 @@ public interface ICurrentStoreSettings
 
 public sealed record StoreSettings(
     string Name,
-    string Currency,
+    Currency Currency,
     string Culture,
     int ReturnWindowDays,
     SellerDetails? Seller,

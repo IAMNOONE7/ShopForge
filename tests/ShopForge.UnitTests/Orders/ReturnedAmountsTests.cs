@@ -1,13 +1,16 @@
 using ShopForge.Orders.Returns;
+using ShopForge.Shared.Payments;
 
 namespace ShopForge.UnitTests.Orders;
 
 public sealed class ReturnedAmountsTests
 {
+    private static readonly Currency Euro = Currency.Of("EUR");
+
     [Fact]
     public void Half_a_line_takes_half_its_discount()
     {
-        var share = ReturnedAmounts.DiscountShare(discount: 10m, quantity: 4, alreadyReturned: 0, returning: 2);
+        var share = ReturnedAmounts.DiscountShare(discount: 10m, quantity: 4, alreadyReturned: 0, returning: 2, Euro);
 
         Assert.Equal(5m, share);
     }
@@ -17,9 +20,9 @@ public sealed class ReturnedAmountsTests
     [Fact]
     public void One_item_of_a_line_takes_the_hundredth_that_did_not_divide()
     {
-        var first = ReturnedAmounts.DiscountShare(1m, quantity: 3, alreadyReturned: 0, returning: 1);
-        var second = ReturnedAmounts.DiscountShare(1m, quantity: 3, alreadyReturned: 1, returning: 1);
-        var third = ReturnedAmounts.DiscountShare(1m, quantity: 3, alreadyReturned: 2, returning: 1);
+        var first = ReturnedAmounts.DiscountShare(1m, quantity: 3, alreadyReturned: 0, returning: 1, Euro);
+        var second = ReturnedAmounts.DiscountShare(1m, quantity: 3, alreadyReturned: 1, returning: 1, Euro);
+        var third = ReturnedAmounts.DiscountShare(1m, quantity: 3, alreadyReturned: 2, returning: 1, Euro);
 
         Assert.Equal([0.33m, 0.34m, 0.33m], new[] { first, second, third });
         Assert.Equal(1m, first + second + third);
@@ -28,7 +31,7 @@ public sealed class ReturnedAmountsTests
     [Fact]
     public void A_line_that_was_not_discounted_gives_nothing_back()
     {
-        Assert.Equal(0m, ReturnedAmounts.DiscountShare(0m, quantity: 3, alreadyReturned: 1, returning: 2));
+        Assert.Equal(0m, ReturnedAmounts.DiscountShare(0m, quantity: 3, alreadyReturned: 1, returning: 2, Euro));
     }
 
     // However a line is split, and in whatever order its parcels arrive, the shop gives back exactly the discount
@@ -49,7 +52,7 @@ public sealed class ReturnedAmountsTests
             {
                 var returning = random.Next(1, quantity - returned + 1);
 
-                shares += ReturnedAmounts.DiscountShare(discount, quantity, returned, returning);
+                shares += ReturnedAmounts.DiscountShare(discount, quantity, returned, returning, Euro);
                 returned += returning;
             }
 

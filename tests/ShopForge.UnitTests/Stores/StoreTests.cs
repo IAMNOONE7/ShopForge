@@ -16,7 +16,7 @@ public sealed class StoreTests
 
         Assert.True(first.IsPrimary);
         Assert.False(second.IsPrimary);
-        Assert.Equal("CZK", store.Currency);
+        Assert.Equal("CZK", store.Currency.Code);
     }
 
     [Fact]
@@ -32,6 +32,9 @@ public sealed class StoreTests
     [InlineData("CZ")]
     [InlineData("CZK1")]
     [InlineData("C2K")]
+    // A well-formed code ShopForge has no minor units for: refused while the shop is a draft rather than at
+    // somebody's checkout.
+    [InlineData("ZWL")]
     public void Invalid_currency_is_rejected(string currency)
     {
         Assert.Throws<ArgumentException>(() => new Store(Guid.NewGuid(), "Wooden Home", currency, "cs-CZ", Theme));

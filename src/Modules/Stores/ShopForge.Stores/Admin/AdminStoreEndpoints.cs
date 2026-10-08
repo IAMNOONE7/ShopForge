@@ -22,7 +22,7 @@ internal static class AdminStoreEndpoints
             .Select(store => new AdminStoreResponse(
                 store.Id,
                 store.Name,
-                store.Currency,
+                store.Currency.Code,
                 store.Culture,
                 store.Status,
                 new AdminThemeResponse(store.Theme.PrimaryColor, store.Theme.SecondaryColor, store.Theme.BorderRadius),
@@ -62,7 +62,7 @@ internal sealed record AdminStoreResponse(
     public static AdminStoreResponse From(Store store, string? primaryHostName) => new(
         store.Id,
         store.Name,
-        store.Currency,
+        store.Currency.Code,
         store.Culture,
         store.Status,
         new AdminThemeResponse(store.Theme.PrimaryColor, store.Theme.SecondaryColor, store.Theme.BorderRadius),

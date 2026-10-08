@@ -210,7 +210,7 @@ public sealed class ComgateNotificationTests : IDisposable
     }
 
     private ComgateTransaction Transaction(ComgateOrder world, string status) =>
-        new(world.TransactionId, status, MinorUnits.Of(world.Amount, "EUR"), "EUR", world.Number, Test: true);
+        new(world.TransactionId, status, Currency.Of("EUR").ToMinorUnits(world.Amount), "EUR", world.Number, Test: true);
 
     private async Task<ComgateOrder> PaidAtComgateAsync(string status)
     {

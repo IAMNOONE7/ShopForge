@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Http;
+using ShopForge.Shared.Payments;
 using ShopForge.Shared.Platform;
 using ShopForge.Shared.Security;
 using ShopForge.Shared.Stores;
@@ -83,7 +84,7 @@ internal static class StoreProvisioningEndpoints
         // Modules set up what the new store needs to work, for example its payment and shipping methods.
         foreach (var initializer in initializers)
         {
-            await initializer.InitializeAsync(cancellationToken);
+            await initializer.InitializeAsync(new NewStore(store.Currency), cancellationToken);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -228,12 +229,13 @@ internal static class StoreProvisioningEndpoints
     private static RequestErrors ValidateSettings(string? name, string? currency, string? culture, ThemeRequest? theme) =>
         new RequestErrors()
             .Check(!string.IsNullOrWhiteSpace(name) && name.Trim().Length <= 200, "name", "Name is required (up to 200 characters).")
-            .Check(currency is null || IsCurrencyCode(currency), "currency", "Currency must be a three-letter ISO 4217 code, for example EUR.")
+            .Check(currency is null || IsCurrencyCode(currency), "currency", "Currency must be a currency ShopForge can charge in, for example EUR.")
             .Check(IsCulture(culture), "culture", "Culture must be a known culture name, for example en-IE.")
             .Check(theme is not null && theme.IsValid, "theme", "Theme needs two #RRGGBB colors and a border radius of zero or more.");
 
-    private static bool IsCurrencyCode(string currency) =>
-        currency.Trim().Length == 3 && currency.Trim().All(char.IsAsciiLetter);
+    // Not merely three letters: a code ShopForge has no minor units for cannot be charged, and a merchant hears
+    // that here rather than through a 500 from the domain refusing it (D-186).
+    private static bool IsCurrencyCode(string currency) => Currency.Find(currency) is not null;
 
     private static bool IsCulture(string? culture)
     {

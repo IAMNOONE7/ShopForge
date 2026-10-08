@@ -1,3 +1,5 @@
+using ShopForge.Shared.Payments;
+
 namespace ShopForge.Orders.Returns;
 
 // A line bought as a whole can come back in pieces, so its discount has to come back in pieces too. Working from
@@ -5,9 +7,9 @@ namespace ShopForge.Orders.Returns;
 // is split and in whatever order the parcels arrive (D-096).
 internal static class ReturnedAmounts
 {
-    public static decimal DiscountShare(decimal discount, int quantity, int alreadyReturned, int returning) =>
-        Portion(discount, alreadyReturned + returning, quantity) - Portion(discount, alreadyReturned, quantity);
+    public static decimal DiscountShare(decimal discount, int quantity, int alreadyReturned, int returning, Currency currency) =>
+        Portion(discount, alreadyReturned + returning, quantity, currency) - Portion(discount, alreadyReturned, quantity, currency);
 
-    private static decimal Portion(decimal discount, int quantity, int of) =>
-        decimal.Round(discount * quantity / of, 2, MidpointRounding.AwayFromZero);
+    private static decimal Portion(decimal discount, int quantity, int of, Currency currency) =>
+        currency.Round(discount * quantity / of);
 }

@@ -103,6 +103,23 @@ public sealed class ProvisioningTests(ShopForgeApiFactory factory)
         Assert.Contains(field, await response.Content.ReadAsStringAsync(CancellationToken), StringComparison.OrdinalIgnoreCase);
     }
 
+    // A well-formed code ShopForge has no minor units for is not a currency it can charge in, and a merchant has
+    // to be told so rather than shown a 500 (D-186).
+    [Fact]
+    public async Task A_currency_ShopForge_cannot_charge_in_is_refused_with_a_reason()
+    {
+        var (existing, _) = await TestStores.CreateTwoStoresOfOneTenantAsync(factory.Services);
+        using var owner = await TestUsers.LoginAsync(factory, await TestUsers.CreateAsync(factory.Services, existing.TenantId));
+
+        using var created = await owner.PostAsJsonAsync(
+            "/api/admin/stores",
+            NewStore("Harare Shop", TestStores.UniqueHostName()) with { Currency = "ZWL" },
+            CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, created.StatusCode);
+        Assert.Contains("ShopForge can charge in", await created.Content.ReadAsStringAsync(CancellationToken), StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Currency_can_only_change_while_the_store_is_a_draft()
     {

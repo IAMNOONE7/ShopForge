@@ -2,13 +2,14 @@ using Microsoft.EntityFrameworkCore;
 using ShopForge.Catalog.Domain;
 using ShopForge.Catalog.Publishing;
 using ShopForge.Shared.Inventory;
+using ShopForge.Shared.Payments;
 using ShopForge.Shared.Platform;
 using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Catalog.Import;
 
-internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeContext, IStockLedger stock, ITenantLimits limits, TimeProvider clock)
+internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeContext, IStockLedger stock, ITenantLimits limits, TimeProvider clock, Currency currency)
 {
     private const int MaxIssues = 200;
 
@@ -145,7 +146,7 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
             product = catalog.ProductOf(listed);
         }
 
-        var details = ReadDetails(row, listing, catalog, issues);
+        var details = ReadDetails(row, listing, catalog, issues, currency);
         var categoryNames = ReadCategoryNames(row, issues);
         var attributes = ReadAttributes(row, catalog, issues);
         var variant = product?.Variants.SingleOrDefault(candidate => candidate.Sku == sku);
@@ -197,7 +198,7 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
 
         if (listing is null)
         {
-            listing = new StoreProduct(storeContext.StoreId!.Value, product, details!);
+            listing = new StoreProduct(storeContext.StoreId!.Value, product, details!, currency);
             dbContext.Add(listing);
             catalog.Listings[product.Id] = listing;
         }
@@ -206,7 +207,7 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
             // A file can rename in bulk, which is the easiest way to lose every link to a shop at once. The
             // trail is written after the rows, where the rest of the deferred work goes.
             var wasCalled = listing.Slug;
-            changed |= listing.Update(details!);
+            changed |= listing.Update(details!, currency);
 
             if (wasCalled != listing.Slug)
             {
@@ -291,7 +292,7 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
         return null;
     }
 
-    private static StoreProductDetails? ReadDetails(ImportRow row, StoreProduct? listing, CatalogData catalog, List<ImportIssue> issues)
+    private static StoreProductDetails? ReadDetails(ImportRow row, StoreProduct? listing, CatalogData catalog, List<ImportIssue> issues, Currency currency)
     {
         void Invalid(string? column, string message) => issues.Add(new ImportIssue(row.Number, column, message));
 
@@ -310,13 +311,13 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
 
         if (row.Has(ImportColumns.Price))
         {
-            if (row[ImportColumns.Price].TryDecimal(out var value) && value >= 0 && decimal.Round(value, 2) == value)
+            if (row[ImportColumns.Price].TryDecimal(out var value) && value >= 0 && currency.Holds(value))
             {
                 price = value;
             }
             else
             {
-                Invalid(ImportColumns.Price, "Price must be zero or more, with at most two decimals.");
+                Invalid(ImportColumns.Price, $"Price must be zero or more, with at most {currency.Decimals} decimals.");
             }
         }
         else if (price is null)

@@ -49,7 +49,7 @@ public sealed class ComgateRefundTests : IDisposable
 
         Assert.Equal(world.TransactionId, refund.TransactionId);
         Assert.Equal("EUR", refund.Currency);
-        Assert.Equal(MinorUnits.Of(received.RefundedAmount, "EUR"), refund.Amount);
+        Assert.Equal(Currency.Of("EUR").ToMinorUnits(received.RefundedAmount), refund.Amount);
         Assert.Equal(world.Total, received.RefundedAmount);
     }
 
@@ -62,7 +62,7 @@ public sealed class ComgateRefundTests : IDisposable
         var received = await ReturnAsync(world, quantity: 1);
         var refund = _comgate.Refunded.Single();
 
-        Assert.Equal(MinorUnits.Of(received.RefundedAmount, "EUR"), refund.Amount);
+        Assert.Equal(Currency.Of("EUR").ToMinorUnits(received.RefundedAmount), refund.Amount);
         Assert.True(received.RefundedAmount < world.Total, $"a partial refund of {received.RefundedAmount} should be less than {world.Total}");
     }
 
@@ -166,11 +166,11 @@ public sealed class ComgateRefundTests : IDisposable
         var refunds = scope.ServiceProvider.GetServices<IPaymentRefunds>()
             .Single(candidate => candidate.Key == ComgatePaymentProvider.ProviderKey);
 
-        await refunds.RefundAsync(new RefundRequest(orderNumber, transactionId, amount, "EUR"), CancellationToken);
+        await refunds.RefundAsync(new RefundRequest(orderNumber, transactionId, amount, Currency.Of("EUR")), CancellationToken);
     }
 
     private ComgateTransaction Transaction(ComgateWorld world, string status) =>
-        new(world.TransactionId, status, MinorUnits.Of(world.Total, "EUR"), "EUR", world.Number, Test: true);
+        new(world.TransactionId, status, Currency.Of("EUR").ToMinorUnits(world.Total), "EUR", world.Number, Test: true);
 
     private async Task<ReturnView> ReturnAsync(ComgateWorld world, int quantity)
     {

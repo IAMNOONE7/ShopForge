@@ -16,4 +16,4 @@ public interface IPaymentAttempts
         CancellationToken cancellationToken);
 }
 
-public sealed record RecordedAttempt(Guid StoreId, string OrderNumber, decimal Amount, string Currency);
+public sealed record RecordedAttempt(Guid StoreId, string OrderNumber, decimal Amount, Currency Currency);

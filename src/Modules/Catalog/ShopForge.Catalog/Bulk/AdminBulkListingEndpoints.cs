@@ -7,6 +7,7 @@ using ShopForge.Catalog.Domain;
 using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Security;
+using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Catalog.Bulk;
@@ -60,11 +61,13 @@ internal static class AdminBulkListingEndpoints
         BulkPriceRequest request,
         DbContext dbContext,
         IAuditLog audit,
+        ICurrentStoreSettings storeSettings,
         CancellationToken cancellationToken)
     {
+        var currency = (await storeSettings.GetAsync(cancellationToken)).Currency;
         var errors = Errors(request.StoreProductIds)
             .Check(request.Set is not null ^ request.ByPercent is not null, "price", "Give either a price to set or a percentage to change by.")
-            .Check(request.Set is null || (request.Set >= 0 && decimal.Round(request.Set.Value, 2) == request.Set), "set", "A price must be zero or more, with at most two decimals.")
+            .Check(request.Set is null || (request.Set >= 0 && currency.Holds(request.Set.Value)), "set", $"A price must be zero or more, with at most {currency.Decimals} decimals.")
             .Check(request.ByPercent is null or (> -100 and <= 1000), "byPercent", "A percentage change must be more than -100 and at most 1000.");
 
         if (errors.Any)
@@ -78,11 +81,11 @@ internal static class AdminBulkListingEndpoints
         foreach (var listing in listings)
         {
             // Rounded to the money it will be charged in, away from zero, so a five per cent rise on 99.99
-            // is 104.99 and not something with four decimals in it (D-183).
-            var price = request.Set
-                ?? decimal.Round(listing.Price * (1 + (request.ByPercent!.Value / 100m)), 2, MidpointRounding.AwayFromZero);
+            // is 104.99 in euros and 105 in yen, and never something with decimals the currency has not got
+            // (D-183, D-186).
+            var price = request.Set ?? currency.Round(listing.Price * (1 + (request.ByPercent!.Value / 100m)));
 
-            if (listing.SetPrice(decimal.Max(price, 0m)))
+            if (listing.SetPrice(decimal.Max(price, 0m), currency))
             {
                 changed++;
             }

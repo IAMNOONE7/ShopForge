@@ -11,6 +11,7 @@ using ShopForge.Catalog.Search;
 using ShopForge.Shared.Admin;
 using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Http;
+using ShopForge.Shared.Payments;
 using ShopForge.Shared.Security;
 using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
@@ -113,9 +114,11 @@ internal static class AdminStoreCatalogEndpoints
         DbContext dbContext,
         IStoreContext storeContext,
         SearchIndex search,
+        ICurrentStoreSettings storeSettings,
         CancellationToken cancellationToken)
     {
-        var errors = ValidateDetails(request.Name, request.Slug, request.Price, request.VatRate);
+        var currency = (await storeSettings.GetAsync(cancellationToken)).Currency;
+        var errors = ValidateDetails(request.Name, request.Slug, request.Price, request.VatRate, currency);
 
         // The tenant filter makes products of other tenants invisible, so they cannot be listed here.
         var product = await dbContext.Set<Product>().SingleOrDefaultAsync(product => product.Id == request.ProductId, cancellationToken);
@@ -138,7 +141,7 @@ internal static class AdminStoreCatalogEndpoints
             return SlugTaken();
         }
 
-        var storeProduct = new StoreProduct(storeContext.StoreId!.Value, product!, details);
+        var storeProduct = new StoreProduct(storeContext.StoreId!.Value, product!, details, currency);
         dbContext.Add(storeProduct);
         await dbContext.SaveChangesAsync(cancellationToken);
         await search.RefreshAsync(storeProduct.Id, cancellationToken);
@@ -155,6 +158,7 @@ internal static class AdminStoreCatalogEndpoints
         TimeProvider clock,
         IAuditLog audit,
         SearchIndex search,
+        ICurrentStoreSettings storeSettings,
         CancellationToken cancellationToken)
     {
         var storeProduct = await dbContext.Set<StoreProduct>()
@@ -168,7 +172,8 @@ internal static class AdminStoreCatalogEndpoints
 
         // Without an explicit slug the public URL stays as it is, even when the name changes.
         var slug = request.Slug ?? storeProduct.Slug;
-        var errors = ValidateDetails(request.Name, slug, request.Price, request.VatRate);
+        var currency = (await storeSettings.GetAsync(cancellationToken)).Currency;
+        var errors = ValidateDetails(request.Name, slug, request.Price, request.VatRate, currency);
 
         if (errors.Any)
         {
@@ -184,7 +189,7 @@ internal static class AdminStoreCatalogEndpoints
 
         var wasPriced = storeProduct.Price;
         var wasCalled = storeProduct.Slug;
-        storeProduct.Update(details);
+        storeProduct.Update(details, currency);
         await SlugTrail.RecordAsync(
             dbContext,
             storeProduct.StoreId,
@@ -594,12 +599,12 @@ internal static class AdminStoreCatalogEndpoints
             title: $"This {what} cannot be deleted",
             detail: $"It cannot be deleted because {reason}. Archive it instead to take it out of use and keep it.");
 
-    private static RequestErrors ValidateDetails(string? name, string? slug, decimal price, decimal vatRate) =>
+    private static RequestErrors ValidateDetails(string? name, string? slug, decimal price, decimal vatRate, Currency currency) =>
         new RequestErrors()
             .Check(!string.IsNullOrWhiteSpace(name) && name.Trim().Length <= 200, "name", "Name is required (up to 200 characters).")
             .Check(slug is null || Slugs.IsValid(slug), "slug", "Slug may contain lower-case letters, digits and single hyphens.")
             .Check(name is null || slug is not null || Slugs.Create(name).Length > 0, "slug", "A slug cannot be derived from this name; provide one.")
-            .Check(price >= 0 && decimal.Round(price, 2) == price, "price", "Price must be zero or more, with at most two decimals.")
+            .Check(price >= 0 && currency.Holds(price), "price", $"Price must be zero or more, with at most {currency.Decimals} decimals.")
             .Check(vatRate is >= 0 and <= 100 && decimal.Round(vatRate, 2) == vatRate, "vatRate", "The VAT rate must be between 0 and 100.");
 
     private static RequestErrors ValidateCategory(CategoryRequest request) =>

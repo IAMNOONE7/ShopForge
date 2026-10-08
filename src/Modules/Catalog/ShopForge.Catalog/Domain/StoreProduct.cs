@@ -1,4 +1,5 @@
 using ShopForge.Shared.Catalog;
+using ShopForge.Shared.Payments;
 using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
 
@@ -13,12 +14,12 @@ internal sealed class StoreProduct : IStoreOwned, IArchivable
     {
     }
 
-    public StoreProduct(Guid storeId, Product product, StoreProductDetails details)
+    public StoreProduct(Guid storeId, Product product, StoreProductDetails details, Currency currency)
     {
         Id = Guid.CreateVersion7();
         StoreId = storeId;
         ProductId = product.Id;
-        Update(details);
+        Update(details, currency);
     }
 
     public Guid Id { get; private set; }
@@ -96,13 +97,13 @@ internal sealed class StoreProduct : IStoreOwned, IArchivable
 
     public IReadOnlyCollection<ProductAttributeValue> AttributeValues => _attributeValues;
 
-    public bool Update(StoreProductDetails details)
+    public bool Update(StoreProductDetails details, Currency currency)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(details.Name);
 
-        if (details.Price < 0 || decimal.Round(details.Price, 2) != details.Price)
+        if (details.Price < 0 || !currency.Holds(details.Price))
         {
-            throw new ArgumentOutOfRangeException(nameof(details), "Price must be a non-negative amount with at most two decimals.");
+            throw new ArgumentOutOfRangeException(nameof(details), $"Price must be a non-negative amount with at most {currency.Decimals} decimals.");
         }
 
         if (details.VatRate is < 0 or > 100 || decimal.Round(details.VatRate, 2) != details.VatRate)
@@ -210,11 +211,11 @@ internal sealed class StoreProduct : IStoreOwned, IArchivable
         return true;
     }
 
-    public bool SetPrice(decimal price)
+    public bool SetPrice(decimal price, Currency currency)
     {
-        if (price < 0 || decimal.Round(price, 2) != price)
+        if (price < 0 || !currency.Holds(price))
         {
-            throw new ArgumentException("A price must be zero or more, with at most two decimals.", nameof(price));
+            throw new ArgumentException($"A price must be zero or more, with at most {currency.Decimals} decimals.", nameof(price));
         }
 
         if (Price == price)

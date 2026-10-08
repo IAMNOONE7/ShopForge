@@ -22,7 +22,7 @@ public sealed record PaymentRequest(
     Guid StoreId,
     string OrderNumber,
     decimal Amount,
-    string Currency,
+    Currency Currency,
     string CustomerEmail,
     string ReturnUrl,
     string CancelUrl,

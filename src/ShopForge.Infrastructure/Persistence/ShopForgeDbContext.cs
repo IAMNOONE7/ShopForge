@@ -6,6 +6,7 @@ using ShopForge.Infrastructure.Auditing;
 using ShopForge.Infrastructure.Email;
 using ShopForge.Infrastructure.Messaging;
 using ShopForge.Shared.Catalog;
+using ShopForge.Shared.Payments;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Infrastructure.Persistence;
@@ -31,6 +32,14 @@ public sealed class ShopForgeDbContext(
         EnsureChangesStayWithinCurrentStore();
         EnsureTheRecordIsOnlyAddedTo();
         return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    // Every currency column in every module, stated once: a module cannot register this for itself without
+    // referencing EF, and a currency that converted in one place and not another would be worse than a string.
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        configurationBuilder.Properties<Currency>().HaveConversion<CurrencyConverter>().HaveMaxLength(3).AreFixedLength();
+        base.ConfigureConventions(configurationBuilder);
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

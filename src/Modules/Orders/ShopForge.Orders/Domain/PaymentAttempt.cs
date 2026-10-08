@@ -1,3 +1,4 @@
+using ShopForge.Shared.Payments;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Orders.Domain;
@@ -17,7 +18,7 @@ internal sealed class PaymentAttempt : IStoreOwned
         string provider,
         string? reference,
         decimal amount,
-        string currency,
+        Currency currency,
         string? redirectUrl,
         DateTimeOffset startedAt)
     {
@@ -52,7 +53,7 @@ internal sealed class PaymentAttempt : IStoreOwned
     // What was asked for, as it was sent: a later price change must not rewrite what somebody was charged.
     public decimal Amount { get; private set; }
 
-    public string Currency { get; private set; } = null!;
+    public Currency Currency { get; private set; } = null!;
 
     // Exactly what the provider gave back, unmodified — the shopper was sent there and nowhere else.
     public string? RedirectUrl { get; private set; }

@@ -1,4 +1,5 @@
 using ShopForge.Orders.Domain;
+using ShopForge.Shared.Payments;
 using ShopForge.Shared.Shipping;
 
 namespace ShopForge.UnitTests.Orders;
@@ -68,7 +69,7 @@ public sealed class OrderTests
     private static Order Place() => new(
         Guid.NewGuid(),
         "2026-00001",
-        "EUR",
+        Currency.Of("EUR"),
         "buyer@example.test",
         "+420 123 456 789",
         Address,

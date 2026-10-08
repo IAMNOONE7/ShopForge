@@ -1,3 +1,4 @@
+using ShopForge.Shared.Payments;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Orders.Domain;
@@ -8,7 +9,7 @@ internal sealed class Discount : IStoreOwned
     {
     }
 
-    public Discount(Guid storeId, string code, string name, DiscountKind kind, decimal value, DiscountLimits limits)
+    public Discount(Guid storeId, string code, string name, DiscountKind kind, decimal value, DiscountLimits limits, Currency currency)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(code);
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
@@ -16,7 +17,7 @@ internal sealed class Discount : IStoreOwned
         Id = Guid.CreateVersion7();
         StoreId = storeId;
         Code = Normalize(code);
-        Update(name, kind, value, limits, isActive: true);
+        Update(name, kind, value, limits, isActive: true, currency);
     }
 
     public Guid Id { get; private set; }
@@ -48,7 +49,7 @@ internal sealed class Discount : IStoreOwned
 
     public static string Normalize(string code) => code.Trim().ToUpperInvariant();
 
-    public void Update(string name, DiscountKind kind, decimal value, DiscountLimits limits, bool isActive)
+    public void Update(string name, DiscountKind kind, decimal value, DiscountLimits limits, bool isActive, Currency currency)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
@@ -57,9 +58,9 @@ internal sealed class Discount : IStoreOwned
             throw new ArgumentOutOfRangeException(nameof(value), "A percentage is between 0 and 100.");
         }
 
-        if (kind == DiscountKind.Amount && (value <= 0 || decimal.Round(value, 2) != value))
+        if (kind == DiscountKind.Amount && (value <= 0 || !currency.Holds(value)))
         {
-            throw new ArgumentOutOfRangeException(nameof(value), "An amount is positive, with at most two decimals.");
+            throw new ArgumentOutOfRangeException(nameof(value), $"An amount is positive, with at most {currency.Decimals} decimals.");
         }
 
         Name = name.Trim();

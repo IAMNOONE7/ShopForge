@@ -44,7 +44,7 @@ public sealed class PaymentAttemptTests : IDisposable
         Assert.Equal(FakeGateway.ProviderKey, attempt.Provider);
         Assert.Equal(PaymentAttemptStatus.Started, attempt.Status);
         // Two chairs at 100 and 4.90 for the courier: what the order came to, not what the browser said.
-        Assert.Equal((204.90m, "EUR"), (attempt.Amount, attempt.Currency));
+        Assert.Equal((204.90m, "EUR"), (attempt.Amount, attempt.Currency.Code));
         Assert.Equal($"https://gateway.test/{order.Number}", attempt.RedirectUrl);
         Assert.Equal($"gateway-{order.Number}", attempt.Reference);
     }

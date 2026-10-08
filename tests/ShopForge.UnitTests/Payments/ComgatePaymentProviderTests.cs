@@ -49,7 +49,7 @@ public sealed class ComgatePaymentProviderTests
         Guid.CreateVersion7(),
         "2026-00001",
         204.90m,
-        "CZK",
+        Currency.Of("CZK"),
         "buyer@example.test",
         "https://shop.test/order/2026-00001",
         "https://shop.test/cart",

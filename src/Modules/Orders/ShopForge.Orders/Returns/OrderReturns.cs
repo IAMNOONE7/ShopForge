@@ -146,7 +146,8 @@ internal sealed class OrderReturns(
                 sold.Discount,
                 sold.Quantity,
                 refundedBefore.GetValueOrDefault(line.VariantId),
-                line.Quantity);
+                line.Quantity,
+                order.Currency);
 
             amount += (sold.UnitPrice * line.Quantity) - share;
             credited.Add(new CreditedLine(sold.ProductName, line.Quantity, sold.UnitPrice, sold.VatRate, share));
@@ -190,7 +191,7 @@ internal sealed class OrderReturns(
             await refunds.RefundAsync(new RefundRequest(order.Number, reference, amount, order.Currency), cancellationToken);
         }
 
-        outbox.Enqueue(new ReturnRefunded(order.Number, order.Email, orderReturn.Number, amount, order.Currency));
+        outbox.Enqueue(new ReturnRefunded(order.Number, order.Email, orderReturn.Number, amount, order.Currency.Code));
         metrics.OrderRefunded(orderReturn.StoreCustomerId is null ? "store" : "return");
 
         return true;

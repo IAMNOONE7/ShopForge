@@ -11,6 +11,7 @@ using ShopForge.Catalog.Export;
 using ShopForge.Shared.Inventory;
 using ShopForge.Shared.Platform;
 using ShopForge.Shared.Security;
+using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Catalog.Import;
@@ -44,6 +45,7 @@ internal static class ImportEndpoints
         IStockLedger stock,
         ITenantLimits limits,
         TimeProvider clock,
+        ICurrentStoreSettings storeSettings,
         CancellationToken cancellationToken)
     {
         if (file is not { Length: > 0 } || file.Length > ImportFile.MaxBytes)
@@ -56,7 +58,9 @@ internal static class ImportEndpoints
             await using var content = file.OpenReadStream();
             var import = ImportFile.Read(content);
 
-            return TypedResults.Ok(await new CatalogImporter(dbContext, storeContext, stock, limits, clock).ImportAsync(import, cancellationToken));
+            var currency = (await storeSettings.GetAsync(cancellationToken)).Currency;
+
+            return TypedResults.Ok(await new CatalogImporter(dbContext, storeContext, stock, limits, clock, currency).ImportAsync(import, cancellationToken));
         }
         catch (ImportFileException exception)
         {

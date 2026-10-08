@@ -179,6 +179,7 @@ public static class DevelopmentCatalog
         await using var scope = services.CreateAsyncScope();
         scope.ServiceProvider.GetRequiredService<StoreContext>().Set(storeId, tenantId);
         var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
+        var currency = (await scope.ServiceProvider.GetRequiredService<ICurrentStoreSettings>().GetAsync(cancellationToken)).Currency;
         var added = new List<Product>();
 
         for (var index = 0; index < categories.Length; index++)
@@ -202,7 +203,8 @@ public static class DevelopmentCatalog
 
                 var product = new Product(tenantId, item.Sku, ean: null, weightGrams: null);
                 var storeProduct = new StoreProduct(storeId, product,
-                    new StoreProductDetails(item.Name, Slugs.Create(item.Name), item.Description, item.Price, VatRate: 21m, IsVisible: true, SortOrder: 0));
+                    new StoreProductDetails(item.Name, Slugs.Create(item.Name), item.Description, item.Price, VatRate: 21m, IsVisible: true, SortOrder: 0),
+                    currency);
                 storeProduct.AssignCategories([category]);
                 dbContext.AddRange(product, storeProduct);
                 added.Add(product);

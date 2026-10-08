@@ -127,7 +127,7 @@ internal static class AdminOrderEndpoints
                 attempt.Status.ToString(),
                 attempt.Environment,
                 attempt.Amount,
-                attempt.Currency,
+                attempt.Currency.Code,
                 attempt.StartedAt,
                 attempt.ChangedAt))
             .ToListAsync(cancellationToken);
@@ -149,7 +149,7 @@ internal static class AdminOrderEndpoints
             {
                 await stock.ConfirmAsync(order.Number, token);
                 await SettleAttemptAsync(dbContext, order, PaymentAttemptStatus.Paid, clock, token);
-                outbox.Enqueue(new PaymentReceived(order.Number, order.Email, order.GrandTotal, order.Currency));
+                outbox.Enqueue(new PaymentReceived(order.Number, order.Email, order.GrandTotal, order.Currency.Code));
             },
             order => metrics.PaymentConfirmed(order.PaymentMethodCode),
             "The order is not awaiting payment",
@@ -405,7 +405,7 @@ internal sealed record AdminOrderDetailResponse(
         order.Status.ToString(),
         order.Email,
         order.Phone,
-        order.Currency,
+        order.Currency.Code,
         order.PaymentMethodName,
         order.ShippingMethodName,
         order.ShippingProviderKey,

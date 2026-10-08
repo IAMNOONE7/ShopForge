@@ -1,3 +1,4 @@
+using ShopForge.Shared.Payments;
 using ShopForge.Shared.Shipping;
 using ShopForge.Shared.Tenancy;
 
@@ -14,7 +15,7 @@ internal sealed class Order : IStoreOwned
     public Order(
         Guid storeId,
         string number,
-        string currency,
+        Currency currency,
         string email,
         string phone,
         Address billing,
@@ -80,7 +81,7 @@ internal sealed class Order : IStoreOwned
     // merchant switched method (D-144). Null only on orders placed before it was asked for.
     public string? Phone { get; private set; }
 
-    public string Currency { get; private set; } = null!;
+    public Currency Currency { get; private set; } = null!;
 
     public Address BillingAddress { get; private set; } = null!;
 
@@ -128,7 +129,7 @@ internal sealed class Order : IStoreOwned
 
     public decimal GrandTotal => ItemsTotal + ShippingCharged;
 
-    public decimal VatTotal => _lines.Sum(line => line.VatAmount) + Money.VatOf(ShippingCharged, ShippingVatRate);
+    public decimal VatTotal => _lines.Sum(line => line.VatIn(Currency)) + Money.VatOf(ShippingCharged, ShippingVatRate, Currency);
 
     public decimal ShippingDiscount { get; private set; }
 
@@ -286,7 +287,8 @@ internal sealed class OrderLine
 
     public decimal LineTotal => (UnitPrice * Quantity) - Discount;
 
-    public decimal VatAmount => Money.VatOf(LineTotal, VatRate);
+    // A line's tax is only money inside its order, which is what knows the currency it rounds in (D-186).
+    public decimal VatIn(Currency currency) => Money.VatOf(LineTotal, VatRate, currency);
 }
 
 internal enum OrderStatus
@@ -310,9 +312,10 @@ internal sealed record ChosenMethods(
     decimal ShippingPrice,
     decimal ShippingVatRate);
 
-// Prices are stored with VAT included (D-044), so the tax part is derived from the gross amount.
+// Prices are stored with VAT included (D-044), so the tax part is derived from the gross amount, and rounded to
+// the places the money it is charged in actually has (D-186).
 internal static class Money
 {
-    public static decimal VatOf(decimal gross, decimal vatRate) =>
-        decimal.Round(gross - (gross / (1 + (vatRate / 100m))), 2, MidpointRounding.AwayFromZero);
+    public static decimal VatOf(decimal gross, decimal vatRate, Currency currency) =>
+        currency.Round(gross - (gross / (1 + (vatRate / 100m))));
 }

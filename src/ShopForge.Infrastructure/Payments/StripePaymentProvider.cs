@@ -14,8 +14,8 @@ internal sealed class StripePaymentProvider(ICheckoutSessions sessions) : IPayme
             new CheckoutSession(
                 request.OrderNumber,
                 request.StoreId,
-                MinorUnits.Of(request.Amount, request.Currency),
-                request.Currency,
+                request.Currency.ToMinorUnits(request.Amount),
+                request.Currency.Code,
                 request.CustomerEmail,
                 request.ReturnUrl,
                 request.CancelUrl,

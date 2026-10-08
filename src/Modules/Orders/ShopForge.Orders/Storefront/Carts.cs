@@ -4,6 +4,8 @@ using ShopForge.Orders.Discounts;
 using ShopForge.Orders.Domain;
 using ShopForge.Shared.Catalog;
 using ShopForge.Shared.Inventory;
+using ShopForge.Shared.Payments;
+using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Orders.Storefront;
@@ -15,6 +17,7 @@ internal sealed class Carts(
     ISellableProducts products,
     IStockLedger stock,
     DiscountCodes discounts,
+    ICurrentStoreSettings storeSettings,
     TimeProvider clock)
 {
     private const string CookieName = "shopforge_cart";
@@ -110,9 +113,10 @@ internal sealed class Carts(
             .ThenBy(item => item.Variant.Position)
             .ToList();
 
-        var (discount, problem) = await DiscountForAsync(cart, items, cancellationToken);
+        var currency = (await storeSettings.GetAsync(cancellationToken)).Currency;
+        var (discount, problem) = await DiscountForAsync(cart, items, currency, cancellationToken);
 
-        return new CartContents(items, changed, shortNames, discount, problem);
+        return new CartContents(items, currency, changed, shortNames, discount, problem);
     }
 
     // A code can stop applying while it sits in the cart — it expires, it is used up, the cart drops below its
@@ -120,6 +124,7 @@ internal sealed class Carts(
     private async Task<(AppliedDiscount? Applied, DiscountProblem? Problem)> DiscountForAsync(
         Cart cart,
         IReadOnlyList<CartItem> items,
+        Currency currency,
         CancellationToken cancellationToken)
     {
         if (cart.DiscountCode is not { Length: > 0 } code || items.Count == 0)
@@ -139,7 +144,7 @@ internal sealed class Carts(
             return (null, problem);
         }
 
-        var allocation = DiscountAllocation.For(discount, [.. items.Select(item => item.LineTotal)], shippingPrice: 0m);
+        var allocation = DiscountAllocation.For(discount, [.. items.Select(item => item.LineTotal)], shippingPrice: 0m, currency);
 
         return (new AppliedDiscount(discount, allocation), null);
     }
@@ -154,6 +159,7 @@ internal sealed record AppliedDiscount(Discount Discount, DiscountResult Result)
 
 internal sealed record CartContents(
     IReadOnlyList<CartItem> Items,
+    Currency Currency,
     bool Changed,
     IReadOnlyList<string> ShortNames,
     AppliedDiscount? Discount = null,
@@ -164,7 +170,7 @@ internal sealed record CartContents(
     public decimal DiscountTotal => Discount?.Result.LineDiscounts.Sum() ?? 0m;
 
     public decimal VatTotal => Items
-        .Select((item, index) => Money.VatOf(item.LineTotal - LineDiscount(index), item.Product.VatRate))
+        .Select((item, index) => Money.VatOf(item.LineTotal - LineDiscount(index), item.Product.VatRate, Currency))
         .Sum();
 
     public int Count => Items.Sum(item => item.Quantity);

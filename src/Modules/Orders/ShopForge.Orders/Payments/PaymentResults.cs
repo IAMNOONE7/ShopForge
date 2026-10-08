@@ -120,7 +120,7 @@ internal sealed class PaymentResults(
         if (result == PaymentResult.Paid)
         {
             await stock.ConfirmAsync(order.Number, cancellationToken);
-            outbox.Enqueue(new PaymentReceived(order.Number, order.Email, order.GrandTotal, order.Currency));
+            outbox.Enqueue(new PaymentReceived(order.Number, order.Email, order.GrandTotal, order.Currency.Code));
             metrics.PaymentConfirmed(provider);
         }
         else

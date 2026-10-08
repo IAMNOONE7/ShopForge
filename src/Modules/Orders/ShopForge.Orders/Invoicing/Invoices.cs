@@ -115,7 +115,7 @@ internal sealed class Invoices(DbContext dbContext, IStoreContext storeContext, 
             invoice.Number,
             invoice.OrderNumber,
             invoice.IssuedAt,
-            invoice.Currency,
+            invoice.Currency.Code,
             settings.Culture,
             new DocumentParty(
                 invoice.Seller.LegalName,

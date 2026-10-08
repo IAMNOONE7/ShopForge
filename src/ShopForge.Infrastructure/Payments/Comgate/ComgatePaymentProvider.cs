@@ -27,8 +27,8 @@ internal sealed class ComgatePaymentProvider(
         var created = await payments.CreateAsync(
             merchant.Merchant,
             new ComgatePayment(
-                MinorUnits.Of(request.Amount, request.Currency),
-                request.Currency,
+                request.Currency.ToMinorUnits(request.Amount),
+                request.Currency.Code,
                 Label(request.OrderNumber),
                 request.OrderNumber,
                 request.CustomerEmail,

@@ -46,7 +46,7 @@ internal sealed class ProductFeeds(
         var settings = await storeSettings.GetAsync(cancellationToken);
         var problems = new List<FeedProblem>();
 
-        await foreach (var product in ProductsAsync(feed, address, settings.Currency, _ => { }, () => { }, cancellationToken))
+        await foreach (var product in ProductsAsync(feed, address, settings.Currency.Code, _ => { }, () => { }, cancellationToken))
         {
             if (GoogleFeedChecks.Problems(product) is { Count: > 0 } found)
             {
@@ -94,10 +94,10 @@ internal sealed class ProductFeeds(
                 new FeedStore(
                     settings.Name,
                     address.Language,
-                    settings.Currency,
+                    settings.Currency.Code,
                     address.Home,
                     await shipping.FindAsync(cancellationToken)),
-                ProductsAsync(feed, address, settings.Currency, count => written = count, () => skipped++, cancellationToken),
+                ProductsAsync(feed, address, settings.Currency.Code, count => written = count, () => skipped++, cancellationToken),
                 cancellationToken);
 
             buffer.Position = 0;

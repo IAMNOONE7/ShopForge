@@ -32,7 +32,7 @@ internal static class StorefrontStoreEndpoint
         return TypedResults.Ok(new StorefrontStoreResponse(
             store.Id,
             store.Name,
-            store.Currency,
+            store.Currency.Code,
             store.Culture,
             store.LogoPath is null ? null : "/api/storefront/store/logo",
             store.ReturnWindowDays,

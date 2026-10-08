@@ -5,7 +5,9 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Orders.Domain;
 using ShopForge.Shared.Http;
+using ShopForge.Shared.Payments;
 using ShopForge.Shared.Security;
+using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Orders.Admin;
@@ -42,9 +44,11 @@ internal static class AdminDiscountEndpoints
         DiscountRequest request,
         DbContext dbContext,
         IStoreContext storeContext,
+        ICurrentStoreSettings storeSettings,
         CancellationToken cancellationToken)
     {
-        var errors = Validate(request);
+        var currency = (await storeSettings.GetAsync(cancellationToken)).Currency;
+        var errors = Validate(request, currency);
 
         if (errors.Any)
         {
@@ -58,7 +62,7 @@ internal static class AdminDiscountEndpoints
             return TypedResults.Problem(statusCode: StatusCodes.Status409Conflict, title: "The store already has this code");
         }
 
-        var discount = new Discount(storeContext.StoreId!.Value, code, request.Name!, request.ToKind(), request.Value, request.ToLimits());
+        var discount = new Discount(storeContext.StoreId!.Value, code, request.Name!, request.ToKind(), request.Value, request.ToLimits(), currency);
         dbContext.Add(discount);
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -70,9 +74,11 @@ internal static class AdminDiscountEndpoints
         string code,
         DiscountRequest request,
         DbContext dbContext,
+        ICurrentStoreSettings storeSettings,
         CancellationToken cancellationToken)
     {
-        var errors = Validate(request);
+        var currency = (await storeSettings.GetAsync(cancellationToken)).Currency;
+        var errors = Validate(request, currency);
 
         if (errors.Any)
         {
@@ -87,21 +93,21 @@ internal static class AdminDiscountEndpoints
             return TypedResults.NotFound();
         }
 
-        discount.Update(request.Name!, discount.Kind, request.Value, request.ToLimits(), request.IsActive);
+        discount.Update(request.Name!, discount.Kind, request.Value, request.ToLimits(), request.IsActive, currency);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return TypedResults.Ok(Response(discount));
     }
 
-    private static RequestErrors Validate(DiscountRequest request) =>
+    private static RequestErrors Validate(DiscountRequest request, Currency currency) =>
         new RequestErrors()
             .Check(!string.IsNullOrWhiteSpace(request.Code) && request.Code.Trim().Length <= 40, "code", "A code of up to 40 characters is required.")
             .Check(!string.IsNullOrWhiteSpace(request.Name) && request.Name.Trim().Length <= 100, "name", "Name is required (up to 100 characters).")
             .Check(request.ToKind() != DiscountKind.Percentage || request.Value is > 0 and <= 100, "value", "A percentage is between 0 and 100.")
             .Check(
-                request.ToKind() != DiscountKind.Amount || (request.Value > 0 && decimal.Round(request.Value, 2) == request.Value),
+                request.ToKind() != DiscountKind.Amount || (request.Value > 0 && currency.Holds(request.Value)),
                 "value",
-                "An amount is positive, with at most two decimals.")
+                $"An amount is positive, with at most {currency.Decimals} decimals.")
             .Check(request.MinimumOrderAmount is null or >= 0, "minimumOrderAmount", "A minimum cannot be negative.")
             .Check(request.MaxRedemptions is null or > 0, "maxRedemptions", "A usage limit is at least one.")
             .Check(request.MaxRedemptionsPerCustomer is null or > 0, "maxRedemptionsPerCustomer", "A per-customer limit is at least one.")

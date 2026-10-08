@@ -1,15 +1,20 @@
 using ShopForge.Orders.Domain;
+using ShopForge.Shared.Payments;
 
 namespace ShopForge.UnitTests.Orders;
 
 public sealed class DiscountAllocationTests
 {
+    private static readonly Currency Euro = Currency.Of("EUR");
+
+    private static readonly Currency Yen = Currency.Of("JPY");
+
     [Fact]
     public void A_percentage_is_split_across_the_lines_it_came_off()
     {
         var discount = Percentage(10m);
 
-        var result = DiscountAllocation.For(discount, [100m, 300m], shippingPrice: 4.90m);
+        var result = DiscountAllocation.For(discount, [100m, 300m], shippingPrice: 4.90m, Euro);
 
         Assert.Equal([10m, 30m], result.LineDiscounts);
         Assert.Equal(0m, result.ShippingDiscount);
@@ -23,7 +28,7 @@ public sealed class DiscountAllocationTests
     {
         var discount = Percentage(10m);
 
-        var result = DiscountAllocation.For(discount, [3.33m, 3.33m, 3.34m], shippingPrice: 0m);
+        var result = DiscountAllocation.For(discount, [3.33m, 3.33m, 3.34m], shippingPrice: 0m, Euro);
 
         Assert.Equal([0.33m, 0.33m, 0.34m], result.LineDiscounts);
         Assert.Equal(1.00m, result.Total);
@@ -34,7 +39,7 @@ public sealed class DiscountAllocationTests
     {
         var discount = Amount(50m);
 
-        var result = DiscountAllocation.For(discount, [12m, 8m], shippingPrice: 4.90m);
+        var result = DiscountAllocation.For(discount, [12m, 8m], shippingPrice: 4.90m, Euro);
 
         Assert.Equal(20m, result.Total);
         Assert.Equal([12m, 8m], result.LineDiscounts);
@@ -45,7 +50,7 @@ public sealed class DiscountAllocationTests
     {
         var discount = Amount(7m);
 
-        var result = DiscountAllocation.For(discount, [10m, 90m], shippingPrice: 0m);
+        var result = DiscountAllocation.For(discount, [10m, 90m], shippingPrice: 0m, Euro);
 
         Assert.Equal([0.70m, 6.30m], result.LineDiscounts);
         Assert.Equal(7m, result.Total);
@@ -54,9 +59,9 @@ public sealed class DiscountAllocationTests
     [Fact]
     public void Free_shipping_touches_the_shipping_line_only()
     {
-        var discount = new Discount(Guid.NewGuid(), "SHIPFREE", "Free shipping", DiscountKind.FreeShipping, 0m, new DiscountLimits());
+        var discount = new Discount(Guid.NewGuid(), "SHIPFREE", "Free shipping", DiscountKind.FreeShipping, 0m, new DiscountLimits(), Euro);
 
-        var result = DiscountAllocation.For(discount, [100m, 50m], shippingPrice: 4.90m);
+        var result = DiscountAllocation.For(discount, [100m, 50m], shippingPrice: 4.90m, Euro);
 
         Assert.Equal([0m, 0m], result.LineDiscounts);
         Assert.Equal(4.90m, result.ShippingDiscount);
@@ -72,7 +77,7 @@ public sealed class DiscountAllocationTests
         var discount = Percentage(percentage);
         decimal[] lines = [19.99m, 5.45m, 120m, 0.99m, 7.50m];
 
-        var result = DiscountAllocation.For(discount, lines, shippingPrice: 0m);
+        var result = DiscountAllocation.For(discount, lines, shippingPrice: 0m, Euro);
         var expected = decimal.Round(lines.Sum() * percentage / 100m, 2, MidpointRounding.AwayFromZero);
 
         Assert.Equal(expected, result.LineDiscounts.Sum());
@@ -94,7 +99,7 @@ public sealed class DiscountAllocationTests
             var percentage = decimal.Round((decimal)(random.NextDouble() * 100), 2);
             percentage = percentage <= 0 ? 1m : percentage;
 
-            var result = DiscountAllocation.For(Percentage(percentage), lines, shippingPrice: 0m);
+            var result = DiscountAllocation.For(Percentage(percentage), lines, shippingPrice: 0m, Euro);
             var expected = decimal.Round(lines.Sum() * percentage / 100m, 2, MidpointRounding.AwayFromZero);
 
             Assert.Equal(expected, result.LineDiscounts.Sum());
@@ -106,9 +111,20 @@ public sealed class DiscountAllocationTests
         }
     }
 
+    // In a currency with no minor unit there are no hundredths to hand around: the shares are whole yen, and
+    // they still add up to the discount rather than to something a yen off it.
+    [Fact]
+    public void A_currency_with_no_minor_unit_is_split_in_whole_units()
+    {
+        var result = DiscountAllocation.For(Percentage(10m), [1000m, 1000m, 1001m], shippingPrice: 0m, Yen);
+
+        Assert.All(result.LineDiscounts, share => Assert.Equal(decimal.Truncate(share), share));
+        Assert.Equal(300m, result.Total);
+    }
+
     private static Discount Percentage(decimal value) =>
-        new(Guid.NewGuid(), "TENOFF", "Ten off", DiscountKind.Percentage, value, new DiscountLimits());
+        new(Guid.NewGuid(), "TENOFF", "Ten off", DiscountKind.Percentage, value, new DiscountLimits(), Euro);
 
     private static Discount Amount(decimal value) =>
-        new(Guid.NewGuid(), "FIVER", "Five off", DiscountKind.Amount, value, new DiscountLimits());
+        new(Guid.NewGuid(), "FIVER", "Five off", DiscountKind.Amount, value, new DiscountLimits(), Euro);
 }

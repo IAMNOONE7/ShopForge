@@ -8,6 +8,7 @@ using ShopForge.Orders.Domain;
 using ShopForge.Shared.Catalog;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Inventory;
+using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Orders.Storefront;
@@ -33,10 +34,11 @@ internal static class CartEndpoints
         ISellableProducts products,
         IStockLedger stock,
         DiscountCodes discounts,
+        ICurrentStoreSettings storeSettings,
         TimeProvider clock,
         CancellationToken cancellationToken)
     {
-        var carts = new Carts(httpContext, dbContext, storeContext, products, stock, discounts, clock);
+        var carts = new Carts(httpContext, dbContext, storeContext, products, stock, discounts, storeSettings, clock);
         var cart = await carts.FindAsync(cancellationToken);
 
         return TypedResults.Ok(cart is null
@@ -52,6 +54,7 @@ internal static class CartEndpoints
         ISellableProducts products,
         IStockLedger stock,
         DiscountCodes discounts,
+        ICurrentStoreSettings storeSettings,
         TimeProvider clock,
         CancellationToken cancellationToken)
     {
@@ -79,7 +82,7 @@ internal static class CartEndpoints
                 .ToProblem();
         }
 
-        var carts = new Carts(httpContext, dbContext, storeContext, products, stock, discounts, clock);
+        var carts = new Carts(httpContext, dbContext, storeContext, products, stock, discounts, storeSettings, clock);
         var cart = await carts.GetOrCreateAsync(cancellationToken);
         cart.Add(request.StoreProductId, variant.Id, quantity);
         carts.Touch(cart);
@@ -98,6 +101,7 @@ internal static class CartEndpoints
         ISellableProducts products,
         IStockLedger stock,
         DiscountCodes discounts,
+        ICurrentStoreSettings storeSettings,
         TimeProvider clock,
         CancellationToken cancellationToken)
     {
@@ -115,6 +119,7 @@ internal static class CartEndpoints
             products,
             stock,
             discounts,
+            storeSettings,
             clock,
             cart => cart.SetQuantity(storeProductId, variantId ?? OnlyFormIn(cart, storeProductId), request.Quantity),
             cancellationToken);
@@ -129,6 +134,7 @@ internal static class CartEndpoints
         ISellableProducts products,
         IStockLedger stock,
         DiscountCodes discounts,
+        ICurrentStoreSettings storeSettings,
         TimeProvider clock,
         CancellationToken cancellationToken) =>
         ChangeAsync(
@@ -138,6 +144,7 @@ internal static class CartEndpoints
             products,
             stock,
             discounts,
+            storeSettings,
             clock,
             cart => cart.SetQuantity(storeProductId, variantId ?? OnlyFormIn(cart, storeProductId), 0),
             cancellationToken);
@@ -160,10 +167,11 @@ internal static class CartEndpoints
         ISellableProducts products,
         IStockLedger stock,
         DiscountCodes discounts,
+        ICurrentStoreSettings storeSettings,
         TimeProvider clock,
         CancellationToken cancellationToken)
     {
-        var carts = new Carts(httpContext, dbContext, storeContext, products, stock, discounts, clock);
+        var carts = new Carts(httpContext, dbContext, storeContext, products, stock, discounts, storeSettings, clock);
         var cart = await carts.FindAsync(cancellationToken);
 
         if (cart is null)
@@ -196,6 +204,7 @@ internal static class CartEndpoints
         ISellableProducts products,
         IStockLedger stock,
         DiscountCodes discounts,
+        ICurrentStoreSettings storeSettings,
         TimeProvider clock,
         CancellationToken cancellationToken) =>
         ChangeAsync(
@@ -205,6 +214,7 @@ internal static class CartEndpoints
             products,
             stock,
             discounts,
+            storeSettings,
             clock,
             cart => cart.ApplyDiscount(null),
             cancellationToken);
@@ -216,11 +226,12 @@ internal static class CartEndpoints
         ISellableProducts products,
         IStockLedger stock,
         DiscountCodes discounts,
+        ICurrentStoreSettings storeSettings,
         TimeProvider clock,
         Action<Cart> change,
         CancellationToken cancellationToken)
     {
-        var carts = new Carts(httpContext, dbContext, storeContext, products, stock, discounts, clock);
+        var carts = new Carts(httpContext, dbContext, storeContext, products, stock, discounts, storeSettings, clock);
         var cart = await carts.FindAsync(cancellationToken);
 
         if (cart is null)
