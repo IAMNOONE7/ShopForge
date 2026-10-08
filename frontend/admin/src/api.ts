@@ -114,8 +114,14 @@ export type Category = {
   name: string;
   slug: string;
   sortOrder: number;
+  parentId: string | null;
   attributeIds: string[];
+  seoTitle: string | null;
+  seoDescription: string | null;
+  pageText: string | null;
 };
+
+export type CategoryInput = Pick<Category, "name" | "sortOrder" | "parentId"> & { slug: string | null };
 
 export type AttributeType =
   | "text"
@@ -770,11 +776,10 @@ export const api = {
       undefined,
       signal,
     ),
-  createCategory: (storeId: string, name: string) =>
-    request<Category>("POST", `/api/admin/stores/${storeId}/categories`, {
-      name,
-      sortOrder: 0,
-    }),
+  createCategory: (storeId: string, input: CategoryInput) =>
+    request<Category>("POST", `/api/admin/stores/${storeId}/categories`, input),
+  updateCategory: (storeId: string, categoryId: string, input: CategoryInput) =>
+    request<Category>("PUT", `/api/admin/stores/${storeId}/categories/${categoryId}`, input),
 };
 
 function formWith(file: File, fields: Record<string, string> = {}) {

@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import { api, type CurrentUser } from "./api";
 import { statusOf } from "./api/errors";
 import { onUnauthorized } from "./api/http";
 import { Layout } from "./components/Layout";
+import { DeferredPage } from "./components/DeferredPage";
 import { LoadingState } from "./components/ui/LoadingState";
 import { RequestError } from "./components/ui/RequestError";
 import { StoreLayout } from "./layouts/StoreLayout";
@@ -20,7 +21,6 @@ import { ForbiddenPage, NotFoundPage } from "./pages/RouteStatePage";
 import { StoreIndexPage } from "./pages/StoreIndexPage";
 import { StoreOverviewPage } from "./pages/StoreOverviewPage";
 import {
-  StoreCategoriesPage,
   StoreDiscountsPage,
   StoreImportPage,
   StoreMethodsPage,
@@ -33,6 +33,10 @@ import {
 } from "./pages/StorePage";
 import { adminHomePath, safeAdminReturnPath } from "./routing";
 import { canManageCatalog, canManageStore, SessionContext } from "./session";
+
+const CategoriesPage = lazy(() => import("./pages/CategoryPages").then((pages) => ({ default: pages.CategoriesPage })));
+const NewCategoryPage = lazy(() => import("./pages/CategoryPages").then((pages) => ({ default: pages.NewCategoryPage })));
+const CategoryDetailPage = lazy(() => import("./pages/CategoryPages").then((pages) => ({ default: pages.CategoryDetailPage })));
 
 type SessionState =
   | { status: "checking" }
@@ -179,7 +183,9 @@ function App() {
                   <Route index element={<StoreOverviewPage />} />
                   <Route path="settings" element={<StoreSettingsPage />} />
                   <Route path="products" element={<StoreProductsPage />} />
-                  <Route path="categories" element={<StoreCategoriesPage />} />
+                  <Route path="categories" element={<DeferredPage><CategoriesPage /></DeferredPage>} />
+                  <Route path="categories/new" element={<DeferredPage><NewCategoryPage /></DeferredPage>} />
+                  <Route path="categories/:categoryId" element={<DeferredPage><CategoryDetailPage /></DeferredPage>} />
                   <Route path="attributes" element={<AttributesIndexPage />} />
                   <Route path="attributes/new" element={canManageCatalog(session.user.role) ? <NewAttributePage /> : <ForbiddenPage />} />
                   <Route path="attributes/:attributeId" element={<AttributeDetailPage />} />
