@@ -193,6 +193,40 @@ internal sealed class StoreProduct : IStoreOwned, IArchivable
         return missing.Count > 0;
     }
 
+    public bool RemoveFromCategories(IReadOnlyCollection<Guid> categoryIds) =>
+        _categories.RemoveAll(assignment => categoryIds.Contains(assignment.CategoryId)) > 0;
+
+    // One thing at a time, for the screens that change one thing across many listings. `Update` replaces
+    // everything a listing is, which is right for an editor and wrong for "hide these forty" (D-183).
+    public bool SetVisible(bool isVisible)
+    {
+        if (IsVisible == isVisible)
+        {
+            return false;
+        }
+
+        IsVisible = isVisible;
+
+        return true;
+    }
+
+    public bool SetPrice(decimal price)
+    {
+        if (price < 0 || decimal.Round(price, 2) != price)
+        {
+            throw new ArgumentException("A price must be zero or more, with at most two decimals.", nameof(price));
+        }
+
+        if (Price == price)
+        {
+            return false;
+        }
+
+        Price = price;
+
+        return true;
+    }
+
     public void ReplaceAttributeValues(IReadOnlyCollection<(AttributeDefinition Definition, AttributeValue Value)> values)
     {
         if (values.Any(item => item.Definition.StoreId != StoreId))

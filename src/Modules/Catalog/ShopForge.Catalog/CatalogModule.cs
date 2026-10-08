@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Catalog.Admin;
+using ShopForge.Catalog.Bulk;
 using ShopForge.Catalog.Feeds;
 using ShopForge.Catalog.Feeds.Google;
 using ShopForge.Catalog.Feeds.Heureka;
@@ -63,6 +64,7 @@ public static class CatalogModule
     public static IEndpointRouteBuilder MapCatalogStoreAdminEndpoints(this IEndpointRouteBuilder storeAdmin)
     {
         storeAdmin.MapAdminStoreCatalog();
+        storeAdmin.MapAdminBulkListings();
         storeAdmin.MapAdminReviews();
         storeAdmin.MapAdminAttributes();
         storeAdmin.MapCatalogImport();
