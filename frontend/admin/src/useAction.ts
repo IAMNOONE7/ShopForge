@@ -21,7 +21,13 @@ export function useAction(
         ? document.activeElement
         : null;
     const form = active?.closest("form") ?? null;
-    const snapshot = form ? snapshotFields(form) : [];
+    let failed = false;
+    // React action forms reset after a caught failure. Cancel that reset instead of restoring a draft
+    // later, which could overwrite edits already made in a controlled onSubmit form.
+    const preserveFailedDraft = (event: Event) => {
+      if (failed) event.preventDefault();
+    };
+    form?.addEventListener("reset", preserveFailedDraft);
     const buttons = form
       ? [...form.querySelectorAll<HTMLButtonElement>('button[type="submit"]')]
       : active instanceof HTMLButtonElement
@@ -37,9 +43,8 @@ export function useAction(
       await change();
       onSuccess();
     } catch (exception) {
+      failed = true;
       setError(exception);
-      // React resets action forms after their promise settles; restore the captured draft on the next task.
-      window.setTimeout(() => restoreFields(snapshot), 50);
     } finally {
       buttons.forEach((button, index) => {
         button.disabled = disabled[index];
@@ -47,57 +52,9 @@ export function useAction(
       form?.removeAttribute("aria-busy");
       setPending(false);
       lock.current = false;
+      window.setTimeout(() => form?.removeEventListener("reset", preserveFailedDraft), 50);
     }
   }
 
   return [error, run, pending];
-}
-
-type FieldSnapshot = {
-  field: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
-  value: string;
-  checked: boolean | null;
-  selected: string[] | null;
-};
-
-function snapshotFields(form: HTMLFormElement): FieldSnapshot[] {
-  return [...form.elements]
-    .filter(
-      (
-        field,
-      ): field is HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement =>
-        field instanceof HTMLInputElement ||
-        field instanceof HTMLTextAreaElement ||
-        field instanceof HTMLSelectElement,
-    )
-    .map((field) => ({
-      field,
-      value: field.value,
-      checked:
-        field instanceof HTMLInputElement &&
-        (field.type === "checkbox" || field.type === "radio")
-          ? field.checked
-          : null,
-      selected:
-        field instanceof HTMLSelectElement && field.multiple
-          ? [...field.selectedOptions].map((option) => option.value)
-          : null,
-    }));
-}
-
-function restoreFields(snapshot: FieldSnapshot[]) {
-  for (const { field, value, checked, selected } of snapshot) {
-    if (
-      !field.isConnected ||
-      (field instanceof HTMLInputElement && field.type === "file")
-    )
-      continue;
-    field.value = value;
-    if (checked !== null && field instanceof HTMLInputElement)
-      field.checked = checked;
-    if (selected && field instanceof HTMLSelectElement) {
-      for (const option of field.options)
-        option.selected = selected.includes(option.value);
-    }
-  }
 }

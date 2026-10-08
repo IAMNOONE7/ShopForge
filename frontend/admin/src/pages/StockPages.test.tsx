@@ -3,7 +3,7 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { api, type Product, type Stock } from "../api";
+import { api, type Product, type Stock, type StockMovement, type AdminList } from "../api";
 import { HttpError } from "../api/http";
 import { i18n, initializeI18n } from "../i18n";
 import { SessionContext } from "../session";
@@ -20,6 +20,10 @@ const product: Product = {
 const reserved: Stock = {
   variantId: "variant-a", onHand: 8, reserved: 3, available: 5,
 };
+
+function movementPage(items: StockMovement[] = []): AdminList<StockMovement> {
+  return { items, totalCount: items.length, page: 1, pageSize: 50, hasMore: false };
+}
 
 function renderAt(path: string, role = "Owner") {
   return render(
@@ -50,6 +54,29 @@ afterEach(() => {
 afterAll(() => i18n.changeLanguage("en"));
 
 describe("shared stock", () => {
+  it("pages through older movements, exposes totals, and permits returning after a failed page read", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(api, "products").mockResolvedValue([product]);
+    vi.spyOn(api, "stock").mockResolvedValue([]);
+    const movements = vi.spyOn(api, "stockMovements")
+      .mockResolvedValueOnce({ ...movementPage(), totalCount: 51, hasMore: true })
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce({ ...movementPage([{ occurredAt: "2026-01-01T00:00:00Z", quantity: 1, reason: "Adjustment", reference: "OLDER" }]),
+        totalCount: 51, page: 2 })
+      .mockResolvedValue({ ...movementPage(), totalCount: 51, hasMore: true });
+    renderAt("/stock/variant-a", "Support");
+    expect(await screen.findByText("Page 1 · 51 movements")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Older movements" }));
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.queryByText("Page 1 · 51 movements")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("Page 2 · 51 movements")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Older movements" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(movements).toHaveBeenLastCalledWith("variant-a", 2, expect.anything());
+    await user.click(screen.getByRole("button", { name: "Newer movements" }));
+    expect(await screen.findByText("Page 1 · 51 movements")).toBeTruthy();
+    expect(movements).toHaveBeenLastCalledWith("variant-a", 1, expect.anything());
+  });
   it("never turns a failed stock read into zero, and distinguishes a successful missing record", async () => {
     const user = userEvent.setup();
     vi.spyOn(api, "products").mockResolvedValue([product]);
@@ -73,7 +100,7 @@ describe("shared stock", () => {
     const stock = vi.spyOn(api, "stock")
       .mockResolvedValueOnce([reserved])
       .mockResolvedValue([{ ...reserved, reserved: 4, available: 4 }]);
-    vi.spyOn(api, "stockMovements").mockResolvedValue([]);
+    vi.spyOn(api, "stockMovements").mockResolvedValue(movementPage());
     const setStock = vi.spyOn(api, "setStock")
       .mockRejectedValueOnce(new HttpError("http", 409))
       .mockResolvedValue({ ...reserved, onHand: 6, reserved: 4, available: 2 });
@@ -99,11 +126,11 @@ describe("shared stock", () => {
   it("keeps movements independent of stock failure and labels signed known and unknown reasons", async () => {
     vi.spyOn(api, "products").mockResolvedValue([product]);
     vi.spyOn(api, "stock").mockRejectedValue(new Error("offline"));
-    vi.spyOn(api, "stockMovements").mockResolvedValue([
+    vi.spyOn(api, "stockMovements").mockResolvedValue(movementPage([
       { occurredAt: "2026-09-29T08:00:00Z", quantity: -2, reason: "Sale", reference: "ORDER-2" },
       { occurredAt: "2026-09-28T08:00:00Z", quantity: 5, reason: "Adjustment", reference: "manual" },
       { occurredAt: "2026-09-27T08:00:00Z", quantity: 1, reason: "NewReason", reference: "EXT-1" },
-    ]);
+    ]));
     renderAt("/stock/variant-a", "Support");
 
     expect(await screen.findByRole("heading", { name: "Stock for SHARED-1" })).toBeTruthy();
@@ -121,7 +148,7 @@ describe("shared stock", () => {
   it("shows an empty movement history separately from successful zero stock", async () => {
     vi.spyOn(api, "products").mockResolvedValue([product]);
     vi.spyOn(api, "stock").mockResolvedValue([]);
-    vi.spyOn(api, "stockMovements").mockResolvedValue([]);
+    vi.spyOn(api, "stockMovements").mockResolvedValue(movementPage());
     renderAt("/stock/variant-a", "Support");
 
     expect(await screen.findByText(/No stock record exists yet/)).toBeTruthy();
@@ -144,7 +171,7 @@ describe("shared stock", () => {
       { variantId: "variant-a", onHand: 3, reserved: 1, available: 2 },
       { variantId: "variant-b", onHand: 9, reserved: 4, available: 5 },
     ]);
-    const movements = vi.spyOn(api, "stockMovements").mockResolvedValue([]);
+    const movements = vi.spyOn(api, "stockMovements").mockResolvedValue(movementPage());
     const setStock = vi.spyOn(api, "setStock").mockResolvedValue({
       variantId: "variant-b", onHand: 10, reserved: 4, available: 6,
     });
@@ -160,7 +187,7 @@ describe("shared stock", () => {
     await user.click(within(table).getByRole("link", { name: "SHARED-L" }));
     expect(await screen.findByRole("heading", { name: "Stock for SHARED-L" })).toBeTruthy();
     expect(screen.getByText("Size: Large")).toBeTruthy();
-    await waitFor(() => expect(movements).toHaveBeenCalledWith("variant-b", expect.anything()));
+    await waitFor(() => expect(movements).toHaveBeenCalledWith("variant-b", 1, expect.anything()));
     const quantity = screen.getByRole("textbox", { name: "New on-hand quantity" });
     await user.clear(quantity);
     await user.type(quantity, "10");
@@ -172,7 +199,7 @@ describe("shared stock", () => {
     const user = userEvent.setup();
     vi.spyOn(api, "products").mockResolvedValue([product]);
     vi.spyOn(api, "stock").mockResolvedValue([reserved]);
-    vi.spyOn(api, "stockMovements").mockResolvedValue([]);
+    vi.spyOn(api, "stockMovements").mockResolvedValue(movementPage());
     let resolve!: (value: Stock) => void;
     const pending = new Promise<Stock>((done) => { resolve = done; });
     const setStock = vi.spyOn(api, "setStock").mockReturnValue(pending);

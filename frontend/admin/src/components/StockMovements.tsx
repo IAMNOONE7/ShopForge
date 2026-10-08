@@ -27,7 +27,7 @@ export function StockMovements({ movements }: { movements: StockMovement[] }) {
   return (
     <section className="physical-panel stock-movements" aria-labelledby="stock-movements-title">
       <h2 id="stock-movements-title">{t("movementsTitle")}</h2>
-      <p className="hint">{t("movementsLimit")}</p>
+      <p className="hint">{t("movementsHint")}</p>
       {movements.length === 0 ? (
         <p className="stock-empty-movements">{t("noMovements")}</p>
       ) : (

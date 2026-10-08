@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { useAction } from "./useAction";
 
 function Form({ change }: { change: () => Promise<void> }) {
@@ -20,7 +21,30 @@ function Form({ change }: { change: () => Promise<void> }) {
   );
 }
 
+afterEach(cleanup);
+
+function ControlledForm() {
+  const [value, setValue] = useState("old value");
+  const [error, run] = useAction(() => undefined);
+  return <form onSubmit={(event) => { event.preventDefault(); void run(async () => { throw new Error("failure"); }); }}>
+    <label>Name <input name="name" value={value} onChange={(event) => setValue(event.target.value)} /></label>
+    <button type="submit">Save</button>
+    {error !== null && <p>failed</p>}
+  </form>;
+}
+
 describe("useAction", () => {
+  it("does not overwrite a controlled correction made immediately after a failed save", async () => {
+    const user = userEvent.setup();
+    render(<ControlledForm />);
+    const input = screen.getByLabelText("Name") as HTMLInputElement;
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText("failed");
+    await user.clear(input);
+    await user.type(input, "correction");
+    await new Promise((resolve) => window.setTimeout(resolve, 60));
+    expect(input.value).toBe("correction");
+  });
   it("locks a pending action and restores an uncontrolled draft after failure", async () => {
     let reject!: (reason: unknown) => void;
     const change = vi.fn(

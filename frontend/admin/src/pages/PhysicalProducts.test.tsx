@@ -9,7 +9,6 @@ import { validateProduct, validateProductImage } from "../components/productVali
 import { i18n, initializeI18n } from "../i18n";
 import { SessionContext } from "../session";
 import { NewPhysicalProductPage } from "./NewPhysicalProductPage";
-import { PhysicalProductPage } from "./PhysicalProductPage";
 import { ProductsPage } from "./ProductsPage";
 
 const product: Product = {
@@ -146,66 +145,6 @@ describe("physical products", () => {
       partNumber: null,
       condition: null,
     });
-  });
-
-  it("loads detail from the unpaged list, keeps SKU fixed, and retains failed edits", async () => {
-    const user = userEvent.setup();
-    vi.spyOn(api, "products").mockResolvedValue([product]);
-    vi.spyOn(api, "stock").mockResolvedValue([]);
-    const update = vi.spyOn(api, "updateProduct")
-      .mockRejectedValueOnce(new Error("offline"))
-      .mockResolvedValue({ ...product, ean: "5901234123457", weightGrams: null });
-    render(withSession(
-      <MemoryRouter initialEntries={["/products/product-a"]}>
-        <Routes>
-          <Route path="/products/:productId" element={<PhysicalProductPage />} />
-        </Routes>
-      </MemoryRouter>,
-    ));
-
-    expect(await screen.findByRole("heading", { name: "Product PHYSICAL-1" })).toBeTruthy();
-    expect((screen.getByRole("textbox", { name: "SKU" }) as HTMLInputElement).readOnly).toBe(true);
-    const ean = screen.getByRole("textbox", { name: "EAN (optional)" });
-    const weight = screen.getByRole("textbox", { name: "Weight in grams (optional)" });
-    await user.clear(ean);
-    await user.type(ean, "5901234123457");
-    await user.clear(weight);
-    await user.click(screen.getByRole("button", { name: "Save physical details" }));
-    expect(await screen.findByRole("alert")).toBeTruthy();
-    expect((ean as HTMLInputElement).value).toBe("5901234123457");
-    await user.click(screen.getByRole("button", { name: "Save physical details" }));
-    await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
-    expect(update.mock.calls[1]).toEqual([
-      "product-a",
-      { ean: "5901234123457", weightGrams: null, brand: null, partNumber: null, condition: null },
-    ]);
-    expect(await screen.findByText("Physical details saved.")).toBeTruthy();
-  });
-
-  it("links every variant to its stock and avoids an unsupported multi-variant physical edit", async () => {
-    const multi: Product = {
-      ...product,
-      optionNames: ["Size"],
-      variants: [
-        { ...product.variants[0], sku: "PHYSICAL-S", optionValues: ["Small"] },
-        { id: "variant-b", sku: "PHYSICAL-L", ean: null, weightGrams: 300, partNumber: null, condition: null, optionValues: ["Large"], position: 1 },
-      ],
-    };
-    vi.spyOn(api, "products").mockResolvedValue([multi]);
-    render(withSession(
-      <MemoryRouter initialEntries={["/products/product-a"]}>
-        <Routes><Route path="/products/:productId" element={<PhysicalProductPage />} /></Routes>
-      </MemoryRouter>,
-    ));
-
-    expect(await screen.findByText("PHYSICAL-L")).toBeTruthy();
-    expect(screen.getByRole("link", { name: /PHYSICAL-S Open shared stock/ }).getAttribute("href"))
-      .toBe("/stock/variant-a");
-    expect(screen.getByRole("link", { name: /PHYSICAL-L Open shared stock/ }).getAttribute("href"))
-      .toBe("/stock/variant-b");
-    expect(screen.getByText("Size: Large")).toBeTruthy();
-    expect(screen.getByText(/Each has its own EAN and weight/)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Save physical details" })).toBeNull();
   });
 
   it("uploads explicitly, then removes the named image only after confirmation", async () => {

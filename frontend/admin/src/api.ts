@@ -85,6 +85,16 @@ export type ProductVariant = {
   position: number;
 };
 
+export type VariantInput = Pick<ProductVariant,
+  "sku" | "ean" | "weightGrams" | "partNumber" | "condition" | "optionValues">;
+
+export type ProductOptionsInput = {
+  names: string[];
+  values: Record<string, string[]>;
+};
+
+export type AdminList<T> = { items: T[]; totalCount: number; page: number; pageSize: number; hasMore: boolean };
+
 export type StoreProduct = {
   id: string;
   productId: string;
@@ -412,6 +422,14 @@ export const api = {
     },
   ) =>
     request<Product>("PUT", `/api/admin/products/${productId}`, input),
+  setProductOptions: (productId: string, input: ProductOptionsInput) =>
+    request<Product>("PUT", `/api/admin/products/${productId}/options`, input),
+  addVariant: (productId: string, input: VariantInput) =>
+    request<ProductVariant>("POST", `/api/admin/products/${productId}/variants`, input),
+  updateVariant: (productId: string, variantId: string, input: VariantInput) =>
+    request<ProductVariant>("PUT", `/api/admin/products/${productId}/variants/${variantId}`, input),
+  deleteVariant: (productId: string, variantId: string) =>
+    request<void>("DELETE", `/api/admin/products/${productId}/variants/${variantId}`),
   uploadProductImage: (productId: string, file: File, altText: string) =>
     request<ProductImage>(
       "POST",
@@ -573,10 +591,10 @@ export const api = {
     request<Stock[]>("GET", "/api/admin/stock", undefined, signal),
   setStock: (variantId: string, quantity: number) =>
     request<Stock>("PUT", `/api/admin/stock/${variantId}`, { quantity }),
-  stockMovements: (variantId: string, signal?: AbortSignal) =>
-    request<StockMovement[]>(
+  stockMovements: (variantId: string, page = 1, signal?: AbortSignal) =>
+    request<AdminList<StockMovement>>(
       "GET",
-      `/api/admin/stock/${variantId}/movements`,
+      `/api/admin/stock/${variantId}/movements?page=${page}&pageSize=50`,
       undefined,
       signal,
     ),

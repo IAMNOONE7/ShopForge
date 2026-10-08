@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router";
 import { api } from "../api";
@@ -11,13 +12,18 @@ import { formatNumber } from "../utils/format";
 import { useRequest } from "../useRequest";
 
 export function ProductStockPage() {
-  const { t, i18n } = useTranslation(["stock"]);
   const { variantId = "" } = useParams();
+  return <VariantStockDetail key={variantId} variantId={variantId} />;
+}
+
+function VariantStockDetail({ variantId }: { variantId: string }) {
+  const { t, i18n } = useTranslation(["stock"]);
+  const [movementPage, setMovementPage] = useState(1);
   const [products, reloadProducts] = useRequest("stock-products", api.products);
   const [stock, reloadStock] = useRequest("stock-detail:" + variantId, api.stock);
   const [movements, reloadMovements] = useRequest(
-    "stock-movements:" + variantId,
-    (signal) => api.stockMovements(variantId, signal),
+    `stock-movements:${variantId}:${movementPage}`,
+    (signal) => api.stockMovements(variantId, movementPage, signal),
   );
 
   if (products.status === "loading") {
@@ -111,9 +117,16 @@ export function ProductStockPage() {
           {movements.refreshError !== null && (
             <RequestError error={movements.refreshError} operation="read" onRetry={reloadMovements} />
           )}
-          <StockMovements movements={movements.data} />
+          <StockMovements movements={movements.data.items} />
         </>
       )}
+      <nav className="stock-movement-pagination" aria-label={t("stock:movementPages")}>
+        <button type="button" disabled={movementPage === 1} onClick={() => setMovementPage((page) => page - 1)}>{t("stock:newerMovements")}</button>
+        <p role="status">{movements.status === "ready"
+          ? t("stock:movementPage", { page: movements.data.page, total: movements.data.totalCount })
+          : t(movements.status === "loading" ? "stock:loadingMovements" : "stock:unavailableValue")}</p>
+        <button type="button" disabled={movements.status !== "ready" || !movements.data.hasMore} onClick={() => setMovementPage((page) => page + 1)}>{t("stock:olderMovements")}</button>
+      </nav>
     </div>
   );
 }
