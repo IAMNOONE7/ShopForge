@@ -1,4 +1,5 @@
 import { HttpError, requestBlob, requestJson, saveDownload } from "./api/http";
+import { findStoreProduct, getStoreProducts, hasVisibleStoreProduct } from "./api/listings";
 
 export type SignInResponse = {
   twoFactorRequired: boolean;
@@ -107,6 +108,10 @@ export type StoreProduct = {
   isVisible: boolean;
   sortOrder: number;
   categoryIds: string[];
+  seoTitle: string | null;
+  seoDescription: string | null;
+  seoSocialImageUrl: string | null;
+  seoNoIndex: boolean;
 };
 
 export type Category = {
@@ -448,13 +453,9 @@ export const api = {
       `/api/admin/products/${productId}/images/${imageId}`,
     ),
 
-  storeProducts: (storeId: string, signal?: AbortSignal) =>
-    request<StoreProduct[]>(
-      "GET",
-      `/api/admin/stores/${storeId}/products`,
-      undefined,
-      signal,
-    ),
+  storeProducts: getStoreProducts,
+  findStoreProduct,
+  hasVisibleStoreProduct,
   listProduct: (storeId: string, productId: string, input: StoreProductInput) =>
     request<StoreProduct>("POST", `/api/admin/stores/${storeId}/products`, {
       productId,

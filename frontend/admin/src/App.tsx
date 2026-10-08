@@ -26,7 +26,6 @@ import {
   StoreMethodsPage,
   StoreOperationsPage,
   StoreOrdersPage,
-  StoreProductsPage,
   StoreReturnsPage,
   StoreReviewsPage,
   StoreSettingsPage,
@@ -37,6 +36,9 @@ import { canManageCatalog, canManageStore, SessionContext } from "./session";
 const CategoriesPage = lazy(() => import("./pages/CategoryPages").then((pages) => ({ default: pages.CategoriesPage })));
 const NewCategoryPage = lazy(() => import("./pages/CategoryPages").then((pages) => ({ default: pages.NewCategoryPage })));
 const CategoryDetailPage = lazy(() => import("./pages/CategoryPages").then((pages) => ({ default: pages.CategoryDetailPage })));
+const ListingsPage = lazy(() => import("./pages/ListingPages").then((pages) => ({ default: pages.ListingsPage })));
+const NewListingPage = lazy(() => import("./pages/ListingPages").then((pages) => ({ default: pages.NewListingPage })));
+const ListingDetailPage = lazy(() => import("./pages/ListingPages").then((pages) => ({ default: pages.ListingDetailPage })));
 
 type SessionState =
   | { status: "checking" }
@@ -182,7 +184,9 @@ function App() {
                 <Route path="stores/:storeId" element={<StoreLayout />}>
                   <Route index element={<StoreOverviewPage />} />
                   <Route path="settings" element={<StoreSettingsPage />} />
-                  <Route path="products" element={<StoreProductsPage />} />
+                  <Route path="products" element={<DeferredPage><ListingsPage /></DeferredPage>} />
+                  <Route path="products/new" element={<DeferredPage><NewListingPage /></DeferredPage>} />
+                  <Route path="products/:listingId" element={<DeferredPage><ListingDetailPage /></DeferredPage>} />
                   <Route path="categories" element={<DeferredPage><CategoriesPage /></DeferredPage>} />
                   <Route path="categories/new" element={<DeferredPage><NewCategoryPage /></DeferredPage>} />
                   <Route path="categories/:categoryId" element={<DeferredPage><CategoryDetailPage /></DeferredPage>} />

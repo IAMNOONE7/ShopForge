@@ -28,7 +28,7 @@ export function StorePublicationSection({
   );
   const [products, reloadProducts] = useRequest(
     `publish-products:${store.id}`,
-    (signal) => api.storeProducts(store.id, signal),
+    (signal) => api.hasVisibleStoreProduct(store.id, signal),
   );
   const [payments, reloadPayments] = useRequest(
     `publish-payments:${store.id}`,
@@ -66,9 +66,7 @@ export function StorePublicationSection({
     },
     {
       key: "product",
-      status: requestStatus(products, (items) =>
-        items.some((item) => item.isVisible),
-      ),
+      status: requestStatus(products, (visible) => visible),
       href: `/stores/${store.id}/products`,
     },
     {
@@ -281,14 +279,14 @@ export function StorePublicationSection({
 }
 
 function requestStatus<T>(
-  state: RequestState<T[]>,
-  ready: (items: T[]) => boolean,
+  state: RequestState<T>,
+  ready: (items: T) => boolean,
 ): CheckStatus {
   if (state.status !== "ready" || state.refreshError) return "unknown";
   return ready(state.data) ? "ready" : "missing";
 }
 
-function hasReadError<T>(state: RequestState<T[]>) {
+function hasReadError<T>(state: RequestState<T>) {
   return (
     state.status === "error" ||
     state.status === "not-found" ||

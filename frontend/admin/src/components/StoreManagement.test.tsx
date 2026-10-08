@@ -53,21 +53,7 @@ function store(overrides: Partial<AdminStore> = {}): AdminStore {
 }
 
 function mockReadyReads() {
-  vi.spyOn(api, "storeProducts").mockResolvedValue([
-    {
-      id: "listing-a",
-      productId: "product-a",
-      sku: "SKU-1",
-      name: "Product",
-      slug: "product",
-      description: null,
-      price: 10,
-      vatRate: 21,
-      isVisible: true,
-      sortOrder: 0,
-      categoryIds: [],
-    },
-  ]);
+  vi.spyOn(api, "hasVisibleStoreProduct").mockResolvedValue(true);
   vi.spyOn(api, "paymentMethods").mockResolvedValue([
     {
       code: "manual",
@@ -222,23 +208,9 @@ describe("store management", () => {
   it("keeps failed readiness reads unknown and retries them", async () => {
     const user = userEvent.setup();
     const products = vi
-      .spyOn(api, "storeProducts")
+      .spyOn(api, "hasVisibleStoreProduct")
       .mockRejectedValueOnce(new Error("offline"))
-      .mockResolvedValue([
-        {
-          id: "listing-a",
-          productId: "product-a",
-          sku: "SKU-1",
-          name: "Product",
-          slug: "product",
-          description: null,
-          price: 10,
-          vatRate: 21,
-          isVisible: true,
-          sortOrder: 0,
-          categoryIds: [],
-        },
-      ]);
+      .mockResolvedValue(true);
     vi.spyOn(api, "paymentMethods").mockResolvedValue([
       {
         code: "manual",
