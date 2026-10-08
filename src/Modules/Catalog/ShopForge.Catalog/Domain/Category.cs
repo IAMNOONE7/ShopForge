@@ -1,9 +1,10 @@
+using ShopForge.Shared.Catalog;
 using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Catalog.Domain;
 
-internal sealed class Category : IStoreOwned
+internal sealed class Category : IStoreOwned, IArchivable
 {
     private readonly List<CategoryAttribute> _attributes = [];
 
@@ -27,6 +28,34 @@ internal sealed class Category : IStoreOwned
     public string Slug { get; private set; } = null!;
 
     public int SortOrder { get; private set; }
+    // Retired: gone from the shop and from the merchant's own list unless they ask for it (D-180).
+    public DateTimeOffset? ArchivedAt { get; private set; }
+
+    public bool IsArchived => ArchivedAt is not null;
+
+    public bool Archive(DateTimeOffset at)
+    {
+        if (IsArchived)
+        {
+            return false;
+        }
+
+        ArchivedAt = at;
+
+        return true;
+    }
+
+    public bool Restore()
+    {
+        if (!IsArchived)
+        {
+            return false;
+        }
+
+        ArchivedAt = null;
+
+        return true;
+    }
 
     // Who this one sits under, or nothing for a category at the top. The rules about where it may sit need the
     // other categories to answer, so they live in CategoryTree and this only refuses the one a category can

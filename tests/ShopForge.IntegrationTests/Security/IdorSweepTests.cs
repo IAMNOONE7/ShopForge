@@ -42,6 +42,12 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
         ("POST", "domains/{domain}/verify", null),
         ("POST", "domains/{domain}/primary", null),
         ("DELETE", "domains/{domain}", null),
+        ("POST", "products/{storeProduct}/archive", null),
+        ("POST", "products/{storeProduct}/restore", null),
+        ("DELETE", "products/{storeProduct}", null),
+        ("POST", "categories/{category}/archive", null),
+        ("POST", "categories/{category}/restore", null),
+        ("DELETE", "categories/{category}", null),
         ("PUT", "pages/{page}", """{"slug":"taken","title":"Taken","body":"Taken.","isPublished":true}"""),
         ("DELETE", "pages/{page}", null),
     ];

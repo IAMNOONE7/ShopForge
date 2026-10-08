@@ -10,6 +10,7 @@ using ShopForge.Catalog.Feeds.Zbozi;
 using ShopForge.Catalog.Import;
 using ShopForge.Catalog.Privacy;
 using ShopForge.Catalog.Publishing;
+using ShopForge.Catalog.Retiring;
 using ShopForge.Catalog.Reviews;
 using ShopForge.Catalog.Search;
 using ShopForge.Catalog.Seo;
@@ -43,6 +44,7 @@ public static class CatalogModule
         services.AddSingleton<IProductFeedFormat, HeurekaFeed>();
         services.AddSingleton<IProductFeedFormat, ZboziFeed>();
         services.AddScoped<IStoreMaintenance, FeedRefresh>();
+        services.AddScoped<WhatPointsAtIt>();
         services.AddScoped<SearchIndex>();
         services.AddScoped<IStoreMaintenance, SearchIndexRebuild>();
         services.AddScoped<IStoreMaintenance, SearchLogCleanup>();

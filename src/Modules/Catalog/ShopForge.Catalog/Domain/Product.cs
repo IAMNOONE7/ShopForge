@@ -1,10 +1,11 @@
+using ShopForge.Shared.Catalog;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Catalog.Domain;
 
 // What a shopper looks at. What they buy is one of its variants, and there is always at least one: a product
 // sold in a single form is a product with a single variant, which is what every product was before (D-134).
-internal sealed class Product : ITenantOwned
+internal sealed class Product : ITenantOwned, IArchivable
 {
     public const int MaxOptions = 3;
     public const int MaxBrandLength = 70;
@@ -30,6 +31,34 @@ internal sealed class Product : ITenantOwned
     // Who made the thing. It belongs to the product rather than to the shop selling it or to one of its
     // sizes, and every shopping feed asks for it (D-163). Null until somebody says.
     public string? Brand { get; private set; }
+    // Retired: gone from the shop and from the merchant's own list unless they ask for it (D-180).
+    public DateTimeOffset? ArchivedAt { get; private set; }
+
+    public bool IsArchived => ArchivedAt is not null;
+
+    public bool Archive(DateTimeOffset at)
+    {
+        if (IsArchived)
+        {
+            return false;
+        }
+
+        ArchivedAt = at;
+
+        return true;
+    }
+
+    public bool Restore()
+    {
+        if (!IsArchived)
+        {
+            return false;
+        }
+
+        ArchivedAt = null;
+
+        return true;
+    }
 
     // The axes this product is sold along — ["Size", "Colour"] — empty for a product sold in one form only.
     public string[] OptionNames { get; private set; } = [];

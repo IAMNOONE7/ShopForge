@@ -1,9 +1,10 @@
+using ShopForge.Shared.Catalog;
 using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Catalog.Domain;
 
-internal sealed class StoreProduct : IStoreOwned
+internal sealed class StoreProduct : IStoreOwned, IArchivable
 {
     private readonly List<ProductCategory> _categories = [];
     private readonly List<ProductAttributeValue> _attributeValues = [];
@@ -57,6 +58,37 @@ internal sealed class StoreProduct : IStoreOwned
     public bool SeoNoIndex { get; private set; }
 
     public bool IsVisible { get; private set; }
+
+    // Retired. Not hiding — a hidden listing is one a merchant is still working on, and it stays in their
+    // list. An archived one is finished with: gone from the shop, gone from the feeds and the sitemap, gone
+    // from what a shopper can search, and gone from the merchant's own list unless they ask for it (D-180).
+    public DateTimeOffset? ArchivedAt { get; private set; }
+
+    public bool IsArchived => ArchivedAt is not null;
+
+    public bool Archive(DateTimeOffset at)
+    {
+        if (IsArchived)
+        {
+            return false;
+        }
+
+        ArchivedAt = at;
+
+        return true;
+    }
+
+    public bool Restore()
+    {
+        if (!IsArchived)
+        {
+            return false;
+        }
+
+        ArchivedAt = null;
+
+        return true;
+    }
 
     public int SortOrder { get; private set; }
 

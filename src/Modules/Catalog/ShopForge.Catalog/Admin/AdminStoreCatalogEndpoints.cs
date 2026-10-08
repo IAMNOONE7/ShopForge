@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using ShopForge.Catalog.Categories;
 using ShopForge.Catalog.Domain;
 using ShopForge.Catalog.Publishing;
+using ShopForge.Catalog.Retiring;
 using ShopForge.Catalog.Search;
 using ShopForge.Shared.Admin;
 using ShopForge.Shared.Auditing;
@@ -28,6 +29,12 @@ internal static class AdminStoreCatalogEndpoints
         storeAdmin.MapGet("/categories", GetCategoriesAsync);
         storeAdmin.MapPost("/categories", CreateCategoryAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
         storeAdmin.MapPut("/categories/{categoryId:guid}", UpdateCategoryAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
+        storeAdmin.MapPost("/products/{storeProductId:guid}/archive", ArchiveListingAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
+        storeAdmin.MapPost("/products/{storeProductId:guid}/restore", RestoreListingAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
+        storeAdmin.MapDelete("/products/{storeProductId:guid}", DeleteListingAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
+        storeAdmin.MapPost("/categories/{categoryId:guid}/archive", ArchiveCategoryAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
+        storeAdmin.MapPost("/categories/{categoryId:guid}/restore", RestoreCategoryAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
+        storeAdmin.MapDelete("/categories/{categoryId:guid}", DeleteCategoryAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
     }
 
     // A thousand listings is a list to work through a page at a time, and to look through by name or code
@@ -42,10 +49,17 @@ internal static class AdminStoreCatalogEndpoints
         int? pageSize,
         string? sort,
         string? q,
+        bool? archived,
         CancellationToken cancellationToken)
     {
         var listed = AdminListQuery.Of(page, pageSize, sort, q);
-        var listings = dbContext.Set<StoreProduct>().AsNoTracking();
+
+        // The merchant's list is what they are working with. Asking for the retired ones is a different
+        // screen, not a longer one, so it is a different list rather than a flag mixed into this one (D-180).
+        var listings = archived == true
+            ? dbContext.Set<StoreProduct>().AsNoTracking().IgnoreQueryFilters([TenancyFilters.Archived])
+                .Where(listing => listing.ArchivedAt != null)
+            : dbContext.Set<StoreProduct>().AsNoTracking();
 
         if (listed.Pattern is { } pattern)
         {
@@ -236,9 +250,14 @@ internal static class AdminStoreCatalogEndpoints
         return TypedResults.Ok(AdminStoreProductResponse.From(storeProduct, product));
     }
 
-    private static async Task<Ok<List<AdminCategoryResponse>>> GetCategoriesAsync(DbContext dbContext, CancellationToken cancellationToken)
+    private static async Task<Ok<List<AdminCategoryResponse>>> GetCategoriesAsync(
+        DbContext dbContext,
+        bool? archived,
+        CancellationToken cancellationToken)
     {
-        var categories = await dbContext.Set<Category>()
+        var categories = await (archived == true
+                ? dbContext.Set<Category>().IgnoreQueryFilters([TenancyFilters.Archived]).Where(category => category.ArchivedAt != null)
+                : dbContext.Set<Category>())
             .OrderBy(category => category.SortOrder)
             .ThenBy(category => category.Name)
             .Select(category => new AdminCategoryResponse(
@@ -404,6 +423,176 @@ internal static class AdminStoreCatalogEndpoints
             category.SeoDescription,
             category.PageText));
     }
+
+
+    // Retiring a listing: off the shop, out of the feeds and the sitemap, out of what a shopper can search,
+    // and out of the merchant's own list unless they ask for it (D-180).
+    private static async Task<Results<NoContent, NotFound>> ArchiveListingAsync(
+        Guid storeProductId,
+        DbContext dbContext,
+        TimeProvider clock,
+        IAuditLog audit,
+        SearchIndex search,
+        CancellationToken cancellationToken)
+    {
+        var listing = await dbContext.Set<StoreProduct>()
+            .IgnoreQueryFilters([TenancyFilters.Archived])
+            .SingleOrDefaultAsync(candidate => candidate.Id == storeProductId, cancellationToken);
+
+        if (listing is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        if (listing.Archive(clock.GetUtcNow()))
+        {
+            audit.Record("catalog.listing.archived", listing.Slug);
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            // An archived listing is not a thing a shopper can find, so its words come out of the index.
+            await search.RefreshAsync(listing.Id, cancellationToken);
+        }
+
+        return TypedResults.NoContent();
+    }
+
+    private static async Task<Results<NoContent, NotFound>> RestoreListingAsync(
+        Guid storeProductId,
+        DbContext dbContext,
+        IAuditLog audit,
+        SearchIndex search,
+        CancellationToken cancellationToken)
+    {
+        var listing = await dbContext.Set<StoreProduct>()
+            .IgnoreQueryFilters([TenancyFilters.Archived])
+            .SingleOrDefaultAsync(candidate => candidate.Id == storeProductId, cancellationToken);
+
+        if (listing is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        if (listing.Restore())
+        {
+            audit.Record("catalog.listing.restored", listing.Slug);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await search.RefreshAsync(listing.Id, cancellationToken);
+        }
+
+        return TypedResults.NoContent();
+    }
+
+    // Deleting it properly, when nothing points at it. When something does, the answer says what — a merchant
+    // told only "no" has nowhere to go, and archiving is the thing they actually wanted (D-180).
+    private static async Task<Results<NoContent, NotFound, ProblemHttpResult>> DeleteListingAsync(
+        Guid storeProductId,
+        DbContext dbContext,
+        WhatPointsAtIt holding,
+        IAuditLog audit,
+        CancellationToken cancellationToken)
+    {
+        var listing = await dbContext.Set<StoreProduct>()
+            .IgnoreQueryFilters([TenancyFilters.Archived])
+            .SingleOrDefaultAsync(candidate => candidate.Id == storeProductId, cancellationToken);
+
+        if (listing is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        if (await holding.HoldingAListingAsync(storeProductId, cancellationToken) is { } reason)
+        {
+            return StillInUse("listing", reason);
+        }
+
+        dbContext.Remove(listing);
+        audit.Record("catalog.listing.deleted", listing.Slug);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return TypedResults.NoContent();
+    }
+
+    private static async Task<Results<NoContent, NotFound>> ArchiveCategoryAsync(
+        Guid categoryId,
+        DbContext dbContext,
+        TimeProvider clock,
+        IAuditLog audit,
+        CancellationToken cancellationToken)
+    {
+        var category = await Categories(dbContext).SingleOrDefaultAsync(candidate => candidate.Id == categoryId, cancellationToken);
+
+        if (category is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        if (category.Archive(clock.GetUtcNow()))
+        {
+            audit.Record("catalog.category.archived", category.Slug);
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        return TypedResults.NoContent();
+    }
+
+    private static async Task<Results<NoContent, NotFound>> RestoreCategoryAsync(
+        Guid categoryId,
+        DbContext dbContext,
+        IAuditLog audit,
+        CancellationToken cancellationToken)
+    {
+        var category = await Categories(dbContext).SingleOrDefaultAsync(candidate => candidate.Id == categoryId, cancellationToken);
+
+        if (category is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        if (category.Restore())
+        {
+            audit.Record("catalog.category.restored", category.Slug);
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        return TypedResults.NoContent();
+    }
+
+    private static async Task<Results<NoContent, NotFound, ProblemHttpResult>> DeleteCategoryAsync(
+        Guid categoryId,
+        DbContext dbContext,
+        WhatPointsAtIt holding,
+        IAuditLog audit,
+        CancellationToken cancellationToken)
+    {
+        var category = await Categories(dbContext).SingleOrDefaultAsync(candidate => candidate.Id == categoryId, cancellationToken);
+
+        if (category is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        if (await holding.HoldingACategoryAsync(categoryId, cancellationToken) is { } reason)
+        {
+            return StillInUse("category", reason);
+        }
+
+        dbContext.Remove(category);
+        audit.Record("catalog.category.deleted", category.Slug);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return TypedResults.NoContent();
+    }
+
+    private static IQueryable<Category> Categories(DbContext dbContext) =>
+        dbContext.Set<Category>().IgnoreQueryFilters([TenancyFilters.Archived]);
+
+    // The reason is the whole point: it names what is holding the row, so a merchant knows whether to empty
+    // it, reassign it, or archive it instead.
+    private static ProblemHttpResult StillInUse(string what, string reason) =>
+        TypedResults.Problem(
+            statusCode: StatusCodes.Status409Conflict,
+            title: $"This {what} cannot be deleted",
+            detail: $"It cannot be deleted because {reason}. Archive it instead to take it out of use and keep it.");
 
     private static RequestErrors ValidateDetails(string? name, string? slug, decimal price, decimal vatRate) =>
         new RequestErrors()

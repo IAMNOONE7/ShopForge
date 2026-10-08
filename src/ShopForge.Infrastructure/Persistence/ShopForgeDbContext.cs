@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore.Metadata;
 using ShopForge.Infrastructure.Auditing;
 using ShopForge.Infrastructure.Email;
 using ShopForge.Infrastructure.Messaging;
+using ShopForge.Shared.Catalog;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Infrastructure.Persistence;
@@ -65,6 +66,14 @@ public sealed class ShopForgeDbContext(
                 modelBuilder.Entity(clrType).HasQueryFilter(
                     TenancyFilters.Tenant, OwnershipFilter(clrType, nameof(ITenantOwned.TenantId), nameof(CurrentTenantId)));
             }
+
+            // A retired row is hidden the same way another store's is: once, here, for everything that can be
+            // retired. The catalogue, the search, the feeds and the sitemap then know nothing about archiving
+            // and so cannot forget it (D-180).
+            if (typeof(IArchivable).IsAssignableFrom(clrType))
+            {
+                modelBuilder.Entity(clrType).HasQueryFilter(TenancyFilters.Archived, NotArchivedFilter(clrType));
+            }
         }
 
         // The outbox owns its rows loosely (D-111), so it cannot join the loop above: a message that belongs to no
@@ -89,6 +98,17 @@ public sealed class ShopForgeDbContext(
 
     // Builds entity => entity.<Owner> == this.<CurrentOwner>. EF Core evaluates the context property
     // per query, so every request is filtered by its own store; with no store resolved nothing matches.
+    private static LambdaExpression NotArchivedFilter(Type entityType)
+    {
+        var row = Expression.Parameter(entityType, "row");
+
+        return Expression.Lambda(
+            Expression.Equal(
+                Expression.Property(row, nameof(IArchivable.ArchivedAt)),
+                Expression.Constant(null, typeof(DateTimeOffset?))),
+            row);
+    }
+
     private LambdaExpression OwnershipFilter(Type entityType, string ownerProperty, string currentOwnerProperty)
     {
         var entity = Expression.Parameter(entityType, "entity");
