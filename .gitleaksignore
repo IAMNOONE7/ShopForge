@@ -1,0 +1,9 @@
+# Each line suppresses one finding in one commit, by its fingerprint, and nothing else: a new secret in the same
+# file, or the same value in a later commit, is still reported. Fixtures only.
+
+# A test account's password in a registration test.
+67fd4f9f41d944d3ee1376ba9b8cbdc84626e4ab:tests/ShopForge.IntegrationTests/Customers/AccountTests.cs:generic-api-key:358
+
+# A made-up order access token in two storefront page tests.
+a9bfb56c5d202038d3f7187bc1107de4257b7392:frontend/storefront/src/pages/CartPage.test.tsx:generic-api-key:122
+a9bfb56c5d202038d3f7187bc1107de4257b7392:frontend/storefront/src/pages/OrderPage.test.tsx:generic-api-key:26

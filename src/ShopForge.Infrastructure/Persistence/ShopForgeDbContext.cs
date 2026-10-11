@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -14,8 +15,12 @@ namespace ShopForge.Infrastructure.Persistence;
 public sealed class ShopForgeDbContext(
     DbContextOptions<ShopForgeDbContext> options,
     IStoreContext storeContext,
-    EntityConfigurationAssemblies configurationAssemblies) : DbContext(options)
+    EntityConfigurationAssemblies configurationAssemblies) : DbContext(options), IDataProtectionKeyContext
 {
+    // The keys every cookie, antiforgery token and protected link is sealed with. Kept where every replica can
+    // read them and a restart cannot lose them (D-191).
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
+
     private Guid? CurrentStoreId => storeContext.StoreId;
 
     private Guid? CurrentTenantId => storeContext.TenantId;

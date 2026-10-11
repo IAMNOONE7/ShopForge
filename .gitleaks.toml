@@ -1,0 +1,12 @@
+# The default rules, plus one value that is never a secret.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Values published as non-secrets"
+regexes = [
+  # Azurite's development storage key. Microsoft publishes it, and it is the same on every machine that runs
+  # the emulator, so it unlocks nothing anywhere. Matched by value, not by path, so a real account key in the
+  # same file would still be caught.
+  '''Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==''',
+]

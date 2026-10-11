@@ -2,6 +2,7 @@ using System.Reflection;
 using Azure.Identity;
 using Azure.Security.KeyVault.Secrets;
 using Azure.Storage.Blobs;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -51,6 +52,15 @@ public static class DependencyInjection
             .UseNpgsql(connectionString)
             .UseSnakeCaseNamingConvention());
         services.AddScoped<DbContext>(provider => provider.GetRequiredService<ShopForgeDbContext>());
+
+        // Without this every replica keeps its own key ring in its own filesystem, so a cookie one replica
+        // issued is unreadable by the next and a sign-in does not survive the load balancer — and a container
+        // restart, which every deployment is, signs everybody out. It never shows on one machine, where the
+        // ring sits in the home directory and outlives every restart. The database is what every replica
+        // already shares (D-191). The name keeps the keys valid however the containers lay out their paths.
+        services.AddDataProtection()
+            .SetApplicationName("ShopForge")
+            .PersistKeysToDbContext<ShopForgeDbContext>();
 
         var fileStorageConnectionString = configuration.GetConnectionString("FileStorage")
             ?? throw new InvalidOperationException("Connection string 'FileStorage' is not configured.");

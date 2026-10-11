@@ -1,0 +1,103 @@
+name: Security
+
+# Separate from CI so that a new advisory published overnight against a dependency is reported as what it is,
+# rather than as a broken build somebody has to read twice to understand.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly, because an advisory can be published against code that has not changed.
+    - cron: '17 4 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: Secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # A push or a pull request is checked for what it adds; the weekly run reads the whole history, because a
+      # secret that landed before the scanner existed is still a secret somebody has to rotate.
+      - name: Scan with gitleaks
+        env:
+          RANGE: ${{ github.event_name == 'pull_request' && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || github.event_name == 'push' && format('{0}..{1}', github.event.before, github.event.after) || '' }}
+        run: |
+          log_opts=()
+          if [ -n "$RANGE" ] && [ "${RANGE%%..*}" != "0000000000000000000000000000000000000000" ]; then
+            log_opts=(--log-opts="$RANGE")
+          fi
+          docker run --rm -v "$PWD:/repo:ro" ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            git /repo --config /repo/.gitleaks.toml --gitleaks-ignore-path /repo/.gitleaksignore \
+            --redact --no-banner "${log_opts[@]}"
+
+  dependencies:
+    name: Dependencies (${{ matrix.app }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [storefront, admin]
+    defaults:
+      run:
+        working-directory: frontend/${{ matrix.app }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/${{ matrix.app }}/package-lock.json
+
+      # What ships to a shopper's browser fails the build at moderate and above. The .NET side needs no step
+      # here: every restore audits the packages and a hit fails the build (Directory.Build.props).
+      - name: Audit what ships
+        run: npm audit --omit=dev --audit-level=moderate
+
+      # The build and test tools run on this machine and never reach a shopper. An advisory against them is
+      # reported and fixed promptly, but does not stop unrelated work while somebody waits for an upstream
+      # release.
+      - name: Audit the tools that build it
+        run: |
+          if ! npm audit --audit-level=high > audit.txt 2>&1; then
+            echo "::warning title=Build-time dependency advisory (${{ matrix.app }})::$(grep -E 'severity|^[a-z@]' audit.txt | head -5 | tr '\n' ' ')"
+            cat audit.txt
+          fi
+
+  code:
+    name: Code (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [csharp, javascript-typescript]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        if: matrix.language == 'csharp'
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.language == 'csharp' && 'manual' || 'none' }}
+
+      - name: Build
+        if: matrix.language == 'csharp'
+        run: dotnet build ShopForge.slnx --configuration Release
+
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}

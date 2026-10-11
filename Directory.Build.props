@@ -7,4 +7,17 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
+  <!--
+    Every restore checks the packages against the known-vulnerability database, transitive ones included, and a
+    hit fails the build. The SDK does most of this by default; it is spelled out so that a change of default, or
+    somebody relaxing warnings-as-errors for an unrelated reason, cannot quietly switch it off. A vulnerability
+    with no fix yet is suppressed with NuGetAuditSuppress and a reason, never by lowering the level.
+  -->
+  <PropertyGroup>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>low</NuGetAuditLevel>
+    <WarningsAsErrors>$(WarningsAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsAsErrors>
+  </PropertyGroup>
+
 </Project>
