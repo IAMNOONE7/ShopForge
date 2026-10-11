@@ -124,6 +124,12 @@ builder.Services.AddInventoryModule();
 builder.Services.AddOrdersModule();
 builder.Services.AddPlatformModule(requireSecureCookies);
 
+// The three sign-in schemes set this for their own cookies; this sets it for every cookie, including the cart's,
+// which is a bearer capability for somebody's basket and was the one that did not (D-192). A policy rather than a
+// line at each call site, so a cookie nobody remembers to mark is marked anyway.
+builder.Services.Configure<CookiePolicyOptions>(options =>
+    options.Secure = requireSecureCookies ? CookieSecurePolicy.Always : CookieSecurePolicy.SameAsRequest);
+
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<ShopForgeDbContext>("database", tags: [HealthEndpoints.ReadinessTag])
     .AddCheck<FileStorageHealthCheck>("file-storage", tags: [HealthEndpoints.ReadinessTag])
@@ -132,6 +138,7 @@ builder.Services.AddHealthChecks()
 var app = builder.Build();
 
 app.UseEdgeHeaders();
+app.UseCookiePolicy();
 app.UseSecurityHeaders();
 
 // A request that carries an idempotency key has its body read twice: once to bind it, once to fingerprint it, so
