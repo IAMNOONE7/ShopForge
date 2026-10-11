@@ -110,7 +110,8 @@ internal static class AdminOrderEndpoints
         AdminOrderDetailResponse.From(
             order,
             await Documents.OfAsync(dbContext, order.Number, cancellationToken),
-            await AttemptsAsync(dbContext, order.Number, cancellationToken));
+            await AttemptsAsync(dbContext, order.Number, cancellationToken),
+            await AdminUnappliedPaymentEndpoints.OfOrderAsync(dbContext, order.Number, cancellationToken));
 
     // Every try at paying this order, newest first: what the gateway called it, what became of it, and which
     // of the gateway's environments it went through. No secret is readable from any of it — an attempt holds a
@@ -133,15 +134,36 @@ internal static class AdminOrderEndpoints
             .ToListAsync(cancellationToken);
 
     // Payment for the manual methods is confirmed by hand; the reserved stock leaves the warehouse at that moment.
-    private static Task<Results<Ok<AdminOrderDetailResponse>, NotFound, ProblemHttpResult>> ConfirmPaymentAsync(
+    // A payment a gateway is still holding open is not: the gateway reports it, and the sweep asks about any it has
+    // not heard of. Confirming it here as well would make the gateway's own report look like a second payment, and
+    // refunding that would give the goods away (D-193).
+    private static async Task<Results<Ok<AdminOrderDetailResponse>, NotFound, ProblemHttpResult>> ConfirmPaymentAsync(
         string number,
         DbContext dbContext,
         IStockLedger stock,
         IOutbox outbox,
         IShopForgeMetrics metrics,
         TimeProvider clock,
-        CancellationToken cancellationToken) =>
-        ChangeAsync(
+        CancellationToken cancellationToken)
+    {
+        var open = await dbContext.Set<PaymentAttempt>()
+            .AsNoTracking()
+            .Where(attempt => attempt.OrderNumber == number
+                && attempt.Reference != null
+                && !(attempt.Status == PaymentAttemptStatus.Paid || attempt.Status == PaymentAttemptStatus.Failed))
+            .Select(attempt => attempt.Provider)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (open is not null)
+        {
+            return TypedResults.Problem(
+                statusCode: StatusCodes.Status409Conflict,
+                title: "This order's payment is confirmed by its gateway",
+                detail: $"The order's gateway ({open}) is still holding a payment open for it. The gateway reports the payment "
+                    + "when it is made, and the shop asks it about any it has not heard of within about twenty minutes.");
+        }
+
+        return await ChangeAsync(
             number,
             dbContext,
             order => order.ConfirmPayment(clock.GetUtcNow()),
@@ -154,6 +176,7 @@ internal static class AdminOrderEndpoints
             order => metrics.PaymentConfirmed(order.PaymentMethodCode),
             "The order is not awaiting payment",
             cancellationToken);
+    }
 
     private static Task<Results<Ok<AdminOrderDetailResponse>, NotFound, ProblemHttpResult>> CancelAsync(
         string number,
@@ -301,7 +324,9 @@ internal static class AdminOrderEndpoints
     }
 
     // A store that takes the money itself still has an attempt to close, so "how was this order paid for" has
-    // one answer rather than one per kind of method.
+    // one answer rather than one per kind of method. An attempt a gateway holds is the gateway's to close: one
+    // closed here is never asked about again, and a payment made after a cancellation would then go unheard if
+    // its notification were lost (D-193).
     private static async Task SettleAttemptAsync(
         DbContext dbContext,
         Order order,
@@ -310,7 +335,7 @@ internal static class AdminOrderEndpoints
         CancellationToken cancellationToken)
     {
         var attempt = await dbContext.Set<PaymentAttempt>()
-            .Where(candidate => candidate.OrderNumber == order.Number)
+            .Where(candidate => candidate.OrderNumber == order.Number && candidate.Reference == null)
             .OrderByDescending(candidate => candidate.StartedAt)
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -395,11 +420,16 @@ internal sealed record AdminOrderDetailResponse(
     string? PaymentReference,
     DateTimeOffset? PaidAt,
     List<AdminPaymentAttemptResponse> PaymentAttempts,
+    // Money a gateway took that this order could not take, and what became of it (D-193).
+    List<AdminUnappliedPaymentResponse> UnappliedPayments,
     List<DocumentResponse> Documents,
     List<AdminOrderLineResponse> Lines)
 {
     public static AdminOrderDetailResponse From(
-        Order order, List<DocumentResponse> documents, List<AdminPaymentAttemptResponse> attempts) => new(
+        Order order,
+        List<DocumentResponse> documents,
+        List<AdminPaymentAttemptResponse> attempts,
+        List<AdminUnappliedPaymentResponse> unappliedPayments) => new(
         order.Number,
         order.PlacedAt,
         order.Status.ToString(),
@@ -423,6 +453,7 @@ internal sealed record AdminOrderDetailResponse(
         order.PaymentReference,
         order.PaidAt,
         attempts,
+        unappliedPayments,
         documents,
         [.. order.Lines.Select(line => new AdminOrderLineResponse(line.ProductName, line.UnitPrice, line.VatRate, line.Quantity, line.LineTotal))]);
 }

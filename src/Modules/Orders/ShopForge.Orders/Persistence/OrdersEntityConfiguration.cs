@@ -216,6 +216,34 @@ internal sealed class PaymentEventEntityConfiguration : IEntityTypeConfiguration
     }
 }
 
+internal sealed class UnappliedPaymentEntityConfiguration : IEntityTypeConfiguration<UnappliedPayment>
+{
+    public void Configure(EntityTypeBuilder<UnappliedPayment> builder)
+    {
+        builder.ToTable("unapplied_payments", OrdersModule.Schema);
+
+        builder.Property(payment => payment.OrderNumber).HasMaxLength(20);
+        builder.Property(payment => payment.Provider).HasMaxLength(50);
+        builder.Property(payment => payment.Reference).HasMaxLength(200);
+        builder.Property(payment => payment.Currency).HasMaxLength(3).IsFixedLength();
+        builder.Property(payment => payment.Amount).HasPrecision(12, 2);
+        builder.Property(payment => payment.Reason).HasConversion<string>().HasMaxLength(20);
+        builder.Property(payment => payment.Status).HasConversion<string>().HasMaxLength(20);
+        builder.Property(payment => payment.Note).HasMaxLength(UnappliedPayment.MaxNoteLength);
+
+        // Closing by hand writes through the change tracker while a refund moves the row with a conditional update,
+        // so the version it read goes with it: a refund that got there first is not quietly overwritten (D-130).
+        builder.Property<uint>("Version").HasColumnName("xmin").IsRowVersion();
+
+        builder.HasIndex(payment => new { payment.StoreId, payment.OrderNumber });
+        builder.HasIndex(payment => new { payment.StoreId, payment.Status });
+
+        // One record per payment however often it is reported, so it can only ever be refunded once. A provider
+        // that named no payment leaves a null, and those are as many as there are.
+        builder.HasIndex(payment => new { payment.StoreId, payment.Provider, payment.Reference }).IsUnique();
+    }
+}
+
 internal sealed class InvoiceEntityConfiguration : IEntityTypeConfiguration<Invoice>
 {
     public void Configure(EntityTypeBuilder<Invoice> builder)

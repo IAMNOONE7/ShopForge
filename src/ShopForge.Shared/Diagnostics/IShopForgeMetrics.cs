@@ -8,6 +8,10 @@ public interface IShopForgeMetrics
 
     void PaymentConfirmed(string provider);
 
+    // Money a provider took that its order could not take. Every one of these is a refund somebody owes, so
+    // it is the number an alert watches (D-193).
+    void PaymentUnapplied(string provider, string reason);
+
     void OrderCancelled(string reason);
 
     void OrderRefunded(string reason);

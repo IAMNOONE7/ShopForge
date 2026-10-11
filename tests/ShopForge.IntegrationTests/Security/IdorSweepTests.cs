@@ -4,8 +4,11 @@ using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using ShopForge.Infrastructure.Payments.Comgate;
 using ShopForge.IntegrationTests.Catalog;
 using ShopForge.IntegrationTests.Orders;
+using ShopForge.Orders.Domain;
+using ShopForge.Shared.Payments;
 
 namespace ShopForge.IntegrationTests.Security;
 
@@ -43,6 +46,8 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
         ("POST", "orders/{order}/cancel", null),
         ("POST", "orders/{order}/refund", null),
         ("POST", "orders/{order}/shipment", """{"trackingNumber":"PKG-1"}"""),
+        ("POST", "unapplied-payments/{unapplied}/refund", null),
+        ("POST", "unapplied-payments/{unapplied}/close", """{"note":"Taken."}"""),
         ("POST", "domains/{domain}/verify", null),
         ("POST", "domains/{domain}/primary", null),
         ("DELETE", "domains/{domain}", null),
@@ -194,12 +199,15 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
             CancellationToken);
         var spare = await added.Content.ReadFromJsonAsync<Named>(CancellationToken);
         using var domain = await SendAsync(world.Owner, "DELETE", $"/api/admin/stores/{world.Store}/domains/{spare!.Id}", null);
+        using var closed = await SendAsync(
+            world.Owner, "POST", $"/api/admin/stores/{world.Store}/unapplied-payments/{world.Unapplied}/close", """{"note":"Ours."}""");
 
         Assert.Equal(HttpStatusCode.OK, listing.StatusCode);
         Assert.Equal(HttpStatusCode.OK, order.StatusCode);
         Assert.Equal(HttpStatusCode.OK, movements.StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, review.StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, domain.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, closed.StatusCode);
     }
 
     // The one swept route that takes a file rather than JSON; an empty body would be refused at binding, before
@@ -330,8 +338,29 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
             await UserIdAsync(furniture),
             await InvitationIdAsync(furniture),
             await ContentPageIdAsync(furniture),
-            WithOptions(attributes!).Options[0].Id);
+            WithOptions(attributes!).Options[0].Id,
+            await UnappliedPaymentIdAsync(furniture, orderNumber));
     }
+
+    // A payment kept against an order can only arrive from a gateway, which this host has none of, so the row is
+    // written as the gateway path would write it.
+    private Task<Guid> UnappliedPaymentIdAsync(FurnitureStore furniture, string orderNumber) =>
+        factory.QueryAsync(furniture.Store, async dbContext =>
+        {
+            var kept = new UnappliedPayment(
+                furniture.Store.StoreId,
+                orderNumber,
+                ComgatePaymentProvider.ProviderKey,
+                $"trans-{Guid.NewGuid():N}",
+                10m,
+                Currency.Of("EUR"),
+                UnappliedReason.OrderAlreadyPaid,
+                DateTimeOffset.UtcNow);
+            dbContext.Add(kept);
+            await dbContext.SaveChangesAsync(CancellationToken);
+
+            return kept.Id;
+        });
 
     private async Task<(string Order, Guid Review, Guid Return)> PurchaseAsync(FurnitureStore furniture, StorefrontApi buyer)
     {
@@ -457,7 +486,8 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
         Guid User,
         Guid Invitation,
         Guid ContentPage,
-        Guid AttributeOption)
+        Guid AttributeOption,
+        Guid Unapplied)
     {
         public string Fill(string route) => route
             .Replace("{storeProduct}", StoreProduct.ToString(), StringComparison.Ordinal)
@@ -475,7 +505,8 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
             .Replace("{user}", User.ToString(), StringComparison.Ordinal)
             .Replace("{invitation}", Invitation.ToString(), StringComparison.Ordinal)
             .Replace("{option}", AttributeOption.ToString(), StringComparison.Ordinal)
-            .Replace("{page}", ContentPage.ToString(), StringComparison.Ordinal);
+            .Replace("{page}", ContentPage.ToString(), StringComparison.Ordinal)
+            .Replace("{unapplied}", Unapplied.ToString(), StringComparison.Ordinal);
     }
 
     private sealed record AttributeWithOptions(Guid Id, List<Named> Options);

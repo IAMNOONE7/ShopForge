@@ -43,23 +43,34 @@ internal sealed class PaymentResults(
             return PaymentRecord.NoSuchOrder;
         }
 
+        var attempt = await AttemptAsync(provider, order.Number, notification.PaymentReference, cancellationToken);
+
         dbContext.Add(new PaymentEvent(notification.StoreId, provider, notification.EventId, order.Number, clock.GetUtcNow()));
-        await RecordAttemptAsync(provider, order.Number, notification.Result, cancellationToken);
-        await ApplyAsync(notification, order, provider, cancellationToken);
+        await RecordAttemptAsync(provider, attempt, notification.Result, cancellationToken);
+        var count = await ApplyAsync(notification, order, provider, attempt, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+
+        // Nothing is counted until it is committed: a writer who lost the race leaves no number behind.
+        count?.Invoke();
 
         return PaymentRecord.Recorded;
     }
 
-    // The attempt this result is about: the one still running for this provider on this order.
-    private async Task RecordAttemptAsync(string provider, string orderNumber, PaymentResult result, CancellationToken cancellationToken)
+    // The attempt this result is about: the one the provider named, where it names attempts the way we stored them
+    // (Comgate's transaction), and otherwise the latest for this provider on this order — which is what a provider
+    // that names the payment differently from the session it started (Stripe) means.
+    private async Task<PaymentAttempt?> AttemptAsync(string provider, string orderNumber, string? reference, CancellationToken cancellationToken)
     {
-        var attempt = await dbContext.Set<PaymentAttempt>()
-            .Where(candidate => candidate.OrderNumber == orderNumber && candidate.Provider == provider)
-            .OrderByDescending(candidate => candidate.StartedAt)
-            .FirstOrDefaultAsync(cancellationToken);
+        var attempts = dbContext.Set<PaymentAttempt>()
+            .Where(candidate => candidate.OrderNumber == orderNumber && candidate.Provider == provider);
 
+        return (reference is null ? null : await attempts.SingleOrDefaultAsync(candidate => candidate.Reference == reference, cancellationToken))
+            ?? await attempts.OrderByDescending(candidate => candidate.StartedAt).FirstOrDefaultAsync(cancellationToken);
+    }
+
+    private async Task RecordAttemptAsync(string provider, PaymentAttempt? attempt, PaymentResult result, CancellationToken cancellationToken)
+    {
         if (attempt is null)
         {
             return;
@@ -83,7 +94,12 @@ internal sealed class PaymentResults(
         }
     }
 
-    private async Task ApplyAsync(PaymentNotification notification, Order order, string provider, CancellationToken cancellationToken)
+    private async Task<Action?> ApplyAsync(
+        PaymentNotification notification,
+        Order order,
+        string provider,
+        PaymentAttempt? attempt,
+        CancellationToken cancellationToken)
     {
         var result = notification.Result;
 
@@ -99,7 +115,7 @@ internal sealed class PaymentResults(
                 provider,
                 result);
 
-            return;
+            return null;
         }
 
         var applied = result switch
@@ -110,25 +126,79 @@ internal sealed class PaymentResults(
 
         if (!applied)
         {
-            // Late or out-of-order results: an order that is already paid or cancelled keeps the state it has, and
-            // a payment that arrives after cancellation is a refund case for the store (D-060).
-            logger.LogWarning("Order {OrderNumber} is {Status}, so a {Result} result changed nothing.", order.Number, order.Status, result);
+            // An order that is already paid or cancelled keeps the state it has. A failure arriving late moves no
+            // money; a payment arriving late has moved some, and that is kept rather than dropped (D-193).
+            if (result == PaymentResult.Paid)
+            {
+                return await KeepAsync(notification, order, provider, attempt, cancellationToken);
+            }
 
-            return;
+            logger.LogInformation("Order {OrderNumber} is {Status}, so a {Result} result changed nothing.", order.Number, order.Status, result);
+
+            return null;
         }
 
         if (result == PaymentResult.Paid)
         {
             await stock.ConfirmAsync(order.Number, cancellationToken);
             outbox.Enqueue(new PaymentReceived(order.Number, order.Email, order.GrandTotal, order.Currency.Code));
-            metrics.PaymentConfirmed(provider);
+
+            return () => metrics.PaymentConfirmed(provider);
         }
-        else
+
+        await stock.ReleaseAsync(order.Number, cancellationToken);
+        outbox.Enqueue(new OrderCancelled(order.Number, order.Email, "The payment was not completed in time."));
+
+        return () => metrics.OrderCancelled("payment_failed");
+    }
+
+    // Money the order cannot take: it was cancelled before the payment landed, or it was already paid with other
+    // money. Either way the provider has it and the store owes it back, so it is written down where a merchant can
+    // see it and refund it, rather than logged and forgotten (D-193).
+    private async Task<Action?> KeepAsync(
+        PaymentNotification notification,
+        Order order,
+        string provider,
+        PaymentAttempt? attempt,
+        CancellationToken cancellationToken)
+    {
+        var reference = notification.PaymentReference;
+
+        // The payment the order already has, told again under another id. It is the same money, not more of it,
+        // and refunding it as if it were a second payment would give away the goods.
+        if (reference is not null && reference == order.PaymentReference)
         {
-            await stock.ReleaseAsync(order.Number, cancellationToken);
-            outbox.Enqueue(new OrderCancelled(order.Number, order.Email, "The payment was not completed in time."));
-            metrics.OrderCancelled("payment_failed");
+            logger.LogInformation("Order {OrderNumber} was already paid by {Reference}; the repeat changes nothing.", order.Number, reference);
+
+            return null;
         }
+
+        if (reference is not null && await dbContext.Set<UnappliedPayment>().AnyAsync(
+                kept => kept.Provider == provider && kept.Reference == reference, cancellationToken))
+        {
+            return null;
+        }
+
+        var reason = order.Status == OrderStatus.Cancelled ? UnappliedReason.OrderCancelled : UnappliedReason.OrderAlreadyPaid;
+
+        dbContext.Add(new UnappliedPayment(
+            order.StoreId,
+            order.Number,
+            provider,
+            reference,
+            attempt?.Amount ?? order.GrandTotal,
+            attempt?.Currency ?? order.Currency,
+            reason,
+            clock.GetUtcNow()));
+
+        logger.LogWarning(
+            "A {Provider} payment {Reference} arrived for order {OrderNumber}, which is {Status}. It is kept for the store to refund.",
+            provider,
+            reference,
+            order.Number,
+            order.Status);
+
+        return () => metrics.PaymentUnapplied(provider, reason == UnappliedReason.OrderCancelled ? "order_cancelled" : "order_already_paid");
     }
 }
 

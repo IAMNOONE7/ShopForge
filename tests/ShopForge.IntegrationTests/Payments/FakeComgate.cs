@@ -14,6 +14,9 @@ internal sealed class FakeComgate : IComgatePayments
 
     public bool Fails { get; set; }
 
+    // A refund sent and never answered: the request went out, so whether the money moved is not known.
+    public bool RefundGoesUnanswered { get; set; }
+
     // What this stand-in will say the transaction is when asked, which is the only answer the reader believes.
     public ComgateTransaction? Says { get; set; }
 
@@ -50,7 +53,15 @@ internal sealed class FakeComgate : IComgatePayments
             return Task.FromException(new HttpRequestException("Comgate is unreachable."));
         }
 
-        Refunded.Add((transactionId, amountInMinorUnits, currency));
+        if (RefundGoesUnanswered)
+        {
+            return Task.FromException(new TaskCanceledException("Comgate did not answer in time."));
+        }
+
+        lock (Refunded)
+        {
+            Refunded.Add((transactionId, amountInMinorUnits, currency));
+        }
 
         return Task.CompletedTask;
     }

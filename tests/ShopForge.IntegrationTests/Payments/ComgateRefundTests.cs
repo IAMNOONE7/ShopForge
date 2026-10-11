@@ -93,7 +93,7 @@ public sealed class ComgateRefundTests : IDisposable
         var world = await PaidAtComgateAsync(quantity: 1);
         _comgate.Says = Transaction(world, "CANCELLED");
 
-        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => RefundAsync(world, 10m));
+        var failure = await Assert.ThrowsAsync<RefundRefusedException>(() => RefundAsync(world, 10m));
 
         Assert.Contains("not a payment to refund", failure.Message, StringComparison.Ordinal);
         Assert.Empty(_comgate.Refunded);
@@ -105,7 +105,7 @@ public sealed class ComgateRefundTests : IDisposable
         var world = await PaidAtComgateAsync(quantity: 1);
         _comgate.Says = null;
 
-        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => RefundAsync(world, 10m));
+        var failure = await Assert.ThrowsAsync<RefundRefusedException>(() => RefundAsync(world, 10m));
 
         Assert.Contains("does not know", failure.Message, StringComparison.Ordinal);
         Assert.Empty(_comgate.Refunded);
@@ -117,7 +117,7 @@ public sealed class ComgateRefundTests : IDisposable
     {
         var world = await PaidAtComgateAsync(quantity: 1);
 
-        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => RefundAsync(world, world.Total + 1m));
+        var failure = await Assert.ThrowsAsync<RefundRefusedException>(() => RefundAsync(world, world.Total + 1m));
 
         Assert.Contains("more than transaction", failure.Message, StringComparison.Ordinal);
         Assert.Empty(_comgate.Refunded);
@@ -130,7 +130,7 @@ public sealed class ComgateRefundTests : IDisposable
     {
         var unconnected = await FurnitureStore.CreateAsync(_factory);
 
-        var failure = await Assert.ThrowsAsync<InvalidOperationException>(
+        var failure = await Assert.ThrowsAsync<RefundRefusedException>(
             () => RefundAsync(unconnected, "trans-nobody-connected-for", 10m));
 
         Assert.Contains("no usable Comgate connection", failure.Message, StringComparison.Ordinal);

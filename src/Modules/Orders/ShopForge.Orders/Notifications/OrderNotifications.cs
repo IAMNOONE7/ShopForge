@@ -14,7 +14,8 @@ internal sealed class OrderNotifications(IEmailSender email, ICurrentStoreSettin
         IEventHandler<OrderCancelled>,
         IEventHandler<ShipmentCreated>,
         IEventHandler<ReturnDecided>,
-        IEventHandler<ReturnRefunded>
+        IEventHandler<ReturnRefunded>,
+        IEventHandler<UnappliedPaymentRefunded>
 {
     public async Task HandleAsync(OrderPlaced domainEvent, CancellationToken cancellationToken) =>
         await SendAsync(
@@ -64,6 +65,18 @@ internal sealed class OrderNotifications(IEmailSender email, ICurrentStoreSettin
                 + "\nThe credit note is attached.",
             cancellationToken,
             OrderAttachments.CreditNoteForReturn + domainEvent.ReturnNumber);
+
+    // A payment the order could not take, given back. The customer was told the order was cancelled, or has it
+    // already, so the letter says which and why the money is coming back (D-193).
+    public async Task HandleAsync(UnappliedPaymentRefunded domainEvent, CancellationToken cancellationToken) =>
+        await SendAsync(
+            domainEvent.Email,
+            $"Your payment for order {domainEvent.OrderNumber} is coming back",
+            store => $"{Amount(domainEvent.Amount, domainEvent.Currency, store)} is on its way back to you. "
+                + (domainEvent.OrderWasCancelled
+                    ? $"The payment arrived after order {domainEvent.OrderNumber} had been cancelled, so it could not be used for it."
+                    : $"Order {domainEvent.OrderNumber} had already been paid, so this second payment was not needed."),
+            cancellationToken);
 
     // Written the way the store's own customers read money, rather than the way the server happens to be set up.
     // A culture that does not know the currency still gets the amount and the code, which beats a wrong symbol.

@@ -14,6 +14,7 @@ internal sealed class ShopForgeMetrics : IShopForgeMetrics, IDisposable
     private readonly Meter _meter;
     private readonly Counter<long> _ordersPlaced;
     private readonly Counter<long> _paymentsConfirmed;
+    private readonly Counter<long> _paymentsUnapplied;
     private readonly Counter<long> _ordersCancelled;
     private readonly Counter<long> _ordersRefunded;
     private readonly Counter<long> _shipments;
@@ -24,6 +25,8 @@ internal sealed class ShopForgeMetrics : IShopForgeMetrics, IDisposable
         _meter = meterFactory.Create(MeterName);
         _ordersPlaced = _meter.CreateCounter<long>("shopforge.orders.placed", description: "Orders placed by shoppers.");
         _paymentsConfirmed = _meter.CreateCounter<long>("shopforge.payments.confirmed", description: "Payments confirmed for orders.");
+        _paymentsUnapplied = _meter.CreateCounter<long>(
+            "shopforge.payments.unapplied", description: "Payments taken that their order could not take, by reason.");
         _ordersCancelled = _meter.CreateCounter<long>("shopforge.orders.cancelled", description: "Orders cancelled, by reason.");
         _ordersRefunded = _meter.CreateCounter<long>("shopforge.orders.refunded", description: "Refunds paid back to shoppers, by reason.");
         _shipments = _meter.CreateCounter<long>("shopforge.shipments.created", description: "Shipments handed to a carrier.");
@@ -33,6 +36,9 @@ internal sealed class ShopForgeMetrics : IShopForgeMetrics, IDisposable
     public void OrderPlaced(string paymentMethod) => _ordersPlaced.Add(1, new KeyValuePair<string, object?>("payment.method", paymentMethod));
 
     public void PaymentConfirmed(string provider) => _paymentsConfirmed.Add(1, new KeyValuePair<string, object?>("payment.provider", provider));
+
+    public void PaymentUnapplied(string provider, string reason) => _paymentsUnapplied.Add(
+        1, new KeyValuePair<string, object?>("payment.provider", provider), new KeyValuePair<string, object?>("reason", reason));
 
     public void OrderCancelled(string reason) => _ordersCancelled.Add(1, new KeyValuePair<string, object?>("reason", reason));
 

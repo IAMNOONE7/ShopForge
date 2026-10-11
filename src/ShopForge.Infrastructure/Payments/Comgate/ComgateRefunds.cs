@@ -20,7 +20,7 @@ internal sealed class ComgateRefunds(
     {
         if (await MerchantAsync(cancellationToken) is not { } merchant)
         {
-            throw new InvalidOperationException("This store has no usable Comgate connection to refund through.");
+            throw new RefundRefusedException("This store has no usable Comgate connection to refund through.");
         }
 
         // What Comgate says the transaction is now, which is the only answer believed about it anywhere
@@ -31,12 +31,12 @@ internal sealed class ComgateRefunds(
 
         if (transaction is null)
         {
-            throw new InvalidOperationException($"Comgate does not know transaction {request.PaymentReference}.");
+            throw new RefundRefusedException($"Comgate does not know transaction {request.PaymentReference}.");
         }
 
         if (!string.Equals(transaction.Status, "PAID", StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException(
+            throw new RefundRefusedException(
                 $"Comgate transaction {request.PaymentReference} is {transaction.Status}, which is not a payment to refund.");
         }
 
@@ -46,7 +46,7 @@ internal sealed class ComgateRefunds(
         // would refuse it too; refusing here says which number was wrong.
         if (amount > transaction.PriceInMinorUnits)
         {
-            throw new InvalidOperationException(
+            throw new RefundRefusedException(
                 $"A refund of {request.Amount} {request.Currency} is more than transaction {request.PaymentReference} took.");
         }
 

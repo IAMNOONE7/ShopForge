@@ -58,6 +58,7 @@ public static class OrdersModule
         services.AddScoped<IEventHandler<ShipmentCreated>, OrderNotifications>();
         services.AddScoped<IEventHandler<ReturnDecided>, OrderNotifications>();
         services.AddScoped<IEventHandler<ReturnRefunded>, OrderNotifications>();
+        services.AddScoped<IEventHandler<UnappliedPaymentRefunded>, OrderNotifications>();
         services.AddScoped<IStoreMaintenance, CartCleanup>();
         services.AddScoped<ISoldListings, SoldListings>();
         services.AddScoped<PaymentResults>();
@@ -89,6 +90,7 @@ public static class OrdersModule
     public static IEndpointRouteBuilder MapOrdersStoreAdminEndpoints(this IEndpointRouteBuilder storeAdmin)
     {
         storeAdmin.MapAdminOrders();
+        storeAdmin.MapAdminUnappliedPayments();
         storeAdmin.MapAdminMethods();
         storeAdmin.MapAdminPickupPoints();
         storeAdmin.MapAdminDiscounts();

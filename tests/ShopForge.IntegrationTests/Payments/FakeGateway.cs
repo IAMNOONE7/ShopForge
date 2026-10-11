@@ -37,14 +37,16 @@ internal class FakeGateway : IPaymentProvider, IPaymentNotifications
             : new PaymentNotification(posted.EventId, posted.StoreId, posted.OrderNumber, result, posted.PaymentReference);
     }
 
-    // What a test posts to /api/payments/fake-gateway.
-    public static HttpContent Notification(Guid storeId, string orderNumber, PaymentResult result, string? eventId = null) =>
+    // What a test posts to /api/payments/fake-gateway. The reference is what the gateway calls the money; a second,
+    // separate payment for the same order is the same order with another one.
+    public static HttpContent Notification(
+        Guid storeId, string orderNumber, PaymentResult result, string? eventId = null, string? reference = null) =>
         JsonContent.Create(new PostedNotification(
             eventId ?? $"event-{Guid.NewGuid():N}",
             storeId,
             orderNumber,
             result.ToString(),
-            PaymentReference: $"reference-{orderNumber}"));
+            PaymentReference: reference ?? $"reference-{orderNumber}"));
 
     private sealed record PostedNotification(string EventId, Guid StoreId, string OrderNumber, string Result, string? PaymentReference);
 }
