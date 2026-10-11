@@ -37,10 +37,14 @@ internal sealed class Carts(
         dbContext.Add(cart);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        // The cookie only carries the cart id; the store's own filter makes it useless on another store.
+        // The cookie only carries the cart id; the store's own filter makes it useless on another store. It is a
+        // bearer capability for the basket, so it is marked Secure here as well as by the cookie policy, which
+        // makes it Secure in a deployment whatever the request said: if the policy were ever not applied, a
+        // request over HTTPS would still mark it (D-192).
         httpContext.Response.Cookies.Append(CookieName, cart.Id.ToString(), new CookieOptions
         {
             HttpOnly = true,
+            Secure = httpContext.Request.IsHttps,
             SameSite = SameSiteMode.Lax,
             IsEssential = true,
             MaxAge = TimeSpan.FromDays(30),
