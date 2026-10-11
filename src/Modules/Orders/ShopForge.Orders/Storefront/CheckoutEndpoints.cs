@@ -17,6 +17,7 @@ using ShopForge.Shared.Messaging;
 using ShopForge.Shared.Payments;
 using ShopForge.Shared.Shipping;
 using ShopForge.Shared.Stores;
+using ShopForge.Shared.Tax;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Orders.Storefront;
@@ -42,6 +43,7 @@ internal static class CheckoutEndpoints
         ISellableProducts products,
         IStockLedger stock,
         ICurrentStoreSettings storeSettings,
+        ITaxRates taxRates,
         IEnumerable<IPaymentProvider> paymentProviders,
         IProviderConnections connections,
         IEnumerable<IShippingProvider> shippingProviders,
@@ -60,7 +62,7 @@ internal static class CheckoutEndpoints
         // Where the parcel is going is not known yet — the shopper is still being shown their choices — so a
         // method limited by destination stays on offer here and is refused at checkout if it turns out not to
         // serve the address (D-145).
-        var carts = new Carts(httpContext, dbContext, storeContext, products, stock, discounts, storeSettings, clock);
+        var carts = new Carts(httpContext, dbContext, storeContext, products, stock, discounts, storeSettings, taxRates, clock);
         var cart = await carts.FindAsync(cancellationToken);
         var parcel = new Parcel(
             cart is null ? null : (await carts.ContentsAsync(cart, cancellationToken)).WeightGrams,
@@ -122,6 +124,7 @@ internal static class CheckoutEndpoints
         IStoreContext storeContext,
         ISellableProducts products,
         ICurrentStoreSettings storeSettings,
+        ITaxRates taxRates,
         ICurrentCustomer currentCustomer,
         IStockLedger stock,
         IEnumerable<IPaymentProvider> paymentProviders,
@@ -134,7 +137,7 @@ internal static class CheckoutEndpoints
         TimeProvider clock,
         CancellationToken cancellationToken)
     {
-        var carts = new Carts(httpContext, dbContext, storeContext, products, stock, discounts, storeSettings, clock);
+        var carts = new Carts(httpContext, dbContext, storeContext, products, stock, discounts, storeSettings, taxRates, clock);
         var cart = await carts.FindAsync(cancellationToken);
         var contents = cart is null ? null : await carts.ContentsAsync(cart, cancellationToken);
 
@@ -217,6 +220,11 @@ internal static class CheckoutEndpoints
         }
 
         var settings = await storeSettings.GetAsync(cancellationToken);
+
+        // Where the parcel is going decides what everything on it attracts, so the rates are read once the
+        // address is known and before a single line is written (D-187).
+        var destination = (request.ShippingAddress ?? request.BillingAddress)!.Country;
+        var rates = await taxRates.ForAsync(destination, settings.Seller?.Country, cancellationToken);
         var placedAt = clock.GetUtcNow();
         var reservationExpiresAt = placedAt + ReservationWindow;
 
@@ -283,7 +291,7 @@ internal static class CheckoutEndpoints
                 shipping.Code,
                 shipping.Name,
                 shipping.Price,
-                shipping.VatRate),
+                rates.For(shipping.TaxClass, shipping.VatRate)),
             pickupPoint is null
                 ? null
                 : new ChosenPickupPoint(
@@ -305,7 +313,7 @@ internal static class CheckoutEndpoints
                 item.Variant.Id,
                 Named(item),
                 item.Product.Price,
-                item.Product.VatRate,
+                rates.For(item.Product.TaxClass, item.Product.VatRate),
                 item.Quantity,
                 allocation?.LineDiscounts[index] ?? 0m);
         }

@@ -818,6 +818,11 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("store_id");
 
+                    b.Property<string>("TaxClass")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("tax_class");
+
                     b.Property<decimal>("VatRate")
                         .HasPrecision(5, 2)
                         .HasColumnType("numeric(5,2)")
@@ -2677,6 +2682,11 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("store_id");
 
+                    b.Property<string>("TaxClass")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("tax_class");
+
                     b.Property<decimal>("VatRate")
                         .HasPrecision(5, 2)
                         .HasColumnType("numeric(5,2)")
@@ -3180,6 +3190,79 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                     b.ToTable("store_domains", "stores", t =>
                         {
                             t.HasCheckConstraint("ck_store_domains_host_name_normalized", "host_name = lower(host_name) AND host_name !~ '[:/\\s]'");
+                        });
+                });
+
+            modelBuilder.Entity("ShopForge.Stores.Domain.TaxClass", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("code");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("StoreId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("store_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tax_classes");
+
+                    b.HasIndex("StoreId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_tax_classes_store_id_code");
+
+                    b.ToTable("tax_classes", "stores");
+                });
+
+            modelBuilder.Entity("ShopForge.Stores.Domain.TaxRate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Country")
+                        .IsRequired()
+                        .HasMaxLength(2)
+                        .HasColumnType("character(2)")
+                        .HasColumnName("country")
+                        .IsFixedLength();
+
+                    b.Property<decimal>("Rate")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("rate");
+
+                    b.Property<Guid>("StoreId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("store_id");
+
+                    b.Property<string>("TaxClass")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("tax_class");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tax_rates");
+
+                    b.HasIndex("StoreId", "TaxClass", "Country")
+                        .IsUnique()
+                        .HasDatabaseName("ix_tax_rates_store_id_tax_class_country");
+
+                    b.ToTable("tax_rates", "stores", t =>
+                        {
+                            t.HasCheckConstraint("ck_tax_rates_rate", "rate >= 0 AND rate <= 100");
                         });
                 });
 

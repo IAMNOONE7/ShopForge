@@ -13,6 +13,9 @@ public sealed record SellableProduct(
     string Slug,
     decimal Price,
     decimal VatRate,
+    // What the thing is, for tax. The rate above is what it attracts where nothing else is said; the class is
+    // how a destination's own rate is found (D-187).
+    string? TaxClass,
     string? ImageUrl,
     IReadOnlyList<string> OptionNames,
     IReadOnlyList<SellableVariant> Variants)

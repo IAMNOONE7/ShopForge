@@ -23,6 +23,7 @@ using ShopForge.Shared.Platform;
 using ShopForge.Shared.Privacy;
 using ShopForge.Shared.Security;
 using ShopForge.Shared.Stores;
+using ShopForge.Shared.Tax;
 
 namespace ShopForge.Catalog;
 
@@ -36,6 +37,7 @@ public static class CatalogModule
     {
         services.AddScoped<IStorePublishCheck, CatalogPublishCheck>();
         services.AddScoped<ISellableProducts, SellableProductLookup>();
+        services.AddScoped<ITaxClassUsers, ListingsNamingATaxClass>();
         services.AddScoped<ITenantProducts, TenantProductLookup>();
         services.AddScoped<ITenantUsage, ProductUsage>();
         services.AddScoped<ProductRatings>();

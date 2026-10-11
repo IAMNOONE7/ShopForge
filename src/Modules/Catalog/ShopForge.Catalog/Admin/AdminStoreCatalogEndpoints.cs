@@ -14,6 +14,7 @@ using ShopForge.Shared.Http;
 using ShopForge.Shared.Payments;
 using ShopForge.Shared.Security;
 using ShopForge.Shared.Stores;
+using ShopForge.Shared.Tax;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Catalog.Admin;
@@ -100,6 +101,7 @@ internal static class AdminStoreCatalogEndpoints
                 listing.IsVisible,
                 listing.SortOrder,
                 listing.Categories.Select(assignment => assignment.CategoryId).ToList(),
+                listing.TaxClass,
                 listing.SeoTitle,
                 listing.SeoDescription,
                 listing.SeoSocialImageUrl,
@@ -115,10 +117,11 @@ internal static class AdminStoreCatalogEndpoints
         IStoreContext storeContext,
         SearchIndex search,
         ICurrentStoreSettings storeSettings,
+        ITaxRates taxRates,
         CancellationToken cancellationToken)
     {
         var currency = (await storeSettings.GetAsync(cancellationToken)).Currency;
-        var errors = ValidateDetails(request.Name, request.Slug, request.Price, request.VatRate, currency);
+        var errors = ValidateDetails(request.Name, request.Slug, request.Price, request.VatRate, currency, request.TaxClass, await taxRates.ClassesAsync(cancellationToken));
 
         // The tenant filter makes products of other tenants invisible, so they cannot be listed here.
         var product = await dbContext.Set<Product>().SingleOrDefaultAsync(product => product.Id == request.ProductId, cancellationToken);
@@ -129,7 +132,7 @@ internal static class AdminStoreCatalogEndpoints
             return errors.ToProblem();
         }
 
-        var details = ToDetails(request.Name!, request.Slug, request.Description, request.Price, request.VatRate, request.IsVisible, request.SortOrder);
+        var details = ToDetails(request.Name!, request.Slug, request.Description, request.Price, request.VatRate, request.IsVisible, request.SortOrder, request.TaxClass);
 
         if (await dbContext.Set<StoreProduct>().AnyAsync(existing => existing.ProductId == product!.Id, cancellationToken))
         {
@@ -159,6 +162,7 @@ internal static class AdminStoreCatalogEndpoints
         IAuditLog audit,
         SearchIndex search,
         ICurrentStoreSettings storeSettings,
+        ITaxRates taxRates,
         CancellationToken cancellationToken)
     {
         var storeProduct = await dbContext.Set<StoreProduct>()
@@ -173,14 +177,14 @@ internal static class AdminStoreCatalogEndpoints
         // Without an explicit slug the public URL stays as it is, even when the name changes.
         var slug = request.Slug ?? storeProduct.Slug;
         var currency = (await storeSettings.GetAsync(cancellationToken)).Currency;
-        var errors = ValidateDetails(request.Name, slug, request.Price, request.VatRate, currency);
+        var errors = ValidateDetails(request.Name, slug, request.Price, request.VatRate, currency, request.TaxClass, await taxRates.ClassesAsync(cancellationToken));
 
         if (errors.Any)
         {
             return errors.ToProblem();
         }
 
-        var details = ToDetails(request.Name!, slug, request.Description, request.Price, request.VatRate, request.IsVisible, request.SortOrder);
+        var details = ToDetails(request.Name!, slug, request.Description, request.Price, request.VatRate, request.IsVisible, request.SortOrder, request.TaxClass);
 
         if (await dbContext.Set<StoreProduct>().AnyAsync(other => other.Slug == details.Slug && other.Id != storeProductId, cancellationToken))
         {
@@ -599,13 +603,20 @@ internal static class AdminStoreCatalogEndpoints
             title: $"This {what} cannot be deleted",
             detail: $"It cannot be deleted because {reason}. Archive it instead to take it out of use and keep it.");
 
-    private static RequestErrors ValidateDetails(string? name, string? slug, decimal price, decimal vatRate, Currency currency) =>
+    private static RequestErrors ValidateDetails(
+        string? name, string? slug, decimal price, decimal vatRate, Currency currency, string? taxClass, IReadOnlyList<string> taxClasses) =>
         new RequestErrors()
             .Check(!string.IsNullOrWhiteSpace(name) && name.Trim().Length <= 200, "name", "Name is required (up to 200 characters).")
             .Check(slug is null || Slugs.IsValid(slug), "slug", "Slug may contain lower-case letters, digits and single hyphens.")
             .Check(name is null || slug is not null || Slugs.Create(name).Length > 0, "slug", "A slug cannot be derived from this name; provide one.")
             .Check(price >= 0 && currency.Holds(price), "price", $"Price must be zero or more, with at most {currency.Decimals} decimals.")
-            .Check(vatRate is >= 0 and <= 100 && decimal.Round(vatRate, 2) == vatRate, "vatRate", "The VAT rate must be between 0 and 100.");
+            .Check(vatRate is >= 0 and <= 100 && decimal.Round(vatRate, 2) == vatRate, "vatRate", "The VAT rate must be between 0 and 100.")
+            // Only a class the shop has: a listing pointed at a code nobody defined would be taxed by a
+            // fallback nobody chose (D-187).
+            .Check(
+                string.IsNullOrWhiteSpace(taxClass) || taxClasses.Contains(taxClass.Trim(), StringComparer.Ordinal),
+                "taxClass",
+                "That tax class is not one this store has.");
 
     private static RequestErrors ValidateCategory(CategoryRequest request) =>
         new RequestErrors()
@@ -614,8 +625,8 @@ internal static class AdminStoreCatalogEndpoints
             .Check(request.Name is null || request.Slug is not null || Slugs.Create(request.Name).Length > 0, "slug", "A slug cannot be derived from this name; provide one.");
 
     private static StoreProductDetails ToDetails(
-        string name, string? slug, string? description, decimal price, decimal vatRate, bool isVisible, int sortOrder) =>
-        new(name, slug ?? Slugs.Create(name), description, price, vatRate, isVisible, sortOrder);
+        string name, string? slug, string? description, decimal price, decimal vatRate, bool isVisible, int sortOrder, string? taxClass) =>
+        new(name, slug ?? Slugs.Create(name), description, price, vatRate, isVisible, sortOrder, taxClass);
 
     private static ProblemHttpResult SlugTaken() =>
         TypedResults.Problem(statusCode: StatusCodes.Status409Conflict, title: "The slug is already used in this store");
@@ -633,7 +644,7 @@ internal static class AdminStoreCatalogEndpoints
         new RequestErrors().Check(false, "parentId", $"Categories can be nested up to {CategoryTree.MaxDepth} levels deep.").ToProblem();
 }
 
-internal sealed record ListProductRequest(Guid ProductId, string? Name, string? Slug, string? Description, decimal Price, decimal VatRate, bool IsVisible, int SortOrder);
+internal sealed record ListProductRequest(Guid ProductId, string? Name, string? Slug, string? Description, decimal Price, decimal VatRate, bool IsVisible, int SortOrder, string? TaxClass = null);
 
 internal sealed record UpdateStoreProductRequest(
     string? Name,
@@ -643,7 +654,8 @@ internal sealed record UpdateStoreProductRequest(
     decimal VatRate,
     bool IsVisible,
     int SortOrder,
-    ListingSeoRequest? Seo = null);
+    ListingSeoRequest? Seo = null,
+    string? TaxClass = null);
 
 // What this page says for itself. Absent leaves what is there alone; present replaces all of it (D-165).
 internal sealed record ListingSeoRequest(string? Title, string? Description, string? SocialImageUrl, bool NoIndex);
@@ -677,6 +689,7 @@ internal sealed record AdminStoreProductResponse(
     bool IsVisible,
     int SortOrder,
     List<Guid> CategoryIds,
+    string? TaxClass,
     string? SeoTitle,
     string? SeoDescription,
     string? SeoSocialImageUrl,
@@ -694,6 +707,7 @@ internal sealed record AdminStoreProductResponse(
         storeProduct.IsVisible,
         storeProduct.SortOrder,
         storeProduct.Categories.Select(assignment => assignment.CategoryId).ToList(),
+        storeProduct.TaxClass,
         storeProduct.SeoTitle,
         storeProduct.SeoDescription,
         storeProduct.SeoSocialImageUrl,

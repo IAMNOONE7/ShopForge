@@ -5,6 +5,7 @@ using ShopForge.Orders.Admin;
 using ShopForge.Orders.Background;
 using ShopForge.Orders.Catalog;
 using ShopForge.Orders.Discounts;
+using ShopForge.Orders.Domain;
 using ShopForge.Orders.Invoicing;
 using ShopForge.Orders.Notifications;
 using ShopForge.Orders.Payments;
@@ -23,6 +24,7 @@ using ShopForge.Shared.Platform;
 using ShopForge.Shared.Privacy;
 using ShopForge.Shared.Shipping;
 using ShopForge.Shared.Stores;
+using ShopForge.Shared.Tax;
 
 namespace ShopForge.Orders;
 
@@ -40,6 +42,7 @@ public static class OrdersModule
         services.AddScoped<IStoreShippingRates, StoreShippingRates>();
         services.AddScoped<IStorePublishCheck, OrdersPublishCheck>();
         services.AddScoped<IStoreInitializer, DefaultStoreMethods>();
+        services.AddScoped<ITaxClassUsers, MethodsNamingATaxClass>();
         services.AddScoped<ICustomerOrders, GuestOrderClaim>();
         services.AddScoped<ICustomerPurchases, CustomerPurchases>();
         services.AddScoped<ITenantUsage, OrderUsage>();

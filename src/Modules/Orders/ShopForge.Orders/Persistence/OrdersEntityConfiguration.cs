@@ -137,6 +137,7 @@ internal sealed class ShippingMethodEntityConfiguration : IEntityTypeConfigurati
         builder.Property(method => method.ProviderKey).HasMaxLength(50);
         builder.Property(method => method.Price).HasPrecision(12, 2);
         builder.Property(method => method.VatRate).HasPrecision(5, 2);
+        builder.Property(method => method.TaxClass).HasMaxLength(50);
         builder.PrimitiveCollection(method => method.Countries).ElementType(country => country.HasMaxLength(2).IsFixedLength());
 
         builder.HasIndex(method => new { method.StoreId, method.Code }).IsUnique();

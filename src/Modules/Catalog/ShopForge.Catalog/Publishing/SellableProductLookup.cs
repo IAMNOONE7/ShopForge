@@ -20,6 +20,7 @@ internal sealed class SellableProductLookup(DbContext dbContext) : ISellableProd
                     storeProduct.Slug,
                     storeProduct.Price,
                     storeProduct.VatRate,
+                    storeProduct.TaxClass,
                     ImageId = product.Images.OrderBy(image => image.Position).Select(image => (Guid?)image.Id).FirstOrDefault(),
                     product.OptionNames,
                     Variants = product.Variants
@@ -38,6 +39,7 @@ internal sealed class SellableProductLookup(DbContext dbContext) : ISellableProd
                 product.Slug,
                 product.Price,
                 product.VatRate,
+                product.TaxClass,
                 product.ImageId is null ? null : $"/api/storefront/products/{product.Id}/images/{product.ImageId}",
                 product.OptionNames,
                 product.Variants)),

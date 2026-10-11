@@ -38,6 +38,9 @@ internal sealed class StoreProduct : IStoreOwned, IArchivable
 
     public decimal VatRate { get; private set; }
 
+    // Which of the shop's tax classes this is, or nothing when the rate above is the whole answer (D-187).
+    public string? TaxClass { get; private set; }
+
     // Kept on the listing so a page of products can be sorted and shown without a join per row (D-089).
     public decimal RatingAverage { get; private set; }
 
@@ -123,7 +126,8 @@ internal sealed class StoreProduct : IStoreOwned, IArchivable
             details.Price,
             details.VatRate,
             details.IsVisible,
-            details.SortOrder);
+            details.SortOrder,
+            string.IsNullOrWhiteSpace(details.TaxClass) ? null : details.TaxClass.Trim());
 
         if (updated == Current)
         {
@@ -137,6 +141,7 @@ internal sealed class StoreProduct : IStoreOwned, IArchivable
         VatRate = updated.VatRate;
         IsVisible = updated.IsVisible;
         SortOrder = updated.SortOrder;
+        TaxClass = updated.TaxClass;
 
         return true;
     }
@@ -157,7 +162,7 @@ internal sealed class StoreProduct : IStoreOwned, IArchivable
 
     private static string? Tidied(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    public StoreProductDetails Current => new(Name, Slug, Description, Price, VatRate, IsVisible, SortOrder);
+    public StoreProductDetails Current => new(Name, Slug, Description, Price, VatRate, IsVisible, SortOrder, TaxClass);
 
     // Import sets only the attributes present in the file; values of other attributes stay as they are.
     public bool SetAttributeValue(AttributeDefinition definition, AttributeValue value)
@@ -199,6 +204,22 @@ internal sealed class StoreProduct : IStoreOwned, IArchivable
 
     // One thing at a time, for the screens that change one thing across many listings. `Update` replaces
     // everything a listing is, which is right for an editor and wrong for "hide these forty" (D-183).
+    // Pointing many listings at a class at once: a shop that starts selling abroad has to say what its
+    // thousands of things are, and one at a time is not a way to say it (D-187).
+    public bool SetTaxClass(string? taxClass)
+    {
+        var named = string.IsNullOrWhiteSpace(taxClass) ? null : taxClass.Trim();
+
+        if (TaxClass == named)
+        {
+            return false;
+        }
+
+        TaxClass = named;
+
+        return true;
+    }
+
     public bool SetVisible(bool isVisible)
     {
         if (IsVisible == isVisible)
@@ -260,4 +281,14 @@ internal sealed class StoreProduct : IStoreOwned, IArchivable
     }
 }
 
-internal sealed record StoreProductDetails(string Name, string Slug, string? Description, decimal Price, decimal VatRate, bool IsVisible, int SortOrder);
+internal sealed record StoreProductDetails(
+    string Name,
+    string Slug,
+    string? Description,
+    decimal Price,
+    decimal VatRate,
+    bool IsVisible,
+    int SortOrder,
+    // What this is, for tax. Nothing means the rate below applies wherever it is sent, which is right for a
+    // shop that sells in one country and is what every shop did before there were classes (D-187).
+    string? TaxClass = null);

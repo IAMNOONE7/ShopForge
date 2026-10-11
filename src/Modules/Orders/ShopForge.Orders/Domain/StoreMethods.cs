@@ -59,7 +59,8 @@ internal sealed class ShippingMethod : IStoreOwned
         Currency currency,
         bool requiresPickupPoint = false,
         int? maxWeightGrams = null,
-        IReadOnlyList<string>? countries = null)
+        IReadOnlyList<string>? countries = null,
+        string? taxClass = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
@@ -67,7 +68,7 @@ internal sealed class ShippingMethod : IStoreOwned
         StoreId = storeId;
         Code = code;
         ProviderKey = providerKey;
-        Update(name, price, vatRate, isActive: true, requiresPickupPoint, currency, maxWeightGrams, countries);
+        Update(name, price, vatRate, isActive: true, requiresPickupPoint, currency, maxWeightGrams, countries, taxClass);
     }
 
     public Guid Id { get; private set; }
@@ -83,6 +84,10 @@ internal sealed class ShippingMethod : IStoreOwned
     public decimal Price { get; private set; }
 
     public decimal VatRate { get; private set; }
+
+    // Which of the shop's tax classes a delivery is, or nothing when the rate above applies wherever the
+    // parcel goes (D-187).
+    public string? TaxClass { get; private set; }
 
     public bool IsActive { get; private set; }
 
@@ -103,7 +108,8 @@ internal sealed class ShippingMethod : IStoreOwned
         bool requiresPickupPoint,
         Currency currency,
         int? maxWeightGrams = null,
-        IReadOnlyList<string>? countries = null)
+        IReadOnlyList<string>? countries = null,
+        string? taxClass = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
@@ -125,6 +131,7 @@ internal sealed class ShippingMethod : IStoreOwned
         Name = name.Trim();
         Price = price;
         VatRate = vatRate;
+        TaxClass = string.IsNullOrWhiteSpace(taxClass) ? null : taxClass.Trim();
         IsActive = isActive;
         RequiresPickupPoint = requiresPickupPoint;
         MaxWeightGrams = maxWeightGrams;

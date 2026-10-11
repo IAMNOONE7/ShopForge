@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Shared.Platform;
 using ShopForge.Shared.Stores;
+using ShopForge.Shared.Tax;
 using ShopForge.Stores.Admin;
 using ShopForge.Stores.Content;
 using ShopForge.Stores.Logos;
@@ -11,6 +12,7 @@ using ShopForge.Stores.Platform;
 using ShopForge.Stores.Provisioning;
 using ShopForge.Stores.Resolution;
 using ShopForge.Stores.Storefront;
+using ShopForge.Stores.Tax;
 
 namespace ShopForge.Stores;
 
@@ -30,6 +32,7 @@ public static class StoresModule
         services.AddScoped<IStoreUrls, StoreUrls>();
         services.AddScoped<IStoreContentPages, StoreContentPages>();
         services.AddScoped<IStoreDirectory, StoreDirectory>();
+        services.AddScoped<ITaxRates, StoreTaxRates>();
         services.AddScoped<ITenantDirectory, TenantDirectory>();
         services.AddScoped<ITenantUsage, StoreUsage>();
         services.AddScoped<TenantPlans>();
@@ -68,6 +71,7 @@ public static class StoresModule
         storeAdmin.MapStoreLifecycle();
         storeAdmin.MapStoreDomainEndpoints();
         storeAdmin.MapAdminContentPages();
+        storeAdmin.MapAdminTaxRules();
 
         return storeAdmin;
     }

@@ -25,6 +25,7 @@ internal sealed class StoreProductEntityConfiguration : IEntityTypeConfiguration
         builder.Property(storeProduct => storeProduct.SeoSocialImageUrl).HasMaxLength(2000);
         builder.Property(storeProduct => storeProduct.Price).HasPrecision(12, 2);
         builder.Property(storeProduct => storeProduct.VatRate).HasPrecision(5, 2);
+        builder.Property(storeProduct => storeProduct.TaxClass).HasMaxLength(50);
 
         builder.HasIndex(storeProduct => new { storeProduct.StoreId, storeProduct.Slug }).IsUnique();
         builder.HasIndex(storeProduct => new { storeProduct.StoreId, storeProduct.ProductId }).IsUnique();

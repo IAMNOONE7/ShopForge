@@ -215,6 +215,11 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
         ["/api/admin/stores/{storeId:guid}/payment-methods/{code}"] = "keyed by a code of the store in the path",
         ["/api/admin/stores/{storeId:guid}/shipping-methods/{code}"] = "keyed by a code of the store in the path",
         ["/api/admin/stores/{storeId:guid}/pickup-points/{code}"] = "keyed by a code of the store in the path",
+        ["/api/admin/stores/{storeId:guid}/tax-classes/{code}"] = "keyed by a code of the store in the path",
+
+        // A class code of the store in the path, and a destination country, neither of which is a row of
+        // another store (D-187).
+        ["/api/admin/stores/{storeId:guid}/tax-classes/{code}/rates/{country}"] = "keyed by a code of the store and a country",
 
         // A feed is named by which shopping engine it is for, and that name means the same thing in every
         // store; the row behind it is found by the store in scope like every other (D-168).

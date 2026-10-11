@@ -11,6 +11,7 @@ using ShopForge.Shared.Payments;
 using ShopForge.Shared.Security;
 using ShopForge.Shared.Shipping;
 using ShopForge.Shared.Stores;
+using ShopForge.Shared.Tax;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Orders.Admin;
@@ -114,7 +115,8 @@ internal static class AdminMethodEndpoints
                 method.IsActive,
                 method.RequiresPickupPoint,
                 method.MaxWeightGrams,
-                method.Countries))
+                method.Countries,
+                method.TaxClass))
             .ToListAsync(cancellationToken));
 
     private static async Task<Results<Created<AdminShippingMethodResponse>, ValidationProblem, ProblemHttpResult>> CreateShippingMethodAsync(
@@ -123,12 +125,13 @@ internal static class AdminMethodEndpoints
         IStoreContext storeContext,
         IEnumerable<IShippingProvider> providers,
         ICurrentStoreSettings storeSettings,
+        ITaxRates taxRates,
         CancellationToken cancellationToken)
     {
         var currency = (await storeSettings.GetAsync(cancellationToken)).Currency;
         var code = Codes.Of(request.Name);
         var providerKey = request.ProviderKey ?? StoreShippingProvider.ProviderKey;
-        var errors = ValidateShipping(request, currency)
+        var errors = ValidateShipping(request, currency, await taxRates.ClassesAsync(cancellationToken))
             .Check(code is not null, "name", "The name must contain letters or digits.")
             .Check(providers.Any(provider => provider.Key == providerKey), "providerKey", "That shipping provider is not available.");
 
@@ -152,7 +155,8 @@ internal static class AdminMethodEndpoints
             currency,
             request.RequiresPickupPoint,
             request.MaxWeightGrams,
-            request.Countries);
+            request.Countries,
+            request.TaxClass);
         dbContext.Add(method);
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -166,10 +170,11 @@ internal static class AdminMethodEndpoints
         ShippingMethodRequest request,
         DbContext dbContext,
         ICurrentStoreSettings storeSettings,
+        ITaxRates taxRates,
         CancellationToken cancellationToken)
     {
         var currency = (await storeSettings.GetAsync(cancellationToken)).Currency;
-        var errors = ValidateShipping(request, currency);
+        var errors = ValidateShipping(request, currency, await taxRates.ClassesAsync(cancellationToken));
 
         if (errors.Any)
         {
@@ -191,7 +196,8 @@ internal static class AdminMethodEndpoints
             request.RequiresPickupPoint,
             currency,
             request.MaxWeightGrams,
-            request.Countries);
+            request.Countries,
+            request.TaxClass);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return TypedResults.Ok(ShippingResponse(method));
@@ -207,12 +213,13 @@ internal static class AdminMethodEndpoints
             method.IsActive,
             method.RequiresPickupPoint,
             method.MaxWeightGrams,
-            method.Countries);
+            method.Countries,
+            method.TaxClass);
 
     private static RequestErrors ValidateName(string? name) =>
         new RequestErrors().Check(!string.IsNullOrWhiteSpace(name) && name.Trim().Length <= 100, "name", "Name is required (up to 100 characters).");
 
-    private static RequestErrors ValidateShipping(ShippingMethodRequest request, Currency currency) =>
+    private static RequestErrors ValidateShipping(ShippingMethodRequest request, Currency currency, IReadOnlyList<string> taxClasses) =>
         ValidateName(request.Name)
             .Check(request.Price >= 0 && currency.Holds(request.Price), "price", $"Price must be zero or more, with at most {currency.Decimals} decimals.")
             .Check(request.VatRate is >= 0 and <= 100, "vatRate", "The VAT rate must be between 0 and 100.")
@@ -220,7 +227,11 @@ internal static class AdminMethodEndpoints
             .Check(
                 request.Countries is null || request.Countries.All(country => country.Trim().Length == 2),
                 "countries",
-                "Each country must be a two-letter code.");
+                "Each country must be a two-letter code.")
+            .Check(
+                string.IsNullOrWhiteSpace(request.TaxClass) || taxClasses.Contains(request.TaxClass.Trim(), StringComparer.Ordinal),
+                "taxClass",
+                "That tax class is not one this store has.");
 
     private static ProblemHttpResult Conflict(string kind) =>
         TypedResults.Problem(statusCode: StatusCodes.Status409Conflict, title: $"The store already has a {kind} method with this name");
@@ -236,7 +247,8 @@ internal sealed record ShippingMethodRequest(
     bool IsActive,
     bool RequiresPickupPoint,
     int? MaxWeightGrams = null,
-    IReadOnlyList<string>? Countries = null);
+    IReadOnlyList<string>? Countries = null,
+    string? TaxClass = null);
 
 internal sealed record AdminPaymentMethodResponse(string Code, string Name, string ProviderKey, bool IsActive);
 
@@ -249,7 +261,8 @@ internal sealed record AdminShippingMethodResponse(
     bool IsActive,
     bool RequiresPickupPoint,
     int? MaxWeightGrams,
-    IReadOnlyList<string> Countries);
+    IReadOnlyList<string> Countries,
+    string? TaxClass);
 
 internal static class Codes
 {

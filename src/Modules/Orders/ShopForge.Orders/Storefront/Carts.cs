@@ -6,6 +6,7 @@ using ShopForge.Shared.Catalog;
 using ShopForge.Shared.Inventory;
 using ShopForge.Shared.Payments;
 using ShopForge.Shared.Stores;
+using ShopForge.Shared.Tax;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Orders.Storefront;
@@ -18,6 +19,7 @@ internal sealed class Carts(
     IStockLedger stock,
     DiscountCodes discounts,
     ICurrentStoreSettings storeSettings,
+    ITaxRates taxRates,
     TimeProvider clock)
 {
     private const string CookieName = "shopforge_cart";
@@ -113,10 +115,15 @@ internal sealed class Carts(
             .ThenBy(item => item.Variant.Position)
             .ToList();
 
-        var currency = (await storeSettings.GetAsync(cancellationToken)).Currency;
+        var settings = await storeSettings.GetAsync(cancellationToken);
+        var currency = settings.Currency;
+
+        // Nowhere in particular yet: a cart is priced in the shop's own market until a destination is typed,
+        // and the checkout works the tax out again for wherever the parcel is actually going (D-187).
+        var rates = await taxRates.ForAsync(destinationCountry: null, settings.Seller?.Country, cancellationToken);
         var (discount, problem) = await DiscountForAsync(cart, items, currency, cancellationToken);
 
-        return new CartContents(items, currency, changed, shortNames, discount, problem);
+        return new CartContents(items, currency, rates, changed, shortNames, discount, problem);
     }
 
     // A code can stop applying while it sits in the cart — it expires, it is used up, the cart drops below its
@@ -160,6 +167,7 @@ internal sealed record AppliedDiscount(Discount Discount, DiscountResult Result)
 internal sealed record CartContents(
     IReadOnlyList<CartItem> Items,
     Currency Currency,
+    DestinationRates Rates,
     bool Changed,
     IReadOnlyList<string> ShortNames,
     AppliedDiscount? Discount = null,
@@ -170,7 +178,7 @@ internal sealed record CartContents(
     public decimal DiscountTotal => Discount?.Result.LineDiscounts.Sum() ?? 0m;
 
     public decimal VatTotal => Items
-        .Select((item, index) => Money.VatOf(item.LineTotal - LineDiscount(index), item.Product.VatRate, Currency))
+        .Select((item, index) => Money.VatOf(item.LineTotal - LineDiscount(index), Rates.For(item.Product.TaxClass, item.Product.VatRate), Currency))
         .Sum();
 
     public int Count => Items.Sum(item => item.Quantity);

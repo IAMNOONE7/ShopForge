@@ -8,6 +8,7 @@ using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Security;
 using ShopForge.Shared.Stores;
+using ShopForge.Shared.Tax;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Catalog.Bulk;
@@ -32,6 +33,7 @@ internal static class AdminBulkListingEndpoints
         bulk.MapPost("/price", PriceAsync);
         bulk.MapPost("/categories", CategoriesAsync);
         bulk.MapPost("/archive", ArchiveAsync);
+        bulk.MapPost("/tax-class", TaxClassAsync);
 
         return storeAdmin;
     }
@@ -94,6 +96,32 @@ internal static class AdminBulkListingEndpoints
         var what = request.Set is { } set ? $"set {changed} to {set}" : $"changed {changed} by {request.ByPercent}%";
 
         return await SavedAsync(dbContext, audit, "catalog.listings.price", request.StoreProductIds!.Count, changed, what, cancellationToken);
+    }
+
+    // What many listings are, for tax. Clearing it puts them back on the rate each one carries (D-187).
+    private static async Task<Results<Ok<BulkResultResponse>, ValidationProblem>> TaxClassAsync(
+        BulkTaxClassRequest request,
+        DbContext dbContext,
+        IAuditLog audit,
+        ITaxRates taxRates,
+        CancellationToken cancellationToken)
+    {
+        var errors = Errors(request.StoreProductIds)
+            .Check(
+                string.IsNullOrWhiteSpace(request.TaxClass) || (await taxRates.ClassesAsync(cancellationToken)).Contains(request.TaxClass.Trim(), StringComparer.Ordinal),
+                "taxClass",
+                "That tax class is not one this store has.");
+
+        if (errors.Any)
+        {
+            return errors.ToProblem();
+        }
+
+        var listings = await ChosenAsync(dbContext, request.StoreProductIds!, cancellationToken);
+        var changed = listings.Count(listing => listing.SetTaxClass(request.TaxClass));
+        var what = request.TaxClass is { Length: > 0 } named ? $"taxed {changed} as {named}" : $"cleared the class of {changed}";
+
+        return await SavedAsync(dbContext, audit, "catalog.listings.tax_class", request.StoreProductIds!.Count, changed, what, cancellationToken);
     }
 
     // Adding to a category and taking out of one, never replacing: a merchant putting forty things into
@@ -212,6 +240,9 @@ internal sealed record BulkPriceRequest(List<Guid>? StoreProductIds, decimal? Se
 internal sealed record BulkCategoriesRequest(List<Guid>? StoreProductIds, List<Guid>? AddCategoryIds, List<Guid>? RemoveCategoryIds);
 
 internal sealed record BulkArchiveRequest(List<Guid>? StoreProductIds, bool Archived);
+
+// Null clears the class, which puts those listings back on the rate they carry.
+internal sealed record BulkTaxClassRequest(List<Guid>? StoreProductIds, string? TaxClass);
 
 // How many were named and how many actually changed. The difference is a listing that was already as asked,
 // or one this store does not have.
