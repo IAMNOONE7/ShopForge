@@ -31,6 +31,7 @@ using ShopForge.Shared.Messaging;
 using ShopForge.Shared.Payments;
 using ShopForge.Shared.Security;
 using ShopForge.Shared.Shipping;
+using ShopForge.Shared.Stores;
 
 namespace ShopForge.Infrastructure;
 
@@ -159,6 +160,10 @@ public static class DependencyInjection
         // Registered whichever provider carries the mail: the sender's name is what a message with no store
         // behind it goes out under (D-111).
         services.AddSingleton(email);
+
+        // Whether mail leaves the building is a fact about this deployment, so the answer comes from here rather
+        // than from a module that cannot see the configuration (D-190).
+        services.AddScoped<IStorePublishCheck, EmailPublishCheck>();
 
         if (string.Equals(email.Provider, EmailOptions.LogProvider, StringComparison.OrdinalIgnoreCase))
         {

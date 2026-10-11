@@ -26,6 +26,7 @@ internal static class StoreProvisioningEndpoints
     {
         storeAdmin.MapPut("/", UpdateSettingsAsync).RequireAuthorization(AdminPolicies.StoreManagement);
         storeAdmin.MapPost("/publish", PublishAsync).RequireAuthorization(AdminPolicies.StoreManagement);
+        storeAdmin.MapGet("/readiness", GetReadinessAsync);
         storeAdmin.MapPost("/unpublish", UnpublishAsync).RequireAuthorization(AdminPolicies.StoreManagement);
     }
 
@@ -150,6 +151,14 @@ internal static class StoreProvisioningEndpoints
         return TypedResults.Ok(AdminStoreResponse.From(store, PrimaryHostName(store)));
     }
 
+    // The same answer the merchant can read before they press anything, so what refuses them is what they were
+    // already looking at. A published store answers too: a provider disconnected after publication is a problem
+    // the overview should carry rather than one a shopper discovers at the checkout (D-190).
+    private static async Task<Ok<StoreReadinessResponse>> GetReadinessAsync(
+        IEnumerable<IStorePublishCheck> checks,
+        CancellationToken cancellationToken) =>
+        TypedResults.Ok(await ReadinessAsync(checks, cancellationToken));
+
     private static async Task<Results<Ok<AdminStoreResponse>, ProblemHttpResult>> PublishAsync(
         IEnumerable<IStorePublishCheck> checks,
         DbContext dbContext,
@@ -158,25 +167,37 @@ internal static class StoreProvisioningEndpoints
         IAuditLog audit,
         CancellationToken cancellationToken)
     {
-        var problems = new List<string>();
+        var readiness = await ReadinessAsync(checks, cancellationToken);
 
-        foreach (var check in checks)
-        {
-            if (await check.FindProblemAsync(cancellationToken) is { } problem)
-            {
-                problems.Add(problem);
-            }
-        }
-
-        if (problems.Count > 0)
+        if (!readiness.IsReady)
         {
             return TypedResults.Problem(
                 statusCode: StatusCodes.Status409Conflict,
                 title: "The store is not ready to be published",
-                extensions: new Dictionary<string, object?> { ["problems"] = problems });
+                extensions: new Dictionary<string, object?>
+                {
+                    // The prose, as before, so a client that only reads this keeps working; and the whole
+                    // checklist beside it, so one that wants to say which line failed can.
+                    ["problems"] = readiness.Checks.Where(check => check.Blocks).Select(check => check.Problem).ToList(),
+                    ["readiness"] = readiness.Checks,
+                });
         }
 
         return TypedResults.Ok(await ChangeStatusAsync(dbContext, storeContext, resolver, audit, publish: true, cancellationToken));
+    }
+
+    private static async Task<StoreReadinessResponse> ReadinessAsync(
+        IEnumerable<IStorePublishCheck> checks,
+        CancellationToken cancellationToken)
+    {
+        var answers = new List<StoreReadiness>();
+
+        foreach (var check in checks)
+        {
+            answers.AddRange(await check.CheckAsync(cancellationToken));
+        }
+
+        return new StoreReadinessResponse(answers.All(answer => !answer.Blocks), [.. answers.OrderBy(answer => answer.Check, StringComparer.Ordinal)]);
     }
 
     private static async Task<Ok<AdminStoreResponse>> UnpublishAsync(
@@ -260,6 +281,9 @@ internal static class StoreProvisioningEndpoints
         }
     }
 }
+
+// Ready means nothing required is failing. Advice can be outstanding on a shop that is perfectly publishable.
+internal sealed record StoreReadinessResponse(bool IsReady, List<StoreReadiness> Checks);
 
 internal sealed record CreateStoreRequest(string? Name, string? HostName, string? Currency, string? Culture, ThemeRequest? Theme);
 

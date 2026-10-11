@@ -26,4 +26,8 @@ internal sealed class InMemorySecrets : ISecretStore
 
         return Task.CompletedTask;
     }
+
+    // A vault losing what a connection still names: a key deleted, or a database moved to a deployment whose
+    // secrets live somewhere else. The row says connected and the money cannot move (D-190).
+    public void Clear() => _kept.Clear();
 }

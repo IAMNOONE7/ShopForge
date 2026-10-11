@@ -34,6 +34,7 @@ public static class StoresModule
         services.AddScoped<StoreResolver>();
         services.AddScoped<IStorePublishCheck, StoreBrandingPublishCheck>();
         services.AddScoped<IStorePublishCheck, StoreCompanyPublishCheck>();
+        services.AddScoped<IStorePublishCheck, StoreDomainPublishCheck>();
         services.AddScoped<ICurrentStoreSettings, CurrentStoreSettings>();
         services.AddScoped<IStoreUrls, StoreUrls>();
         services.AddScoped<IStoreContentPages, StoreContentPages>();
