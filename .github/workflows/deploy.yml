@@ -58,6 +58,7 @@ jobs:
                          image="${{ vars.REGISTRY_SERVER }}/shopforge-api:${{ github.sha }}" \
                          registryServer="${{ vars.REGISTRY_SERVER }}" \
                          storefrontFqdn="${{ vars.STOREFRONT_FQDN }}" \
+                         storeHostSuffix="${{ vars.STORE_HOST_SUFFIX }}" \
                          databasePassword="${{ secrets.DATABASE_PASSWORD }}" \
                          stripeSecretKey="${{ secrets.STRIPE_SECRET_KEY }}" \
                          stripeWebhookSecret="${{ secrets.STRIPE_WEBHOOK_SECRET }}"

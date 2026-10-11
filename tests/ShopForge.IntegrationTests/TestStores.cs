@@ -11,7 +11,19 @@ internal sealed record TestStore(Guid StoreId, Guid TenantId, string Name, strin
 
 internal static class TestStores
 {
-    public static string UniqueHostName(string label = "shop") => $"{label}-{Guid.NewGuid():N}.test";
+    // The suffix the platform owns in tests. The factory configures it, so a store created through the API and
+    // a store created here land on the same kind of name (D-189).
+    //
+    // It is a zone of its own rather than a bare `test`, because the fixtures that stand in for a merchant's
+    // own domain use `example.test` — and a name inside the platform's zone cannot be claimed, which would make
+    // every one of those fixtures a refusal.
+    public const string PlatformSuffix = "shops.test";
+
+    public static string UniqueLabel(string label = "shop") => $"{label}-{Guid.NewGuid():N}";
+
+    public static string UniqueHostName(string label = "shop") => $"{UniqueLabel(label)}.{PlatformSuffix}";
+
+    internal static PlatformHosts Hosts { get; } = new() { Suffix = PlatformSuffix };
 
     // A shop that charges in something other than euros, for the money that does not have two decimals (D-186).
     public static Task<TestStore> CreateInCurrencyAsync(IServiceProvider services, string currency) =>
@@ -42,7 +54,7 @@ internal static class TestStores
     {
         var currency = Currency.Of(code);
         var store = new Store(tenant.Id, name, code, "en-IE", new StoreTheme("#112233", "#FFFFFF", 4));
-        var domain = store.AddDomain(UniqueHostName(), DateTimeOffset.UtcNow);
+        var domain = store.AddPlatformDomain(Hosts, UniqueLabel(), DateTimeOffset.UtcNow);
         store.SetCompany(new StoreCompany("Test Furniture s.r.o.", "1 Workshop Lane", "Brno", "602 00", "CZ", "12345678", "CZ12345678"));
         store.Publish();
 

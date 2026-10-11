@@ -35,12 +35,16 @@ internal static class StoreProvisioningEndpoints
         StoreContext storeContext,
         ITenantLimits limits,
         IEnumerable<IStoreInitializer> initializers,
+        PlatformHosts platformHosts,
         TimeProvider clock,
         CancellationToken cancellationToken)
     {
-        var hostName = HostNames.Normalize(request.HostName);
+        // The name a new store is given is the platform's to give: a label under the suffix the platform owns,
+        // and nothing else. A merchant's own domain is added afterwards and proved (D-189).
+        var label = platformHosts.LabelOf(request.HostName);
         var errors = ValidateSettings(request.Name, request.Currency, request.Culture, request.Theme)
-            .Check(hostName is not null, "hostName", "A valid host name is required, for example shop.example.com.");
+            .Check(platformHosts.IsConfigured, "hostName", "The platform has no host name suffix configured, so it cannot give a store an address.")
+            .Check(!platformHosts.IsConfigured || label is not null, "hostName", $"A name of lower-case letters, digits and hyphens under {platformHosts.Suffix} is required, for example wooden-home. A domain of your own is added and proved after the store exists.");
 
         if (errors.Any)
         {
@@ -64,6 +68,8 @@ internal static class StoreProvisioningEndpoints
             }
         }
 
+        var hostName = platformHosts.Compose(label!);
+
         if (await dbContext.Set<StoreDomain>().IgnoreQueryFilters().AnyAsync(domain => domain.HostName == hostName, cancellationToken))
         {
             return TypedResults.Problem(statusCode: StatusCodes.Status409Conflict, title: "The host name is already used by another store");
@@ -75,7 +81,7 @@ internal static class StoreProvisioningEndpoints
             request.Currency!,
             request.Culture!,
             request.Theme!.ToTheme());
-        store.AddDomain(hostName!, clock.GetUtcNow());
+        store.AddPlatformDomain(platformHosts, label!, clock.GetUtcNow());
 
         // Adding the store's own domain is a write inside the new store, so the tenant scope is narrowed to it first.
         storeContext.Set(store.Id, store.TenantId);

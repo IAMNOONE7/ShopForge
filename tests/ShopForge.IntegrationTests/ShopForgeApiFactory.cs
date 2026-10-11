@@ -111,6 +111,10 @@ public sealed class ShopForgeApiFactory : WebApplicationFactory<Program>, IAsync
 
         // The test host speaks plain HTTP, so cookies cannot be marked Secure the way a deployment marks them.
         builder.UseSetting("Security:RequireSecureCookies", "false");
+
+        // The suffix the platform owns. Test hosts are generated under `.test`, so a store created through the
+        // API gets a name the platform can give out (D-189).
+        builder.UseSetting("StoreHosts:Suffix", TestStores.PlatformSuffix);
         builder.UseSetting("Email:Mailgun:WebhookSigningKey", MailgunSigningKey);
         // Only the last hop is faked: registration still writes an outbox message, which the dispatcher delivers.
         builder.ConfigureTestServices(services =>

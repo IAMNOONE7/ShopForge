@@ -14,6 +14,10 @@ internal sealed class StoreDomainEntityConfiguration : IEntityTypeConfiguration<
         builder.Property(domain => domain.HostName).HasMaxLength(253);
 
         builder.HasIndex(domain => domain.HostName).IsUnique();
+
+        // The sweep looks for unproved claims older than their window, and the admin reads a store's own names;
+        // both want the claim date beside the proof (D-189).
+        builder.HasIndex(domain => new { domain.VerifiedAt, domain.ClaimedAt });
         builder.HasIndex(domain => domain.StoreId);
         builder.HasIndex(domain => domain.StoreId, "ix_store_domains_store_id_primary")
             .IsUnique()

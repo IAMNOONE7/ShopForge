@@ -8,16 +8,22 @@ namespace ShopForge.Stores.Development;
 public static class DevelopmentStores
 {
     private const string DemoTenantName = "Demo Retail";
-    private const string WoodenHomeHost = "shop-a.localhost";
-    private const string VoltElectronicsHost = "shop-b.localhost";
+    // The labels, not the whole names: the suffix is configuration, so the seed composes through the same
+    // place store creation does (D-189). On this machine that makes `shop-a.localhost`.
+    private const string WoodenHomeLabel = "shop-a";
+    private const string VoltElectronicsLabel = "shop-b";
 
     public static async Task<DevelopmentStoreIds> SeedDevelopmentStoresAsync(this IServiceProvider services, CancellationToken cancellationToken = default)
     {
+        var platformHosts = services.GetRequiredService<PlatformHosts>();
+        var woodenHomeHost = platformHosts.Compose(WoodenHomeLabel);
+        var voltElectronicsHost = platformHosts.Compose(VoltElectronicsLabel);
+
         await using (var scope = services.CreateAsyncScope())
         {
             var existing = await scope.ServiceProvider.GetRequiredService<DbContext>().Set<Store>()
                 .IgnoreQueryFilters()
-                .Where(store => store.Domains.Any(domain => domain.HostName == WoodenHomeHost || domain.HostName == VoltElectronicsHost))
+                .Where(store => store.Domains.Any(domain => domain.HostName == woodenHomeHost || domain.HostName == voltElectronicsHost))
                 .Select(store => new { store.Id, store.TenantId, store.Name })
                 .ToListAsync(cancellationToken);
 
@@ -36,12 +42,12 @@ public static class DevelopmentStores
         var tenant = new Tenant(DemoTenantName);
 
         var woodenHome = new Store(tenant.Id, "Wooden Home", "CZK", "cs-CZ", new StoreTheme("#8B5A2B", "#F5F0E8", 8));
-        woodenHome.AddDomain(WoodenHomeHost, now);
+        woodenHome.AddPlatformDomain(platformHosts, WoodenHomeLabel, now);
         woodenHome.SetCompany(new StoreCompany("Wooden Home s.r.o.", "Dřevařská 12", "Brno", "602 00", "CZ", "27654321", "CZ27654321"));
         woodenHome.Publish();
 
         var voltElectronics = new Store(tenant.Id, "Volt Electronics", "EUR", "en-IE", new StoreTheme("#1F6FEB", "#EEF4FF", 2));
-        voltElectronics.AddDomain(VoltElectronicsHost, now);
+        voltElectronics.AddPlatformDomain(platformHosts, VoltElectronicsLabel, now);
         voltElectronics.SetCompany(new StoreCompany("Volt Electronics Ltd", "4 Dock Road", "Galway", "H91 AB12", "IE", "IE448921", "IE4489217W"));
         voltElectronics.Publish();
 

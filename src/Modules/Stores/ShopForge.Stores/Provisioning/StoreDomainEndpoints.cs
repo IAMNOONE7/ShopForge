@@ -42,12 +42,20 @@ internal static class StoreDomainEndpoints
         AddDomainRequest request,
         DbContext dbContext,
         IStoreContext storeContext,
+        PlatformHosts platformHosts,
         IAuditLog audit,
+        TimeProvider clock,
         CancellationToken cancellationToken)
     {
         var hostName = HostNames.Normalize(request.HostName);
         var errors = new RequestErrors()
-            .Check(hostName is not null, "hostName", "A valid host name is required, for example shop.example.com.");
+            .Check(hostName is not null, "hostName", "A valid host name is required, for example shop.example.com.")
+            // A name inside the platform's own zone is not a merchant's to claim: they cannot put the proof in
+            // DNS for it, so the claim would sit there holding the name until it lapsed (D-189).
+            .Check(
+                !platformHosts.Owns(hostName),
+                "hostName",
+                $"A name under {platformHosts.Suffix} belongs to the platform. Your store already has one; add a domain of your own here.");
 
         if (errors.Any)
         {
@@ -62,7 +70,7 @@ internal static class StoreDomainEndpoints
         }
 
         var store = await CurrentStoreAsync(dbContext, storeContext, cancellationToken);
-        var added = store.ClaimDomain(hostName!);
+        var added = store.ClaimDomain(hostName!, clock.GetUtcNow());
 
         audit.Record("domain.added", added.HostName);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -190,7 +198,8 @@ internal static class StoreDomainEndpoints
         domain.IsVerified,
         domain.VerifiedAt,
         domain.IsVerified ? null : domain.ChallengeName,
-        domain.IsVerified ? null : domain.VerificationToken);
+        domain.IsVerified ? null : domain.VerificationToken,
+        domain.ClaimExpiresAt);
 }
 
 internal sealed record AddDomainRequest(string? HostName);
@@ -202,4 +211,6 @@ internal sealed record StoreDomainResponse(
     bool IsVerified,
     DateTimeOffset? VerifiedAt,
     string? ChallengeName,
-    string? ChallengeValue);
+    string? ChallengeValue,
+    // When an unproved claim gives the name back. Null once it is proved (D-189).
+    DateTimeOffset? ClaimExpiresAt);

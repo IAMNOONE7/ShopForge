@@ -11,6 +11,8 @@ param image string
 param registryServer string
 @description('Host name the built storefront is served from (the storage account static website).')
 param storefrontFqdn string
+@description('The zone store subdomains are composed under, e.g. shops.example.cz (D-189).')
+param storeHostSuffix string
 @secure()
 param stripeSecretKey string = ''
 @secure()
@@ -72,6 +74,7 @@ module api 'modules/api.bicep' = {
     emailProvider: emailProvider
     emailSenderAddress: emailSenderAddress
     mailgunDomain: mailgunDomain
+    storeHostSuffix: storeHostSuffix
   }
 }
 

@@ -113,7 +113,7 @@ builder.Services.AddInfrastructure(
         OrdersModule.Assembly,
         PlatformModule.Assembly,
     ]);
-builder.Services.AddStoresModule();
+builder.Services.AddStoresModule(builder.Configuration);
 // Outside Development the browser always reaches the platform over TLS terminated at the edge (D-075). The setting
 // exists so a test host can serve plain HTTP; a deployment leaves it alone.
 var requireSecureCookies = builder.Configuration.GetValue("Security:RequireSecureCookies", !builder.Environment.IsDevelopment());

@@ -181,14 +181,15 @@ public sealed class CanonicalAddressTests(ShopForgeApiFactory factory)
 
     private async Task<string> SecondDomainAsync(FurnitureStore furniture)
     {
-        var host = TestStores.UniqueHostName("alias");
+        var label = TestStores.UniqueLabel("alias");
+        var host = $"{label}.{TestStores.PlatformSuffix}";
 
         await using var scope = TestStores.CreateScope(factory.Services, furniture.Store);
         var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
         var store = await dbContext.Set<Store>().Include(store => store.Domains)
             .SingleAsync(store => store.Id == furniture.Store.StoreId, CancellationToken);
 
-        store.AddDomain(host, DateTimeOffset.UtcNow);
+        store.AddPlatformDomain(TestStores.Hosts, label, DateTimeOffset.UtcNow);
         await dbContext.SaveChangesAsync(CancellationToken);
 
         return host;

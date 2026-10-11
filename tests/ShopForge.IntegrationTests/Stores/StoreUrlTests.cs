@@ -85,14 +85,15 @@ public sealed class StoreUrlTests(ShopForgeApiFactory factory)
 
     private async Task<string> AddProvedDomainAsync(TestStore store, bool primary)
     {
-        var hostName = TestStores.UniqueHostName("alias");
+        var label = TestStores.UniqueLabel("alias");
+        var hostName = $"{label}.{TestStores.PlatformSuffix}";
         await using var scope = TestStores.CreateScope(factory.Services, store);
         var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
         var found = await dbContext.Set<Store>()
             .Include(candidate => candidate.Domains)
             .SingleAsync(candidate => candidate.Id == store.StoreId, CancellationToken);
 
-        found.AddDomain(hostName, DateTimeOffset.UtcNow);
+        found.AddPlatformDomain(TestStores.Hosts, label, DateTimeOffset.UtcNow);
 
         if (primary)
         {

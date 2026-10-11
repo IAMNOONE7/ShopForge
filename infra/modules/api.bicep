@@ -10,6 +10,8 @@ param frontDoorId string
 param emailProvider string = 'log'
 param emailSenderAddress string = ''
 param mailgunDomain string = ''
+@description('The zone store subdomains are composed under, e.g. shops.example.cz. Without it no store can be created.')
+param storeHostSuffix string
 
 resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
   name: workspaceName
@@ -69,6 +71,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'Email__Provider', value: emailProvider }
             { name: 'Email__SenderAddress', value: emailSenderAddress }
             { name: 'Email__Mailgun__Domain', value: mailgunDomain }
+            { name: 'StoreHosts__Suffix', value: storeHostSuffix }
           ]
           probes: [
             {

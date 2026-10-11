@@ -3150,6 +3150,10 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<DateTimeOffset>("ClaimedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("claimed_at");
+
                     b.Property<string>("HostName")
                         .IsRequired()
                         .HasMaxLength(253)
@@ -3181,6 +3185,9 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("StoreId")
                         .HasDatabaseName("ix_store_domains_store_id");
+
+                    b.HasIndex("VerifiedAt", "ClaimedAt")
+                        .HasDatabaseName("ix_store_domains_verified_at_claimed_at");
 
                     b.HasIndex(new[] { "StoreId" }, "ix_store_domains_store_id_primary")
                         .IsUnique()

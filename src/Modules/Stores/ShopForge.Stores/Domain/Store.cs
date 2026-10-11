@@ -75,16 +75,19 @@ internal sealed class Store : ITenantOwned
 
     public IReadOnlyCollection<StoreDomain> Domains => _domains;
 
-    // The subdomain a store is given when it is created: the platform owns it, so there is nothing to prove.
-    public StoreDomain AddDomain(string hostName, DateTimeOffset now)
+    // The subdomain a store is given when it is created: the platform owns the zone, so there is nothing to
+    // prove. It takes the label and composes the rest, because a method that accepts a whole host name is a
+    // method that can be handed somebody else's (D-189).
+    public StoreDomain AddPlatformDomain(PlatformHosts hosts, string label, DateTimeOffset now)
     {
-        var domain = StoreDomain.OwnedByThePlatform(Id, hostName, isPrimary: _domains.Count == 0, now);
+        var domain = StoreDomain.OwnedByThePlatform(Id, hosts.Compose(label), isPrimary: _domains.Count == 0, now);
 
         return Add(domain);
     }
 
-    // A name the merchant says is theirs. It is served only once they have proved it (D-124).
-    public StoreDomain ClaimDomain(string hostName) => Add(StoreDomain.ClaimedByTheStore(Id, hostName));
+    // A name the merchant says is theirs. It is served only once they have proved it, and the claim does not
+    // hold the name for ever (D-124, D-189).
+    public StoreDomain ClaimDomain(string hostName, DateTimeOffset now) => Add(StoreDomain.ClaimedByTheStore(Id, hostName, now));
 
     public void MakePrimary(StoreDomain domain)
     {

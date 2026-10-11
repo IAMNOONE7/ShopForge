@@ -1,12 +1,15 @@
 using System.Reflection;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using ShopForge.Shared.Maintenance;
 using ShopForge.Shared.Platform;
 using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tax;
 using ShopForge.Stores.Admin;
 using ShopForge.Stores.Content;
+using ShopForge.Stores.Domain;
 using ShopForge.Stores.Logos;
 using ShopForge.Stores.Platform;
 using ShopForge.Stores.Provisioning;
@@ -22,8 +25,11 @@ public static class StoresModule
 
     public static Assembly Assembly => typeof(StoresModule).Assembly;
 
-    public static IServiceCollection AddStoresModule(this IServiceCollection services)
+    public static IServiceCollection AddStoresModule(this IServiceCollection services, IConfiguration configuration)
     {
+        // What the platform owns. An empty suffix means it hands out no store addresses at all, which is the
+        // only safe answer when nobody has told it what it controls (D-189).
+        services.AddSingleton(configuration.GetSection(PlatformHosts.Section).Get<PlatformHosts>() ?? new PlatformHosts());
         services.AddMemoryCache();
         services.AddScoped<StoreResolver>();
         services.AddScoped<IStorePublishCheck, StoreBrandingPublishCheck>();
@@ -33,6 +39,7 @@ public static class StoresModule
         services.AddScoped<IStoreContentPages, StoreContentPages>();
         services.AddScoped<IStoreDirectory, StoreDirectory>();
         services.AddScoped<ITaxRates, StoreTaxRates>();
+        services.AddScoped<IStoreMaintenance, ExpiredDomainClaims>();
         services.AddScoped<ITenantDirectory, TenantDirectory>();
         services.AddScoped<ITenantUsage, StoreUsage>();
         services.AddScoped<TenantPlans>();
@@ -79,6 +86,7 @@ public static class StoresModule
     public static IEndpointRouteBuilder MapStoresPlatformEndpoints(this IEndpointRouteBuilder platform)
     {
         platform.MapPlatformTenants();
+        platform.MapPlatformDomains();
         platform.MapPlatformPlans();
 
         return platform;
