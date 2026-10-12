@@ -102,6 +102,7 @@ internal static class AdminUnappliedPaymentEndpoints
         {
             // Refused before any money moved, so the payment is open again and can be tried once the reason is fixed.
             await MoveAsync(dbContext, paymentId, UnappliedPaymentStatus.Refunding, UnappliedPaymentStatus.Open, clock, CancellationToken.None);
+            metrics.RefundFailed(payment.Provider, "refused");
 
             return TypedResults.Problem(statusCode: StatusCodes.Status409Conflict, title: "The refund was refused", detail: refusal.Message);
         }
@@ -116,6 +117,7 @@ internal static class AdminUnappliedPaymentEndpoints
                 payment.Provider,
                 reference,
                 payment.OrderNumber);
+            metrics.RefundFailed(payment.Provider, "unanswered");
 
             return TypedResults.Problem(
                 statusCode: StatusCodes.Status502BadGateway,

@@ -2456,6 +2456,25 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("received_at");
 
+                    b.Property<string>("Refund")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("refund_status");
+
+                    b.Property<string>("RefundNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("refund_note");
+
+                    b.Property<string>("RefundProblem")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("refund_problem");
+
+                    b.Property<DateTimeOffset?>("RefundSettledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("refund_settled_at");
+
                     b.Property<decimal>("RefundedAmount")
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)")
@@ -2488,6 +2507,9 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("StoreId", "OrderNumber")
                         .HasDatabaseName("ix_order_returns_store_id_order_number");
+
+                    b.HasIndex("StoreId", "Refund")
+                        .HasDatabaseName("ix_order_returns_store_id_refund_status");
 
                     b.HasIndex("StoreId", "Status")
                         .HasDatabaseName("ix_order_returns_store_id_status");

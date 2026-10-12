@@ -40,6 +40,8 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
         ("POST", "returns/{return}/accept", null),
         ("POST", "returns/{return}/refuse", null),
         ("POST", "returns/{return}/receive", null),
+        ("POST", "returns/{return}/refund", null),
+        ("POST", "returns/{return}/refund/close", """{"note":"Taken."}"""),
         ("GET", "orders/{order}", null),
         ("GET", "orders/{order}/documents/{document}", null),
         ("POST", "orders/{order}/payment", null),

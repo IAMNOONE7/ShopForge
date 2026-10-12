@@ -17,6 +17,7 @@ internal sealed class ShopForgeMetrics : IShopForgeMetrics, IDisposable
     private readonly Counter<long> _paymentsUnapplied;
     private readonly Counter<long> _ordersCancelled;
     private readonly Counter<long> _ordersRefunded;
+    private readonly Counter<long> _refundsFailed;
     private readonly Counter<long> _shipments;
     private readonly Counter<long> _reservationsRefused;
 
@@ -29,6 +30,8 @@ internal sealed class ShopForgeMetrics : IShopForgeMetrics, IDisposable
             "shopforge.payments.unapplied", description: "Payments taken that their order could not take, by reason.");
         _ordersCancelled = _meter.CreateCounter<long>("shopforge.orders.cancelled", description: "Orders cancelled, by reason.");
         _ordersRefunded = _meter.CreateCounter<long>("shopforge.orders.refunded", description: "Refunds paid back to shoppers, by reason.");
+        _refundsFailed = _meter.CreateCounter<long>(
+            "shopforge.refunds.failed", description: "Refunds a provider refused or never answered, by reason.");
         _shipments = _meter.CreateCounter<long>("shopforge.shipments.created", description: "Shipments handed to a carrier.");
         _reservationsRefused = _meter.CreateCounter<long>("shopforge.stock.reservations_refused", description: "Checkouts refused for lack of stock.");
     }
@@ -43,6 +46,9 @@ internal sealed class ShopForgeMetrics : IShopForgeMetrics, IDisposable
     public void OrderCancelled(string reason) => _ordersCancelled.Add(1, new KeyValuePair<string, object?>("reason", reason));
 
     public void OrderRefunded(string reason) => _ordersRefunded.Add(1, new KeyValuePair<string, object?>("reason", reason));
+
+    public void RefundFailed(string provider, string reason) => _refundsFailed.Add(
+        1, new KeyValuePair<string, object?>("payment.provider", provider), new KeyValuePair<string, object?>("reason", reason));
 
     public void ShipmentCreated() => _shipments.Add(1);
 

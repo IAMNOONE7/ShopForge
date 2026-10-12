@@ -16,6 +16,10 @@ public interface IShopForgeMetrics
 
     void OrderRefunded(string reason);
 
+    // A refund that did not go through: refused by the provider, or sent and never answered. Either way a customer
+    // is owed money nobody has confirmed they got back (D-194).
+    void RefundFailed(string provider, string reason);
+
     void ShipmentCreated();
 
     void ReservationRefused();

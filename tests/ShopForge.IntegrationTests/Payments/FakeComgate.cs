@@ -17,6 +17,12 @@ internal sealed class FakeComgate : IComgatePayments
     // A refund sent and never answered: the request went out, so whether the money moved is not known.
     public bool RefundGoesUnanswered { get; set; }
 
+    // The worse half of that: Comgate gave the money back, and the answer saying so was lost on the way.
+    public bool RefundMovesButGoesUnanswered { get; set; }
+
+    // Something that happens while Comgate is still working on a refund, before it answers.
+    public Func<Task>? WhileRefunding { get; set; }
+
     // What this stand-in will say the transaction is when asked, which is the only answer the reader believes.
     public ComgateTransaction? Says { get; set; }
 
@@ -43,19 +49,24 @@ internal sealed class FakeComgate : IComgatePayments
     // What was asked to be given back, in the order it was asked, so a test can say "once, and this much".
     public List<(string TransactionId, long Amount, string Currency)> Refunded { get; } = [];
 
-    public Task RefundAsync(
+    public async Task RefundAsync(
         ComgateMerchant merchant, string transactionId, long amountInMinorUnits, string currency, CancellationToken cancellationToken)
     {
         LastMerchant = merchant;
 
         if (Fails)
         {
-            return Task.FromException(new HttpRequestException("Comgate is unreachable."));
+            throw new HttpRequestException("Comgate is unreachable.");
         }
 
         if (RefundGoesUnanswered)
         {
-            return Task.FromException(new TaskCanceledException("Comgate did not answer in time."));
+            throw new TaskCanceledException("Comgate did not answer in time.");
+        }
+
+        if (WhileRefunding is { } meanwhile)
+        {
+            await meanwhile();
         }
 
         lock (Refunded)
@@ -63,7 +74,10 @@ internal sealed class FakeComgate : IComgatePayments
             Refunded.Add((transactionId, amountInMinorUnits, currency));
         }
 
-        return Task.CompletedTask;
+        if (RefundMovesButGoesUnanswered)
+        {
+            throw new TaskCanceledException("Comgate did not answer in time.");
+        }
     }
 
     public Task<ComgateTransaction?> FindAsync(ComgateMerchant merchant, string transactionId, CancellationToken cancellationToken)

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using ShopForge.Orders.Domain;
 using ShopForge.Orders.Invoicing;
 using ShopForge.Orders.Persistence;
@@ -22,7 +23,8 @@ internal sealed class OrderReturns(
     IEnumerable<IPaymentRefunds> paymentRefunds,
     IOutbox outbox,
     IShopForgeMetrics metrics,
-    TimeProvider clock)
+    TimeProvider clock,
+    ILogger<OrderReturns> logger)
 {
     public Task<List<OrderReturn>> OfOrderAsync(string orderNumber, CancellationToken cancellationToken) =>
         dbContext.Set<OrderReturn>()
@@ -130,7 +132,8 @@ internal sealed class OrderReturns(
     }
 
     // The parcel is here: the goods go back on the shelf, a credit note records what was taken back, and the money
-    // follows through the provider that took it (D-095).
+    // follows through the provider that took it (D-095) — after all of this is committed, by SendRefundAsync, never
+    // inside it (D-194).
     public async Task<bool> ReceiveAsync(Order order, OrderReturn orderReturn, CancellationToken cancellationToken)
     {
         await TakeOrderRowAsync(order, cancellationToken);
@@ -175,7 +178,15 @@ internal sealed class OrderReturns(
             return false;
         }
 
-        orderReturn.Receive(amount, clock.GetUtcNow());
+        // Booked now, paid afterwards. A provider that has the money to give back is only asked once the receipt
+        // is committed, so a lost answer can no longer roll the receipt back and leave the return waiting to be
+        // received — and refunded — a second time (D-194).
+        var refunds = paymentRefunds.SingleOrDefault(candidate => candidate.Key == order.PaymentProviderKey);
+        var refund = amount <= 0 ? RefundStatus.Refunded
+            : refunds is not null && order.PaymentReference is { Length: > 0 } ? RefundStatus.Pending
+            : RefundStatus.ByStore;
+
+        orderReturn.Receive(amount, refund, clock.GetUtcNow());
 
         // The order line says which form was sold, so the goods go back on the shelf they came off (D-135).
         var backToStock = orderReturn.Lines.Select(line => new StockRequest(line.VariantId, line.Quantity)).ToList();
@@ -184,17 +195,130 @@ internal sealed class OrderReturns(
 
         await invoices.IssueCreditNoteAsync(order, orderReturn.Id, credited, everythingBack, cancellationToken);
 
-        var refunds = paymentRefunds.SingleOrDefault(candidate => candidate.Key == order.PaymentProviderKey);
-
-        if (amount > 0 && refunds is not null && order.PaymentReference is { Length: > 0 } reference)
+        // Money the store gives back itself, or none at all, is the customer's news now. Money a provider moves is
+        // their news once the provider has moved it.
+        if (refund != RefundStatus.Pending)
         {
-            await refunds.RefundAsync(new RefundRequest(order.Number, reference, amount, order.Currency), cancellationToken);
+            outbox.Enqueue(new ReturnRefunded(order.Number, order.Email, orderReturn.Number, amount, order.Currency.Code));
+            metrics.OrderRefunded(orderReturn.StoreCustomerId is null ? "store" : "return");
         }
 
-        outbox.Enqueue(new ReturnRefunded(order.Number, order.Email, orderReturn.Number, amount, order.Currency.Code));
+        return true;
+    }
+
+    // The money, once the books are committed. The return is received, the goods are back and the credit note is
+    // issued, so what the provider says decides only where the refund stands. A refusal can be tried again; an
+    // answer that never came leaves it pending for somebody to check, because the money may already have moved.
+    public async Task<RefundOutcome> SendRefundAsync(Guid returnId, CancellationToken cancellationToken)
+    {
+        var orderReturn = await dbContext.Set<OrderReturn>().AsNoTracking().SingleAsync(candidate => candidate.Id == returnId, cancellationToken);
+        var order = await dbContext.Set<Order>().AsNoTracking().SingleAsync(candidate => candidate.Number == orderReturn.OrderNumber, cancellationToken);
+        var refunds = paymentRefunds.SingleOrDefault(candidate => candidate.Key == order.PaymentProviderKey);
+
+        // The gateway this order was paid through is not part of this deployment any more, so nothing here can move
+        // the money. That is a refusal like any other, with its reason, rather than an error that leaves it pending.
+        if (refunds is null || order.PaymentReference is not { Length: > 0 } reference)
+        {
+            var unreachable = $"This deployment cannot give money back through {order.PaymentProviderKey}. Refund it there, then close this by hand.";
+
+            await SettleAsync(returnId, RefundStatus.Failed, unreachable, CancellationToken.None);
+            metrics.RefundFailed(order.PaymentProviderKey, "refused");
+
+            return new RefundOutcome(RefundStatus.Failed, unreachable);
+        }
+
+        try
+        {
+            await refunds.RefundAsync(
+                new RefundRequest(order.Number, reference, orderReturn.RefundedAmount, order.Currency), cancellationToken);
+        }
+        catch (RefundRefusedException refusal)
+        {
+            await SettleAsync(returnId, RefundStatus.Failed, refusal.Message, CancellationToken.None);
+            metrics.RefundFailed(order.PaymentProviderKey, "refused");
+
+            return new RefundOutcome(RefundStatus.Failed, refusal.Message);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            // A timeout arrives as a cancellation, and it is this case too: the request went out and nothing came back.
+            logger.LogError(
+                exception,
+                "Refunding return {ReturnNumber} of order {OrderNumber} through {Provider} had no answer; it is left for the store to check.",
+                orderReturn.Number,
+                order.Number,
+                order.PaymentProviderKey);
+
+            var problem = $"The gateway ({order.PaymentProviderKey}) did not say whether the money went back. Check it there before anything else, then close this by hand.";
+
+            await dbContext.Set<OrderReturn>()
+                .Where(candidate => candidate.Id == returnId && candidate.Refund == RefundStatus.Pending)
+                .ExecuteUpdateAsync(set => set.SetProperty(candidate => candidate.RefundProblem, problem), CancellationToken.None);
+            metrics.RefundFailed(order.PaymentProviderKey, "unanswered");
+
+            return new RefundOutcome(RefundStatus.Pending, problem);
+        }
+
+        // Confirmed, so it is written down whatever happens to the request from here: the money has moved.
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(CancellationToken.None);
+
+        if (await SettleAsync(returnId, RefundStatus.Refunded, problem: null, CancellationToken.None))
+        {
+            outbox.Enqueue(new ReturnRefunded(order.Number, order.Email, orderReturn.Number, orderReturn.RefundedAmount, order.Currency.Code));
+        }
+        else
+        {
+            logger.LogWarning("Return {ReturnNumber} was refunded through {Provider} after it had been closed by hand.", orderReturn.Number, order.PaymentProviderKey);
+        }
+
+        await dbContext.SaveChangesAsync(CancellationToken.None);
+        await transaction.CommitAsync(CancellationToken.None);
         metrics.OrderRefunded(orderReturn.StoreCustomerId is null ? "store" : "return");
 
-        return true;
+        return new RefundOutcome(RefundStatus.Refunded, null);
+    }
+
+    // A refused refund is tried again by whoever claims it first, so two presses send the money once.
+    public async Task<bool> ClaimAnotherTryAsync(Guid returnId, CancellationToken cancellationToken) =>
+        await dbContext.Set<OrderReturn>()
+            .Where(candidate => candidate.Id == returnId && candidate.Refund == RefundStatus.Failed)
+            .ExecuteUpdateAsync(
+                set => set
+                    .SetProperty(candidate => candidate.Refund, RefundStatus.Pending)
+                    .SetProperty(candidate => candidate.RefundProblem, (string?)null),
+                cancellationToken) == 1;
+
+    // Settled somewhere ShopForge cannot see — refunded at the provider's own portal, or paid back another way —
+    // and closed with a note saying how. A refusal or an unanswered refund can be; a settled one cannot.
+    public async Task<bool> CloseRefundByHandAsync(Guid returnId, string note, CancellationToken cancellationToken)
+    {
+        var now = clock.GetUtcNow();
+
+        return await dbContext.Set<OrderReturn>()
+            .Where(candidate => candidate.Id == returnId
+                && (candidate.Refund == RefundStatus.Failed || candidate.Refund == RefundStatus.Pending))
+            .ExecuteUpdateAsync(
+                set => set
+                    .SetProperty(candidate => candidate.Refund, RefundStatus.ClosedByHand)
+                    .SetProperty(candidate => candidate.RefundNote, note)
+                    .SetProperty(candidate => candidate.RefundSettledAt, now),
+                cancellationToken) == 1;
+    }
+
+    // From pending to what the provider said, and only from pending: a refund somebody closed by hand meanwhile
+    // keeps that.
+    private async Task<bool> SettleAsync(Guid returnId, RefundStatus answer, string? problem, CancellationToken cancellationToken)
+    {
+        DateTimeOffset? settledAt = answer == RefundStatus.Refunded ? clock.GetUtcNow() : null;
+
+        return await dbContext.Set<OrderReturn>()
+            .Where(candidate => candidate.Id == returnId && candidate.Refund == RefundStatus.Pending)
+            .ExecuteUpdateAsync(
+                set => set
+                    .SetProperty(candidate => candidate.Refund, answer)
+                    .SetProperty(candidate => candidate.RefundProblem, problem)
+                    .SetProperty(candidate => candidate.RefundSettledAt, settledAt),
+                cancellationToken) == 1;
     }
 
     // Everything here is worked out from the other returns of the same order, so two parcels arriving at the same
@@ -229,3 +353,5 @@ internal sealed record ReturnableLine(Guid StoreProductId, Guid VariantId, strin
 internal sealed record RequestedReturnLine(Guid StoreProductId, Guid? VariantId, int Quantity);
 
 internal sealed record ReturnRequestResult(OrderReturn? Created, string? Problem);
+
+internal sealed record RefundOutcome(RefundStatus Status, string? Problem);

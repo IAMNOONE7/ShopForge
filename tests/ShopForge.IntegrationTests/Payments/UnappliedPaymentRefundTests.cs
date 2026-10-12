@@ -1,3 +1,4 @@
+using System.Diagnostics.Metrics;
 using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -153,6 +154,51 @@ public sealed class UnappliedPaymentRefundTests : IDisposable
         Assert.Equal((HttpStatusCode.Conflict, HttpStatusCode.Conflict), (refundedAfterwards.StatusCode, closedAgain.StatusCode));
         Assert.Empty(_comgate.Refunded);
         Assert.Equal("Refunded at the Comgate portal.", (await KeptAsync(world)).Note);
+    }
+
+    // The same number a failed return refund is counted on: money owed that nobody has confirmed went back (D-194).
+    [Fact]
+    public async Task A_refund_refused_or_unanswered_is_counted_by_why()
+    {
+        var refused = await PaidAfterCancellingAsync();
+        var unanswered = await PaidAfterCancellingAsync();
+        var reasons = new List<string>();
+
+        using (var listener = new MeterListener())
+        {
+            listener.InstrumentPublished = (instrument, meterListener) =>
+            {
+                if (instrument is { Name: "shopforge.refunds.failed", Meter.Name: "ShopForge" })
+                {
+                    meterListener.EnableMeasurementEvents(instrument);
+                }
+            };
+            listener.SetMeasurementEventCallback<long>((_, _, tags, _) =>
+            {
+                foreach (var tag in tags)
+                {
+                    if (tag.Key == "reason")
+                    {
+                        lock (reasons)
+                        {
+                            reasons.Add((string)tag.Value!);
+                        }
+                    }
+                }
+            });
+            listener.Start();
+
+            _comgate.Says = Transaction(refused, "CANCELLED");
+            using var refusal = await ActAsync(refused, "refund");
+            _comgate.Says = Transaction(unanswered, "PAID");
+            _comgate.RefundGoesUnanswered = true;
+            using var silence = await ActAsync(unanswered, "refund");
+
+            Assert.Equal((HttpStatusCode.Conflict, HttpStatusCode.BadGateway), (refusal.StatusCode, silence.StatusCode));
+        }
+
+        Assert.Contains("refused", reasons);
+        Assert.Contains("unanswered", reasons);
     }
 
     // Giving money back is the store's decision, the same as refunding an order is.

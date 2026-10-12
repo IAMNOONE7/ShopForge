@@ -111,7 +111,24 @@ internal static class AdminOrderEndpoints
             order,
             await Documents.OfAsync(dbContext, order.Number, cancellationToken),
             await AttemptsAsync(dbContext, order.Number, cancellationToken),
-            await AdminUnappliedPaymentEndpoints.OfOrderAsync(dbContext, order.Number, cancellationToken));
+            await AdminUnappliedPaymentEndpoints.OfOrderAsync(dbContext, order.Number, cancellationToken),
+            await ReturnsAsync(dbContext, order.Number, cancellationToken));
+
+    // What came back from this order, and where each refund stands: a refused one is visible from the order itself.
+    private static async Task<List<AdminOrderReturnResponse>> ReturnsAsync(
+        DbContext dbContext, string orderNumber, CancellationToken cancellationToken) =>
+        await dbContext.Set<OrderReturn>()
+            .AsNoTracking()
+            .Where(orderReturn => orderReturn.OrderNumber == orderNumber)
+            .OrderByDescending(orderReturn => orderReturn.RequestedAt)
+            .Select(orderReturn => new AdminOrderReturnResponse(
+                orderReturn.Id,
+                orderReturn.Number,
+                orderReturn.Status.ToString(),
+                orderReturn.RefundedAmount,
+                orderReturn.Refund == null ? null : orderReturn.Refund.ToString(),
+                orderReturn.RefundProblem))
+            .ToListAsync(cancellationToken);
 
     // Every try at paying this order, newest first: what the gateway called it, what became of it, and which
     // of the gateway's environments it went through. No secret is readable from any of it — an attempt holds a
@@ -251,6 +268,12 @@ internal static class AdminOrderEndpoints
         audit.Record("order.refunded", order.Number, new { orderReturn.Number, amount = orderReturn.RefundedAmount });
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+
+        // Booked first, paid afterwards; the order's returns say how the money went (D-194).
+        if (orderReturn.Refund == RefundStatus.Pending)
+        {
+            await returns.SendRefundAsync(orderReturn.Id, cancellationToken);
+        }
 
         return TypedResults.Ok(await DetailAsync(dbContext, order, cancellationToken));
     }
@@ -422,6 +445,8 @@ internal sealed record AdminOrderDetailResponse(
     List<AdminPaymentAttemptResponse> PaymentAttempts,
     // Money a gateway took that this order could not take, and what became of it (D-193).
     List<AdminUnappliedPaymentResponse> UnappliedPayments,
+    // What came back, and where each refund stands (D-194).
+    List<AdminOrderReturnResponse> Returns,
     List<DocumentResponse> Documents,
     List<AdminOrderLineResponse> Lines)
 {
@@ -429,7 +454,8 @@ internal sealed record AdminOrderDetailResponse(
         Order order,
         List<DocumentResponse> documents,
         List<AdminPaymentAttemptResponse> attempts,
-        List<AdminUnappliedPaymentResponse> unappliedPayments) => new(
+        List<AdminUnappliedPaymentResponse> unappliedPayments,
+        List<AdminOrderReturnResponse> returns) => new(
         order.Number,
         order.PlacedAt,
         order.Status.ToString(),
@@ -454,6 +480,7 @@ internal sealed record AdminOrderDetailResponse(
         order.PaidAt,
         attempts,
         unappliedPayments,
+        returns,
         documents,
         [.. order.Lines.Select(line => new AdminOrderLineResponse(line.ProductName, line.UnitPrice, line.VatRate, line.Quantity, line.LineTotal))]);
 }
@@ -476,6 +503,8 @@ internal sealed record AdminPaymentAttemptResponse(
     string Currency,
     DateTimeOffset StartedAt,
     DateTimeOffset ChangedAt);
+
+internal sealed record AdminOrderReturnResponse(Guid Id, string Number, string Status, decimal RefundedAmount, string? Refund, string? RefundProblem);
 
 internal sealed record ShipmentCreationRequest(string? TrackingNumber);
 

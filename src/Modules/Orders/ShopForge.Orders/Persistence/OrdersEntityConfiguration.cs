@@ -318,6 +318,9 @@ internal sealed class OrderReturnEntityConfiguration : IEntityTypeConfiguration<
         builder.Property(orderReturn => orderReturn.Status).HasConversion<string>().HasMaxLength(20);
         builder.Property(orderReturn => orderReturn.Reason).HasMaxLength(OrderReturn.MaxReasonLength);
         builder.Property(orderReturn => orderReturn.RefundedAmount).HasPrecision(12, 2);
+        builder.Property(orderReturn => orderReturn.Refund).HasColumnName("refund_status").HasConversion<string>().HasMaxLength(20);
+        builder.Property(orderReturn => orderReturn.RefundProblem).HasMaxLength(OrderReturn.MaxRefundTextLength);
+        builder.Property(orderReturn => orderReturn.RefundNote).HasMaxLength(OrderReturn.MaxRefundTextLength);
         builder.Ignore(orderReturn => orderReturn.HoldsGoods);
 
         builder.OwnsMany(orderReturn => orderReturn.Lines, lines =>
@@ -332,6 +335,7 @@ internal sealed class OrderReturnEntityConfiguration : IEntityTypeConfiguration<
         builder.HasIndex(orderReturn => new { orderReturn.StoreId, orderReturn.Number }).IsUnique();
         builder.HasIndex(orderReturn => new { orderReturn.StoreId, orderReturn.OrderNumber });
         builder.HasIndex(orderReturn => new { orderReturn.StoreId, orderReturn.Status });
+        builder.HasIndex(orderReturn => new { orderReturn.StoreId, orderReturn.Refund });
     }
 }
 

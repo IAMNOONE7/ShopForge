@@ -8,6 +8,8 @@ internal sealed class OrderReturn : IStoreOwned
 {
     public const int MaxReasonLength = 1000;
 
+    public const int MaxRefundTextLength = 500;
+
     private readonly List<OrderReturnLine> _lines = [];
 
     private OrderReturn()
@@ -50,6 +52,18 @@ internal sealed class OrderReturn : IStoreOwned
     // What was actually paid back for it, which is only known once the parcel is here.
     public decimal RefundedAmount { get; private set; }
 
+    // Where that money stands. The goods, the stock and the credit note are booked when the parcel arrives; the
+    // money follows them, and nothing a provider says can undo the receipt (D-194). Null until then.
+    public RefundStatus? Refund { get; private set; }
+
+    // Why a refund did not go through, in the provider's words or ours, for whoever has to deal with it.
+    public string? RefundProblem { get; private set; }
+
+    // How somebody settled it by hand, when the provider could not.
+    public string? RefundNote { get; private set; }
+
+    public DateTimeOffset? RefundSettledAt { get; private set; }
+
     public IReadOnlyList<OrderReturnLine> Lines => _lines;
 
     // A return still waiting for a decision, or waiting for the parcel, keeps its goods out of another return.
@@ -91,7 +105,7 @@ internal sealed class OrderReturn : IStoreOwned
         return true;
     }
 
-    public bool Receive(decimal refunded, DateTimeOffset receivedAt)
+    public bool Receive(decimal refunded, RefundStatus refund, DateTimeOffset receivedAt)
     {
         if (Status != ReturnStatus.Accepted)
         {
@@ -101,6 +115,8 @@ internal sealed class OrderReturn : IStoreOwned
         Status = ReturnStatus.Received;
         ReceivedAt = receivedAt;
         RefundedAmount = refunded;
+        Refund = refund;
+        RefundSettledAt = refund == RefundStatus.Pending ? null : receivedAt;
 
         return true;
     }
@@ -146,4 +162,23 @@ internal enum ReturnStatus
     Accepted,
     Refused,
     Received,
+}
+
+internal enum RefundStatus
+{
+    // Asked of the provider and not confirmed: on its way, or sent with no answer back. Sending it again could
+    // give the money back twice, so it is never sent again from here; somebody checks and closes it by hand.
+    Pending,
+
+    // The provider confirmed it, or there was nothing to give back.
+    Refunded,
+
+    // The provider refused it before any money moved. It can be tried again.
+    Failed,
+
+    // Paid by a method the store settles itself, so the store gives it back itself (D-081).
+    ByStore,
+
+    // Settled somewhere ShopForge cannot see, and somebody said how.
+    ClosedByHand,
 }
