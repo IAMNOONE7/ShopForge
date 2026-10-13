@@ -53,7 +53,7 @@ public sealed class UnappliedPaymentRefundTests : IDisposable
 
         Assert.Equal(HttpStatusCode.OK, refunded.StatusCode);
         Assert.Equal(UnappliedPaymentStatus.Refunded, kept.Status);
-        Assert.Equal((world.TransactionId, Currency.Of("EUR").ToMinorUnits(world.Total), "EUR"), given);
+        Assert.Equal((world.TransactionId, Currency.Of("EUR").ToMinorUnits(world.Total), true), given);
         Assert.Equal(1, await LettersAsync(world, "payment.unapplied-refunded"));
 
         // The money was never the order's, so there is nothing to credit: no invoice was issued and none is

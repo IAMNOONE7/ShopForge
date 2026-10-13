@@ -18,10 +18,12 @@ internal sealed class ComgateRefunds(
 
     public async Task RefundAsync(RefundRequest request, CancellationToken cancellationToken)
     {
-        if (await MerchantAsync(cancellationToken) is not { } merchant)
+        if (await MerchantAsync(cancellationToken) is not { } connected)
         {
             throw new RefundRefusedException("This store has no usable Comgate connection to refund through.");
         }
+
+        var (merchant, test) = connected;
 
         // What Comgate says the transaction is now, which is the only answer believed about it anywhere
         // (D-141). A payment that never completed is cancelled rather than refunded, and the order model keeps
@@ -38,6 +40,14 @@ internal sealed class ComgateRefunds(
         {
             throw new RefundRefusedException(
                 $"Comgate transaction {request.PaymentReference} is {transaction.Status}, which is not a payment to refund.");
+        }
+
+        // Comgate gives money back in the currency the transaction took it in, and is not told any other; a
+        // refund worked out in a different one is a sum from somewhere this adapter cannot see.
+        if (!string.Equals(transaction.Currency, request.Currency.Code, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new RefundRefusedException(
+                $"Comgate transaction {request.PaymentReference} is in {transaction.Currency}, not {request.Currency}.");
         }
 
         var amount = request.Currency.ToMinorUnits(request.Amount);
@@ -57,10 +67,11 @@ internal sealed class ComgateRefunds(
             request.PaymentReference,
             request.OrderNumber);
 
-        await payments.RefundAsync(merchant, request.PaymentReference, amount, request.Currency.Code, cancellationToken);
+        // A test payment is given back as a test refund, the way it was taken.
+        await payments.RefundAsync(merchant, request.PaymentReference, amount, test, cancellationToken);
     }
 
-    private async Task<ComgateMerchant?> MerchantAsync(CancellationToken cancellationToken)
+    private async Task<(ComgateMerchant Merchant, bool IsTest)?> MerchantAsync(CancellationToken cancellationToken)
     {
         if (await connections.FindAsync(Key, cancellationToken) is not { } connection || !connection.IsUsable)
         {
@@ -68,7 +79,7 @@ internal sealed class ComgateRefunds(
         }
 
         return await secrets.FindAsync(connection.SecretName!, cancellationToken) is { Length: > 0 } secret
-            ? new ComgateMerchant(connection.MerchantId, secret)
+            ? (new ComgateMerchant(connection.MerchantId, secret), connection.Environment == ProviderEnvironment.Test)
             : null;
     }
 }

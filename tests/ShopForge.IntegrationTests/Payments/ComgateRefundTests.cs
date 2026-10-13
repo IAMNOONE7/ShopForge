@@ -48,7 +48,8 @@ public sealed class ComgateRefundTests : IDisposable
         var refund = _comgate.Refunded.Single();
 
         Assert.Equal(world.TransactionId, refund.TransactionId);
-        Assert.Equal("EUR", refund.Currency);
+        // A test payment goes back as a test refund.
+        Assert.True(refund.Test);
         Assert.Equal(Currency.Of("EUR").ToMinorUnits(received.RefundedAmount), refund.Amount);
         Assert.Equal(world.Total, received.RefundedAmount);
     }
@@ -123,6 +124,20 @@ public sealed class ComgateRefundTests : IDisposable
         Assert.Empty(_comgate.Refunded);
     }
 
+    // Comgate gives money back in the transaction's own currency and is not told any other, so a refund worked
+    // out in a different one is refused rather than sent as a number in the wrong money (D-195).
+    [Fact]
+    public async Task A_refund_in_another_currency_than_the_payment_is_refused()
+    {
+        var world = await PaidAtComgateAsync(quantity: 1);
+
+        var failure = await Assert.ThrowsAsync<RefundRefusedException>(
+            () => RefundAsync(world.Store, world.TransactionId, 10m, world.Number, "CZK"));
+
+        Assert.Contains("is in EUR, not CZK", failure.Message, StringComparison.Ordinal);
+        Assert.Empty(_comgate.Refunded);
+    }
+
     // A store that never connected a merchant has nothing to refund through, and saying so is better than
     // sending a call with no credentials on it.
     [Fact]
@@ -160,13 +175,13 @@ public sealed class ComgateRefundTests : IDisposable
     private Task RefundAsync(ComgateWorld world, decimal amount) =>
         RefundAsync(world.Store, world.TransactionId, amount, world.Number);
 
-    private async Task RefundAsync(FurnitureStore store, string transactionId, decimal amount, string orderNumber = "2026-1")
+    private async Task RefundAsync(FurnitureStore store, string transactionId, decimal amount, string orderNumber = "2026-1", string currency = "EUR")
     {
         await using var scope = TestStores.CreateScope(_withComgate.Services, store.Store);
         var refunds = scope.ServiceProvider.GetServices<IPaymentRefunds>()
             .Single(candidate => candidate.Key == ComgatePaymentProvider.ProviderKey);
 
-        await refunds.RefundAsync(new RefundRequest(orderNumber, transactionId, amount, Currency.Of("EUR")), CancellationToken);
+        await refunds.RefundAsync(new RefundRequest(orderNumber, transactionId, amount, Currency.Of(currency)), CancellationToken);
     }
 
     private ComgateTransaction Transaction(ComgateWorld world, string status) =>

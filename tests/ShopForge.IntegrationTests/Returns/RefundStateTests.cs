@@ -83,7 +83,7 @@ public sealed class RefundStateTests : IDisposable
 
         Assert.Equal(HttpStatusCode.OK, again.StatusCode);
         Assert.Equal(("Refunded", (string?)null), (view!.Refund, view.RefundProblem));
-        Assert.Equal((world.TransactionId, Currency.Of("EUR").ToMinorUnits(world.Total), "EUR"), Assert.Single(_comgate.Refunded));
+        Assert.Equal((world.TransactionId, Currency.Of("EUR").ToMinorUnits(world.Total), true), Assert.Single(_comgate.Refunded));
         Assert.Equal(1, await LettersAsync(world, "return.refunded"));
     }
 

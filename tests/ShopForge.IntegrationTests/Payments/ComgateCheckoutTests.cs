@@ -80,6 +80,23 @@ public sealed class ComgateCheckoutTests : IDisposable
         Assert.True(_comgate.LastPayment!.Test);
     }
 
+    // What Comgate's documentation asks for, as against what the first brief guessed (D-195): the payer's name,
+    // the country whose payment methods are offered rather than the shopper's own, its own word for posted goods,
+    // and an expiry a little before the order lets its stock go — not the week Comgate keeps a payment open by
+    // default.
+    [Fact]
+    public async Task The_payment_is_described_the_way_comgate_documents_it()
+    {
+        var store = await ConnectedStoreAsync("MERCHANT-ONE");
+
+        await OrderAsync(store);
+        var sent = _comgate.LastPayment!;
+
+        Assert.Equal(("Alex Buyer", "+420 123 456 789"), (sent.FullName, sent.Phone));
+        Assert.Equal(("SK", "PHYSICAL_GOODS_ONLY"), (sent.Country, sent.Category));
+        Assert.Equal("30m", sent.ExpirationTime);
+    }
+
     [Fact]
     public async Task A_parcel_going_to_a_locker_is_a_collection_as_far_as_the_gateway_is_concerned()
     {

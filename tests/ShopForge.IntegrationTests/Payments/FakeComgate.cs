@@ -46,11 +46,12 @@ internal sealed class FakeComgate : IComgatePayments
         return Task.FromResult(new ComgateCreated($"trans-{Guid.NewGuid():N}", $"https://pay.comgate.test/{payment.ReferenceId}/{Created}"));
     }
 
-    // What was asked to be given back, in the order it was asked, so a test can say "once, and this much".
-    public List<(string TransactionId, long Amount, string Currency)> Refunded { get; } = [];
+    // What was asked to be given back, in the order it was asked, so a test can say "once, and this much". No
+    // currency: Comgate refunds in the transaction's own, and is told only whether it is a test.
+    public List<(string TransactionId, long Amount, bool Test)> Refunded { get; } = [];
 
     public async Task RefundAsync(
-        ComgateMerchant merchant, string transactionId, long amountInMinorUnits, string currency, CancellationToken cancellationToken)
+        ComgateMerchant merchant, string transactionId, long amountInMinorUnits, bool test, CancellationToken cancellationToken)
     {
         LastMerchant = merchant;
 
@@ -71,7 +72,7 @@ internal sealed class FakeComgate : IComgatePayments
 
         lock (Refunded)
         {
-            Refunded.Add((transactionId, amountInMinorUnits, currency));
+            Refunded.Add((transactionId, amountInMinorUnits, test));
         }
 
         if (RefundMovesButGoesUnanswered)
