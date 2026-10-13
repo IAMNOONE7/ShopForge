@@ -11,7 +11,8 @@ namespace ShopForge.Infrastructure.Payments.Comgate;
 // The field names below are the wire format and the only part of this integration that depends on Comgate's
 // documentation being read correctly. They are kept together, and apart from everything else, so that checking
 // them against the current API reference is one short file rather than a hunt. They were checked against the
-// Merchant API reference at apidoc.comgate.cz on 2026-10-13, and five of them were wrong (D-195).
+// Merchant API reference at apidoc.comgate.cz on 2026-10-13, which found the original brief wrong in ten places
+// (D-195).
 internal interface IComgatePayments
 {
     Task<ComgateCreated> CreateAsync(ComgateMerchant merchant, ComgatePayment payment, CancellationToken cancellationToken);
