@@ -11,26 +11,31 @@ export function RequestError({
   error,
   operation,
   onRetry,
+  fieldErrors,
 }: {
   error: unknown;
   operation: ErrorOperation;
   onRetry?: () => void;
+  fieldErrors?: readonly { field: string; message: string }[];
 }) {
   const { t } = useTranslation(["errors", "validation", "common"]);
   const [copied, setCopied] = useState(false);
-  const issues = fieldIssues(error);
+  const issues = fieldErrors ?? fieldIssues(error).map((issue) => ({
+    field: issue.target,
+    message: t(`validation:${issue.key}`),
+  }));
   const reference = traceId(error);
 
   useEffect(() => {
     for (const issue of issues) {
-      const field = findField(issue.target);
+      const field = findField(issue.field);
       field?.setAttribute("aria-invalid", "true");
     }
     return () => {
       for (const issue of issues)
-        findField(issue.target)?.removeAttribute("aria-invalid");
+        findField(issue.field)?.removeAttribute("aria-invalid");
     };
-  }, [error]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [error, fieldErrors]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function focusField(name: string) {
     const field = findField(name);
@@ -58,9 +63,9 @@ export function RequestError({
               <button
                 type="button"
                 className="link-button"
-                onClick={() => focusField(issue.target)}
+                onClick={() => focusField(issue.field)}
               >
-                {t(`validation:${issue.key}`)}
+                {issue.message}
               </button>
             </li>
           ))}

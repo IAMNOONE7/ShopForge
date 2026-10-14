@@ -1,4 +1,5 @@
 import type { Company } from "../api";
+import { isHttpError } from "../api/http";
 
 export type ThemeDraft = {
   primaryColor: string;
@@ -30,6 +31,9 @@ export type StoreSettingsDraft = ThemeDraft & {
 export type StoreIssueKey =
   | "nameInvalid"
   | "hostInvalid"
+  | "hostRejected"
+  | "hostTaken"
+  | "hostUnavailable"
   | "currencyInvalid"
   | "cultureInvalid"
   | "colorInvalid"
@@ -55,7 +59,7 @@ const country = /^[a-z]{2}$/i;
 export function validateCreateStore(draft: CreateStoreDraft): StoreIssue[] {
   return [
     ...validateName(draft.name),
-    ...(isHostName(draft.hostName)
+    ...(isStoreAddress(draft.hostName)
       ? []
       : [{ field: "hostName", key: "hostInvalid" } satisfies StoreIssue]),
     ...validateFormatting(draft),
@@ -195,22 +199,32 @@ function validateTheme(draft: ThemeDraft): StoreIssue[] {
   return issues;
 }
 
-function isHostName(value: string) {
-  const input = value.trim().replace(/\.$/, "");
-  if (!input || /[\s/@:#?]/.test(input)) return false;
-  try {
-    const parsed = new URL(`http://${input}`);
-    return (
-      parsed.hostname.length > 0 &&
-      parsed.hostname.length <= 253 &&
-      parsed.port === "" &&
-      parsed.pathname === "/" &&
-      parsed.search === "" &&
-      parsed.hash === ""
-    );
-  } catch {
-    return false;
+export function normalizedStoreAddress(value: string) {
+  return value.trim().replace(/\.+$/, "").toLowerCase();
+}
+
+function isStoreAddress(value: string) {
+  const input = normalizedStoreAddress(value);
+  const [label, ...suffix] = input.split(".");
+  // The server owns the suffix. Only address syntax can be checked before submitting.
+  return input.length <= 253 && label.length > 0 && label.length <= 63
+    && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(label)
+    && suffix.every((part) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(part));
+}
+
+export function storeAddressIssue(error: unknown): StoreIssue | null {
+  if (!isHttpError(error)) return null;
+  // These responses have no reason codes. Unknown responses retain the shared error fallback.
+  if (error.status === 409 && error.problem?.title === "The host name is already used by another store") {
+    return { field: "hostName", key: "hostTaken" };
   }
+  const messages = error.problem?.errors?.hostName;
+  if (error.status !== 400 || !messages?.length) return null;
+  return {
+    field: "hostName",
+    key: messages.includes("The platform has no host name suffix configured, so it cannot give a store an address.")
+      ? "hostUnavailable" : "hostRejected",
+  };
 }
 
 export function issueText(

@@ -135,6 +135,7 @@ const resources = {
       "Nyní vytvořte stručný koncept. Před zveřejněním doplňte firemní údaje, logo a prodejní metody.",
     name: "Název",
     address: "Adresa obchodu",
+    addressName: "Název v adrese",
     currency: "Měna",
     formattingCulture: "Kultura formátování",
     primaryColor: "Hlavní barva",
@@ -159,7 +160,9 @@ const resources = {
     addressReadOnlyHint:
       "V této fázi nelze adresu obchodu změnit.",
     newAddressHint:
-      "Zadejte pouze název hostitele, například shop.example.com. V této fázi jej nelze změnit.",
+      "Zvolte název o 1–63 písmenech bez diakritiky nebo číslicích s jednotlivými spojovníky, například wooden-home. Platforma přidělí celou adresu. Můžete zadat i známou celou adresu této platformy. Vlastní doménu přidáte a ověříte po vytvoření obchodu.",
+    newCurrencyHint: "Nové obchody používají českou korunu (CZK).",
+    newPreviewPrice: "49,00 Kč",
     currencyHint: "Použijte třípísmenný kód, například EUR nebo CZK.",
     formattingCultureHint:
       "Určuje formát čísel a dat ve výloze, například en-IE nebo cs-CZ. Jazyk administrace nemění.",
@@ -257,7 +260,10 @@ const resources = {
     validationTitle: "Zkontrolujte označená pole obchodu.",
     validation: {
       nameInvalid: "Zadejte název o nejvýše 200 znacích.",
-      hostInvalid: "Zadejte platný název hostitele bez schématu, portu a cesty.",
+      hostInvalid: "Použijte 1–63 písmen bez diakritiky nebo číslic s jednotlivými spojovníky mezi nimi, nebo celou adresu této platformy. Vynechte schéma, port a cestu.",
+      hostRejected: "Zadejte krátký název v adrese nebo celou adresu patřící této platformě. Vlastní doménu přidáte a ověříte po vytvoření obchodu.",
+      hostTaken: "Tento název v adrese je již obsazený. Zvolte jiný název.",
+      hostUnavailable: "Platforma zatím nemůže přidělovat adresy obchodů. Požádejte správce platformy o nastavení a pak to zkuste znovu.",
       currencyInvalid: "Zadejte třípísmenný kód měny.",
       cultureInvalid: "Zadejte známou kulturu formátování, například cs-CZ.",
       colorInvalid: "Zadejte barvu ve formátu #RRGGBB.",
@@ -271,7 +277,7 @@ const resources = {
     },
     fields: {
       name: "Název",
-      hostName: "Adresa obchodu",
+      hostName: "Název v adrese",
       currency: "Měna",
       culture: "Kultura formátování",
       primaryColor: "Hlavní barva",

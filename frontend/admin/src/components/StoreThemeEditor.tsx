@@ -7,6 +7,7 @@ import type { StoreIssue, ThemeDraft } from "./storeValidation";
 type Props = {
   value: ThemeDraft;
   storeName: string;
+  previewPrice?: string;
   issues: StoreIssue[];
   onChange: (field: keyof ThemeDraft, value: string) => void;
 };
@@ -16,6 +17,7 @@ const validColor = /^#[0-9a-f]{6}$/i;
 export function StoreThemeEditor({
   value,
   storeName,
+  previewPrice,
   issues,
   onChange,
 }: Props) {
@@ -52,7 +54,7 @@ export function StoreThemeEditor({
           onChange={(event) => onChange("borderRadius", event.target.value)}
         />
       </div>
-      <ThemePreview value={value} storeName={storeName} />
+      <ThemePreview value={value} storeName={storeName} previewPrice={previewPrice} />
     </div>
   );
 }
@@ -117,9 +119,11 @@ function ColorField({
 export function ThemePreview({
   value,
   storeName,
+  previewPrice,
 }: {
   value: ThemeDraft;
   storeName: string;
+  previewPrice?: string;
 }) {
   const { t } = useTranslation("stores");
   const primary = validColor.test(value.primaryColor)
@@ -148,7 +152,7 @@ export function ThemePreview({
       <div className="theme-preview-body">
         <div className="theme-preview-card">
           <span>{t("previewProduct")}</span>
-          <strong>{t("previewPrice")}</strong>
+          <strong>{previewPrice ?? t("previewPrice")}</strong>
           <span className="theme-preview-button">{t("previewAction")}</span>
         </div>
       </div>

@@ -133,6 +133,7 @@ const resources = {
       "Create a short draft now. Add company details, a logo and sale methods before publishing.",
     name: "Name",
     address: "Store address",
+    addressName: "Address name",
     currency: "Currency",
     formattingCulture: "Formatting culture",
     primaryColor: "Primary color",
@@ -157,7 +158,9 @@ const resources = {
     addressReadOnlyHint:
       "This stage does not support changing the store address.",
     newAddressHint:
-      "Use only a host name, such as shop.example.com. It cannot be changed in this stage.",
+      "Choose a name of 1–63 letters, digits and single hyphens, for example wooden-home. The platform assigns the full address. You can also enter a known full platform address. Add and verify your own domain after creating the store.",
+    newCurrencyHint: "New stores use Czech koruna (CZK).",
+    newPreviewPrice: "CZK 49.00",
     currencyHint: "Use a three-letter code such as EUR or CZK.",
     formattingCultureHint:
       "Controls storefront number and date formatting, for example en-IE or cs-CZ. It does not change the admin language.",
@@ -255,7 +258,10 @@ const resources = {
     validationTitle: "Check the highlighted store fields.",
     validation: {
       nameInvalid: "Enter a name of 200 characters or fewer.",
-      hostInvalid: "Enter a valid host name without a scheme, port or path.",
+      hostInvalid: "Use 1–63 letters or digits with single hyphens between them, or a full platform address. Leave out schemes, ports and paths.",
+      hostRejected: "Use a short address name or a full address belonging to this platform. Add and verify your own domain after creating the store.",
+      hostTaken: "This address name is already taken. Choose another name.",
+      hostUnavailable: "The platform cannot assign store addresses yet. Ask the platform operator to configure them, then try again.",
       currencyInvalid: "Enter a three-letter currency code.",
       cultureInvalid: "Enter a known formatting culture such as en-IE.",
       colorInvalid: "Enter a color in #RRGGBB format.",
@@ -269,7 +275,7 @@ const resources = {
     },
     fields: {
       name: "Name",
-      hostName: "Store address",
+      hostName: "Address name",
       currency: "Currency",
       culture: "Formatting culture",
       primaryColor: "Primary color",

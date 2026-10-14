@@ -1045,7 +1045,17 @@ input[readonly] {
 }
 
 .new-store-layout {
-  grid-template-columns: minmax(18rem, 0.9fr) minmax(22rem, 1.1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.new-store-layout .theme-editor {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (max-width: 64rem) {
+  .new-store-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 52rem) {
