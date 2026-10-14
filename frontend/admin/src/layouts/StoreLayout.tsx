@@ -32,6 +32,10 @@ export function StoreLayout() {
       </EmptyState>
     );
 
-  const context: StoreOutletContext = { store, reloadStores };
-  return <Outlet key={store.id} context={context} />;
+  const context: StoreOutletContext = { store, reloadStores, storeRefreshing: stores.refreshing, storeRefreshError: stores.refreshError };
+  return <>
+    {stores.refreshing && <p role="status" className="hint">{t("stores:refreshingStore")}</p>}
+    {stores.refreshError !== null && <RequestError error={stores.refreshError} operation="read" onRetry={reloadStores} />}
+    <Outlet key={store.id} context={context} />
+  </>;
 }

@@ -5,6 +5,7 @@ export type ActionRunner = (change: () => Promise<unknown>) => Promise<void>;
 // Mutations never retry automatically. A synchronous lock prevents duplicate clicks before React can repaint.
 export function useAction(
   onSuccess: () => void,
+  options: { manageControls?: boolean } = {},
 ): [unknown | null, ActionRunner, boolean] {
   const [error, setError] = useState<unknown | null>(null);
   const [pending, setPending] = useState(false);
@@ -17,7 +18,7 @@ export function useAction(
     setPending(true);
 
     const active =
-      document.activeElement instanceof HTMLElement
+      options.manageControls !== false && document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
     const form = active?.closest("form") ?? null;

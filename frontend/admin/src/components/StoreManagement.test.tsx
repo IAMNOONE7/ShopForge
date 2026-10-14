@@ -53,29 +53,13 @@ function store(overrides: Partial<AdminStore> = {}): AdminStore {
 }
 
 function mockReadyReads() {
-  vi.spyOn(api, "hasVisibleStoreProduct").mockResolvedValue(true);
-  vi.spyOn(api, "paymentMethods").mockResolvedValue([
-    {
-      code: "manual",
-      name: "Bank transfer",
-      providerKey: "manual",
-      isActive: true,
-    },
-  ]);
-  vi.spyOn(api, "shippingMethods").mockResolvedValue([
-    {
-      code: "standard",
-      name: "Standard",
-      providerKey: "flat-rate",
-      price: 5,
-      vatRate: 21,
-      isActive: true,
-      requiresPickupPoint: false,
-      maxWeightGrams: null,
-      countries: [],
-      taxClass: null,
-    },
-  ]);
+  vi.spyOn(api, "storeReadiness").mockResolvedValue({ isReady: true, checks: [
+    { check: "store.logo", isReady: true, problem: null, weight: "required" },
+    { check: "store.company", isReady: true, problem: null, weight: "required" },
+    { check: "catalog.visible-products", isReady: true, problem: null, weight: "required" },
+    { check: "orders.payment-method", isReady: true, problem: null, weight: "required" },
+    { check: "orders.shipping-method", isReady: true, problem: null, weight: "required" },
+  ] });
 }
 
 beforeAll(async () => {
@@ -208,36 +192,14 @@ describe("store management", () => {
 
   it("keeps failed readiness reads unknown and retries them", async () => {
     const user = userEvent.setup();
-    const products = vi
-      .spyOn(api, "hasVisibleStoreProduct")
+    const readiness = vi.spyOn(api, "storeReadiness")
       .mockRejectedValueOnce(new Error("offline"))
-      .mockResolvedValue(true);
-    vi.spyOn(api, "paymentMethods").mockResolvedValue([
-      {
-        code: "manual",
-        name: "Manual",
-        providerKey: "manual",
-        isActive: true,
-      },
-    ]);
-    vi.spyOn(api, "shippingMethods").mockResolvedValue([
-      {
-        code: "standard",
-        name: "Standard",
-        providerKey: "flat",
-        price: 5,
-        vatRate: 21,
-        isActive: true,
-        requiresPickupPoint: false,
-        maxWeightGrams: null,
-        countries: [],
-        taxClass: null,
-      },
-    ]);
+      .mockResolvedValue({ isReady: true, checks: [{ check: "catalog.visible-products", isReady: true, problem: null, weight: "required" }] });
 
     render(
       <MemoryRouter>
         <StorePublicationSection
+          canManage
           store={store({ logoUrl: "/logo", company })}
           reloadStores={() => undefined}
         />
@@ -246,19 +208,19 @@ describe("store management", () => {
 
     expect(
       await screen.findByText(
-        "Some readiness data is unavailable, so those checks remain unknown.",
+        "Current readiness could not be verified. Any displayed checklist is from an earlier response.",
       ),
     ).toBeTruthy();
-    expect(screen.getByText("Could not be checked")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Review and publish" })).toHaveProperty("disabled", true);
 
-    await user.click(screen.getByRole("button", { name: "Retry readiness checks" }));
-    await waitFor(() => expect(products).toHaveBeenCalledTimes(2));
+    await user.click(screen.getByRole("button", { name: "Refresh readiness checks" }));
+    await waitFor(() => expect(readiness).toHaveBeenCalledTimes(2));
     await waitFor(() =>
-      expect(screen.getAllByText("Ready")).toHaveLength(5),
+      expect(screen.getAllByText("Ready")).toHaveLength(1),
     );
   });
 
-  it("focuses publish confirmation and keeps backend conflict details generic", async () => {
+  it("focuses publish confirmation and shows server refusal details", async () => {
     const user = userEvent.setup();
     mockReadyReads();
     vi.spyOn(api, "publishStore").mockRejectedValue(
@@ -272,6 +234,7 @@ describe("store management", () => {
     render(
       <MemoryRouter>
         <StorePublicationSection
+          canManage
           store={store({ logoUrl: "/logo", company })}
           reloadStores={() => undefined}
         />
@@ -281,6 +244,7 @@ describe("store management", () => {
     await waitFor(() =>
       expect(screen.getAllByText("Ready")).toHaveLength(5),
     );
+    vi.mocked(api.storeReadiness).mockRejectedValue(new Error("offline"));
     await user.click(screen.getByRole("button", { name: "Review and publish" }));
 
     const confirm = screen.getByRole("button", { name: "Publish store" });
@@ -293,7 +257,7 @@ describe("store management", () => {
         "The data changed or conflicts with an existing record. Review it and try again.",
       ),
     ).toBeTruthy();
-    expect(screen.queryByText("Internal publish check detail")).toBeNull();
+    expect(screen.getByText("Internal publish check detail")).toBeTruthy();
     expect(
       screen.getByText(
         "Review the readiness checks and store settings, then try again.",

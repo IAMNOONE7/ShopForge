@@ -1,5 +1,6 @@
 import { HttpError, requestBlob, requestJson, saveDownload } from "./api/http";
 import { findStoreProduct, getStoreProducts, hasVisibleStoreProduct } from "./api/listings";
+import { getStoreReadiness } from "./api/readiness";
 
 export type SignInResponse = {
   twoFactorRequired: boolean;
@@ -15,6 +16,15 @@ export type CurrentUser = {
 };
 
 export type StoreStatus = "draft" | "published";
+
+export type StoreReadinessCheck = {
+  check: string;
+  isReady: boolean;
+  problem: string | null;
+  weight: "required" | "advised";
+};
+
+export type StoreReadiness = { isReady: boolean; checks: StoreReadinessCheck[] };
 
 export type StoreTheme = {
   primaryColor: string;
@@ -410,6 +420,7 @@ export const api = {
     request<AdminStore>("POST", "/api/admin/stores", input),
   updateStore: (storeId: string, input: StoreSettings) =>
     request<AdminStore>("PUT", `/api/admin/stores/${storeId}`, input),
+  storeReadiness: getStoreReadiness,
   publishStore: (storeId: string) =>
     request<AdminStore>("POST", `/api/admin/stores/${storeId}/publish`),
   unpublishStore: (storeId: string) =>

@@ -10,6 +10,8 @@ export type AdminOutletContext = {
 export type StoreOutletContext = {
   store: AdminStore;
   reloadStores: () => void;
+  storeRefreshing: boolean;
+  storeRefreshError: unknown | null;
 };
 
 export function useAdminOutlet() {

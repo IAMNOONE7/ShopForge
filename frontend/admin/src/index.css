@@ -969,16 +969,58 @@ input[readonly] {
 
 .readiness-list li {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: var(--space-3);
-  align-items: center;
+  align-items: start;
   padding: var(--space-3);
   background: var(--color-surface-subtle);
   border-radius: var(--radius-control);
 }
 
-.readiness-list li > span:nth-child(2) {
+.readiness-check-copy {
   display: grid;
+  min-width: 0;
+  gap: var(--space-1);
+  overflow-wrap: anywhere;
+}
+
+.readiness-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.readiness-heading h3,
+.readiness-group h4,
+.readiness-check-copy p {
+  margin: 0;
+}
+
+.readiness-group {
+  margin-top: var(--space-5);
+}
+
+.readiness-problem summary {
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+
+.readiness-problem p {
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.readiness-refusal {
+  overflow-wrap: anywhere;
+}
+
+.readiness-check-copy .link-button {
+  justify-self: start;
+  text-align: left;
 }
 
 .readiness-list small {

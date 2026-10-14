@@ -37,13 +37,16 @@ function StoreRoute({
 export function StoreSettingsPage() {
   const { t } = useTranslation("stores");
   const { user } = useSession();
-  const { store, reloadStores } = useSelectedStore();
+  const { store, reloadStores, storeRefreshing, storeRefreshError } = useSelectedStore();
   return (
     <StoreRoute title={t("settings")} allowed={canManageStore(user.role)}>
       <div className="store-settings-workspace">
         <StorePublicationSection
           store={store}
           reloadStores={reloadStores}
+          canManage={canManageStore(user.role)}
+          storeRefreshing={storeRefreshing}
+          storeRefreshError={storeRefreshError}
         />
         <StoreSettingsSection
           store={store}
