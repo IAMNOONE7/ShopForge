@@ -78,15 +78,14 @@ public sealed class SuppressionTests(ShopForgeApiFactory factory)
             "/api/storefront/account/register",
             new { Email = email, Password = "Shop-forge-2026", FirstName = "Ada", LastName = "Lovelace", Phone = (string?)null });
 
-        // The message is finished rather than failed: nothing went wrong, we chose not to send it.
-        for (var run = 0; run < 5; run++)
-        {
-            await factory.DispatchOutboxAsync(CancellationToken);
-        }
+        // The message is finished rather than failed: nothing went wrong, we chose not to send it. The host's own
+        // worker may hold it at any moment, so the test waits for it to be finished rather than asserting straight
+        // after a dispatch.
+        var pending = await factory.EventuallyAsync(() => PendingForAsync(email), count => count == 0, CancellationToken);
 
         Assert.Equal(HttpStatusCode.Accepted, registered.StatusCode);
         Assert.Empty(factory.Emails.For(email));
-        Assert.Equal(0, await PendingForAsync(email));
+        Assert.Equal(0, pending);
     }
 
     private async Task<FurnitureStore> SigningStoreAsync() => await FurnitureStore.CreateAsync(factory);

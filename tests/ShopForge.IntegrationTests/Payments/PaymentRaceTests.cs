@@ -19,6 +19,12 @@ namespace ShopForge.IntegrationTests.Payments;
 // A notification and the sweep that goes asking reach the same payment at the same moment, a thousand times over.
 // Whichever arrives second must find the first one's answer, so each order is paid once, its stock taken once, and
 // its shopper told once (Roadmap V2 §4.3, item 4; D-176, D-199).
+// The race floods the database for most of a minute. Run on its own, it neither upsets other tests' timing nor has
+// its own collisions thinned out by theirs.
+[CollectionDefinition(nameof(PaymentRaceTests), DisableParallelization = true)]
+public sealed class PaymentRaceRunsAlone;
+
+[Collection(nameof(PaymentRaceTests))]
 public sealed class PaymentRaceTests : IDisposable
 {
     private const string Secret = "the-merchants-comgate-secret";
