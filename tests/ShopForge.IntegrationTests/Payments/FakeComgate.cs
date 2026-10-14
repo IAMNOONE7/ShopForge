@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using ShopForge.Infrastructure.Payments.Comgate;
 
 namespace ShopForge.IntegrationTests.Payments;
@@ -81,14 +82,36 @@ internal sealed class FakeComgate : IComgatePayments
         }
     }
 
+    // An answer per transaction, for a test with many of them; one named here wins over Says.
+    public ConcurrentDictionary<string, ComgateTransaction> Answers { get; } = new(StringComparer.Ordinal);
+
+    // Lookups that run out of time before Comgate answers, this many before the next one does.
+    public int LookupsTimingOut
+    {
+        get => Volatile.Read(ref _lookupsTimingOut);
+        set => Volatile.Write(ref _lookupsTimingOut, value);
+    }
+
+    private int _lookupsTimingOut;
+
     public Task<ComgateTransaction?> FindAsync(ComgateMerchant merchant, string transactionId, CancellationToken cancellationToken)
     {
         AskedAbout = true;
         LastMerchant = merchant;
 
-        return Fails
-            ? Task.FromException<ComgateTransaction?>(new HttpRequestException("Comgate is unreachable."))
-            : Task.FromResult(Says);
+        if (Fails)
+        {
+            return Task.FromException<ComgateTransaction?>(new HttpRequestException("Comgate is unreachable."));
+        }
+
+        if (Interlocked.Decrement(ref _lookupsTimingOut) >= 0)
+        {
+            return Task.FromException<ComgateTransaction?>(new TaskCanceledException("Comgate did not answer in time."));
+        }
+
+        Interlocked.Exchange(ref _lookupsTimingOut, 0);
+
+        return Task.FromResult(Answers.TryGetValue(transactionId, out var answer) ? answer : Says);
     }
 
     // Comgate's statements: the transfers paid out on each day, the lines of each, and every day somebody asked for.

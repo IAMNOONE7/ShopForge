@@ -23,8 +23,17 @@ public sealed class CheckoutTests(ShopForgeApiFactory factory)
             shopper.PostAsync("/api/storefront/checkout", Checkout.Request()),
             shopper.PostAsync("/api/storefront/checkout", Checkout.Request()));
         var orders = await furniture.Admin.AdminListAsync<PlacedOrderRow>($"/api/admin/stores/{furniture.Store.StoreId}/orders", TestContext.Current.CancellationToken);
+        var second = answers.Single(answer => answer.StatusCode != HttpStatusCode.Created);
 
-        Assert.Equal([HttpStatusCode.Created, HttpStatusCode.Conflict], answers.Select(answer => answer.StatusCode).Order());
+        // One order whatever the timing. The second submission either meets the first still at work and is told so,
+        // or arrives once it has finished and finds the cart already empty — which is what a busy machine makes of
+        // "at the same moment".
+        Assert.Single(answers, answer => answer.StatusCode == HttpStatusCode.Created);
+        Assert.True(
+            second.StatusCode == HttpStatusCode.Conflict
+                || (second.StatusCode == HttpStatusCode.BadRequest
+                    && (await second.Content.ReadAsStringAsync(CancellationToken)).Contains("The cart is empty.", StringComparison.Ordinal)),
+            $"The second submission was answered {second.StatusCode}.");
         Assert.Single(orders!);
 
         foreach (var answer in answers)
