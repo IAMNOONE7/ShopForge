@@ -2677,6 +2677,135 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                     b.ToTable("payment_methods", "orders");
                 });
 
+            modelBuilder.Entity("ShopForge.Orders.Domain.ProviderStatementDay", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateOnly>("Day")
+                        .HasColumnType("date")
+                        .HasColumnName("day");
+
+                    b.Property<DateTimeOffset>("ImportedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("imported_at");
+
+                    b.Property<int>("Lines")
+                        .HasColumnType("integer")
+                        .HasColumnName("lines");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("provider");
+
+                    b.Property<Guid>("StoreId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("store_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_provider_statement_days");
+
+                    b.HasIndex("StoreId", "Provider", "Day")
+                        .IsUnique()
+                        .HasDatabaseName("ix_provider_statement_days_store_id_provider_day");
+
+                    b.ToTable("provider_statement_days", "orders");
+                });
+
+            modelBuilder.Entity("ShopForge.Orders.Domain.ProviderStatementLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal?>("Confirmed")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("confirmed");
+
+                    b.Property<string>("Currency")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<DateOnly>("Day")
+                        .HasColumnType("date")
+                        .HasColumnName("day");
+
+                    b.Property<decimal?>("Fee")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("fee");
+
+                    b.Property<DateTimeOffset>("ImportedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("imported_at");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("OrderNumber")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("order_number");
+
+                    b.Property<DateOnly?>("PaidOn")
+                        .HasColumnType("date")
+                        .HasColumnName("paid_on");
+
+                    b.Property<string>("Problem")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("problem");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("provider");
+
+                    b.Property<Guid>("StoreId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("store_id");
+
+                    b.Property<string>("TransactionId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("transaction_id");
+
+                    b.Property<string>("TransferId")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("transfer_id");
+
+                    b.Property<decimal?>("Transferred")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("transferred");
+
+                    b.Property<DateOnly?>("TransferredOn")
+                        .HasColumnType("date")
+                        .HasColumnName("transferred_on");
+
+                    b.HasKey("Id")
+                        .HasName("pk_provider_statement_lines");
+
+                    b.HasIndex("StoreId", "Provider", "PaidOn")
+                        .HasDatabaseName("ix_provider_statement_lines_store_id_provider_paid_on");
+
+                    b.HasIndex("StoreId", "Provider", "TransactionId")
+                        .HasDatabaseName("ix_provider_statement_lines_store_id_provider_transaction_id");
+
+                    b.ToTable("provider_statement_lines", "orders");
+                });
+
             modelBuilder.Entity("ShopForge.Orders.Domain.ShippingMethod", b =>
                 {
                     b.Property<Guid>("Id")

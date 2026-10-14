@@ -120,6 +120,12 @@ public sealed class ComgatePaymentProviderTests
 
         public Task<ComgateTransaction?> FindAsync(ComgateMerchant merchant, string transactionId, CancellationToken cancellationToken) =>
             Task.FromResult<ComgateTransaction?>(null);
+
+        public Task<IReadOnlyList<long>> TransferIdsAsync(ComgateMerchant merchant, DateOnly day, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<long>>([]);
+
+        public Task<IReadOnlyList<ComgateTransferLine>> TransferLinesAsync(ComgateMerchant merchant, long transferId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<ComgateTransferLine>>([]);
     }
 
     private sealed class OneConnection(ProviderConnection? connection) : IProviderConnections

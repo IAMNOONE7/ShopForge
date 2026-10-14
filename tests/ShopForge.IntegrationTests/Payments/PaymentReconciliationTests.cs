@@ -260,7 +260,7 @@ public sealed class PaymentReconciliationTests : IDisposable
             $"""
             UPDATE orders.payment_attempts
             SET started_at = started_at - {howLong}, changed_at = changed_at - {howLong}
-            WHERE order_number = {world.Number}
+            WHERE order_number = {world.Number} AND store_id = {world.Store.Store.StoreId}
             """,
             CancellationToken));
 

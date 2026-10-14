@@ -63,6 +63,7 @@ public static class OrdersModule
         services.AddScoped<ISoldListings, SoldListings>();
         services.AddScoped<PaymentResults>();
         services.AddScoped<IStoreCatchUp, PaymentReconciliation>();
+        services.AddScoped<IStoreCatchUp, StatementImport>();
         services.AddSingleton<ExpiredOrders>();
         services.AddHostedService<ExpiredOrderSweeper>();
 
@@ -91,6 +92,7 @@ public static class OrdersModule
     {
         storeAdmin.MapAdminOrders();
         storeAdmin.MapAdminUnappliedPayments();
+        storeAdmin.MapAdminReconciliation();
         storeAdmin.MapAdminMethods();
         storeAdmin.MapAdminPickupPoints();
         storeAdmin.MapAdminDiscounts();

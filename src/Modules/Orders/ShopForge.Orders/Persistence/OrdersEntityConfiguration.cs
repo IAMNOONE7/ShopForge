@@ -244,6 +244,45 @@ internal sealed class UnappliedPaymentEntityConfiguration : IEntityTypeConfigura
     }
 }
 
+internal sealed class ProviderStatementLineEntityConfiguration : IEntityTypeConfiguration<ProviderStatementLine>
+{
+    public void Configure(EntityTypeBuilder<ProviderStatementLine> builder)
+    {
+        builder.ToTable("provider_statement_lines", OrdersModule.Schema);
+
+        builder.Property(line => line.Provider).HasMaxLength(50);
+        builder.Property(line => line.TransferId).HasMaxLength(50);
+        builder.Property(line => line.TransactionId).HasMaxLength(200);
+        builder.Property(line => line.OrderNumber).HasMaxLength(200);
+        builder.Property(line => line.Kind).HasMaxLength(50);
+        builder.Property(line => line.Currency).HasMaxLength(3);
+        builder.Property(line => line.Confirmed).HasPrecision(12, 2);
+        builder.Property(line => line.Fee).HasPrecision(12, 2);
+        builder.Property(line => line.Transferred).HasPrecision(12, 2);
+        builder.Property(line => line.Problem).HasMaxLength(ProviderStatementLine.MaxProblemLength);
+        builder.Ignore(line => line.IsPayment);
+
+        // A payment is found by its transaction whatever day it was paid out on, and a day is laid out by when
+        // the shopper paid.
+        builder.HasIndex(line => new { line.StoreId, line.Provider, line.TransactionId });
+        builder.HasIndex(line => new { line.StoreId, line.Provider, line.PaidOn });
+    }
+}
+
+internal sealed class ProviderStatementDayEntityConfiguration : IEntityTypeConfiguration<ProviderStatementDay>
+{
+    public void Configure(EntityTypeBuilder<ProviderStatementDay> builder)
+    {
+        builder.ToTable("provider_statement_days", OrdersModule.Schema);
+
+        builder.Property(day => day.Provider).HasMaxLength(50);
+
+        // A day is read once: two passes reaching for the same day race for this, and the loser reads it again
+        // as already done.
+        builder.HasIndex(day => new { day.StoreId, day.Provider, day.Day }).IsUnique();
+    }
+}
+
 internal sealed class InvoiceEntityConfiguration : IEntityTypeConfiguration<Invoice>
 {
     public void Configure(EntityTypeBuilder<Invoice> builder)

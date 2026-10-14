@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
@@ -12,7 +13,7 @@ namespace ShopForge.Infrastructure.Payments.Comgate;
 // documentation being read correctly. They are kept together, and apart from everything else, so that checking
 // them against the current API reference is one short file rather than a hunt. They were checked against the
 // Merchant API reference at apidoc.comgate.cz on 2026-10-13, which found the original brief wrong in ten places
-// (D-195).
+// (D-195), and the statement calls were written from it on 2026-10-14 (D-198).
 internal interface IComgatePayments
 {
     Task<ComgateCreated> CreateAsync(ComgateMerchant merchant, ComgatePayment payment, CancellationToken cancellationToken);
@@ -24,6 +25,12 @@ internal interface IComgatePayments
     // Giving money back, in the transaction's own currency, which is why no currency is sent. A refusal throws
     // RefundRefusedException; anything else that throws may have moved the money (D-194).
     Task RefundAsync(ComgateMerchant merchant, string transactionId, long amountInMinorUnits, bool test, CancellationToken cancellationToken);
+
+    // The transfers Comgate paid the merchant on one day, a Prague day. Only paid, transferred production payments
+    // are ever in one, so a test payment never is (D-198).
+    Task<IReadOnlyList<long>> TransferIdsAsync(ComgateMerchant merchant, DateOnly day, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<ComgateTransferLine>> TransferLinesAsync(ComgateMerchant merchant, long transferId, CancellationToken cancellationToken);
 }
 
 // Who the payment is taken for. The secret is read from the store's secret store at the moment of the call and
@@ -59,6 +66,20 @@ internal sealed record ComgateTransaction(
     string Currency,
     string ReferenceId,
     bool Test);
+
+// One line of a transfer as Comgate writes it, field for field. The amounts are text in crowns with a decimal comma
+// and the type is a number the reference leaves unexplained, so turning a line into money is the reader's job, and a
+// line nobody can read is reported rather than guessed at (D-198).
+internal sealed record ComgateTransferLine(
+    int? Type,
+    string? TransactionId,
+    string? ReferenceId,
+    string? Currency,
+    string? ConfirmedAmount,
+    string? TransferredAmount,
+    string? Fee,
+    string? PaidAt,
+    string? TransferredOn);
 
 internal sealed class ComgateHttpPayments(HttpClient client) : IComgatePayments
 {
@@ -171,6 +192,50 @@ internal sealed class ComgateHttpPayments(HttpClient client) : IComgatePayments
             $"Comgate answered the refund with {(int)response.StatusCode} {answer?.Code} {answer?.Message}; whether the money moved is not known.");
     }
 
+    public async Task<IReadOnlyList<long>> TransferIdsAsync(ComgateMerchant merchant, DateOnly day, CancellationToken cancellationToken)
+    {
+        var transfers = await ListAsync<TransferResponse>(
+            merchant, $"v2.0/transferList/date/{day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}.json", cancellationToken);
+
+        return [.. transfers.Select(transfer => transfer.TransferId)];
+    }
+
+    public async Task<IReadOnlyList<ComgateTransferLine>> TransferLinesAsync(ComgateMerchant merchant, long transferId, CancellationToken cancellationToken)
+    {
+        var lines = await ListAsync<TransferLineResponse>(
+            merchant, $"v2.0/singleTransfer/transferId/{transferId.ToString(CultureInfo.InvariantCulture)}.json", cancellationToken);
+
+        return [.. lines.Select(line => new ComgateTransferLine(
+            line.Type,
+            line.TransactionId,
+            line.ReferenceId,
+            line.Currency,
+            line.ConfirmedAmount,
+            line.TransferredAmount,
+            line.Fee,
+            line.PaidAt,
+            line.TransferredOn))];
+    }
+
+    // Both statement calls answer an array, or 204 and nothing at all on a day with no transfers. Anything else is
+    // a failure to read the day, and the day is read again rather than taken to have been empty.
+    private async Task<List<T>> ListAsync<T>(ComgateMerchant merchant, string path, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, path);
+        request.Headers.Authorization = Basic(merchant);
+
+        using var response = await client.SendAsync(request, cancellationToken);
+
+        if (response.StatusCode == System.Net.HttpStatusCode.NoContent)
+        {
+            return [];
+        }
+
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<List<T>>(cancellationToken) ?? [];
+    }
+
     private static async Task<Answer?> AnswerAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
         try
@@ -230,4 +295,19 @@ internal sealed class ComgateHttpPayments(HttpClient client) : IComgatePayments
     private sealed record Answer(
         [property: JsonPropertyName("code")] int Code,
         [property: JsonPropertyName("message")] string? Message);
+
+    private sealed record TransferResponse(
+        [property: JsonPropertyName("transferId"), JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)] long TransferId);
+
+    // The names are Comgate's, in Czech, exactly as its reference prints them.
+    private sealed record TransferLineResponse(
+        [property: JsonPropertyName("typ"), JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)] int? Type,
+        [property: JsonPropertyName("ID Comgate")] string? TransactionId,
+        [property: JsonPropertyName("ID od klienta")] string? ReferenceId,
+        [property: JsonPropertyName("Měna")] string? Currency,
+        [property: JsonPropertyName("Potvrzená částka")] string? ConfirmedAmount,
+        [property: JsonPropertyName("Převedená částka")] string? TransferredAmount,
+        [property: JsonPropertyName("Poplatek celkem")] string? Fee,
+        [property: JsonPropertyName("Datum zaplacení")] string? PaidAt,
+        [property: JsonPropertyName("Datum převodu")] string? TransferredOn);
 }

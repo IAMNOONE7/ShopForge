@@ -90,4 +90,39 @@ internal sealed class FakeComgate : IComgatePayments
             ? Task.FromException<ComgateTransaction?>(new HttpRequestException("Comgate is unreachable."))
             : Task.FromResult(Says);
     }
+
+    // Comgate's statements: the transfers paid out on each day, the lines of each, and every day somebody asked for.
+    public Dictionary<DateOnly, List<long>> Transfers { get; } = [];
+
+    public Dictionary<long, List<ComgateTransferLine>> TransferLines { get; } = [];
+
+    public List<DateOnly> StatementDaysAsked { get; } = [];
+
+    public void PaysOut(DateOnly day, long transferId, params ComgateTransferLine[] lines)
+    {
+        if (!Transfers.TryGetValue(day, out var transfers))
+        {
+            Transfers[day] = transfers = [];
+        }
+
+        transfers.Add(transferId);
+        TransferLines[transferId] = [.. lines];
+    }
+
+    public Task<IReadOnlyList<long>> TransferIdsAsync(ComgateMerchant merchant, DateOnly day, CancellationToken cancellationToken)
+    {
+        LastMerchant = merchant;
+
+        lock (StatementDaysAsked)
+        {
+            StatementDaysAsked.Add(day);
+        }
+
+        return Fails
+            ? Task.FromException<IReadOnlyList<long>>(new HttpRequestException("Comgate is unreachable."))
+            : Task.FromResult<IReadOnlyList<long>>(Transfers.TryGetValue(day, out var transfers) ? [.. transfers] : []);
+    }
+
+    public Task<IReadOnlyList<ComgateTransferLine>> TransferLinesAsync(ComgateMerchant merchant, long transferId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<ComgateTransferLine>>(TransferLines.TryGetValue(transferId, out var lines) ? [.. lines] : []);
 }

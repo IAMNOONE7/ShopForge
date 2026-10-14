@@ -169,6 +169,63 @@ public sealed class ComgateHttpPaymentsTests
             () => Client(handler).RefundAsync(Merchant, "trans-1", 100, false, CancellationToken));
     }
 
+    // A day's transfers, from the path Comgate documents and with the merchant's own credentials. The day is written
+    // the way Comgate reads it, a Prague date (D-198).
+    [Fact]
+    public async Task A_days_transfers_are_listed_from_the_documented_path()
+    {
+        var handler = new RecordingHandler(
+            HttpStatusCode.OK,
+            """[{"transferId":1234567,"transferDate":"2023-01-25","accountCounterparty":"0/0000","accountOutgoing":"123456789/0000","variableSymbol":"12345678"}]""");
+
+        var transfers = await Client(handler).TransferIdsAsync(Merchant, new DateOnly(2023, 1, 25), CancellationToken);
+
+        Assert.Equal([1234567L], transfers);
+        Assert.Equal(("https://pay.comgate.test/v2.0/transferList/date/2023-01-25.json", "GET"), (handler.Url, handler.Method));
+        Assert.StartsWith("Basic ", handler.Authorization, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_day_comgate_paid_nothing_out_on_is_an_empty_day()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.NoContent, string.Empty);
+
+        Assert.Empty(await Client(handler).TransferIdsAsync(Merchant, new DateOnly(2023, 1, 25), CancellationToken));
+    }
+
+    // Comgate's own sample, character for character: Czech names, amounts as text with a decimal comma.
+    [Fact]
+    public async Task A_transfers_lines_are_read_under_comgates_own_names()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.OK, """
+            [{"typ":1,"Merchant":"123456","Datum založení":"2023-01-06 14:11:30","Datum zaplacení":"2023-01-06 14:21:30",
+              "Datum převodu":"2023-01-10","Měsíc fakturace":null,"ID Comgate":"AAAA-BBBB-CCCC","Metoda":"Card payment",
+              "Produkt":null,"Popis":"description eshop payment","E-mail plátce":"name.lastname@email.cz",
+              "Variabilní symbol plátce":"123456789","Variabilní symbol převodu":"123456789","ID od klienta":"1234",
+              "Měna":"EUR","Potvrzená částka":"10,00","Převedená částka":"10,00","Poplatek celkem":"0,35",
+              "Poplatek mezibankovní":"0,25","Poplatek asociace":"0,25","Poplatek zpracovatel":"-0,15","Typ karty":"EU_UNREGULATED"}]
+            """);
+
+        var lines = await Client(handler).TransferLinesAsync(Merchant, 1234567, CancellationToken);
+
+        Assert.Equal(("https://pay.comgate.test/v2.0/singleTransfer/transferId/1234567.json", "GET"), (handler.Url, handler.Method));
+        Assert.Equal(
+            new ComgateTransferLine(1, "AAAA-BBBB-CCCC", "1234", "EUR", "10,00", "10,00", "0,35", "2023-01-06 14:21:30", "2023-01-10"),
+            Assert.Single(lines));
+    }
+
+    // A day that could not be read is not a day with nothing in it: taken for one, it would never be asked for again.
+    [Theory]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    public async Task A_statement_that_cannot_be_read_is_a_failure_and_not_an_empty_day(HttpStatusCode status)
+    {
+        var handler = new RecordingHandler(status, """{"code":1400,"message":"bad request"}""");
+
+        await Assert.ThrowsAsync<HttpRequestException>(
+            () => Client(handler).TransferIdsAsync(Merchant, new DateOnly(2023, 1, 25), CancellationToken));
+    }
+
     private static ComgateHttpPayments Client(RecordingHandler handler) =>
         new(new HttpClient(handler) { BaseAddress = new Uri("https://pay.comgate.test/") });
 

@@ -133,6 +133,7 @@ public static class DependencyInjection
         services.AddScoped<IPaymentNotifications, ComgateNotifications>();
         services.AddScoped<IPaymentEnquiries, ComgateEnquiries>();
         services.AddScoped<IPaymentRefunds, ComgateRefunds>();
+        services.AddScoped<ISettlementStatements, ComgateStatements>();
     }
 
     // The same arrangement as Comgate's, for the same reason: the account belongs to the store, so the carrier
