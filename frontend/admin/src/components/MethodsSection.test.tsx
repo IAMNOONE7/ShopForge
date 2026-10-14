@@ -3,7 +3,10 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { api, type ShippingMethod } from "../api";
+import { HttpError } from "../api/http";
 import { i18n, initializeI18n } from "../i18n";
+import { useAction } from "../useAction";
+import { RequestError } from "./ui/RequestError";
 import { MethodsSection } from "./MethodsSection";
 
 const zbox: ShippingMethod = {
@@ -16,6 +19,7 @@ const zbox: ShippingMethod = {
   requiresPickupPoint: true,
   maxWeightGrams: null,
   countries: [],
+  taxClass: null,
 };
 
 const money = new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" });
@@ -27,6 +31,11 @@ function mockReads(method: ShippingMethod) {
   vi.spyOn(api, "paymentMethods").mockResolvedValue([]);
   vi.spyOn(api, "shippingMethods").mockResolvedValue([method]);
   vi.spyOn(api, "pickupPoints").mockResolvedValue([]);
+}
+
+function EditableMethods() {
+  const [error, run] = useAction(() => undefined);
+  return <><MethodsSection storeId="store-a" money={money} run={run} />{error !== null && <RequestError error={error} operation="write" />}</>;
 }
 
 beforeAll(async () => {
@@ -42,6 +51,26 @@ afterEach(() => {
 afterAll(() => i18n.changeLanguage("en"));
 
 describe("MethodsSection", () => {
+  it.each(["standard", null])("preserves tax class %s, zero prices and false flags after a failed edit", async (taxClass) => {
+    const user = userEvent.setup();
+    const method = { ...zbox, taxClass, price: 0, vatRate: 0, isActive: false, requiresPickupPoint: false, maxWeightGrams: 5000, countries: ["CZ"] };
+    mockReads(method);
+    const saved = vi.spyOn(api, "updateShippingMethod")
+      .mockRejectedValueOnce(new HttpError("http", 400, { errors: { name: ["Invalid name"] } }))
+      .mockResolvedValue(method);
+    render(<EditableMethods />);
+    const form = (await screen.findByRole("spinbutton", { name: /Weight limit/ })).closest("form")!;
+    const name = form.querySelector<HTMLInputElement>('input[name="name"]')!;
+    await user.clear(name); await user.type(name, "Parcel");
+    await user.click(screen.getAllByRole("button", { name: "Save" })[0]);
+    await screen.findByRole("alert");
+    expect(name).toHaveProperty("value", "Parcel");
+    await user.click(screen.getAllByRole("button", { name: "Save" })[0]);
+    await waitFor(() => expect(saved).toHaveBeenCalledTimes(2));
+    const input = { name: "Parcel", price: 0, vatRate: 0, isActive: false, requiresPickupPoint: false, maxWeightGrams: 5000, countries: ["CZ"], taxClass };
+    expect(saved.mock.calls.map(([, , payload]) => payload)).toEqual([input, input]);
+  });
+
   // The limits are what keep a method off the shelf for a parcel it cannot take, and until now only the API
   // could set them.
   it("saves a weight limit and the countries a method serves", async () => {
@@ -79,6 +108,7 @@ describe("MethodsSection", () => {
     expect(saved.mock.calls[0][2]).toMatchObject({
       maxWeightGrams: null,
       countries: [],
+  taxClass: null,
     });
   });
 

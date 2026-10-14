@@ -19,7 +19,7 @@ const root: Category = { id: "root", name: "Furniture", slug: "furniture", paren
 const child: Category = { ...root, id: "child", name: "Chairs", slug: "chairs", parentId: "root", sortOrder: 2, attributeIds: ["material", "colour"] };
 const leaf: Category = { ...root, id: "leaf", name: "Dining chairs", slug: "dining", parentId: "child" };
 const material: AttributeDefinition = { id: "material", name: "Material", code: "material", type: "select", unit: null, isFilterable: true,
-  isVisibleOnProductPage: true, sortOrder: 0, options: [] };
+  isVisibleOnProductPage: true, isInFeeds: false, isSearchable: false, sortOrder: 0, options: [] };
 const colour = { ...material, id: "colour", code: "colour", name: "Colour" };
 const tree = [root, child, leaf];
 

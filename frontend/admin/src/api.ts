@@ -108,6 +108,7 @@ export type StoreProduct = {
   isVisible: boolean;
   sortOrder: number;
   categoryIds: string[];
+  taxClass: string | null;
   seoTitle: string | null;
   seoDescription: string | null;
   seoSocialImageUrl: string | null;
@@ -145,6 +146,8 @@ export type AttributeDefinition = {
   unit: string | null;
   isFilterable: boolean;
   isVisibleOnProductPage: boolean;
+  isInFeeds: boolean;
+  isSearchable: boolean;
   sortOrder: number;
   options: { id: string; code: string; name: string }[];
 };
@@ -163,7 +166,7 @@ export type AttributeInput = {
 export type AttributeUpdate = Pick<
   AttributeInput,
   "name" | "unit" | "isFilterable" | "isVisibleOnProductPage" | "sortOrder"
->;
+> & Pick<AttributeDefinition, "isInFeeds" | "isSearchable">;
 
 export type AttributeValues = Record<
   string,
@@ -194,6 +197,7 @@ export type StoreProductInput = {
   vatRate: number;
   isVisible: boolean;
   sortOrder: number;
+  taxClass: string | null;
 };
 
 export type AdminOrder = {
@@ -279,6 +283,7 @@ export type ShippingMethod = {
   // What this method will take. Null and empty mean no limit, which is every method until a store sets one.
   maxWeightGrams: number | null;
   countries: string[];
+  taxClass: string | null;
 };
 
 export type PickupPoint = {
@@ -607,9 +612,9 @@ export const api = {
     ),
 
   orders: (storeId: string, signal?: AbortSignal) =>
-    request<AdminOrder[]>(
+    request<AdminList<AdminOrder>>(
       "GET",
-      `/api/admin/stores/${storeId}/orders`,
+      `/api/admin/stores/${storeId}/orders?page=1&pageSize=50&sort=-placed`,
       undefined,
       signal,
     ),
@@ -726,6 +731,7 @@ export const api = {
       requiresPickupPoint: boolean;
       maxWeightGrams: number | null;
       countries: string[];
+      taxClass: string | null;
     },
   ) =>
     request<ShippingMethod>(

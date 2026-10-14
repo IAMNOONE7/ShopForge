@@ -269,6 +269,8 @@ export function EditAttributeForm({
         isFilterable: definition.type !== "text" && draft.isFilterable,
         isVisibleOnProductPage: draft.isVisibleOnProductPage,
         sortOrder: Number(draft.sortOrder),
+        isInFeeds: definition.isInFeeds,
+        isSearchable: definition.isSearchable,
       });
       setDraft({
         name: updated.name,

@@ -28,7 +28,7 @@ export function ListingForm({ item, products, disabled, pending, onSave, onCance
       setProductInvalid(true); document.getElementById("listing-productId")?.focus(); return;
     }
     if (next.length) { document.getElementById(`listing-${next[0].field}`)?.focus(); return; }
-    await onSave(listingInput(draft), item?.productId ?? productId);
+    await onSave(listingInput(draft, item?.taxClass ?? null), item?.productId ?? productId);
   }
   const selected = products?.find((candidate) => candidate.id === productId);
   return <form className="listing-form" noValidate onSubmit={submit}>

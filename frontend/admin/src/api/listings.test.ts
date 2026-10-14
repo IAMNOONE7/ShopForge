@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { api, type StoreProduct } from "../api";
 
 const item: StoreProduct = { id: "listing-a", productId: "physical-a", sku: "S", name: "Table", slug: "table", description: null,
-  price: 100, vatRate: 21, isVisible: true, sortOrder: 0, categoryIds: [], seoTitle: "Saved title", seoDescription: null, seoSocialImageUrl: null, seoNoIndex: true };
+  price: 100, vatRate: 21, isVisible: true, sortOrder: 0, categoryIds: [], taxClass: "standard", seoTitle: "Saved title", seoDescription: null, seoSocialImageUrl: null, seoNoIndex: true };
 const first = { items: [{ ...item, id: "earlier", isVisible: false }], page: 1, pageSize: 200, totalCount: 201, hasMore: true };
 const last = { items: [item], page: 2, pageSize: 200, totalCount: 201, hasMore: false };
 afterEach(() => vi.unstubAllGlobals());
@@ -35,7 +35,7 @@ it("distinguishes no active match from a later-page failure and stops aborted sc
 });
 it("writes independent listing, category and typed values payloads, omitting existing SEO", async () => {
   const fetch = responses(item, item, { values: { safe: false, length: 0 } });
-  const input = { name: "New name", slug: "table", price: 0, vatRate: 0, isVisible: false, sortOrder: -1, description: null };
+  const input = { name: "New name", slug: "table", price: 0, vatRate: 0, isVisible: false, sortOrder: -1, description: null, taxClass: item.taxClass };
   await api.updateStoreProduct("store-a", item.id, input); await api.assignCategories("store-a", item.id, []); await api.setProductAttributes("store-a", item.id, { safe: false, length: 0 });
   expect(fetch.mock.calls.map(([url, options]) => [url, options.method, JSON.parse(options.body)])).toEqual([
     ["/api/admin/stores/store-a/products/listing-a", "PUT", input],

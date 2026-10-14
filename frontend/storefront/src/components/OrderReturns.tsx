@@ -165,6 +165,7 @@ export function OrderReturns({
               ))}
             </ul>
           )}
+          {data.returns.some((sent) => sent.status === "Received") && <p className="hint">{t("returnCreditHint")}</p>}
           {success && <InlineMessage tone="success">{t("returnRequested")}</InlineMessage>}
           {refreshError !== null && (
             <RequestError error={refreshError} operation="read" onRetry={answer.reload} />

@@ -12,7 +12,7 @@ import { SessionContext } from "../session";
 import { AttributeDetailPage, AttributesIndexPage, NewAttributePage } from "./AttributePages";
 
 const store: AdminStore = { id: "store-a", name: "Store", currency: "CZK", culture: "cs-CZ", status: "draft", theme: { primaryColor: "#123456", secondaryColor: "#ffffff", borderRadius: 4 }, logoUrl: null, primaryHostName: null, returnWindowDays: 14, company: null };
-const definition: AttributeDefinition = { id: "attribute-a", code: "material", name: "Material", type: "select", unit: null, isFilterable: true, isVisibleOnProductPage: true, sortOrder: 2, options: [{ id: "option-a", code: "cotton", name: "Cotton" }] };
+const definition: AttributeDefinition = { id: "attribute-a", code: "material", name: "Material", type: "select", unit: null, isFilterable: true, isVisibleOnProductPage: true, isInFeeds: true, isSearchable: false, sortOrder: 2, options: [{ id: "option-a", code: "cotton", name: "Cotton" }] };
 
 function route(path: string, role = "Owner") {
   return render(<SessionContext.Provider value={{ user: { id: "user-a", email: "owner@example.test", role, tenantId: "tenant-a" }, logout: async () => undefined, logoutPending: false, logoutError: null }}>
@@ -75,9 +75,30 @@ describe("attribute definitions", () => {
     await user.clear(name);
     await user.type(name, "Fabric");
     await user.click(screen.getByRole("button", { name: "Save changes" }));
-    await waitFor(() => expect(update).toHaveBeenCalledWith("store-a", "attribute-a", { name: "Fabric", unit: null, isFilterable: true, isVisibleOnProductPage: true, sortOrder: 2 }));
+    await waitFor(() => expect(update).toHaveBeenCalledWith("store-a", "attribute-a", { name: "Fabric", unit: null, isFilterable: true, isVisibleOnProductPage: true, isInFeeds: true, isSearchable: false, sortOrder: 2 }));
     expect((name as HTMLInputElement).value).toBe("Fabric");
     expect(await screen.findByText(/could not be saved/i)).toBeTruthy();
+  });
+
+  it.each([
+    { isInFeeds: true, isSearchable: true },
+    { isInFeeds: false, isSearchable: false },
+  ])("preserves search and feed flags $isSearchable/$isInFeeds across a failed edit and retry", async (flags) => {
+    const user = userEvent.setup();
+    const text = { ...definition, ...flags, type: "text" as const, isFilterable: false, sortOrder: 0, options: [] };
+    const update = vi.spyOn(api, "updateAttribute").mockRejectedValueOnce(new Error("offline")).mockResolvedValue({ ...text, name: "Details" });
+    render(<EditAttributeForm storeId="store-a" definition={text} reload={() => undefined} />);
+    const name = screen.getByRole("textbox", { name: "Name" });
+    await user.clear(name); await user.type(name, "Details");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await screen.findByText(/could not be saved/i);
+    expect(name).toHaveProperty("value", "Details");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await screen.findByText("Attribute saved.");
+    expect(update.mock.calls.map(([, , input]) => input)).toEqual([
+      { name: "Details", unit: null, isFilterable: false, isVisibleOnProductPage: true, sortOrder: 0, ...flags },
+      { name: "Details", unit: null, isFilterable: false, isVisibleOnProductPage: true, sortOrder: 0, ...flags },
+    ]);
   });
 
   it("keeps options visible while rejecting duplicate codes and failed option writes", async () => {

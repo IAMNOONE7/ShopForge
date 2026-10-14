@@ -143,6 +143,7 @@ export function MethodsSection({ storeId, money, run }: Props) {
                 requiresPickupPoint: form.get("requiresPickupPoint") === "on",
                 maxWeightGrams: weightFrom(form.get("maxWeightGrams")),
                 countries: countriesFrom(form.get("countries")),
+                taxClass: method.taxClass,
               });
               reloadShipping();
             })

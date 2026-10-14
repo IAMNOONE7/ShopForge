@@ -12,13 +12,13 @@ import {
 } from "../utils/format";
 type Props = { storeId: string; canManage: boolean };
 export function OrdersSection({ storeId, canManage }: Props) {
-  const { t } = useTranslation(["orders", "errors"]);
+  const { t, i18n } = useTranslation(["orders", "errors"]);
   const [orders, reload] = useRequest(`orders:${storeId}`, (signal) =>
     api.orders(storeId, signal),
   );
   const [error, run] = useAction(reload);
   const [open, setOpen] = useState<string | null>(null);
-  const list: AdminOrder[] = orders.status === "ready" ? orders.data : [];
+  const list: AdminOrder[] = orders.status === "ready" ? orders.data.items : [];
   return (
     <section>
       <h2>{t("orders:title")}</h2>
@@ -34,8 +34,16 @@ export function OrdersSection({ storeId, canManage }: Props) {
           onRetry={reload}
         />
       )}
-      {orders.status === "ready" && list.length === 0 && (
-        <p className="hint">{t("orders:empty")}</p>
+      {orders.status === "ready" && (
+        <>
+          <p className="hint">{t("orders:firstPage", {
+            shown: formatNumber(list.length, i18n.resolvedLanguage),
+            total: formatNumber(orders.data.totalCount, i18n.resolvedLanguage),
+            limit: formatNumber(orders.data.pageSize, i18n.resolvedLanguage),
+          })}</p>
+          {orders.data.hasMore && <p className="hint">{t("orders:moreOrders")}</p>}
+          {list.length === 0 && <p className="hint">{t(orders.data.totalCount === 0 ? "orders:empty" : "orders:emptyPage")}</p>}
+        </>
       )}
       {list.length > 0 && (
         <table>

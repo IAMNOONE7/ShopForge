@@ -203,7 +203,7 @@ describe("account profile and history", () => {
       }),
     );
 
-    expect(await screen.findByText("Refunded")).toBeTruthy();
+    expect(await screen.findByText("Credited")).toBeTruthy();
     expect(screen.getByText("2 items")).toBeTruthy();
     expect(
       screen.getByRole("link", { name: "View order 2026-00023" }),

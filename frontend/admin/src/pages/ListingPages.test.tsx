@@ -15,13 +15,13 @@ import { ListingDetailPage, ListingsPage, NewListingPage } from "./ListingPages"
 const store: AdminStore = { id: "store-a", name: "Store A", currency: "CZK", culture: "cs-CZ", status: "draft",
   theme: { primaryColor: "#123456", secondaryColor: "#fff", borderRadius: 4 }, logoUrl: null, primaryHostName: null, returnWindowDays: 14, company: null };
 const item: StoreProduct = { id: "listing-a", productId: "physical-a", sku: "CHAIR", name: "Chair", slug: "chair", description: "Plain description",
-  price: 100, vatRate: 21, isVisible: true, sortOrder: 0, categoryIds: ["child"], seoTitle: "Saved SEO title", seoDescription: "Saved SEO text", seoSocialImageUrl: "https://example.test/social.png", seoNoIndex: true };
+  price: 100, vatRate: 21, isVisible: true, sortOrder: 0, categoryIds: ["child"], taxClass: "standard", seoTitle: "Saved SEO title", seoDescription: "Saved SEO text", seoSocialImageUrl: "https://example.test/social.png", seoNoIndex: true };
 const parent: Category = { id: "root", name: "Furniture", slug: "furniture", parentId: null, sortOrder: 0, attributeIds: [], seoTitle: null, seoDescription: null, pageText: null };
 const child: Category = { ...parent, id: "child", name: "Chairs", slug: "chairs", parentId: "root" };
 const product: Product = { id: item.productId, sku: "CHAIR", ean: null, weightGrams: null, brand: null, optionNames: ["Colour"], images: [],
   variants: [{ id: "variant-red", sku: "CHAIR-RED", ean: null, weightGrams: null, partNumber: null, condition: null, optionValues: ["Red"], position: 0 }] };
 function definition(code: string, type: AttributeType): AttributeDefinition {
-  return { id: code, code, name: code, type, unit: null, sortOrder: 0, isFilterable: true, isVisibleOnProductPage: true,
+  return { id: code, code, name: code, type, unit: null, sortOrder: 0, isFilterable: true, isVisibleOnProductPage: true, isInFeeds: false, isSearchable: false,
     options: ["red", "blue"].map((code, sortOrder) => ({ id: code, code, name: code.toUpperCase(), sortOrder })) };
 }
 const definitions = [definition("text", "text"), definition("integer", "integer"), definition("decimal", "decimal"), definition("boolean", "boolean"), definition("date", "date"), definition("select", "select"), definition("multi", "multiSelect")];
@@ -91,21 +91,22 @@ describe("focused store listings", () => {
     expect((screen.getByRole("textbox", { name: "Name" }) as HTMLInputElement).value).toBe("Žluté židle");
     expect((screen.getByRole("textbox", { name: "Price" }) as HTMLInputElement).value).toBe("12,50");
     await user.click(screen.getByRole("button", { name: "List product" })); expect(await screen.findByRole("heading", { name: "Žluté židle" })).toBeTruthy();
-    expect(create).toHaveBeenLastCalledWith("store-a", product.id, { name: "Žluté židle", slug: null, description: null, price: 12.5, vatRate: 21, isVisible: false, sortOrder: 0 });
+    expect(create).toHaveBeenLastCalledWith("store-a", product.id, { name: "Žluté židle", slug: null, description: null, price: 12.5, vatRate: 21, isVisible: false, sortOrder: 0, taxClass: null });
     expect(api.findStoreProduct).toHaveBeenLastCalledWith("store-a", "new-id", expect.any(AbortSignal));
   });
 
-  it("saves details independently, omits SEO and retains values/categories after a failed write", async () => {
-    const user = userEvent.setup(); reads();
+  it.each(["standard", null])("preserves tax class %s and unrelated settings after a failed detail write", async (taxClass) => {
+    const user = userEvent.setup(); reads(); vi.mocked(api.findStoreProduct).mockResolvedValue({ ...item, taxClass });
     const update = vi.spyOn(api, "updateStoreProduct").mockRejectedValueOnce(new HttpError("http", 400, { errors: { price: ["Invalid price"] } })).mockResolvedValue(item);
     const categories = vi.spyOn(api, "assignCategories"); const values = vi.spyOn(api, "setProductAttributes");
     route(); await user.click(await screen.findByRole("button", { name: "Edit listing" }));
     const fields = within(editor()); await user.clear(fields.getByRole("textbox", { name: "Price" })); await user.type(fields.getByRole("textbox", { name: "Price" }), "0");
     await user.click(fields.getByRole("checkbox", { name: "Visible in the storefront" })); await user.click(fields.getByRole("button", { name: "Save listing" }));
     const alert = await screen.findByRole("alert"); await user.click(within(alert).getByRole("button")); expect(document.activeElement).toBe(fields.getByRole("textbox", { name: "Price" }));
+    expect(update.mock.calls[0][2].taxClass).toBe(taxClass);
     expect((fields.getByRole("textbox", { name: "Price" }) as HTMLInputElement).value).toBe("0");
     await user.click(fields.getByRole("button", { name: "Save listing" })); await waitFor(() => expect(editor()).toBeNull());
-    expect(update).toHaveBeenLastCalledWith("store-a", item.id, { name: "Chair", slug: "chair", description: "Plain description", price: 0, vatRate: 21, isVisible: false, sortOrder: 0 });
+    expect(update).toHaveBeenLastCalledWith("store-a", item.id, { name: "Chair", slug: "chair", description: "Plain description", price: 0, vatRate: 21, isVisible: false, sortOrder: 0, taxClass });
     expect(categories).not.toHaveBeenCalled(); expect(values).not.toHaveBeenCalled();
   });
 

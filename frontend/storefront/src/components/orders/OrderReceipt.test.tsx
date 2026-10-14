@@ -25,6 +25,20 @@ beforeAll(initializeI18n);
 afterEach(async () => { cleanup(); await i18n.changeLanguage("en"); });
 
 describe("order receipt", () => {
+  it.each(["en", "cs"])("describes a credited order without claiming refund settlement in %s", async (language) => {
+    await i18n.changeLanguage(language);
+    const view = render(receipt());
+    const notice = language === "en"
+      ? "The order has been credited. This status does not confirm that the refund has been paid."
+      : "Objednávka byla dobropisována. Tento stav nepotvrzuje, že peníze byly vráceny.";
+    expect(screen.getByText(language === "en" ? "Credited" : "Dobropisováno")).toBeTruthy();
+    expect(screen.getByText(notice)).toBeTruthy();
+    view.rerender(receipt({ ...order, documents: [invoice, creditNote] }));
+    expect(screen.getByText(notice)).toBeTruthy();
+    expect(screen.queryByText("This order was refunded.")).toBeNull();
+    expect(screen.queryByText("Platba za tuto objednávku byla vrácena.")).toBeNull();
+  });
+
   it("keeps an issued invoice usable while the expected credit note is preparing, then removes that guidance", async () => {
     const user = userEvent.setup();
     const download = vi.fn().mockResolvedValue(undefined);

@@ -73,6 +73,7 @@ function mockReadyReads() {
       requiresPickupPoint: false,
       maxWeightGrams: null,
       countries: [],
+      taxClass: null,
     },
   ]);
 }
@@ -230,6 +231,7 @@ describe("store management", () => {
         requiresPickupPoint: false,
         maxWeightGrams: null,
         countries: [],
+        taxClass: null,
       },
     ]);
 

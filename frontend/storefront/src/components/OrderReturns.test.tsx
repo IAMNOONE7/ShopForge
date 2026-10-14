@@ -193,6 +193,19 @@ describe("account order returns", () => {
     expect(await screen.findByText("Vrácení zboží")).toBeTruthy();
     expect(screen.getByText(/14,50/)).toBeTruthy();
     expect(screen.getByText(/€/)).toBeTruthy();
+    expect(screen.getByText(/Přijato · dobropisováno/)).toBeTruthy();
+    expect(screen.getByText("Dobropisovaná částka nepotvrzuje, že peníze byly vráceny.")).toBeTruthy();
     await i18n.changeLanguage("en");
+  });
+
+  it.each([0, 14.5])("describes a received return as credited for %s without settlement facts", async (refundedAmount) => {
+    mocks.getReturns.mockResolvedValue({ ...returns, returnable: [], returns: [{
+      number: "RET-1", status: "Received", requestedAt: "2026-09-01T00:00:00Z", refundedAmount,
+      lines: [{ productName: "Hoodie (M / Blue)", quantity: 1 }],
+    }] });
+    renderReturns("Refunded");
+    expect(await screen.findByText(/Received · credited/)).toBeTruthy();
+    expect(screen.getByText("The credited amount does not confirm that the refund has been paid.")).toBeTruthy();
+    expect(screen.queryByText(/^Refunded/)).toBeNull();
   });
 });

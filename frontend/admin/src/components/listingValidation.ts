@@ -22,7 +22,7 @@ export function validateListing(draft: ListingDraft, editing: boolean): ListingI
   return issues;
 }
 
-export function listingInput(draft: ListingDraft): StoreProductInput {
+export function listingInput(draft: ListingDraft, taxClass: string | null): StoreProductInput {
   return { name: draft.name.trim(), slug: draft.slug.trim() || null, description: draft.description.trim() || null,
-    price: decimalNumber(draft.price), vatRate: decimalNumber(draft.vatRate), sortOrder: Number(draft.sortOrder), isVisible: draft.isVisible };
+    price: decimalNumber(draft.price), vatRate: decimalNumber(draft.vatRate), sortOrder: Number(draft.sortOrder), isVisible: draft.isVisible, taxClass };
 }
