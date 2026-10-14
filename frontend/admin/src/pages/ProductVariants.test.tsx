@@ -119,8 +119,11 @@ describe("product variant editor", () => {
     await user.type(screen.getByRole("textbox", { name: "SKU" }), "SHIRT-M");
     await user.click(screen.getByRole("button", { name: "Create variant" }));
     expect(add).not.toHaveBeenCalled();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("alert")));
     await user.type(screen.getByRole("textbox", { name: "Size" }), "M");
     await user.type(screen.getByRole("textbox", { name: "Colour" }), "Green");
+    expect((screen.getByRole("textbox", { name: "Size" }) as HTMLInputElement).value).toBe("M");
+    expect((screen.getByRole("textbox", { name: "Colour" }) as HTMLInputElement).value).toBe("Green");
     await user.click(screen.getByRole("button", { name: "Create variant" }));
     await user.click(screen.getByRole("button", { name: "Saving product…" }));
     expect(add).toHaveBeenCalledTimes(1);

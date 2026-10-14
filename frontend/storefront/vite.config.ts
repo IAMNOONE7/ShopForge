@@ -8,7 +8,7 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       // The API identifies the store by hostname, so the browser's Host header must reach it unchanged.
-      '/api': { target: 'http://localhost:5080', changeOrigin: false },
+      '/api': { target: process.env.SHOPFORGE_API_TARGET ?? 'http://localhost:5080', changeOrigin: false },
     },
   },
 })

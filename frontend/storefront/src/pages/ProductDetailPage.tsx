@@ -89,8 +89,8 @@ export function ProductDetailPage() {
                   </a>
                 ) : <Stars rating={rating} count={reviewCount} />}
               </header>
-              <ProductGallery key={id} images={images} productName={name} contentLanguage={store.culture} />
-              <ProductPurchase key={id} product={product.data} />
+              <ProductGallery key={`gallery:${id}`} images={images} productName={name} contentLanguage={store.culture} />
+              <ProductPurchase key={`purchase:${id}`} product={product.data} />
               {(description || attributes.length > 0) && (
                 <nav className="product-section-links" aria-label={t("catalog:productInformation")}>
                   {description && <a href="#product-description-heading">{t("catalog:description")}</a>}

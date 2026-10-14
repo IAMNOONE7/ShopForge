@@ -45,7 +45,7 @@ beforeEach(async () => {
   mocks.getWishlist.mockResolvedValue([]);
   mocks.writeReview.mockResolvedValue(undefined);
 });
-afterEach(async () => { cleanup(); await i18n.changeLanguage("en"); });
+afterEach(async () => { cleanup(); vi.restoreAllMocks(); await i18n.changeLanguage("en"); });
 
 function page(customer = guest, brand = store) {
   return render(<MemoryRouter initialEntries={["/p/old-chair"]}>
@@ -57,6 +57,14 @@ function page(customer = guest, brand = store) {
 }
 
 describe("product purchase page", () => {
+  it("renders gallery and buying controls without sibling key collisions", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    page();
+    await screen.findByRole("heading", { name: "Oak chair" });
+    expect(screen.getByRole("region", { name: "Buying options" })).toBeTruthy();
+    expect(errors.mock.calls.filter(([message]) => String(message).includes("same key"))).toEqual([]);
+  });
+
   it("uses the deepest supplied category trail and renders only real information as plain text", async () => {
     page();
     expect(await screen.findByRole("heading", { level: 1, name: "Oak chair" })).toBeTruthy();
