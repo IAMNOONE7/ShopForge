@@ -5,7 +5,9 @@ COPY Directory.Build.props Directory.Packages.props global.json ShopForge.slnx .
 COPY src ./src
 RUN dotnet publish src/ShopForge.Api/ShopForge.Api.csproj --configuration Release --output /app
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
+# The -extra variant carries ICU and time-zone data. The plain Alpine image has neither and runs invariant, where
+# asking for a shop's culture throws, and statement days are Prague days (D-197).
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine-extra AS runtime
 # Invoices are rendered in the container, and PDFsharp brings no fonts of its own.
 RUN apk add --no-cache font-dejavu
 WORKDIR /app
@@ -13,6 +15,7 @@ COPY --from=build /app ./
 
 # Container Apps sends traffic to this port and calls the readiness probe before putting a revision in rotation.
 ENV ASPNETCORE_HTTP_PORTS=8080
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
 EXPOSE 8080
 USER $APP_UID
 
