@@ -2,11 +2,13 @@ using ShopForge.Shared.Payments;
 
 namespace ShopForge.Infrastructure.Payments;
 
-internal sealed class StripePaymentProvider(ICheckoutSessions sessions) : IPaymentProvider
+internal sealed class StripePaymentProvider(ICheckoutSessions sessions, StripeOptions options) : IPaymentProvider
 {
     public const string ProviderKey = "stripe";
 
     public string Key => ProviderKey;
+
+    public bool IsOfferedToStores => options.OfferToStores;
 
     public async Task<PaymentInstructions> StartAsync(PaymentRequest request, CancellationToken cancellationToken)
     {

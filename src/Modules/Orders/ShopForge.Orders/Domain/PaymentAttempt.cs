@@ -96,4 +96,7 @@ internal enum PaymentAttemptStatus
     Authorized,
     Paid,
     Failed,
+
+    // The provider said something nobody wrote code for. Not finished, so the sweep keeps asking (D-196).
+    Unrecognised,
 }

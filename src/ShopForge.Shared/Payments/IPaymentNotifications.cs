@@ -11,7 +11,15 @@ public interface IPaymentNotifications
     Task<PaymentNotification?> ReadAsync(HttpRequest request, CancellationToken cancellationToken);
 }
 
-public sealed record PaymentNotification(string EventId, Guid StoreId, string OrderNumber, PaymentResult Result, string? PaymentReference = null);
+// `ProviderStatus` is the provider's own word for the state, kept for the person who has to read it when that word
+// is one ShopForge does not know.
+public sealed record PaymentNotification(
+    string EventId,
+    Guid StoreId,
+    string OrderNumber,
+    PaymentResult Result,
+    string? PaymentReference = null,
+    string? ProviderStatus = null);
 
 // What a provider says became of a payment. Only two of these are terminal: a payment either happened or it
 // never will. The others are a payment still in progress, and an order must not be cancelled for being in one of
@@ -29,4 +37,9 @@ public enum PaymentResult
     // The money is held but not taken. It is not a payment until it is captured, and ShopForge does not capture
     // (D-060, D-140), so an order stays where it is.
     Authorized,
+
+    // A status the provider does not document, or that ShopForge was not written for. Reading it as one of the
+    // others is a guess that confirms or cancels an order on no evidence, so it moves nothing and is counted
+    // where somebody will see it (D-196).
+    Unrecognised,
 }

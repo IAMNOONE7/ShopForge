@@ -89,6 +89,26 @@ public sealed class PaymentReconciliationTests : IDisposable
         Assert.Equal(1, await LettersAsync(world, "order.paid"));
     }
 
+    // A status nobody knew is not an answer an attempt can rest on: it is asked about again, and the payment that
+    // follows still lands (D-196).
+    [Fact]
+    public async Task An_attempt_left_on_a_status_nobody_knew_is_asked_about_again()
+    {
+        var world = await StartedAtComgateAsync();
+        await WaitedAsync(world, PaymentReconciliation.Unanswered + TimeSpan.FromMinutes(1));
+        _comgate.Says = Transaction(world, "REFUNDED");
+
+        Assert.Equal(1, await SweepAsync());
+        Assert.Equal(PaymentAttemptStatus.Unrecognised, (await AttemptAsync(world)).Status);
+        Assert.Equal(OrderStatus.AwaitingPayment, (await OrderAsync(world)).Status);
+
+        await WaitedAsync(world, PaymentReconciliation.Unanswered + TimeSpan.FromMinutes(1));
+        _comgate.Says = Transaction(world, "PAID");
+
+        Assert.Equal(1, await SweepAsync());
+        Assert.Equal(OrderStatus.Paid, (await OrderAsync(world)).Status);
+    }
+
     // An attempt still young is the shopper still on the gateway's page: asking about it is asking a question
     // nobody has had time to answer.
     [Fact]

@@ -1,3 +1,4 @@
+using System.Diagnostics.Metrics;
 using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Hosting;
@@ -5,9 +6,11 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using ShopForge.Infrastructure.Payments.Comgate;
 using ShopForge.IntegrationTests.Catalog;
 using ShopForge.IntegrationTests.Orders;
+using ShopForge.IntegrationTests.Shipping;
 using ShopForge.Orders.Domain;
 using ShopForge.Shared.Payments;
 using ShopForge.Shared.Security;
@@ -22,6 +25,8 @@ public sealed class ComgateNotificationTests : IDisposable
 
     private readonly ShopForgeApiFactory _factory;
     private readonly FakeComgate _comgate = new();
+    private readonly InMemorySecrets _secrets = new();
+    private readonly RecordingLogs _logs = new();
     private readonly WebApplicationFactory<Program> _withComgate;
 
     public ComgateNotificationTests(ShopForgeApiFactory factory)
@@ -30,7 +35,8 @@ public sealed class ComgateNotificationTests : IDisposable
         _withComgate = factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
         {
             services.AddSingleton<IComgatePayments>(_comgate);
-            services.AddSingleton<ISecretStore>(new InMemorySecrets());
+            services.AddSingleton<ISecretStore>(_secrets);
+            services.AddSingleton<ILoggerProvider>(_logs);
         }));
     }
 
@@ -207,6 +213,104 @@ public sealed class ComgateNotificationTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, pushed.StatusCode);
         Assert.Equal(OrderStatus.Paid, (await OrderAsync(second)).Status);
         Assert.Equal(OrderStatus.AwaitingPayment, (await OrderAsync(first)).Status);
+    }
+
+    // Comgate documents four statuses (D-195). A fifth used to read as pending, so the order waited for ever and
+    // nothing said why. It still waits, and now it is counted — once, however often Comgate repeats it (D-196).
+    [Fact]
+    public async Task A_status_comgate_does_not_document_moves_nothing_and_is_counted_once()
+    {
+        var world = await StartedAtComgateAsync();
+        _comgate.Says = Transaction(world, "REFUNDED");
+        var counted = new List<string?>();
+
+        using (Listen("shopforge.payments.unrecognised", counted))
+        {
+            using var first = await PushAsync(world);
+            using var again = await PushAsync(world);
+
+            Assert.Equal((HttpStatusCode.OK, HttpStatusCode.OK), (first.StatusCode, again.StatusCode));
+        }
+
+        Assert.Equal(OrderStatus.AwaitingPayment, (await OrderAsync(world)).Status);
+        Assert.Equal(PaymentAttemptStatus.Unrecognised, await AttemptStatusAsync(world));
+        Assert.Equal([ComgatePaymentProvider.ProviderKey], counted);
+
+        // Comgate's own word, where the person the count sends to look will read it.
+        Assert.Contains(_logs.Messages, message => message.Contains(world.Number, StringComparison.Ordinal) && message.Contains("REFUNDED", StringComparison.Ordinal));
+    }
+
+    // Not knowing what a status means is not knowing the payment is over: what Comgate says next still counts.
+    [Fact]
+    public async Task A_payment_comgate_confirms_after_a_status_nobody_knew_still_pays()
+    {
+        var world = await PaidAtComgateAsync("REFUNDED");
+        _comgate.Says = Transaction(world, "PAID");
+
+        using var paid = await PushAsync(world);
+
+        Assert.Equal(HttpStatusCode.OK, paid.StatusCode);
+        Assert.Equal(OrderStatus.Paid, (await OrderAsync(world)).Status);
+        Assert.Equal(PaymentAttemptStatus.Paid, await AttemptStatusAsync(world));
+    }
+
+    // Comgate pushes from a few addresses, so a busy minute arrives from one, and every push used to count against
+    // the ceiling of 600 a minute that address shared with everything else. A thousand from one address, under the
+    // production ceiling, are all taken (P6, D-196).
+    [Fact]
+    public async Task A_thousand_pushes_a_minute_from_one_address_are_all_taken()
+    {
+        var world = await StartedAtComgateAsync();
+        _comgate.Says = Transaction(world, "PAID");
+        using var production = _withComgate.WithWebHostBuilder(builder => builder.UseSetting("RateLimiting:Global:PermitLimit", "600"));
+        using var client = production.CreateClient();
+        var answers = new Dictionary<HttpStatusCode, int>();
+
+        for (var push = 0; push < 1000; push++)
+        {
+            using var answer = await client.PostAsJsonAsync(
+                $"/api/payments/{ComgatePaymentProvider.ProviderKey}",
+                new { merchant = world.MerchantId, transId = world.TransactionId },
+                CancellationToken);
+
+            answers[answer.StatusCode] = answers.GetValueOrDefault(answer.StatusCode) + 1;
+        }
+
+        Assert.Equal(new Dictionary<HttpStatusCode, int> { [HttpStatusCode.OK] = 1000 }, answers);
+        Assert.Equal(1, await LettersAsync(world, "order.paid"));
+    }
+
+    // Only this test's own host: a listener hears every meter in the process, and other tests run alongside.
+    private MeterListener Listen(string name, List<string?> providers)
+    {
+        var meters = _withComgate.Services.GetRequiredService<IMeterFactory>();
+        var listener = new MeterListener
+        {
+            InstrumentPublished = (instrument, meterListener) =>
+            {
+                if (instrument.Name == name && ReferenceEquals(instrument.Meter.Scope, meters))
+                {
+                    meterListener.EnableMeasurementEvents(instrument);
+                }
+            },
+        };
+
+        listener.SetMeasurementEventCallback<long>((_, _, tags, _) =>
+        {
+            foreach (var tag in tags)
+            {
+                if (tag.Key == "payment.provider")
+                {
+                    lock (providers)
+                    {
+                        providers.Add(tag.Value as string);
+                    }
+                }
+            }
+        });
+        listener.Start();
+
+        return listener;
     }
 
     private ComgateTransaction Transaction(ComgateOrder world, string status) =>

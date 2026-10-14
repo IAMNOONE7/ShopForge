@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using ShopForge.Orders.Domain;
 using ShopForge.Orders.Payments;
 using ShopForge.Orders.Shipping;
+using ShopForge.Shared.Connections;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Payments;
 using ShopForge.Shared.Security;
@@ -31,8 +32,7 @@ internal static class AdminMethodEndpoints
         storeAdmin.MapPut("/shipping-methods/{code}", UpdateShippingMethodAsync).RequireAuthorization(AdminPolicies.StoreManagement);
     }
 
-    private static Ok<List<string>> GetPaymentProviders(IEnumerable<IPaymentProvider> providers) =>
-        TypedResults.Ok(providers.Select(provider => provider.Key).Order(StringComparer.Ordinal).ToList());
+    private static Ok<List<string>> GetPaymentProviders(IEnumerable<IPaymentProvider> providers) => Offered(providers);
 
     private static async Task<Ok<List<AdminPaymentMethodResponse>>> GetPaymentMethodsAsync(DbContext dbContext, CancellationToken cancellationToken) =>
         TypedResults.Ok(await dbContext.Set<PaymentMethod>()
@@ -49,9 +49,10 @@ internal static class AdminMethodEndpoints
     {
         var code = Codes.Of(request.Name);
         var providerKey = request.ProviderKey ?? ManualPaymentProvider.ProviderKey;
+        var refusal = Refusal(providers, providerKey, "payment");
         var errors = ValidateName(request.Name)
             .Check(code is not null, "name", "The name must contain letters or digits.")
-            .Check(providers.Any(provider => provider.Key == providerKey), "providerKey", "That payment provider is not available.");
+            .Check(refusal is null, "providerKey", refusal ?? string.Empty);
 
         if (errors.Any)
         {
@@ -99,8 +100,22 @@ internal static class AdminMethodEndpoints
         return TypedResults.Ok(new AdminPaymentMethodResponse(method.Code, method.Name, method.ProviderKey, method.IsActive));
     }
 
-    private static Ok<List<string>> GetShippingProviders(IEnumerable<IShippingProvider> providers) =>
-        TypedResults.Ok(providers.Select(provider => provider.Key).Order(StringComparer.Ordinal).ToList());
+    private static Ok<List<string>> GetShippingProviders(IEnumerable<IShippingProvider> providers) => Offered(providers);
+
+    // What a store may choose from. A platform account is registered wherever the deployment has its keys, and is
+    // still not a store's to choose (D-196).
+    private static Ok<List<string>> Offered<TProvider>(IEnumerable<TProvider> providers)
+        where TProvider : IConnectedProvider =>
+        TypedResults.Ok(providers.Where(provider => provider.IsOfferedToStores).Select(provider => provider.Key).Order(StringComparer.Ordinal).ToList());
+
+    private static string? Refusal<TProvider>(IEnumerable<TProvider> providers, string providerKey, string kind)
+        where TProvider : IConnectedProvider =>
+        providers.FirstOrDefault(provider => provider.Key == providerKey) switch
+        {
+            null => $"That {kind} provider is not available.",
+            { IsOfferedToStores: false } => $"That {kind} provider is the platform's own account rather than a store's, so a store cannot use it.",
+            _ => null,
+        };
 
     private static async Task<Ok<List<AdminShippingMethodResponse>>> GetShippingMethodsAsync(DbContext dbContext, CancellationToken cancellationToken) =>
         TypedResults.Ok(await dbContext.Set<ShippingMethod>()
@@ -131,9 +146,10 @@ internal static class AdminMethodEndpoints
         var currency = (await storeSettings.GetAsync(cancellationToken)).Currency;
         var code = Codes.Of(request.Name);
         var providerKey = request.ProviderKey ?? StoreShippingProvider.ProviderKey;
+        var refusal = Refusal(providers, providerKey, "shipping");
         var errors = ValidateShipping(request, currency, await taxRates.ClassesAsync(cancellationToken))
             .Check(code is not null, "name", "The name must contain letters or digits.")
-            .Check(providers.Any(provider => provider.Key == providerKey), "providerKey", "That shipping provider is not available.");
+            .Check(refusal is null, "providerKey", refusal ?? string.Empty);
 
         if (errors.Any)
         {

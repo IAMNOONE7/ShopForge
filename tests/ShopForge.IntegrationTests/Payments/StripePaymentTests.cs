@@ -22,10 +22,12 @@ public sealed class StripePaymentTests : IDisposable
     public StripePaymentTests(ShopForgeApiFactory factory)
     {
         _factory = factory;
+        // A deployment whose stores are all its owner's, which is the only kind that may offer Stripe (D-196).
         _withStripe = factory.WithWebHostBuilder(builder =>
         {
             builder.UseSetting("Payments:Stripe:SecretKey", "sk_test_shopforge");
             builder.UseSetting("Payments:Stripe:WebhookSecret", WebhookSecret);
+            builder.UseSetting("Payments:Stripe:OfferToStores", "true");
             builder.ConfigureTestServices(services => services.AddSingleton<ICheckoutSessions>(_sessions));
         });
     }
@@ -189,7 +191,64 @@ public sealed class StripePaymentTests : IDisposable
         Assert.Contains("manual", providers!);
     }
 
+    // Stripe's keys are the platform's own account. A store that chose it would be taking its payments into the
+    // platform's balance, so the keys alone offer it to no store (P5, D-196).
+    [Fact]
+    public async Task With_the_platforms_keys_alone_no_store_can_choose_stripe()
+    {
+        var furniture = await FurnitureStore.CreateAsync(_factory);
+        using var keysAlone = KeysAlone();
+        using var admin = await TestUsers.LoginAsync(keysAlone, await TestUsers.CreateAsync(_factory.Services, furniture.Store.TenantId));
+
+        using var refused = await admin.PostAsJsonAsync(
+            $"/api/admin/stores/{furniture.Store.StoreId}/payment-methods",
+            new { Name = "Card", ProviderKey = "stripe", IsActive = true },
+            CancellationToken);
+        var providers = await admin.GetFromJsonAsync<List<string>>(
+            $"/api/admin/stores/{furniture.Store.StoreId}/payment-providers",
+            CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Contains("the platform's own account", await refused.Content.ReadAsStringAsync(CancellationToken), StringComparison.Ordinal);
+        Assert.DoesNotContain("stripe", providers!);
+    }
+
+    // A card method chosen while the deployment offered Stripe and still switched on after it stopped — or after its
+    // keys were taken away — is not shown to a shopper, and the store is told by name before it can publish.
+    [Fact]
+    public async Task A_stripe_method_left_on_where_stripe_is_not_offered_is_hidden_and_named()
+    {
+        var store = await StripeStoreAsync();
+        using var keysAlone = KeysAlone();
+
+        foreach (var host in new WebApplicationFactory<Program>[] { keysAlone, _factory })
+        {
+            using var shopper = new StorefrontApi(host, store.Store);
+            using var admin = await TestUsers.LoginAsync(host, await TestUsers.CreateAsync(_factory.Services, store.Store.TenantId));
+
+            var methods = await shopper.GetJsonAsync<CheckoutMethodsView>("/api/storefront/checkout/methods");
+            var readiness = await admin.GetFromJsonAsync<ReadinessView>(
+                $"/api/admin/stores/{store.Store.StoreId}/readiness", CancellationToken);
+            var payment = readiness!.Checks.Single(check => check.Check == "orders.payment-connected");
+
+            Assert.Empty(methods.PaymentMethods);
+            Assert.False(readiness.IsReady);
+            Assert.False(payment.IsReady);
+            Assert.Equal(
+                "\"Card\" (stripe) is switched on, but this platform does not offer that provider to its stores, so it would not be offered at the checkout. Switch it off.",
+                payment.Problem);
+        }
+    }
+
     public void Dispose() => _withStripe.Dispose();
+
+    // The keys, without the deployment saying its stores are all its owner's: a platform with merchants on it.
+    private WebApplicationFactory<Program> KeysAlone() => _factory.WithWebHostBuilder(builder =>
+    {
+        builder.UseSetting("Payments:Stripe:SecretKey", "sk_test_shopforge");
+        builder.UseSetting("Payments:Stripe:WebhookSecret", WebhookSecret);
+        builder.ConfigureTestServices(services => services.AddSingleton<ICheckoutSessions>(_sessions));
+    });
 
     private async Task<FurnitureStore> StripeStoreAsync()
     {
@@ -257,4 +316,8 @@ public sealed class StripePaymentTests : IDisposable
     private sealed record CheckoutMethodsView(List<MethodView> PaymentMethods, List<MethodView> ShippingMethods);
 
     private sealed record MethodView(string Code, string Name);
+
+    private sealed record ReadinessView(bool IsReady, List<ReadinessCheckView> Checks);
+
+    private sealed record ReadinessCheckView(string Check, bool IsReady, string? Problem);
 }

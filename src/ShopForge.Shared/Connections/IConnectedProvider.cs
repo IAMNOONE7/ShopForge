@@ -13,4 +13,9 @@ public interface IConnectedProvider
     // False for a provider that needs nothing from the store: methods the store settles or carries itself, and
     // the platform's own accounts, which belong to the deployment (D-059).
     bool NeedsConnection => false;
+
+    // False for an account that is the platform's rather than a store's. Money taken through it lands with whoever
+    // runs the deployment, so a store may only choose it on a deployment that says every store on it is its own
+    // (D-196).
+    bool IsOfferedToStores => true;
 }

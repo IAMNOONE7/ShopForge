@@ -52,7 +52,7 @@ internal static class EmailEndpoints
             logger.LogInformation("{Recipient} was suppressed: {Reason}.", delivery.Recipient, delivery.Reason);
 
             return Results.Ok();
-        });
+        }).RequireRateLimiting(RateLimits.Webhooks);
 
         return app;
     }

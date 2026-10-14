@@ -91,11 +91,12 @@ export Email__Mailgun__WebhookSigningKey=...            # without it, bounce eve
 
 Asking for a provider without its settings stops the application at startup rather than losing mail quietly.
 
-Card payments are off unless Stripe keys are configured:
+Stripe is the deployment's own account, not a store's: payments through it go to whoever holds the keys. The keys register it, and stores may choose it only where every store on the deployment is the key holder's:
 
 ```bash
 export Payments__Stripe__SecretKey=sk_test_...
 export Payments__Stripe__WebhookSecret=whsec_...
+export Payments__Stripe__OfferToStores=true   # only when every store here is yours
 ```
 
 The API exposes `/health/live` and `/health/ready`.

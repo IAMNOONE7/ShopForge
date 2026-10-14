@@ -12,6 +12,10 @@ public interface IShopForgeMetrics
     // it is the number an alert watches (D-193).
     void PaymentUnapplied(string provider, string reason);
 
+    // A provider answered with a status nobody wrote code for. The order is left where it was, so nothing else
+    // anywhere says that somebody has to look; this does, once per payment and status (D-196).
+    void PaymentStatusUnrecognised(string provider);
+
     void OrderCancelled(string reason);
 
     void OrderRefunded(string reason);

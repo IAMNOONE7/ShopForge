@@ -57,8 +57,9 @@ builder.Services.AddHttpLogging(options =>
     options.CombineLogs = true;
 });
 
-// Three named windows and a ceiling under all of them. The ceiling is the important one: an endpoint nobody
-// remembered to limit is still limited, which is the failure this stage exists to prevent (D-126).
+// Named windows, and a ceiling under every one of them but the providers' webhooks. The ceiling is the important
+// one: an endpoint nobody remembered to limit is still limited, which is the failure this stage exists to prevent
+// (D-126).
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -72,10 +73,20 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy(RateLimits.Crawlers, context =>
         Window(context, "crawlers", builder.Configuration.GetValue("RateLimiting:Crawlers:PermitLimit", 300)));
 
+    // Sized from what the providers document rather than from a shopper: three times the thousand a minute one
+    // address must be able to send, and every provider retries what this refuses (D-196).
+    options.AddPolicy(RateLimits.Webhooks, context =>
+        Window(context, "webhooks", builder.Configuration.GetValue("RateLimiting:Webhooks:PermitLimit", 3000)));
+
+    // A webhook's own window is wider than the ceiling, so counting it here as well would make the ceiling its
+    // limit again.
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
-        context.Request.Path.StartsWithSegments("/health")
-            ? RateLimitPartition.GetNoLimiter("health")
-            : Window(context, "all", builder.Configuration.GetValue("RateLimiting:Global:PermitLimit", 600)));
+        context.Request.Path.StartsWithSegments("/health") ? RateLimitPartition.GetNoLimiter("health")
+        : IsWebhook(context) ? RateLimitPartition.GetNoLimiter("webhooks")
+        : Window(context, "all", builder.Configuration.GetValue("RateLimiting:Global:PermitLimit", 600)));
+
+    static bool IsWebhook(HttpContext context) =>
+        context.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName == RateLimits.Webhooks;
 
     static RateLimitPartition<string> Window(HttpContext context, string bucket, int permitLimit) =>
         RateLimitPartition.GetFixedWindowLimiter(
@@ -170,7 +181,7 @@ storefront.MapCatalogStorefrontEndpoints();
 storefront.MapCustomersStorefrontEndpoints();
 storefront.MapOrdersStorefrontEndpoints();
 
-app.MapGroup("/api/payments").MapPaymentWebhookEndpoints();
+app.MapGroup("/api/payments").RequireRateLimiting(RateLimits.Webhooks).MapPaymentWebhookEndpoints();
 app.MapEmailWebhookEndpoints();
 
 // Administering ShopForge itself: outside tenancy, behind its own cookie (D-103).

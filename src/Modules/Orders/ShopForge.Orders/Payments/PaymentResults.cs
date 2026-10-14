@@ -82,6 +82,7 @@ internal sealed class PaymentResults(
                 PaymentResult.Paid => PaymentAttemptStatus.Paid,
                 PaymentResult.Failed => PaymentAttemptStatus.Failed,
                 PaymentResult.Authorized => PaymentAttemptStatus.Authorized,
+                PaymentResult.Unrecognised => PaymentAttemptStatus.Unrecognised,
                 _ => PaymentAttemptStatus.Pending,
             },
             clock.GetUtcNow());
@@ -102,6 +103,19 @@ internal sealed class PaymentResults(
         CancellationToken cancellationToken)
     {
         var result = notification.Result;
+
+        // Nobody knows what this status means, so nothing is done on the strength of it: the order waits, the sweep
+        // keeps asking, and the count is what tells a person to read what the provider said (D-196).
+        if (result == PaymentResult.Unrecognised)
+        {
+            logger.LogWarning(
+                "A {Provider} result for order {OrderNumber} has the status {ProviderStatus}, which ShopForge does not know. Nothing was changed.",
+                provider,
+                order.Number,
+                notification.ProviderStatus);
+
+            return () => metrics.PaymentStatusUnrecognised(provider);
+        }
 
         // A payment that has not finished is not a payment that failed. Only a result that says the money will
         // never arrive cancels the order and gives its stock back; everything else leaves the order where it is,

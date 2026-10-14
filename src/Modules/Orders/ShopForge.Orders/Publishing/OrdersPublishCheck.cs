@@ -44,6 +44,14 @@ internal sealed class OrdersPublishCheck(
             .Concat(shippingProviders.Where(provider => provider.NeedsConnection).Select(provider => provider.Key))
             .ToHashSet(StringComparer.Ordinal);
 
+        // A method whose provider this deployment does not offer a store — one it has no keys for, or the platform's
+        // own account (D-196) — is left out of the checkout as surely as one nobody connected.
+        var offered = paymentProviders
+            .Where(provider => provider.IsOfferedToStores)
+            .Select(provider => provider.Key)
+            .Concat(shippingProviders.Where(provider => provider.IsOfferedToStores).Select(provider => provider.Key))
+            .ToHashSet(StringComparer.Ordinal);
+
         return
         [
             payment.Count > 0
@@ -52,18 +60,19 @@ internal sealed class OrdersPublishCheck(
             shipping.Count > 0
                 ? StoreReadiness.Ready("orders.shipping-method")
                 : StoreReadiness.NotReady("orders.shipping-method", "The store has no active shipping method."),
-            await ConnectedAsync("orders.payment-connected", "payment", [.. payment.Select(method => (method.Name, method.ProviderKey))], needsConnection, cancellationToken),
-            await ConnectedAsync("orders.shipping-connected", "delivery", [.. shipping.Select(method => (method.Name, method.ProviderKey))], needsConnection, cancellationToken),
+            await ConnectedAsync("orders.payment-connected", [.. payment.Select(method => (method.Name, method.ProviderKey))], needsConnection, offered, cancellationToken),
+            await ConnectedAsync("orders.shipping-connected", [.. shipping.Select(method => (method.Name, method.ProviderKey))], needsConnection, offered, cancellationToken),
         ];
     }
 
     private async Task<StoreReadiness> ConnectedAsync(
         string check,
-        string kind,
         IReadOnlyList<(string Name, string ProviderKey)> methods,
         HashSet<string> needsConnection,
+        HashSet<string> offered,
         CancellationToken cancellationToken)
     {
+        var unoffered = methods.Where(method => !offered.Contains(method.ProviderKey)).Select(Named).ToList();
         var unusable = new List<string>();
 
         foreach (var method in methods.Where(method => needsConnection.Contains(method.ProviderKey)))
@@ -73,14 +82,24 @@ internal sealed class OrdersPublishCheck(
                 continue;
             }
 
-            unusable.Add($"\"{method.Name}\" ({method.ProviderKey})");
+            unusable.Add(Named(method));
         }
 
-        return unusable.Count == 0
-            ? StoreReadiness.Ready(check)
-            : StoreReadiness.NotReady(
-                check,
-                $"{string.Join(", ", unusable)} {(unusable.Count == 1 ? "is" : "are")} switched on but not connected to an account, so {(unusable.Count == 1 ? "it" : "they")} would not be offered at the checkout. Connect {(unusable.Count == 1 ? "it" : "them")} or switch {(unusable.Count == 1 ? "it" : "them")} off.");
+        var problems = new List<string>();
+
+        if (unusable.Count > 0)
+        {
+            problems.Add($"{string.Join(", ", unusable)} {(unusable.Count == 1 ? "is" : "are")} switched on but not connected to an account, so {(unusable.Count == 1 ? "it" : "they")} would not be offered at the checkout. Connect {(unusable.Count == 1 ? "it" : "them")} or switch {(unusable.Count == 1 ? "it" : "them")} off.");
+        }
+
+        if (unoffered.Count > 0)
+        {
+            problems.Add($"{string.Join(", ", unoffered)} {(unoffered.Count == 1 ? "is" : "are")} switched on, but this platform does not offer {(unoffered.Count == 1 ? "that provider" : "those providers")} to its stores, so {(unoffered.Count == 1 ? "it" : "they")} would not be offered at the checkout. Switch {(unoffered.Count == 1 ? "it" : "them")} off.");
+        }
+
+        return problems.Count == 0 ? StoreReadiness.Ready(check) : StoreReadiness.NotReady(check, string.Join(" ", problems));
+
+        static string Named((string Name, string ProviderKey) method) => $"\"{method.Name}\" ({method.ProviderKey})";
     }
 
     private async Task<bool> IsUsableAsync(string provider, CancellationToken cancellationToken) =>

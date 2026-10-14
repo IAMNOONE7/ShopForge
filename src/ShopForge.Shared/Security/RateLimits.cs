@@ -14,4 +14,9 @@ public static class RateLimits
     // A crawler reading a sitemap or a feed. It comes back often and in bursts, and it is not writing
     // anything, so sharing a shopper's window would throttle it into failure (D-126, D-167).
     public const string Crawlers = "crawlers";
+
+    // A provider telling us what happened: a gateway's push, a mail service's bounce. It comes from a few of the
+    // provider's addresses, in bursts, and every one of them retries what it is refused, so it has a window of
+    // its own instead of the ceiling every other caller shares (D-196).
+    public const string Webhooks = "webhooks";
 }

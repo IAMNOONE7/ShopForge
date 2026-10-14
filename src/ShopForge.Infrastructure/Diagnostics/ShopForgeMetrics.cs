@@ -15,6 +15,7 @@ internal sealed class ShopForgeMetrics : IShopForgeMetrics, IDisposable
     private readonly Counter<long> _ordersPlaced;
     private readonly Counter<long> _paymentsConfirmed;
     private readonly Counter<long> _paymentsUnapplied;
+    private readonly Counter<long> _paymentStatusesUnrecognised;
     private readonly Counter<long> _ordersCancelled;
     private readonly Counter<long> _ordersRefunded;
     private readonly Counter<long> _refundsFailed;
@@ -28,6 +29,8 @@ internal sealed class ShopForgeMetrics : IShopForgeMetrics, IDisposable
         _paymentsConfirmed = _meter.CreateCounter<long>("shopforge.payments.confirmed", description: "Payments confirmed for orders.");
         _paymentsUnapplied = _meter.CreateCounter<long>(
             "shopforge.payments.unapplied", description: "Payments taken that their order could not take, by reason.");
+        _paymentStatusesUnrecognised = _meter.CreateCounter<long>(
+            "shopforge.payments.unrecognised", description: "Payment results whose status the provider's adapter does not know.");
         _ordersCancelled = _meter.CreateCounter<long>("shopforge.orders.cancelled", description: "Orders cancelled, by reason.");
         _ordersRefunded = _meter.CreateCounter<long>("shopforge.orders.refunded", description: "Refunds paid back to shoppers, by reason.");
         _refundsFailed = _meter.CreateCounter<long>(
@@ -42,6 +45,9 @@ internal sealed class ShopForgeMetrics : IShopForgeMetrics, IDisposable
 
     public void PaymentUnapplied(string provider, string reason) => _paymentsUnapplied.Add(
         1, new KeyValuePair<string, object?>("payment.provider", provider), new KeyValuePair<string, object?>("reason", reason));
+
+    public void PaymentStatusUnrecognised(string provider) =>
+        _paymentStatusesUnrecognised.Add(1, new KeyValuePair<string, object?>("payment.provider", provider));
 
     public void OrderCancelled(string reason) => _ordersCancelled.Add(1, new KeyValuePair<string, object?>("reason", reason));
 

@@ -380,19 +380,20 @@ internal static class CheckoutEndpoints
             new PlacedOrderResponse(order.Number, order.AccessToken, instructions.Message, instructions.RedirectUrl));
     }
 
-    // A gateway a merchant signed up for is only on offer where that merchant has connected it: the platform's
-    // own providers need nothing, and a store that has not finished connecting one is not shown its methods
-    // rather than being shown a method that cannot take money (D-138).
+    // A gateway a merchant signed up for is only on offer where that merchant has connected it: a store that has
+    // not finished connecting one is not shown its methods rather than being shown a method that cannot take money
+    // (D-138).
     // The same question for a gateway and a carrier, asked once: which of these can this store actually use
-    // today. A provider that needs no connection is always usable; one that does is usable where the store has
-    // finished connecting an account to it (D-138, D-153).
+    // today. A platform account is not a store's to use unless the deployment says so (D-196); a provider that
+    // needs no connection is otherwise always usable; one that does is usable where the store has finished
+    // connecting an account to it (D-138, D-153).
     private static async Task<List<string>> UsableProvidersAsync<TProvider>(
         IEnumerable<TProvider> providers,
         IProviderConnections connections,
         CancellationToken cancellationToken)
         where TProvider : IConnectedProvider
     {
-        var all = providers.ToList();
+        var all = providers.Where(provider => provider.IsOfferedToStores).ToList();
 
         if (!all.Any(provider => provider.NeedsConnection))
         {

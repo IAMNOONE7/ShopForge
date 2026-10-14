@@ -55,7 +55,8 @@ internal sealed class ComgateTransactions(
             enquiry.StoreId,
             enquiry.OrderNumber,
             Result(transaction.Status),
-            enquiry.Reference);
+            enquiry.Reference,
+            transaction.Status);
     }
 
     // Everything the transaction must agree with before an order moves. The first disagreement is the one
@@ -67,12 +68,15 @@ internal sealed class ComgateTransactions(
         : transaction.Test != expectedTest ? "the other environment"
         : null;
 
+    // The four statuses Comgate documents (D-195). A fifth would be one this code was not written for, and it used
+    // to read as pending: an order waiting for ever and nothing saying so (D-196).
     private static PaymentResult Result(string status) => status.Trim().ToUpperInvariant() switch
     {
         "PAID" => PaymentResult.Paid,
         "CANCELLED" => PaymentResult.Failed,
         "AUTHORIZED" => PaymentResult.Authorized,
-        _ => PaymentResult.Pending,
+        "PENDING" => PaymentResult.Pending,
+        _ => PaymentResult.Unrecognised,
     };
 
     private async Task<(ComgateMerchant Merchant, bool IsTest)?> MerchantAsync(CancellationToken cancellationToken)

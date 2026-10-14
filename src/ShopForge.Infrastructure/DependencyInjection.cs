@@ -101,7 +101,9 @@ public static class DependencyInjection
 
         var stripe = configuration.GetSection(StripeOptions.Section).Get<StripeOptions>() ?? new StripeOptions();
 
-        // Without keys the provider is simply not offered, which is how development and CI run (D-059).
+        // Without keys the provider is simply not offered, which is how development and CI run (D-059). With them it
+        // is registered, so payments already started through it are still heard about and refunded, and a store may
+        // choose it only where the deployment says every store is its owner's (D-196).
         if (stripe.IsConfigured)
         {
             services.AddSingleton(stripe);
