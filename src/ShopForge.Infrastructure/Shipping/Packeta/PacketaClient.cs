@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
+using ShopForge.Infrastructure.Diagnostics;
 
 namespace ShopForge.Infrastructure.Shipping.Packeta;
 
@@ -35,9 +36,13 @@ internal sealed class PacketaHttpClient(HttpClient client) : IPacketaClient
             + $"&country={Uri.EscapeDataString(choice.Country)}"
             + $"&vendor={Uri.EscapeDataString(choice.Vendor)}";
 
+        // The path is the password, so the request says so, and its trace keeps only the host (D-199).
+        using var request = new HttpRequestMessage(HttpMethod.Get, path);
+        request.Options.Set(TelemetryRedaction.AddressIsACredential, true);
+
         // An answer of "no" is a refusal; no answer at all is left to throw, because an order must not be
         // placed against a point nobody has checked.
-        using var response = await client.GetAsync(path, cancellationToken);
+        using var response = await client.SendAsync(request, cancellationToken);
 
         response.EnsureSuccessStatusCode();
 

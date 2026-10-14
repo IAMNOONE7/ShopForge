@@ -1,9 +1,14 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Json;
+using System.Web;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using OpenTelemetry.Trace;
 using ShopForge.IntegrationTests.Catalog;
+using ShopForge.IntegrationTests.Shipping;
 using ShopForge.Shared.Feeds;
 
 namespace ShopForge.IntegrationTests.Feeds;
@@ -123,6 +128,32 @@ public sealed class ProductFeedTests : IDisposable
     }
 
     // A shop with a feed switched on but never produced has nothing to collect, which is not an error.
+    // A feed's address carries its token, because a shopping engine collects from a URL and nothing else. The token
+    // goes no further than the request: not into the request log, not into a trace an exporter sends on (D-199).
+    [Fact]
+    public async Task A_feeds_token_is_in_no_log_line_and_no_trace()
+    {
+        var spans = new ConcurrentQueue<string>();
+        var logs = new RecordingLogs();
+        using var watched = _withFeed.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        {
+            services.AddSingleton<ILoggerProvider>(logs);
+            services.ConfigureOpenTelemetryTracerProvider(tracing => tracing.AddProcessor(new FinishedSpans(spans)));
+        }));
+        var world = await FeedStoreAsync();
+        var run = await RunAsync(world);
+        var token = HttpUtility.ParseQueryString(new Uri(run.Url!).Query)["token"]!;
+        using var engine = new Orders.StorefrontApi(watched, world.Furniture.Store);
+
+        using var collected = await engine.GetAsync(PathOf(run.Url!));
+
+        Assert.Equal(HttpStatusCode.OK, collected.StatusCode);
+        Assert.Contains(spans, span => span.Contains("/feeds/stub.xml", StringComparison.Ordinal));
+        Assert.Contains(logs.Messages, message => message.Contains("/feeds/stub.xml", StringComparison.Ordinal));
+        Assert.DoesNotContain(spans, span => span.Contains(token, StringComparison.Ordinal));
+        Assert.DoesNotContain(logs.Messages, message => message.Contains(token, StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task A_feed_never_produced_has_nothing_to_collect()
     {

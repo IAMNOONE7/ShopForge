@@ -1,10 +1,16 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
+using System.Net.Sockets;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using OpenTelemetry;
+using OpenTelemetry.Trace;
 using ShopForge.Infrastructure.Shipping.Packeta;
 using ShopForge.IntegrationTests.Catalog;
 using ShopForge.IntegrationTests.Orders;
@@ -226,6 +232,35 @@ public sealed class PacketaConnectionTests : IDisposable
         Assert.Equal(HttpStatusCode.ServiceUnavailable, attempted.StatusCode);
         Assert.NotEmpty(logs.Messages);
         Assert.DoesNotContain(logs.Messages, message => message.Contains(ApiPassword, StringComparison.Ordinal));
+    }
+
+    // The same URL is a trace attribute too: the HTTP client's span records the address it called, and an exporter
+    // sends it on to Application Insights. Only a real socket makes that span, so this one calls a listener on this
+    // machine standing in for Packeta, and reads every span the host finished (D-199).
+    [Fact]
+    public async Task The_api_password_is_in_no_trace_either()
+    {
+        using var packeta = new PacketaOnThisMachine();
+        var spans = new ConcurrentQueue<string>();
+        using var withTheRealClient = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("Shipping:Packeta:BaseAddress", packeta.Address);
+            builder.ConfigureTestServices(services =>
+            {
+                services.AddSingleton<ISecretStore>(new InMemorySecrets());
+                services.ConfigureOpenTelemetryTracerProvider(tracing => tracing.AddProcessor(new FinishedSpans(spans)));
+            });
+        });
+
+        var world = await PacketaStoreAsync(connect: true, host: withTheRealClient);
+        using var attempted = await world.Shopper.PostAsync("/api/storefront/checkout", PacketaCheckout());
+
+        // The listener answers nothing useful, so the carrier counts as unreachable — but the call went out, and its
+        // span was finished and handed to the exporter's side of the pipeline.
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, attempted.StatusCode);
+        Assert.True(packeta.Asked > 0);
+        Assert.Contains(spans, span => span.Contains(packeta.Authority, StringComparison.Ordinal));
+        Assert.DoesNotContain(spans, span => span.Contains(ApiPassword, StringComparison.Ordinal));
     }
 
     // The same carrier, no map, nowhere to choose. Everything Packeta asks for about the recipient — a name,
@@ -457,6 +492,60 @@ internal sealed class RecordingPacketa : IPacketaClient
 }
 
 // Answers every call without a network, so the real Packeta client can be exercised for what it logs.
+// Every span the host finished, as the exporter would receive it: its name and every attribute.
+internal sealed class FinishedSpans(ConcurrentQueue<string> spans) : BaseProcessor<Activity>
+{
+    public override void OnEnd(Activity data) =>
+        spans.Enqueue($"{data.DisplayName} {string.Join(' ', data.TagObjects.Select(tag => $"{tag.Key}={tag.Value}"))}");
+}
+
+// Packeta on a port of this machine, answering every request with a 404, so that a real socket — and with it the HTTP
+// client's own span — is involved.
+internal sealed class PacketaOnThisMachine : IDisposable
+{
+    private readonly HttpListener _listener = new();
+    private int _asked;
+
+    public PacketaOnThisMachine()
+    {
+        var free = new TcpListener(IPAddress.Loopback, 0);
+        free.Start();
+        var port = ((IPEndPoint)free.LocalEndpoint).Port;
+        free.Stop();
+
+        Authority = $"localhost:{port}";
+        _listener.Prefixes.Add($"http://{Authority}/");
+        _listener.Start();
+        _ = AnswerAsync();
+    }
+
+    public string Authority { get; }
+
+    public string Address => $"http://{Authority}/api/";
+
+    public int Asked => Volatile.Read(ref _asked);
+
+    public void Dispose() => _listener.Close();
+
+    private async Task AnswerAsync()
+    {
+        while (_listener.IsListening)
+        {
+            try
+            {
+                var context = await _listener.GetContextAsync();
+                Interlocked.Increment(ref _asked);
+                context.Response.StatusCode = (int)HttpStatusCode.NotFound;
+                context.Response.Close();
+            }
+            catch (Exception exception) when (exception is HttpListenerException or ObjectDisposedException or InvalidOperationException)
+            {
+                return;
+            }
+        }
+    }
+}
+
 internal sealed class SilentHandler : HttpMessageHandler
 {
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
