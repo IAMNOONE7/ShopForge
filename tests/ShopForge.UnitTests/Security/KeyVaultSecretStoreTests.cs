@@ -94,6 +94,12 @@ public sealed class KeyVaultSecretStoreTests
 
         public int Reads { get; private set; }
 
+        // The overload the store's call binds to since 4.11, which added the content type; the older one is kept for
+        // whatever still calls it.
+        public override Task<Response<KeyVaultSecret>> GetSecretAsync(
+            string name, string? version = null, SecretContentType? outContentType = null, CancellationToken cancellationToken = default) =>
+            GetSecretAsync(name, version, cancellationToken);
+
         public override Task<Response<KeyVaultSecret>> GetSecretAsync(string name, string? version = null, CancellationToken cancellationToken = default)
         {
             Reads++;
