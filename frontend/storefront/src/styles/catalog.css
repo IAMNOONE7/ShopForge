@@ -11,6 +11,45 @@
   font-family: var(--font-display);
   font-size: clamp(1.75rem, 1rem + 2.5vw, 3rem);
   letter-spacing: -0.045em;
+  overflow-wrap: anywhere;
+}
+
+.catalog-search-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.catalog-search-context p {
+  margin: 0;
+}
+
+.catalog-search-context a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+}
+
+.catalog-query-notice {
+  margin-block: 0 var(--space-6);
+  color: var(--color-text-muted);
+}
+
+.catalog-search-recovery {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
+}
+
+.catalog-search-recovery a {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
 }
 
 .catalog-breadcrumbs {
@@ -459,7 +498,7 @@ dialog.filter-dialog {
 
   .catalog-toolbar {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(max(8rem, calc((100% - var(--space-3)) / 2)), 100%), 1fr));
     align-items: end;
     gap: var(--space-3);
   }
@@ -485,7 +524,7 @@ dialog.filter-dialog {
 
   .product-grid,
   .catalog-loading-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(max(7rem, calc((100% - var(--space-3)) / 2)), 100%), 1fr));
     gap: var(--space-8) var(--space-3);
   }
 

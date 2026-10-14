@@ -9,6 +9,7 @@ import { RequestError } from "./ui/RequestError";
 import { RouteEffects } from "./RouteEffects";
 import { RouteContent } from "./RouteContent";
 import { StoreBrand } from "./StoreBrand";
+import { StoreSearch } from "./StoreSearch";
 import { categoryTree } from "./categoryTree";
 import { categoryPath } from "../publicPages";
 import {
@@ -51,6 +52,7 @@ export function Layout() {
       <header className="store-header">
         <div className="store-header-inner container">
           <StoreBrand />
+          <StoreSearch />
           <NavLink to={accountTo} className="account-link">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
               <circle cx="12" cy="8" r="3.5" />
@@ -69,7 +71,7 @@ export function Layout() {
             )}
           </NavLink>
           <MobileNavigation
-            key={location.pathname}
+            key={location.key}
             state={categoryState}
             contentLanguage={store.culture}
           />

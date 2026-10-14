@@ -25,6 +25,7 @@ import { InlineMessage } from "../components/ui/InlineMessage";
 import { RequestError } from "../components/ui/RequestError";
 import { useRequest } from "../useRequest";
 import { useStore } from "../storeContext";
+import { searchTerm, searchMaximum, searchMinimum } from "../search";
 
 export function ProductListPage() {
   const { t } = useTranslation(["catalog", "errors", "navigation"]);
@@ -34,7 +35,9 @@ export function ProductListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const sortId = useId();
   const categorySlug = slug ?? searchParams.get("category") ?? undefined;
-  const scope = categorySlug ?? "";
+  const rawQuery = searchParams.get("q")?.trim() ?? "";
+  const query = searchTerm(rawQuery);
+  const scope = JSON.stringify([categorySlug ?? "", query]);
   const products = useRequest(
     `products:${scope}?${searchParams}`,
     (signal) => getProducts(slug, searchParams, signal),
@@ -52,7 +55,7 @@ export function ProductListPage() {
   const currentData = products.status === "ready" ? products.data : retainedData;
   const displayTitle = categorySlug
     ? (currentData?.path.at(-1)?.name ?? categories.find((category) => category.slug === categorySlug)?.name ?? t("navigation:products"))
-    : t("navigation:allProducts");
+    : query ? t("catalog:searchResults", { query }) : t("navigation:allProducts");
   const pageHeading = (
     <>
       {showDiscovery && (
@@ -65,7 +68,10 @@ export function ProductListPage() {
         subcategories={currentData?.children ?? []}
         pageText={currentData?.pageText ?? null}
         headingLevel={showDiscovery ? 2 : 1}
+        query={query}
       />
+      {rawQuery && rawQuery.length < searchMinimum && <p className="catalog-query-notice" role="status">{t("catalog:searchLength")}</p>}
+      {rawQuery.length > searchMaximum && <p className="catalog-query-notice" role="status">{t("catalog:searchTruncated")}</p>}
     </>
   );
 
@@ -96,7 +102,7 @@ export function ProductListPage() {
         ],
       ]);
     return [
-      ["", t("catalog:defaultOrder")],
+      [query ? "relevance" : "", t(query ? "catalog:relevance" : "catalog:defaultOrder")],
       ["price", t("catalog:priceLowHigh")],
       ["-price", t("catalog:priceHighLow")],
       ["name", t("catalog:nameAZ")],
@@ -218,7 +224,7 @@ export function ProductListPage() {
               <span>{t("catalog:sortBy")}</span>
               <select
                 id={sortId}
-                value={searchParams.get("sort") ?? ""}
+                value={searchParams.get("sort") || (query ? "relevance" : "")}
                 onChange={(event) =>
                   setSearchParams(
                     withParam(searchParams, "sort", event.target.value),
@@ -262,6 +268,7 @@ export function ProductListPage() {
               <CatalogEmptyState
                 category={Boolean(categorySlug)}
                 filtered={filtered}
+                query={query}
                 clearFilters={clearFilters}
               />
             ) : (
@@ -289,13 +296,32 @@ export function ProductListPage() {
 function CatalogEmptyState({
   category,
   filtered,
+  query,
   clearFilters,
 }: {
   category: boolean;
   filtered: boolean;
+  query: string;
   clearFilters: () => void;
 }) {
   const { t } = useTranslation("catalog");
+  if (query) {
+    return (
+      <EmptyState title={t("noSearchMatchesTitle")} headingLevel={2} action={
+        <div className="catalog-search-recovery">
+          {filtered ? <button type="button" onClick={clearFilters}>{t("clearFilters")}</button> :
+            <button type="button" onClick={() => {
+              const input = document.getElementById("store-search-query") as HTMLInputElement | null;
+              input?.focus();
+              input?.select();
+            }}>{t("changeSearch")}</button>}
+          <Link to="/">{t("browseAll")}</Link>
+        </div>
+      }>
+        <p>{t(filtered ? "noSearchFilterMatches" : "noSearchMatches", { query })}</p>
+      </EmptyState>
+    );
+  }
   if (filtered) {
     return (
       <EmptyState

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router";
 import type { Category } from "../api";
 import type { Store } from "../store";
+import { searchTerm } from "../search";
 
 export function RouteEffects({
   store,
@@ -18,15 +19,18 @@ export function RouteEffects({
     "checkout",
     "orders",
     "errors",
+    "catalog",
   ]);
   const location = useLocation();
-  const previousPath = useRef<string | null>(null);
+  const query = location.pathname === "/" || location.pathname.startsWith("/c/")
+    ? searchTerm(new URLSearchParams(location.search).get("q")) : "";
+  const previousRoute = useRef<{ pathname: string; query: string } | null>(null);
   const fallbackTitle = useMemo(() => {
     const segments = location.pathname
       .split("/")
       .filter(Boolean)
       .map(decodeURIComponent);
-    if (segments.length === 0) return t("navigation:allProducts");
+    if (segments.length === 0) return query ? t("catalog:searchResults", { query }) : t("navigation:allProducts");
     if (segments[0] === "c") {
       return (
         categories.find((category) => category.slug === segments[1])?.name ??
@@ -47,15 +51,15 @@ export function RouteEffects({
     if (segments[1] === "reset-password") return t("auth:chooseNewPassword");
     if (segments[1] === "verify") return t("auth:checkEmail");
     return t("account:title");
-  }, [categories, location.pathname, t]);
+  }, [categories, location.pathname, query, t]);
 
   useEffect(() => {
     const main = document.getElementById("main-content");
     if (!main) return;
     const shouldFocus =
-      previousPath.current !== null &&
-      previousPath.current !== location.pathname;
-    previousPath.current = location.pathname;
+      previousRoute.current !== null &&
+      (previousRoute.current.pathname !== location.pathname || previousRoute.current.query !== query);
+    previousRoute.current = { pathname: location.pathname, query };
     let focused = false;
 
     function update() {
@@ -80,7 +84,7 @@ export function RouteEffects({
       characterData: true,
     });
     return () => observer.disconnect();
-  }, [fallbackTitle, i18n.resolvedLanguage, location.pathname, store.name, t]);
+  }, [fallbackTitle, i18n.resolvedLanguage, location.pathname, query, store.name, t]);
 
   return null;
 }

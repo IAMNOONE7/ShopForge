@@ -104,7 +104,7 @@ export function getCategories(signal: AbortSignal) {
   return requestJson<Category[]>("/api/storefront/categories", { signal });
 }
 
-// `query` carries filters (f.<code>), sort and page exactly as they appear in the page URL.
+// `query` carries search (q), filters (f.<code>), sort and page from the page URL.
 export function getProducts(
   category: string | undefined,
   query: URLSearchParams,

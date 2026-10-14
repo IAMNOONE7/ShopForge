@@ -4,13 +4,14 @@ import type { Category } from "../../api";
 import { categoryPath } from "../../publicPages";
 import { useStore } from "../../storeContext";
 
-export function CatalogHeader({ title, category, path, subcategories, pageText, headingLevel }: {
+export function CatalogHeader({ title, category, path, subcategories, pageText, headingLevel, query = "" }: {
   title: string;
   category: boolean;
   path: Category[];
   subcategories: Category[];
   pageText: string | null;
   headingLevel: 1 | 2;
+  query?: string;
 }) {
   const { t } = useTranslation("catalog");
   const store = useStore();
@@ -34,6 +35,10 @@ export function CatalogHeader({ title, category, path, subcategories, pageText, 
       <Heading id="shop-products" className="catalog-heading" tabIndex={-1} lang={category ? store.culture : undefined}>
         {title}
       </Heading>
+      {query && <div className="catalog-search-context">
+        {category && <p>{t("searchResults", { query })}</p>}
+        <Link to="/">{t("clearSearch")}</Link>
+      </div>}
       {pageText && (
         <div className="catalog-description" lang={store.culture}>
           {pageText.split(/\n\s*\n/).filter((paragraph) => paragraph.trim()).map((paragraph, index) => (
