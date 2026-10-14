@@ -7,3 +7,6 @@
 # A made-up order access token in two storefront page tests.
 a9bfb56c5d202038d3f7187bc1107de4257b7392:frontend/storefront/src/pages/CartPage.test.tsx:generic-api-key:122
 a9bfb56c5d202038d3f7187bc1107de4257b7392:frontend/storefront/src/pages/OrderPage.test.tsx:generic-api-key:26
+
+# A made-up Comgate secret the telemetry test looks for in every log line, span, metric tag and audit entry.
+d9394ef1b3ca44fb6add7e767a26ffc703fd12f7:tests/ShopForge.IntegrationTests/Payments/PaymentTelemetryTests.cs:generic-api-key:28
