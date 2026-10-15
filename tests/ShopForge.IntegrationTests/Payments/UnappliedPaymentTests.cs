@@ -65,7 +65,8 @@ public sealed class UnappliedPaymentTests : IDisposable
     {
         var world = await OrderAtTheGatewayAsync();
         await ExpireAsync(world);
-        await _withGateway.Services.GetRequiredService<ExpiredOrders>().SweepAsync(CancellationToken);
+        await _withGateway.Services.GetRequiredService<ExpiredOrders>().SweepStoreAsync(
+            new ShopForge.Shared.Stores.StoreReference(world.Furniture.Store.StoreId, world.Furniture.Store.TenantId), CancellationToken);
 
         using var paid = await NotifyAsync(world, PaymentResult.Paid);
         var kept = (await KeptAsync(world)).Single();

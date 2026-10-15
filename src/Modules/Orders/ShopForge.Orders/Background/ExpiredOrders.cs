@@ -47,7 +47,10 @@ internal sealed class ExpiredOrders(IServiceProvider services, TimeProvider cloc
         return cancelled;
     }
 
-    private async Task<int> SweepStoreAsync(StoreReference store, CancellationToken cancellationToken)
+    // One store's part of the pass. A test sweeps its own store and nobody else's: the suite's hosts share one
+    // database but not their stand-ins for the gateways, and a sweep through another test's store would let its
+    // orders go with nobody asked (D-202).
+    internal async Task<int> SweepStoreAsync(StoreReference store, CancellationToken cancellationToken)
     {
         await using var scope = services.CreateAsyncScope();
         scope.ServiceProvider.GetRequiredService<StoreContext>().Set(store.StoreId, store.TenantId);
@@ -88,8 +91,9 @@ internal sealed class ExpiredOrders(IServiceProvider services, TimeProvider cloc
 
         foreach (var order in expired.Where(order => !unasked.Contains(order.Number)))
         {
-            // Every instance sweeps, so the order is claimed before anything follows from it; the run that does not
-            // get it leaves the stock and the letter to the run that did.
+            // Two sweeps can still meet — one that outlasts its minute meets the next — so the order is claimed
+            // before anything follows from it; the run that does not get it leaves the stock and the letter to the
+            // run that did.
             var claimed = await dbContext.Set<Order>()
                 .Where(candidate => candidate.Id == order.Id && candidate.Status == OrderStatus.AwaitingPayment)
                 .ExecuteUpdateAsync(setters => setters.SetProperty(candidate => candidate.Status, OrderStatus.Cancelled), cancellationToken);

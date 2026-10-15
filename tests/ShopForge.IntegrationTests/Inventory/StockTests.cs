@@ -7,6 +7,7 @@ using ShopForge.IntegrationTests.Orders;
 using ShopForge.Orders.Background;
 using ShopForge.Orders.Domain;
 using ShopForge.Shared.Inventory;
+using ShopForge.Shared.Stores;
 
 namespace ShopForge.IntegrationTests.Inventory;
 
@@ -214,17 +215,18 @@ public sealed class StockTests(ShopForgeApiFactory factory)
         var order = await PlaceOrderAsync(shopper);
 
         await ExpireAsync(furniture, order.Number);
-        var cancelled = await factory.Services.GetRequiredService<ExpiredOrders>().SweepAsync(CancellationToken);
+        var cancelled = await factory.Services.GetRequiredService<ExpiredOrders>().SweepStoreAsync(StoreOf(furniture), CancellationToken);
         var stock = await StockAsync(furniture, variantId);
         var confirmation = await shopper.GetJsonAsync<OrderView>($"/api/storefront/orders/{order.Number}?token={order.Token}");
 
-        Assert.True(cancelled >= 1);
+        Assert.Equal(1, cancelled);
         Assert.Equal("Cancelled", confirmation.Status);
         Assert.Equal((6, 0, 6), (stock.OnHand, stock.Reserved, stock.Available));
     }
 
-    // Every instance runs the sweep, so two of them regularly meet over the same expired orders. Between them they
-    // must cancel each order once: one release of its stock, one letter to the customer.
+    // One replica sweeps at a time (D-202), but a sweep that outlasts its minute meets the next one over the same
+    // expired orders. Between them they must cancel each order once: one release of its stock, one letter to the
+    // customer, and counts that add up to the orders there were.
     [Fact]
     public async Task Two_sweeps_at_once_cancel_each_expired_order_once()
     {
@@ -247,17 +249,16 @@ public sealed class StockTests(ShopForgeApiFactory factory)
 
         var sweeps = factory.Services.GetRequiredService<ExpiredOrders>();
 
-        // The sweep walks every store, so its own count includes orders other tests left behind; what this test
-        // asserts is what happened to its own.
-        await Task.WhenAll(
-            Task.Run(() => sweeps.SweepAsync(CancellationToken), CancellationToken),
-            Task.Run(() => sweeps.SweepAsync(CancellationToken), CancellationToken));
+        var counts = await Task.WhenAll(
+            Task.Run(() => sweeps.SweepStoreAsync(StoreOf(furniture), CancellationToken), CancellationToken),
+            Task.Run(() => sweeps.SweepStoreAsync(StoreOf(furniture), CancellationToken), CancellationToken));
         var stock = await StockAsync(furniture, variantId);
         var letters = await CancellationsAsync(furniture, numbers);
         var cancelled = await factory.QueryAsync(furniture.Store, async dbContext => await dbContext.Set<Order>()
             .CountAsync(order => numbers.Contains(order.Number) && order.Status == OrderStatus.Cancelled, CancellationToken));
 
         Assert.Equal(numbers.Count, cancelled);
+        Assert.Equal(numbers.Count, counts.Sum());
         Assert.Equal((40, 0, 40), (stock.OnHand, stock.Reserved, stock.Available));
         Assert.Equal(numbers.Count, letters);
     }
@@ -356,4 +357,6 @@ public sealed class StockTests(ShopForgeApiFactory factory)
     private sealed record OrderStatusView(string Number, string Status);
 
     private sealed record ProblemView(string Title, string Detail);
+
+    private static StoreReference StoreOf(FurnitureStore furniture) => new(furniture.Store.StoreId, furniture.Store.TenantId);
 }

@@ -112,7 +112,7 @@ public sealed class PaymentSimulationTests : IDisposable
         Answer(world, "PAID");
         await RunOutAsync(world, TimeSpan.FromMinutes(1));
 
-        await ExpireAsync();
+        await ExpireAsync(world);
 
         Assert.Equal(Paid(world, events: 1), await EndStateAsync(world));
     }
@@ -125,7 +125,7 @@ public sealed class PaymentSimulationTests : IDisposable
         var world = await OrderedAsync();
         Answer(world, "PENDING");
         await RunOutAsync(world, TimeSpan.FromMinutes(1));
-        await ExpireAsync();
+        await ExpireAsync(world);
         Answer(world, "PAID");
 
         await PushAsync(world);
@@ -162,9 +162,9 @@ public sealed class PaymentSimulationTests : IDisposable
         await RunOutAsync(world, TimeSpan.FromMinutes(1));
         _comgate.LookupsTimingOut = 1;
 
-        await ExpireAsync();
+        await ExpireAsync(world);
         var kept = await EndStateAsync(world);
-        await ExpireAsync();
+        await ExpireAsync(world);
 
         Assert.Equal(Waiting(world), kept);
         Assert.Equal(Paid(world, events: 1), await EndStateAsync(world));
@@ -193,7 +193,7 @@ public sealed class PaymentSimulationTests : IDisposable
         await RunOutAsync(world, ExpiredOrders.AskingGrace + TimeSpan.FromMinutes(1));
         _comgate.LookupsTimingOut = 1;
 
-        await ExpireAsync();
+        await ExpireAsync(world);
         await PushAsync(world);
 
         Assert.Equal(
@@ -267,7 +267,9 @@ public sealed class PaymentSimulationTests : IDisposable
         await scope.ServiceProvider.GetServices<IStoreCatchUp>().OfType<PaymentReconciliation>().Single().RunAsync(CancellationToken);
     }
 
-    private Task<int> ExpireAsync() => _withComgate.Services.GetRequiredService<ExpiredOrders>().SweepAsync(CancellationToken);
+    private Task<int> ExpireAsync(ComgateOrder world) =>
+        _withComgate.Services.GetRequiredService<ExpiredOrders>().SweepStoreAsync(
+            new ShopForge.Shared.Stores.StoreReference(world.Store.Store.StoreId, world.Store.Store.TenantId), CancellationToken);
 
     // Back-dating is how a test says "this has been waiting", without a clock the whole host would have to share.
     private async Task QuietAsync(ComgateOrder world, TimeSpan howLong) =>
