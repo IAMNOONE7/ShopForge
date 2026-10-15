@@ -3,9 +3,9 @@ import { findStoreProduct, getStoreProducts, hasVisibleStoreProduct } from "./ap
 import { getStoreReadiness } from "./api/readiness";
 import { getStoreDomains, addStoreDomain, verifyStoreDomain, makeStoreDomainPrimary, removeStoreDomain } from "./api/domains";
 import { getOrders } from "./api/orders";
-import { changeOrder, getOrderDetails } from "./api/orderDetails";
+import { changeOrder, getOrderDetails, refundOrder } from "./api/orderDetails";
 import { changeUnappliedPayment, getUnappliedPayments } from "./api/unappliedPayments";
-import { decideReturn, getReturns } from "./api/returns";
+import { changeReturnMoney, decideReturn, getReturns } from "./api/returns";
 
 export type SignInResponse = {
   twoFactorRequired: boolean;
@@ -630,6 +630,7 @@ export const api = {
 
   returns: getReturns,
   decideReturn,
+  changeReturnMoney,
 
   reviews: (storeId: string, status?: string, signal?: AbortSignal) =>
     request<Review[]>(
@@ -671,8 +672,7 @@ export const api = {
     changeOrder(storeId, number, "cancel"),
   createShipment: (storeId: string, number: string, trackingNumber: string) =>
     changeOrder(storeId, number, "shipment", { trackingNumber }),
-  refundOrder: (storeId: string, number: string) =>
-    changeOrder(storeId, number, "refund"),
+  refundOrder,
   downloadDocument: async (
     storeId: string,
     orderNumber: string,

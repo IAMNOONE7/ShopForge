@@ -29,7 +29,7 @@ export function OrderActions({ order, disabled, pending, trackingError, onChange
     document.addEventListener("keydown", escape); return () => document.removeEventListener("keydown", escape);
   }, [confirmation, pending]); // eslint-disable-line react-hooks/exhaustive-deps
   const locked = disabled || confirmation !== null;
-  const hasActions = (["payment", "cancel", "shipment", "refund"] as const).some((action) => canChangeOrder(order, action));
+  const hasActions = (["payment", "cancel", "shipment"] as const).some((action) => canChangeOrder(order, action));
   const stale = confirmation !== null && (confirmation.order !== order || !canChangeOrder(order, confirmation.kind));
   function close() {
     setConfirmation(null);
@@ -55,7 +55,6 @@ export function OrderActions({ order, disabled, pending, trackingError, onChange
     <div className="cluster">
       {canChangeOrder(order, "payment") && <Button type="button" disabled={locked} onClick={(event) => open("payment", event.currentTarget)}>{t("orders:markPaid")}</Button>}
       {canChangeOrder(order, "cancel") && <Button type="button" variant="secondary" disabled={locked} onClick={(event) => open("cancel", event.currentTarget)}>{t("cancelOrder")}</Button>}
-      {canChangeOrder(order, "refund") && <Button type="button" variant="secondary" disabled={locked} onClick={(event) => open("refund", event.currentTarget)}>{t("orders:refund")}</Button>}
     </div>
     {order.status === "AwaitingPayment" && hasOpenGatewayPayment(order) && <p className="hint">{t("orders:gatewayManaged")} <a href="#order-payment-attempts">{t("reviewAttempts")}</a></p>}
     {canChangeOrder(order, "shipment") && <form className="order-shipment-form" noValidate onSubmit={ship}>
@@ -68,7 +67,7 @@ export function OrderActions({ order, disabled, pending, trackingError, onChange
       <p>{t(`confirmHint.${confirmation.kind}`)}</p>
       {confirmation.kind === "shipment" && <p>{t("shipmentConfirmation", { carrier: order.carrier ?? t("notRecorded"), tracking: confirmation.tracking || t("notRecorded") })}</p>}
       {stale && <p role="status">{t("confirmationStale")}</p>}
-      <div className="cluster"><Button ref={confirmButton} type="button" variant={confirmation.kind === "cancel" || confirmation.kind === "refund" ? "danger" : "primary"}
+      <div className="cluster"><Button ref={confirmButton} type="button" variant={confirmation.kind === "cancel" ? "danger" : "primary"}
         busy={pending} busyLabel={t("orders:saving")} disabled={disabled || stale} onClick={() => void confirm()}>{t(`confirmAction.${confirmation.kind}`)}</Button>
         <Button type="button" variant="secondary" disabled={pending} onClick={close}>{t("keepOrder")}</Button></div>
     </div>}

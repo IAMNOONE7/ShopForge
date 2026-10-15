@@ -131,6 +131,6 @@ export function StoreOrderPage() {
   const query = orderListParameters(orderListQuery(parameters));
   return <div className="orders-page">
     <Link className="physical-back-link" to={`/stores/${store.id}/orders${query.size ? `?${query}` : ""}`}>{t("backToOrders")}</Link>
-    <OrderDetailsSection key={`${store.id}:${number}`} storeId={store.id} number={number} canManage={canManageStore(user.role)} />
+    <OrderDetailsSection key={`${store.id}:${number}`} storeId={store.id} userId={user.id} number={number} canManage={canManageStore(user.role)} />
   </div>;
 }

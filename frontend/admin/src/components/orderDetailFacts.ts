@@ -1,15 +1,14 @@
 import type { AdminOrderDetail } from "../api";
 import { isHttpError } from "../api/http";
 
-export type OrderAction = "payment" | "cancel" | "shipment" | "refund";
+export type OrderAction = "payment" | "cancel" | "shipment";
 export function hasOpenGatewayPayment(order: AdminOrderDetail) {
   return !Array.isArray(order.paymentAttempts) || order.paymentAttempts.some((attempt) => attempt.reference !== null && !["Paid", "Failed"].includes(attempt.status));
 }
 export function canChangeOrder(order: AdminOrderDetail, action: OrderAction) {
   if (action === "payment") return order.status === "AwaitingPayment" && !hasOpenGatewayPayment(order);
   if (action === "cancel") return order.status === "AwaitingPayment";
-  if (action === "shipment") return order.status === "Paid" && order.shipment === null;
-  return ["Paid", "Shipped"].includes(order.status);
+  return order.status === "Paid" && order.shipment === null;
 }
 export function safeTrackingUrl(value: string | null) {
   if (!value) return null;

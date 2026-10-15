@@ -1232,6 +1232,76 @@ const resources = {
       unknown: "Neznámý",
     },
   },
+  refunds: {
+      "orderTitle": "Vrácení zbývající části objednávky",
+      "returnTitle": "Převzetí a vrácení peněz",
+      "intro": "Převzetí, dobropis a platba jsou samostatné záznamy. Před každou akcí posuďte aktuální stav.",
+      "actions": {
+          "order-refund": "Vrátit zbývající část objednávky",
+          "receive": "Zaznamenat převzetí zboží",
+          "retry": "Opakovat odmítnuté vrácení peněz",
+          "close": "Zaznamenat ruční vyřešení platby"
+      },
+      "confirmTitle": {
+          "order-refund": "Vrátit zbývající zboží z objednávky {{number}}?",
+          "receive": "Převzít {{number}}?",
+          "retry": "Opakovat vrácení peněz za {{number}}?",
+          "close": "Ručně uzavřít vrácení peněz za {{number}}?"
+      },
+      "confirmHint": {
+          "order-refund": "Tím se vytvoří a převezme vrácení zbývajícího způsobilého zboží, obnoví jeho zásoba, zaúčtuje dobropis a případně požádá původního poskytovatele o platbu. Vrácení peněz může zůstat nevyřešené nebo na obchodu.",
+          "receive": "Potvrďte, že toto zboží dorazilo. Zaznamenání převzetí obnoví zásobu, zaúčtuje dobropis a případně požádá poskytovatele o vrácení peněz. Odmítnuté nebo nepotvrzené vrácení peněz převzetí neruší.",
+          "retry": "Poskytovatel toto vrácení peněz odmítl. Než je výslovně odešlete znovu, ověřte a napravte uvedenou příčinu. Zboží se znovu nepřebírá ani nevystavuje další dobropis.",
+          "close": "Použijte až po ověření, jak byly zákazníkovi peníze vráceny. Tím se zaznamená poznámka a ruční vyřešení; peníze se neodesílají a nejde o potvrzení poskytovatele."
+      },
+      "confirmAction": {
+          "order-refund": "Potvrdit vrácení objednávky",
+          "receive": "Potvrdit převzetí",
+          "retry": "Potvrdit opakování vrácení peněz",
+          "close": "Potvrdit ruční vyřešení"
+      },
+      "verify": {
+          "order-refund": "Zkontroloval/a jsem zbývající vratné zboží a potvrzuji, že se může vrátit do zásoby.",
+          "receive": "Převzal/a a zkontroloval/a jsem všechno uvedené zboží.",
+          "close": "Ověřil/a jsem výsledek u poskytovatele a zkontroloval/a, že byly peníze zákazníkovi vráceny."
+      },
+      "remainingHint": "Dobropis se počítá z původní objednávky, předchozích vrácení, slev a dopravy. Akce se týká pouze zboží, které lze ještě vrátit. Před potvrzením posuďte existující vrácení.",
+      "note": "Jak byly peníze vráceny?",
+      "noteHint": "Povinné, 1–500 znaků po odstranění krajních mezer. Zaznamenejte, co jste ověřili a jak byl zákazník vyplacen.",
+      "noteInvalid": "Zadejte poznámku o 1–500 znacích po odstranění krajních mezer.",
+      "savedNote": "Obnovení odešle přesnou uloženou poznámku beze změny.",
+      "verificationRequired": "Před pokračováním potvrďte, že jste vše ověřili.",
+      "reviewRequired": "Před potvrzením obnovte a posuďte aktuální záznam.",
+      "reviewCurrent": "Posoudit aktuální záznam",
+      "cancel": "Zrušit finanční akci",
+      "noActions": "V aktuálním stavu není dostupné převzetí, opakování ani ruční vyřešení.",
+      "byStore": "Obchod musí peníze vrátit vlastním platebním způsobem. Zde u tohoto záznamu není výsledek poskytovatele ani podporovaná akce ručního uzavření.",
+      "acknowledged": {
+          "order-refund": "Vrácení zbývajícího zboží a dobropis byly zaznamenány. Níže posuďte stav každého vrácení peněz.",
+          "receive": "Převzetí a dobropis byly zaznamenány. Výsledek platby je uveden samostatně níže.",
+          "retry": "Opakování vrácení peněz bylo potvrzeno. Níže posuďte vrácený stav platby.",
+          "close": "Ruční vyřešení bylo zaznamenáno. Tato akce neodeslala peníze ani neposkytla potvrzení brány."
+      },
+      "storageBlocked": "V této kartě prohlížeče nešlo bezpečně uložit nebo přečíst finanční požadavek. Před pokračováním obnovte úložiště relace a načtěte stránku znovu. Finanční akce zůstávají nedostupné.",
+      "recoveryTitle": "Posouzení nedokončeného finančního požadavku",
+      "recoveryHint": "Tato karta uložila požadavek bez potvrzené odpovědi. Další akce čekají na aktuální načtení. Samotné načtení přehledu požadavek nikdy neodesílá.",
+      "recoveryLoading": "Ověřování původní objednávky a vrácení",
+      "sameKey": "Aktuální záznam tuto akci stále dovoluje. Obnovení odešle původní požadavek beze změny. Pokud již uspěl, použije se jeho zaznamenaná odpověď. Je-li výsledek nejistý, před pokračováním jej ověřte u poskytovatele.",
+      "reviewSame": "Posoudit stejný finanční požadavek",
+      "noReplay": "Tuto operaci z aktuálního záznamu znovu neodesílejte. Převzetí již může být zaúčtováno, vrácení peněz nevyřešené nebo uzavřené, případně chybí úplný detail. Před pokračováním posuďte vrácené údaje.",
+      "finishReview": "Dokončit posouzení a obnovit",
+      "problems": {
+          "cannotReceive": "Toto vrácení nebo objednávka již převzetí nedovoluje. Posuďte aktuální stav; zboží znovu nepřebírejte.",
+          "cannotRetry": "Opakovat lze pouze vrácení peněz evidované jako odmítnuté. Ověřte aktuální výsledek u poskytovatele.",
+          "cannotClose": "Zde lze ručně uzavřít pouze odmítnuté nebo nepotvrzené vrácení peněz.",
+          "nothingLeft": "Pro tuto akci nezbývá v objednávce žádné způsobilé zboží. Posuďte existující vrácení.",
+          "cannotRefundOrder": "Objednávka již zaznamenání tohoto vrácení nedovoluje. Posuďte aktuální stav.",
+          "refused": "Poskytovatel vrácení peněz odmítl. Převzetí a dobropis zůstávají zaznamenány. Před dalším požadavkem ověřte příčinu.",
+          "unconfirmed": "Poskytovatel nepotvrdil výsledek vrácení peněz. Ověřte jej u něj; ve stavu Čeká na potvrzení další vrácení neodesílejte.",
+          "inFlight": "Původní požadavek se stále zpracovává. Před obnovením vyčkejte a načtěte stav znovu.",
+          "keyMismatch": "Uložený klíč patří jinému obsahu. Tento požadavek se znovu neodešle; před jeho odstraněním posuďte aktuální záznam."
+      }
+  },
   returnReview: {
       "intro": "Vrácené zboží a vrácení peněz posuzujte odděleně. Přijetí žádosti nezaznamená převzetí zboží ani neodešle peníze.",
       "filtersTitle": "Filtrování vrácení zboží",

@@ -44,7 +44,7 @@ describe("order detail contracts", () => {
     const shipment = { carrier: "manual", trackingNumber: "TRACK", trackingUrl: null, shippedAt: orderDetail.placedAt };
     const fetch = responses({ ...value, status: "Paid" }, { ...value, status: "Cancelled" }, { ...value, status: "Shipped", shipment }, { ...value, status: "Refunded" });
     await api.confirmOrderPayment("store/a", number); await api.cancelOrder("store/a", number);
-    await api.createShipment("store/a", number, "TRACK"); await api.refundOrder("store/a", number);
+    await api.createShipment("store/a", number, "TRACK"); await api.refundOrder("store/a", number, "sf-order-key");
     expect(fetch.mock.calls.map(([url, options]) => [url, options.method, options.body])).toEqual([
       ["/api/admin/stores/store%2Fa/orders/2026%2F1%20%23/payment", "POST", undefined],
       ["/api/admin/stores/store%2Fa/orders/2026%2F1%20%23/cancel", "POST", undefined],

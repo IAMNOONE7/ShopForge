@@ -34,7 +34,7 @@ beforeEach(async () => {
     records = records.map((record) => record.id === id ? changed : record); return changed;
   });
 });
-afterEach(async () => { cleanup(); vi.restoreAllMocks(); window.history.replaceState(null, "", "/"); await i18n.changeLanguage("en"); });
+afterEach(async () => { sessionStorage.clear(); cleanup(); vi.restoreAllMocks(); window.history.replaceState(null, "", "/"); await i18n.changeLanguage("en"); });
 
 describe("focused return collection", () => {
   it("reads only the current bounded collection, separates status labels and keeps currency on details", async () => {

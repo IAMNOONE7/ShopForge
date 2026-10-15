@@ -1230,6 +1230,76 @@ const resources = {
       unknown: "Unknown",
     },
   },
+  refunds: {
+      "orderTitle": "Return the remaining order",
+      "returnTitle": "Receipt and refund actions",
+      "intro": "Receipt, credit and payment are separate records. Review the current state before every action.",
+      "actions": {
+          "order-refund": "Refund remaining order",
+          "receive": "Record received goods",
+          "retry": "Retry refused refund",
+          "close": "Record manual refund resolution"
+      },
+      "confirmTitle": {
+          "order-refund": "Refund the remaining goods on {{number}}?",
+          "receive": "Receive {{number}}?",
+          "retry": "Retry the refund for {{number}}?",
+          "close": "Close the refund for {{number}} manually?"
+      },
+      "confirmHint": {
+          "order-refund": "This creates and receives a return for the remaining eligible goods, restores their stock, books a credit and may request payment through the original provider. It can leave the refund unresolved or for the store to settle.",
+          "receive": "Confirm that these goods have arrived. Recording receipt restores their stock, books the credit and may request a provider refund. A refused or unconfirmed refund does not undo receipt.",
+          "retry": "The provider previously refused this refund. Check and correct the reported cause before explicitly sending it again. This does not receive goods or book another credit.",
+          "close": "Use this only after verifying how the customer was paid back. This records your note and manual resolution; it does not send money or establish provider confirmation."
+      },
+      "confirmAction": {
+          "order-refund": "Confirm order refund",
+          "receive": "Confirm receipt",
+          "retry": "Confirm refund retry",
+          "close": "Confirm manual resolution"
+      },
+      "verify": {
+          "order-refund": "I checked the goods that remain returnable and confirm they can be returned to stock.",
+          "receive": "I have received and checked all the listed goods.",
+          "close": "I checked the provider outcome and verified that the money was returned to the customer."
+      },
+      "remainingHint": "The credit is calculated from the original order, earlier returns, discounts and delivery. This action applies only to goods still eligible for return. Review existing returns before confirming.",
+      "note": "How was the money returned?",
+      "noteHint": "Required, 1–500 characters after trimming spaces. Record what you checked and how the customer was paid.",
+      "noteInvalid": "Enter a note of 1–500 characters after trimming spaces.",
+      "savedNote": "Recovery sends the exact saved note unchanged.",
+      "verificationRequired": "Confirm that you have checked this before continuing.",
+      "reviewRequired": "Refresh and review the current record before confirming.",
+      "reviewCurrent": "Review current record",
+      "cancel": "Cancel financial action",
+      "noActions": "No receipt, retry or manual resolution action is available in the current state.",
+      "byStore": "The store must return this money using its own payment method. This record has no provider outcome or supported manual-closure action here.",
+      "acknowledged": {
+          "order-refund": "The remaining return and credit were recorded. Review each returned refund status below.",
+          "receive": "Receipt and credit were recorded. The payment outcome is shown separately below.",
+          "retry": "The refund retry was acknowledged. Review the returned payment status below.",
+          "close": "Manual resolution was recorded. This action did not send money or provide gateway confirmation."
+      },
+      "storageBlocked": "This browser tab could not safely save or read the financial request. Restore session storage and reload before continuing. Financial actions remain unavailable.",
+      "recoveryTitle": "Review an unfinished financial request",
+      "recoveryHint": "This tab saved a request without a confirmed answer. Other actions wait for a current read. Loading this review never sends the request.",
+      "recoveryLoading": "Checking the original order and return",
+      "sameKey": "The current record still permits this action. Recovery sends the original request unchanged. If it already succeeded, its recorded answer is used. Check the provider before continuing if the outcome is uncertain.",
+      "reviewSame": "Review same financial request",
+      "noReplay": "Do not resend this operation from the current record. Receipt may already be booked, the refund may be unresolved or settled, or full details may be unavailable. Review the returned facts before continuing.",
+      "finishReview": "Finish review and refresh",
+      "problems": {
+          "cannotReceive": "This return or order no longer permits receipt. Review its latest state; do not receive it again.",
+          "cannotRetry": "Only a refund recorded as refused can be retried. Check the current provider outcome.",
+          "cannotClose": "Only a refused or unconfirmed refund can be closed manually here.",
+          "nothingLeft": "The order has no eligible goods left for this action. Review existing returns.",
+          "cannotRefundOrder": "The order no longer permits recording this refund. Review its current status.",
+          "refused": "The provider refused the refund. Receipt and credit remain recorded. Check the cause before another request.",
+          "unconfirmed": "The provider did not confirm the refund outcome. Check it there; do not send another refund while it is Pending.",
+          "inFlight": "The original request is still in progress. Wait and refresh before considering recovery.",
+          "keyMismatch": "The saved key belongs to another payload. This request will not be resent; review the current record before clearing it."
+      }
+  },
   returnReview: {
       "intro": "Review the returned goods and the refund independently. Accepting a request does not record receipt or send money.",
       "filtersTitle": "Filter returns",

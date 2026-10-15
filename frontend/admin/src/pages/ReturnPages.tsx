@@ -7,6 +7,9 @@ import { HttpError, isHttpError } from "../api/http";
 import type { ReturnDecision } from "../api/returns";
 import { ReturnDecisionPanel } from "../components/ReturnDecisionPanel";
 import { ReturnReviewFacts, ReturnStatuses } from "../components/ReturnReviewFacts";
+import { RefundActions } from "../components/RefundActions";
+import { RefundOutcome } from "../components/RefundOutcome";
+import { RefundRecovery } from "../components/RefundRecovery";
 import { Button } from "../components/ui/Button";
 import { EmptyState } from "../components/ui/EmptyState";
 import { InlineMessage } from "../components/ui/InlineMessage";
@@ -15,6 +18,8 @@ import { RequestError } from "../components/ui/RequestError";
 import { canManageStore, useSession } from "../session";
 import { useAction } from "../useAction";
 import { useRequest } from "../useRequest";
+import { useRefundAction } from "../useRefundAction";
+import { refundProblem } from "../utils/refundWorkflow";
 import { formatDateTime, formatNumber } from "../utils/format";
 import { canDecideReturn } from "../utils/returnDecision";
 import { refundStatuses, returnLimit, returnParameters, returnQuery, returnReviewPath, returnStatuses, type ReturnQuery } from "../utils/returnQuery";
@@ -73,10 +78,10 @@ type ReturnReview = { record: OrderReturn | null; order: AdminOrderDetail | null
 export function StoreReturnPage() {
   const { store } = useSelectedStore(); const { user } = useSession(); const { returnId = "" } = useParams(); const [parameters] = useSearchParams();
   const orderHint = parameters.get("order") ?? "";
-  return <ReturnWorkspace key={`${store.id}:${returnId}:${orderHint}`} storeId={store.id} id={returnId} orderHint={orderHint} canManage={canManageStore(user.role)} />;
+  return <ReturnWorkspace key={`${user.id}:${store.id}:${returnId}:${orderHint}`} storeId={store.id} userId={user.id} id={returnId} orderHint={orderHint} canManage={canManageStore(user.role)} />;
 }
-function ReturnWorkspace({ storeId, id, orderHint, canManage }: { storeId: string; id: string; orderHint: string; canManage: boolean }) {
-  const { t } = useTranslation(["returnReview", "returns", "orders"]);
+function ReturnWorkspace({ storeId, userId, id, orderHint, canManage }: { storeId: string; userId: string; id: string; orderHint: string; canManage: boolean }) {
+  const { t } = useTranslation(["returnReview", "returns", "orders", "refunds"]);
   const [parameters] = useSearchParams(); const query = returnParameters(returnQuery(parameters));
   const [state, reload] = useRequest(`return:${storeId}:${id}:${orderHint}`, async (signal): Promise<ReturnReview> => {
     const records = await api.returns(storeId, signal);
@@ -94,13 +99,18 @@ function ReturnWorkspace({ storeId, id, orderHint, canManage }: { storeId: strin
   const [decisionRevision, setDecisionRevision] = useState(0);
   const mounted = useRef(false); const result = useRef<HTMLDivElement>(null);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  useEffect(() => { if (error !== null || success !== null) result.current?.focus(); }, [error, success]);
   const ready = state.status === "ready" ? state : null;
   const record = ready?.data.record;
-  const disabled = pending || !ready || ready.refreshing || ready.refreshError !== null || ready.data === stale;
+  const money = useRefundAction({ storeId, userId, allowed: canManage, run, pending, onChanged: () => { setStale(ready?.data ?? null); reload(); } });
+  useEffect(() => { if (error !== null || success !== null || money.outcome !== null) result.current?.focus(); }, [error, success, money.outcome]);
+  const readStale = !ready || ready.refreshing || ready.refreshError !== null || ready.data === stale;
+  const disabled = pending || readStale || money.blocked || money.attempt !== null;
+  const problem = refundProblem(error);
+  const noteError = isHttpError(error) && error.status === 400 && Boolean(error.problem?.errors?.note);
   async function decide(decision: ReturnDecision) {
     if (disabled || !canManage || !ready || !record || !canDecideReturn(record, decision)) return;
     setSuccess(null);
+    money.clearOutcome();
     await run(async () => {
       try {
         const changed = await api.decideReturn(storeId, id, decision);
@@ -119,18 +129,24 @@ function ReturnWorkspace({ storeId, id, orderHint, canManage }: { storeId: strin
     {(state.status === "error" || state.status === "not-found") && <RequestError error={state.error} operation="read" onRetry={reload} />}
     <div ref={result} tabIndex={-1} className="order-action-result">
       {success && <InlineMessage tone="success">{t(`success.${success}`)}</InlineMessage>}
+      {money.outcome && <RefundOutcome storeId={storeId} outcome={money.outcome} />}
+      {money.blocked && <InlineMessage tone="error">{t("refunds:storageBlocked")}</InlineMessage>}
       {error !== null && <>{isHttpError(error) && error.status === 409 && error.problem?.title === "This return has already been dealt with" && <p>{t("conflict")}</p>}
-        <RequestError error={error} operation="write" /><p className="hint">{t("writeFailure")}</p></>}
+        {problem && <p>{t(`refunds:problems.${problem}`)}</p>}
+        <RequestError error={error} operation="write" fieldErrors={noteError ? [{ field: "refund-note", message: t("refunds:noteInvalid") }] : undefined} /><p className="hint">{t("writeFailure")}</p></>}
       {pending && <p role="status">{t("orders:saving")}</p>}
     </div>
+    {canManage && money.attempt && !pending && !money.blocked && <RefundRecovery key={money.attempt.key} storeId={storeId} attempt={money.attempt} onExecute={money.execute} onFinish={money.finishReview} />}
     {ready && <>
       {ready.refreshing && <p role="status">{t("orders:refreshingDetail")}</p>}
       {ready.refreshError !== null && <RequestError error={ready.refreshError} operation="read" onRetry={reload} />}
-      {disabled && !pending && <p role="status" className="hint">{t("staleDetail")}</p>}
+      {readStale && !pending && <p role="status" className="hint">{t("staleDetail")}</p>}
       {ready.data.order && <Link to={`/stores/${encodeURIComponent(storeId)}/orders/${encodeURIComponent(ready.data.order.number)}${ready.data.summary ? `#order-return-${encodeURIComponent(id)}` : ""}`}>{t("orderLink", { number: ready.data.order.number })}</Link>}
       {!record && <EmptyState headingLevel={2} title={t("outsideTitle")}><p>{t(ready.data.summary ? "summaryOnly" : "outsideHint")}</p></EmptyState>}
       {ready.data.summary && ready.data.order && <ReturnReviewFacts record={record ?? null} summary={ready.data.summary} order={ready.data.order} />}
       {record && canManage && <ReturnDecisionPanel key={`${id}:${decisionRevision}`} record={record} snapshot={ready.data} disabled={disabled} pending={pending} onDecide={decide} />}
+      {record && ready.data.order && canManage && (!money.attempt || pending) && <RefundActions key={`money:${money.revision}`} target="return" order={ready.data.order} record={record} snapshot={ready.data}
+        disabled={disabled} pending={pending} noteError={noteError} onExecute={async (attempt) => { setSuccess(null); await money.execute(attempt); }} />}
       {!canManage && <p className="hint">{t("readOnly")}</p>}
     </>}
   </div>;

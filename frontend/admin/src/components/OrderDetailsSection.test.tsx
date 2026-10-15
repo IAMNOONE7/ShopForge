@@ -16,8 +16,8 @@ beforeEach(async () => {
   HTMLElement.prototype.scrollIntoView = vi.fn();
   vi.stubGlobal("CSS", { escape: (value: string) => value });
 });
-afterEach(async () => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); await i18n.changeLanguage("en"); });
-function show(canManage = false, hash = "") { return render(<MemoryRouter initialEntries={[`/stores/store-a/orders/${orderDetail.number}${hash}`]}><OrderDetailsSection storeId="store-a" number={orderDetail.number} canManage={canManage} /></MemoryRouter>); }
+afterEach(async () => { sessionStorage.clear(); cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); await i18n.changeLanguage("en"); });
+function show(canManage = false, hash = "") { return render(<MemoryRouter initialEntries={[`/stores/store-a/orders/${orderDetail.number}${hash}`]}><OrderDetailsSection userId="owner" storeId="store-a" number={orderDetail.number} canManage={canManage} /></MemoryRouter>); }
 
 describe("routed order details", () => {
   it("retains carrier, pickup, phone and saved currency without reading the list", async () => {
@@ -91,7 +91,7 @@ describe("routed order details", () => {
     const user = userEvent.setup();
     vi.mocked(api.order).mockResolvedValue({ ...orderDetail, status: "Paid" });
     vi.spyOn(api, "createShipment").mockRejectedValue(new HttpError("network", null));
-    vi.spyOn(api, "refundOrder").mockResolvedValue({ ...orderDetail, status: "Refunded" });
+    vi.spyOn(api, "refundOrder").mockResolvedValue({ ...orderDetail, status: "Refunded", returns: [returnedOrder] });
     show(true);
     const tracking = await screen.findByRole("textbox", { name: "Tracking number" });
     await user.type(tracking, "  TRACK-123  "); await user.click(screen.getByRole("button", { name: "Ship" }));
@@ -101,10 +101,11 @@ describe("routed order details", () => {
     expect(tracking).toHaveProperty("value", "  TRACK-123  ");
     expect(api.createShipment).toHaveBeenCalledWith("store-a", orderDetail.number, "TRACK-123");
     vi.mocked(api.order).mockResolvedValue({ ...orderDetail, status: "Refunded" });
-    await user.click(screen.getByRole("button", { name: "Refund" }));
-    await user.click(screen.getByRole("button", { name: "Request refund" }));
+    await user.click(screen.getByRole("button", { name: "Refund remaining order" }));
+    await user.click(screen.getByRole("checkbox"));
+    await user.click(screen.getByRole("button", { name: "Confirm order refund" }));
     await screen.findByText("Credited");
-    expect(api.refundOrder).toHaveBeenCalledWith("store-a", orderDetail.number);
+    expect(api.refundOrder).toHaveBeenCalledWith("store-a", orderDetail.number, expect.any(String));
     expect(screen.queryByRole("button", { name: "Ship" })).toBeNull();
   });
 
@@ -215,7 +216,7 @@ describe("routed order details", () => {
     await user.click(screen.getByRole("button", { name: "Confirm payment" }));
     const next = { ...orderDetail, number: "OTHER", email: "other@example.test" };
     vi.mocked(api.order).mockResolvedValue(next);
-    view.rerender(<MemoryRouter><OrderDetailsSection storeId="store-b" number="OTHER" canManage /></MemoryRouter>);
+    view.rerender(<MemoryRouter><OrderDetailsSection userId="owner" storeId="store-b" number="OTHER" canManage /></MemoryRouter>);
     await screen.findByText("other@example.test"); await act(async () => resolve({ ...orderDetail, status: "Paid" }));
     expect(api.order).toHaveBeenCalledTimes(2);
     expect(screen.queryByText(/Payment confirmation recorded/)).toBeNull();

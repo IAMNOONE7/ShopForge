@@ -37,3 +37,15 @@ export async function decideReturn(storeId: string, id: string, decision: Return
   if (!isReturn(value) || value.id !== id || value.status !== (decision === "accept" ? "Accepted" : "Refused")) throw new HttpError("invalid-response", 200);
   return value;
 }
+
+export async function changeReturnMoney(storeId: string, id: string, action: "receive" | "retry" | "close", key: string, note?: string) {
+  if (!key || key.length > 128) throw new RangeError("Invalid request key.");
+  const operation = { receive: "receive", retry: "refund", close: "refund/close" }[action];
+  const value = await requestJson<unknown>(`${path(storeId)}/${encodeURIComponent(id)}/${operation}`, {
+    method: "POST", idempotencyKey: key, body: action === "close" ? { note } : undefined,
+  });
+  if (!isReturn(value) || value.id !== id || value.status !== "Received" || value.refund === null
+    || (action === "close" && value.refund !== "ClosedByHand")
+    || (action === "retry" && value.refund !== "Refunded" && value.refund !== "ClosedByHand")) throw new HttpError("invalid-response", 200);
+  return value;
+}

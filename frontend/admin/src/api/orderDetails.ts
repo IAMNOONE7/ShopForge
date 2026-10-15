@@ -48,9 +48,14 @@ const path = (storeId: string, number: string) => `/api/admin/stores/${encodeURI
 export async function getOrderDetails(storeId: string, number: string, signal?: AbortSignal) {
   return checked(await requestJson<unknown>(path(storeId, number), { signal }), number);
 }
-export async function changeOrder(storeId: string, number: string, action: "payment" | "cancel" | "shipment" | "refund", body?: { trackingNumber: string }) {
+export async function changeOrder(storeId: string, number: string, action: "payment" | "cancel" | "shipment", body?: { trackingNumber: string }) {
   const value = checked(await requestJson<unknown>(`${path(storeId, number)}/${action}`, { method: "POST", body }), number);
-  const status = { payment: "Paid", cancel: "Cancelled", shipment: "Shipped", refund: null }[action];
-  if ((status !== null && value.status !== status) || (action === "shipment" && value.shipment === null)) throw new HttpError("invalid-response", 200);
+  const status = { payment: "Paid", cancel: "Cancelled", shipment: "Shipped" }[action];
+  if (value.status !== status || (action === "shipment" && value.shipment === null)) throw new HttpError("invalid-response", 200);
   return value;
+}
+
+export async function refundOrder(storeId: string, number: string, key: string) {
+  if (!key || key.length > 128) throw new RangeError("Invalid request key.");
+  return checked(await requestJson<unknown>(`${path(storeId, number)}/refund`, { method: "POST", idempotencyKey: key }), number);
 }
