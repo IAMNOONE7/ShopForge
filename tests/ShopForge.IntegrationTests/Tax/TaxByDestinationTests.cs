@@ -176,6 +176,83 @@ public sealed class TaxByDestinationTests(ShopForgeApiFactory factory)
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    // A workbook that says nothing about tax is not an instruction to undo what the admin set. Before D-201 any
+    // import row that touched a classified listing put it back on its own rate, and a book sent to Germany was
+    // charged 21 %.
+    [Fact]
+    public async Task An_import_that_names_no_class_leaves_a_listings_class_alone()
+    {
+        var furniture = await BooksStoreAsync();
+
+        var report = await ImportAsync(furniture, ["sku", "name", "price"], [FurnitureStore.SkuOf("oak-chair"), "Oak Reading Chair", 100m]);
+        var german = await OrderAsync(furniture, "DE");
+
+        Assert.Equal((1, 0), (report.Updated, report.Invalid));
+        Assert.Equal("books", (await ListingAsync(furniture, "oak-chair")).TaxClass);
+        Assert.Equal([7m], (await LinesAsync(furniture, german)).Select(line => line.VatRate).Distinct());
+    }
+
+    // An empty cell leaves a value alone in every column, so a row that restates the listing changes nothing.
+    [Fact]
+    public async Task A_row_that_restates_a_classified_listing_changes_nothing()
+    {
+        var furniture = await BooksStoreAsync();
+
+        var report = await ImportAsync(furniture, ["sku", "price", "taxclass"], [FurnitureStore.SkuOf("oak-chair"), 100m, null]);
+
+        Assert.Equal((0, 1), (report.Updated, report.Skipped));
+        Assert.Equal("books", (await ListingAsync(furniture, "oak-chair")).TaxClass);
+    }
+
+    // Codes are lower case, and a spreadsheet is where somebody types "Books" (D-201).
+    [Fact]
+    public async Task The_workbook_can_say_what_a_listing_is_for_tax()
+    {
+        var furniture = await BooksStoreAsync();
+
+        var report = await ImportAsync(furniture, ["sku", "taxclass"], [FurnitureStore.SkuOf("walnut-chair"), "Books"]);
+        var german = await OrderAsync(furniture, "DE", product: "walnut-chair");
+        var recorded = await factory.QueryAsync(furniture.Store, dbContext => dbContext.Database
+            .SqlQuery<string>($"SELECT details AS \"Value\" FROM auditing.audit_entries WHERE store_id = {furniture.Store.StoreId} AND action = 'catalog.import.applied'")
+            .SingleAsync(CancellationToken));
+
+        Assert.Equal((1, 0), (report.Updated, report.Invalid));
+        Assert.Contains("\"reclassified\":1", recorded, StringComparison.Ordinal);
+        Assert.Equal("books", (await ListingAsync(furniture, "walnut-chair")).TaxClass);
+        Assert.Equal([7m], (await LinesAsync(furniture, german)).Select(line => line.VatRate).Distinct());
+    }
+
+    [Fact]
+    public async Task A_product_the_import_brings_in_has_a_class_only_when_the_file_names_one()
+    {
+        var furniture = await BooksStoreAsync();
+
+        var report = await ImportAsync(furniture, ["sku", "name", "price", "vat", "taxclass"],
+            ["IMP-ATLAS", "Atlas", 30m, 21m, "books"],
+            ["IMP-GLOBE", "Globe", 30m, 21m, null]);
+
+        Assert.Equal((2, 0), (report.Created, report.Invalid));
+        Assert.Equal("books", (await ListingAsync(furniture, "atlas")).TaxClass);
+        Assert.Null((await ListingAsync(furniture, "globe")).TaxClass);
+    }
+
+    // The same rule the admin keeps, with the store's classes named, because the person reading the report is
+    // looking at a spreadsheet rather than at a list of classes.
+    [Fact]
+    public async Task A_class_the_shop_has_not_got_is_refused_and_the_row_left_as_it_was()
+    {
+        var furniture = await BooksStoreAsync();
+
+        var report = await ImportAsync(furniture, ["sku", "price", "taxclass"], [FurnitureStore.SkuOf("walnut-chair"), 1m, "invented"]);
+        var issue = Assert.Single(report.Issues);
+        var walnut = await ListingAsync(furniture, "walnut-chair");
+
+        Assert.Equal((0, 1), (report.Updated, report.Invalid));
+        Assert.Equal("taxclass", issue.Column);
+        Assert.Equal("The tax class 'invented' is not one this store has: it has books.", issue.Message);
+        Assert.Equal((200m, null), (walnut.Price, walnut.TaxClass));
+    }
+
     [Fact]
     public async Task A_rate_outside_nought_to_a_hundred_is_refused()
     {
@@ -286,12 +363,35 @@ public sealed class TaxByDestinationTests(ShopForgeApiFactory factory)
 
     private Task<int> EntriesAsync(FurnitureStore furniture, string action) =>
         factory.QueryAsync(furniture.Store, dbContext => dbContext.Database
-            .SqlQuery<int>($"SELECT count(*)::int AS \"Value\" FROM auditing.audit_entries WHERE action = {action}")
+            .SqlQuery<int>($"SELECT count(*)::int AS \"Value\" FROM auditing.audit_entries WHERE store_id = {furniture.Store.StoreId} AND action = {action}")
             .SingleAsync(CancellationToken));
+
+    private static async Task<ImportReportView> ImportAsync(FurnitureStore furniture, string[] columns, params object?[][] rows)
+    {
+        using var response = await furniture.Admin.ImportAsync(furniture.Store.StoreId, ImportFiles.Workbook(columns, rows));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        return (await response.Content.ReadFromJsonAsync<ImportReportView>(CancellationToken))!;
+    }
+
+    private static async Task<ListingView> ListingAsync(FurnitureStore furniture, string slug)
+    {
+        var listings = await furniture.Admin.AdminListAsync<ListingView>(
+            $"/api/admin/stores/{furniture.Store.StoreId}/products?pageSize=200", CancellationToken);
+
+        return listings.Single(listing => listing.Slug == slug);
+    }
 
     private sealed record BulkResultView(int Asked, int Changed);
 
     private sealed record TaxClassView(string Code, string Name, List<TaxRateView> Rates);
+
+    private sealed record ImportReportView(int Created, int Updated, int Skipped, int Invalid, List<IssueView> Issues);
+
+    private sealed record IssueView(int Row, string? Column, string Message);
+
+    private sealed record ListingView(string Slug, decimal Price, string? TaxClass);
 
     private sealed record TaxRateView(string Country, decimal Rate);
 }

@@ -14,7 +14,8 @@ internal sealed class CatalogData
         Dictionary<string, StoreProduct> listingsBySlug,
         Dictionary<string, Category> categories,
         Dictionary<string, AttributeDefinition> definitions,
-        Dictionary<string, Guid> slugs)
+        Dictionary<string, Guid> slugs,
+        HashSet<string> taxClasses)
     {
         StoreId = storeId;
         Products = products;
@@ -23,6 +24,7 @@ internal sealed class CatalogData
         Categories = categories;
         Definitions = definitions;
         Slugs = slugs;
+        TaxClasses = taxClasses;
     }
 
     public Guid StoreId { get; }
@@ -41,13 +43,16 @@ internal sealed class CatalogData
 
     public Dictionary<string, Guid> Slugs { get; }
 
+    public HashSet<string> TaxClasses { get; }
+
     public HashSet<string> SeenSkus { get; } = new(StringComparer.Ordinal);
 
     public Dictionary<Guid, Product> ProductsById { get; } = [];
 
     public Product ProductOf(StoreProduct listing) => ProductsById[listing.ProductId];
 
-    public static async Task<CatalogData> LoadAsync(DbContext dbContext, Guid storeId, ImportFile file, CancellationToken cancellationToken)
+    public static async Task<CatalogData> LoadAsync(
+        DbContext dbContext, Guid storeId, ImportFile file, IEnumerable<string> taxClasses, CancellationToken cancellationToken)
     {
         var skus = file.Rows
             .Select(row => row[ImportColumns.Sku].Text.ToUpperInvariant())
@@ -94,7 +99,8 @@ internal sealed class CatalogData
             listings.ToDictionary(listing => listing.Slug, StringComparer.Ordinal),
             categories.ToDictionary(category => category.Slug, StringComparer.Ordinal),
             definitions.ToDictionary(definition => definition.Code, StringComparer.Ordinal),
-            slugs.ToDictionary(listing => listing.Slug, listing => listing.Id, StringComparer.Ordinal));
+            slugs.ToDictionary(listing => listing.Slug, listing => listing.Id, StringComparer.Ordinal),
+            taxClasses.ToHashSet(StringComparer.Ordinal));
 
         foreach (var product in products)
         {
@@ -114,6 +120,7 @@ internal static class ImportColumns
     public const string Price = "price";
     public const string Stock = "stock";
     public const string Vat = "vat";
+    public const string TaxClass = "taxclass";
     public const string Visible = "visible";
     public const string SortOrder = "sortorder";
     public const string Categories = "categories";
@@ -128,7 +135,7 @@ internal static class ImportColumns
     public const string OptionPrefix = "option:";
 
     public static readonly string[] All =
-        [Sku, Name, Slug, Description, Price, Vat, Stock, Visible, SortOrder, Categories, Ean, Weight, Brand, PartNumber, Condition];
+        [Sku, Name, Slug, Description, Price, Vat, TaxClass, Stock, Visible, SortOrder, Categories, Ean, Weight, Brand, PartNumber, Condition];
 
     public static bool IsOption(string column) => column.StartsWith(OptionPrefix, StringComparison.Ordinal);
 

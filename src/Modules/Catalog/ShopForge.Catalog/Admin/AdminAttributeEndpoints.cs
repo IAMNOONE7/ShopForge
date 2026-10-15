@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Catalog.Attributes;
 using ShopForge.Catalog.Domain;
+using ShopForge.Catalog.Import;
 using ShopForge.Catalog.Retiring;
 using ShopForge.Catalog.Search;
 using ShopForge.Shared.Auditing;
@@ -50,6 +51,10 @@ internal static class AdminAttributeEndpoints
         var options = request.Options ?? [];
         var errors = ValidateSettings(request.Name, request.Type, request.IsFilterable, request.IsSearchable)
             .Check(Slugs.IsValid(code), "code", "Code may contain lower-case letters, digits and single hyphens.")
+            // An attribute's code is a column of the catalogue workbook beside the ones every workbook has. One of
+            // those as a code would put two columns of one name into every template and export, and the importer
+            // refuses such a file whole (D-185, D-201).
+            .Check(!ImportColumns.All.Contains(code), "code", $"Every catalogue workbook already has a column called '{code}'; give the attribute another code.")
             .Check(options.Count == 0 || request.Type is AttributeType.Select or AttributeType.MultiSelect, "options", "Only select attributes have options.")
             .Check(options.All(option => Slugs.Create(option).Length > 0), "options", "Every option needs a name with letters or digits.")
             .Check(options.Select(Slugs.Create).Distinct().Count() == options.Count, "options", "Option names must be unique.");

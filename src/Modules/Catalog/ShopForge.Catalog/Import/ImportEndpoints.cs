@@ -8,10 +8,13 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Catalog.Domain;
 using ShopForge.Catalog.Export;
+using ShopForge.Catalog.Search;
+using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Inventory;
 using ShopForge.Shared.Platform;
 using ShopForge.Shared.Security;
 using ShopForge.Shared.Stores;
+using ShopForge.Shared.Tax;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Catalog.Import;
@@ -44,6 +47,9 @@ internal static class ImportEndpoints
         IStoreContext storeContext,
         IStockLedger stock,
         ITenantLimits limits,
+        ITaxRates taxRates,
+        SearchIndex search,
+        IAuditLog audit,
         TimeProvider clock,
         ICurrentStoreSettings storeSettings,
         CancellationToken cancellationToken)
@@ -60,7 +66,9 @@ internal static class ImportEndpoints
 
             var currency = (await storeSettings.GetAsync(cancellationToken)).Currency;
 
-            return TypedResults.Ok(await new CatalogImporter(dbContext, storeContext, stock, limits, clock, currency).ImportAsync(import, cancellationToken));
+            var importer = new CatalogImporter(dbContext, storeContext, stock, limits, taxRates, search, audit, clock, currency);
+
+            return TypedResults.Ok(await importer.ImportAsync(import, cancellationToken));
         }
         catch (ImportFileException exception)
         {

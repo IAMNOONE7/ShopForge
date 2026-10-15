@@ -1,20 +1,35 @@
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Catalog.Domain;
 using ShopForge.Catalog.Publishing;
+using ShopForge.Catalog.Search;
+using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Inventory;
 using ShopForge.Shared.Payments;
 using ShopForge.Shared.Platform;
 using ShopForge.Shared.Stores;
+using ShopForge.Shared.Tax;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Catalog.Import;
 
-internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeContext, IStockLedger stock, ITenantLimits limits, TimeProvider clock, Currency currency)
+internal sealed class CatalogImporter(
+    DbContext dbContext,
+    IStoreContext storeContext,
+    IStockLedger stock,
+    ITenantLimits limits,
+    ITaxRates taxRates,
+    SearchIndex search,
+    IAuditLog audit,
+    TimeProvider clock,
+    Currency currency)
 {
     private const int MaxIssues = 200;
 
     private readonly List<StockUpdate> _stockUpdates = [];
     private readonly List<Rename> _renames = [];
+    private readonly HashSet<Guid> _touched = [];
+    private readonly HashSet<Guid> _repriced = [];
+    private readonly HashSet<Guid> _reclassified = [];
 
     private string[] _axes = [];
 
@@ -30,7 +45,8 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
         _optionColumns = [.. file.Columns.Where(ImportColumns.IsOption)];
         _axes = [.. _optionColumns.Select(ImportColumns.AxisOf)];
 
-        var catalog = await CatalogData.LoadAsync(dbContext, storeContext.StoreId!.Value, file, cancellationToken);
+        var catalog = await CatalogData.LoadAsync(
+            dbContext, storeContext.StoreId!.Value, file, await taxRates.ClassesAsync(cancellationToken), cancellationToken);
         var issues = new List<ImportIssue>();
         var outcomes = new List<RowOutcome>();
 
@@ -62,7 +78,21 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
             {
                 // The trail goes in the same save as the rename it records: either both or neither (D-166).
                 await RecordRenamesAsync(cancellationToken);
+
+                // A file can reprice or reclassify a whole catalogue. The editor leaves a line for a price and the
+                // bulk actions one for each change they make, so the file leaves one for the whole of it (D-201).
+                var created = outcomes.Count(outcome => outcome == RowOutcome.Created);
+                var updated = outcomes.Count(outcome => outcome == RowOutcome.Updated);
+                audit.Record(
+                    "catalog.import.applied",
+                    $"{created} created, {updated} updated",
+                    new { Created = created, Updated = updated, Repriced = _repriced.Count, Reclassified = _reclassified.Count });
+
                 await dbContext.SaveChangesAsync(cancellationToken);
+
+                // What a shopper types is matched against the listing's words as they were last indexed, so what
+                // the file brought in or changed is indexed now, as an edit in the admin is (D-178, D-201).
+                await search.RefreshAsync(_touched, cancellationToken);
                 await ApplyStockAsync(issues, cancellationToken);
             }
             catch (DbUpdateException exception)
@@ -207,7 +237,19 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
             // A file can rename in bulk, which is the easiest way to lose every link to a shop at once. The
             // trail is written after the rows, where the rest of the deferred work goes.
             var wasCalled = listing.Slug;
+            var wasPriced = listing.Price;
+            var wasTaxed = listing.TaxClass;
             changed |= listing.Update(details!, currency);
+
+            if (listing.Price != wasPriced)
+            {
+                _repriced.Add(listing.Id);
+            }
+
+            if (listing.TaxClass != wasTaxed)
+            {
+                _reclassified.Add(listing.Id);
+            }
 
             if (wasCalled != listing.Slug)
             {
@@ -229,6 +271,11 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
         {
             _stockUpdates.Add(new StockUpdate(row.Number, variant, quantity));
             changed = true;
+        }
+
+        if (created || changed)
+        {
+            _touched.Add(listing.Id);
         }
 
         return created ? RowOutcome.Created : changed ? RowOutcome.Updated : RowOutcome.Unchanged;
@@ -301,6 +348,7 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
         var description = row.Has(ImportColumns.Description) ? row[ImportColumns.Description].Text : listing?.Description;
         decimal? price = listing?.Price;
         decimal? vatRate = listing?.VatRate;
+        var taxClass = listing?.TaxClass;
         var visible = listing?.IsVisible ?? true;
         var sortOrder = listing?.SortOrder ?? 0;
 
@@ -341,6 +389,25 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
             Invalid(ImportColumns.Vat, "A VAT rate is required for a product that is not yet listed in this store.");
         }
 
+        // A file that says nothing about tax leaves a listing taxed as it was: a column it does not have is not an
+        // instruction to undo what the admin set (D-201). Codes are lower case (D-187), so "Books" typed in a
+        // spreadsheet is the class whose code is "books".
+        if (row.Has(ImportColumns.TaxClass))
+        {
+            var code = row[ImportColumns.TaxClass].Text.ToLowerInvariant();
+
+            if (catalog.TaxClasses.Contains(code))
+            {
+                taxClass = code;
+            }
+            else
+            {
+                Invalid(ImportColumns.TaxClass, catalog.TaxClasses.Count == 0
+                    ? $"The tax class '{code}' is not one this store has: it has none yet."
+                    : $"The tax class '{code}' is not one this store has: it has {string.Join(", ", catalog.TaxClasses.Order(StringComparer.Ordinal))}.");
+            }
+        }
+
         if (row.Has(ImportColumns.Visible) && !row[ImportColumns.Visible].TryBoolean(out visible))
         {
             Invalid(ImportColumns.Visible, "Use true or false.");
@@ -370,7 +437,7 @@ internal sealed class CatalogImporter(DbContext dbContext, IStoreContext storeCo
             Invalid(ImportColumns.Slug, $"The slug '{slug}' is already used by another product in this store.");
         }
 
-        return issues.Count > 0 ? null : new StoreProductDetails(name!, slug!, description, price!.Value, vatRate!.Value, visible, sortOrder);
+        return issues.Count > 0 ? null : new StoreProductDetails(name!, slug!, description, price!.Value, vatRate!.Value, visible, sortOrder, taxClass);
     }
 
     private static List<string> ReadCategoryNames(ImportRow row, List<ImportIssue> issues)

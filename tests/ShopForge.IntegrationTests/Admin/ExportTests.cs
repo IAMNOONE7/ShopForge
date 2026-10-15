@@ -151,6 +151,51 @@ public sealed class ExportTests(ShopForgeApiFactory factory)
         Assert.Equal(4, listings.TotalCount);
     }
 
+    // What a listing is for tax goes out with it and comes back with it, so a file taken out and sent back
+    // leaves every class where it was (D-201).
+    [Fact]
+    public async Task A_listings_tax_class_goes_out_and_comes_back()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+        using var created = await furniture.Admin.PostAsJsonAsync(
+            $"/api/admin/stores/{furniture.Store.StoreId}/tax-classes", new { Name = "Books", Code = "books" }, CancellationToken);
+        using var pointed = await furniture.Admin.PostAsJsonAsync(
+            $"/api/admin/stores/{furniture.Store.StoreId}/products/bulk/tax-class",
+            new { StoreProductIds = new[] { furniture.Products["oak-chair"] }, TaxClass = "books" },
+            CancellationToken);
+        Assert.Equal((HttpStatusCode.Created, HttpStatusCode.OK), (created.StatusCode, pointed.StatusCode));
+
+        var rows = Rows(await CatalogueAsync(furniture));
+        var report = await ImportAsync(furniture, await CatalogueBytesAsync(furniture));
+        var listings = await furniture.Admin.AdminListAsync<ClassifiedRow>(
+            $"/api/admin/stores/{furniture.Store.StoreId}/products?pageSize=200", CancellationToken);
+
+        Assert.Equal("books", rows.Single(row => row["slug"] == "oak-chair")["taxclass"]);
+        Assert.Equal(string.Empty, rows.Single(row => row["slug"] == "walnut-chair")["taxclass"]);
+        Assert.Equal((0, 0), (report.Invalid, report.Updated));
+        Assert.Equal("books", listings.Single(listing => listing.Slug == "oak-chair").TaxClass);
+    }
+
+    // An attribute called Weight would be a second "weight" column in every template and export, and the
+    // importer refuses a file with two columns of one name, so the shop's own export would stop coming back
+    // in (D-201).
+    [Fact]
+    public async Task An_attribute_cannot_take_a_code_every_workbook_already_has()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+
+        using var refused = await furniture.Admin.PostAsJsonAsync(
+            $"/api/admin/stores/{furniture.Store.StoreId}/attributes", new { Name = "Weight", Type = "decimal", Unit = "kg" }, CancellationToken);
+        using var renamed = await furniture.Admin.PostAsJsonAsync(
+            $"/api/admin/stores/{furniture.Store.StoreId}/attributes", new { Name = "Weight", Code = "net-weight", Type = "decimal", Unit = "kg" }, CancellationToken);
+        var report = await ImportAsync(furniture, await CatalogueBytesAsync(furniture));
+
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Contains("already has a column called 'weight'", await refused.Content.ReadAsStringAsync(CancellationToken), StringComparison.Ordinal);
+        Assert.Equal(HttpStatusCode.Created, renamed.StatusCode);
+        Assert.Equal(0, report.Invalid);
+    }
+
     // Stock is the warehouse's answer, not the catalogue's, and an empty cell means "leave it alone" — so a
     // round trip must not quietly set everything to nothing.
     [Fact]
@@ -364,6 +409,8 @@ public sealed class ExportTests(ShopForgeApiFactory factory)
     }
 
     private sealed record ListingRow(Guid Id, string Name, string Slug);
+
+    private sealed record ClassifiedRow(string Slug, string? TaxClass);
 
     private sealed record ImportReportView(int Created, int Updated, int Skipped, int Invalid, int Failed, List<string> IgnoredColumns, List<IssueView> Issues);
 

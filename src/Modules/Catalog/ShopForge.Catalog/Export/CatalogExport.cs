@@ -157,6 +157,7 @@ internal static class CatalogExport
         Put(listing.Description);
         Put(listing.Price);
         Put(listing.VatRate);
+        Put(listing.TaxClass);
 
         // Stock is the warehouse's answer rather than the catalogue's, and the importer treats an empty cell
         // as "leave it alone" — which is what an export that does not carry it should mean (D-185).

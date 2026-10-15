@@ -72,6 +72,48 @@ public sealed class CatalogSearchTests(ShopForgeApiFactory factory)
         Assert.Empty(found.Items);
     }
 
+    // A catalogue loaded from a workbook is the catalogue a shop actually has, so it is findable the moment the
+    // import answers rather than after the nightly rebuild (D-201).
+    [Fact]
+    public async Task A_product_the_import_brings_in_is_found_at_once()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+        await ImportAsync(furniture, ["sku", "name", "description", "price", "vat"], ["IMP-ZEPHYR-1", "Zephyr Lounger", "Woven by hand in Olomouc.", 10m, 21m]);
+
+        var byName = await SearchAsync(furniture, "zephyr");
+        var byDescription = await SearchAsync(furniture, "Olomouc");
+        var byCode = await SearchAsync(furniture, "IMP-ZEPHYR-1");
+
+        Assert.Equal(["zephyr-lounger"], byName.Items.Select(item => item.Slug));
+        Assert.Equal(["zephyr-lounger"], byDescription.Items.Select(item => item.Slug));
+        Assert.Equal(["zephyr-lounger"], byCode.Items.Select(item => item.Slug));
+    }
+
+    // A listing the file changes rather than creates. The old name cannot be shown to have gone: the code
+    // carries the words of the name it was made from.
+    [Fact]
+    public async Task A_product_the_import_renames_is_found_by_its_new_name_at_once()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+        await ImportAsync(furniture, ["sku", "name"], [FurnitureStore.SkuOf("walnut-chair"), "Mahogany Throne"]);
+
+        var found = await SearchAsync(furniture, "mahogany");
+
+        Assert.Equal(["walnut-chair"], found.Items.Select(item => item.Slug));
+    }
+
+    [Fact]
+    public async Task Words_the_import_writes_into_a_searchable_attribute_are_found_at_once()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+        await SearchableAsync(furniture, "Care", searchable: true);
+
+        await ImportAsync(furniture, ["sku", "care"], [FurnitureStore.SkuOf("beech-stool"), "Rub with linseed now and then"]);
+        var found = await SearchAsync(furniture, "linseed");
+
+        Assert.Equal(["beech-stool"], found.Items.Select(item => item.Slug));
+    }
+
     // Only text has words worth matching: a number is found by filtering.
     [Fact]
     public async Task A_measurement_cannot_be_marked_searchable()
@@ -239,6 +281,15 @@ public sealed class CatalogSearchTests(ShopForgeApiFactory factory)
         return await shopper.GetJsonAsync<ProductPage>($"/api/storefront/products?{query.TrimStart('&')}");
     }
 
+    private static async Task ImportAsync(FurnitureStore furniture, string[] columns, params object?[][] rows)
+    {
+        using var response = await furniture.Admin.ImportAsync(furniture.Store.StoreId, ImportFiles.Workbook(columns, rows));
+        var report = await response.Content.ReadFromJsonAsync<ImportReport>(CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal((1, 0), (report!.Created + report.Updated, report.Invalid));
+    }
+
     private async Task DescribeAsync(FurnitureStore furniture, string slug, string description, int? sortOrder = null)
     {
         var listing = await ListingAsync(furniture, slug);
@@ -341,4 +392,6 @@ public sealed class CatalogSearchTests(ShopForgeApiFactory factory)
     private sealed record AttributeView(Guid Id, string Name, string? Unit, bool IsFilterable, bool IsVisibleOnProductPage, int SortOrder, bool IsInFeeds);
 
     private sealed record LoggedSearch(string Terms, int Found);
+
+    private sealed record ImportReport(int Created, int Updated, int Invalid);
 }

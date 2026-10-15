@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using ClosedXML.Excel;
+using Microsoft.EntityFrameworkCore;
 using ShopForge.Access.Domain;
 
 namespace ShopForge.IntegrationTests.Catalog;
@@ -120,6 +121,28 @@ public sealed class ImportTests(ShopForgeApiFactory factory)
         Assert.DoesNotContain(page.Filters.Single(filter => filter.Code == "material").Options!, option => option.Code == "phantom");
     }
 
+    // A file can reprice a whole catalogue, so it leaves a line in the audit trail as the editor and the bulk
+    // actions do — one for the file, counting what it changed. A file that changes nothing leaves none (D-201).
+    [Fact]
+    public async Task An_import_that_changes_something_leaves_one_line_in_the_audit_trail()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+
+        await ImportAsync(furniture, ["sku", "price"], [FurnitureStore.SkuOf("oak-chair"), 100m]);
+        var unchanged = await ImportEntriesAsync(furniture);
+        await ImportAsync(furniture, ["sku", "name", "price", "vat"],
+            [FurnitureStore.SkuOf("oak-chair"), "Oak Chair", 120m, 21m],
+            [FurnitureStore.SkuOf("beech-stool"), "Beech Stool", 55m, 21m],
+            [FurnitureStore.SkuOf("walnut-chair"), "Walnut Armchair", 200m, 21m],
+            ["IMP-NEW", "New Stool", 10m, 21m]);
+        var changed = await ImportEntriesAsync(furniture);
+
+        Assert.Empty(unchanged);
+        var entry = Assert.Single(changed);
+        Assert.Equal("1 created, 3 updated", entry.Subject);
+        Assert.Equal("""{"created":1,"updated":3,"repriced":2,"reclassified":0}""", entry.Details);
+    }
+
     [Theory]
     [InlineData(new[] { "name", "price" }, "sku")]
     [InlineData(new[] { "sku", "sku" }, "unique")]
@@ -181,6 +204,11 @@ public sealed class ImportTests(ShopForgeApiFactory factory)
         return (await response.Content.ReadFromJsonAsync<ImportReport>(CancellationToken))!;
     }
 
+    private Task<List<AuditLine>> ImportEntriesAsync(FurnitureStore furniture) =>
+        factory.QueryAsync(furniture.Store, dbContext => dbContext.Database
+            .SqlQuery<AuditLine>($"SELECT subject AS \"Subject\", details AS \"Details\" FROM auditing.audit_entries WHERE store_id = {furniture.Store.StoreId} AND action = 'catalog.import.applied'")
+            .ToListAsync(CancellationToken));
+
     private async Task<T> GetAsync<T>(FurnitureStore furniture, string pathAndQuery)
     {
         using var client = factory.CreateClient();
@@ -193,6 +221,8 @@ public sealed class ImportTests(ShopForgeApiFactory factory)
     private sealed record ImportReport(int Created, int Updated, int Skipped, int Invalid, int Failed, List<string> IgnoredColumns, List<Issue> Issues);
 
     private sealed record Issue(int Row, string? Column, string Message);
+
+    private sealed record AuditLine(string Subject, string? Details);
 
     private sealed record ProductPage(List<ProductSummary> Items, List<Facet> Filters);
 
