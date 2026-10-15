@@ -56,10 +56,10 @@ export function OrderPaymentAttempts({ order }: { order: AdminOrderDetail }) {
 }
 
 export function OrderRelatedRecords({ order, storeId }: { order: AdminOrderDetail; storeId: string }) {
-  const { t, i18n } = useTranslation("orderDetails");
+  const { t, i18n } = useTranslation(["orderDetails", "unapplied"]);
   return <>
     <section className="order-panel" aria-labelledby="order-unapplied">
-      <h2 id="order-unapplied" tabIndex={-1}>{t("unappliedTitle")}</h2>
+      <div className="order-record-heading"><h2 id="order-unapplied" tabIndex={-1}>{t("unappliedTitle")}</h2><Link to={`/stores/${encodeURIComponent(storeId)}/unapplied-payments?status=`}>{t("unapplied:title")}</Link></div>
       <p className="hint">{t("unappliedHint")}</p>
       {order.unappliedPayments.length === 0 ? <p>{t("noUnapplied")}</p> : <ul className="order-records">
         {order.unappliedPayments.map((payment) => <li className="order-record" key={payment.id}>

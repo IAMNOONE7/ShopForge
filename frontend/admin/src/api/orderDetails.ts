@@ -1,5 +1,6 @@
 import type { AdminOrderDetail } from "../api";
 import { HttpError, requestJson } from "./http";
+import { isUnappliedPayment } from "./unappliedPayments";
 
 const object = (value: unknown): Record<string, unknown> | null => typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null;
 const string = (value: unknown): value is string => typeof value === "string";
@@ -31,9 +32,7 @@ function validOrder(value: unknown): value is AdminOrderDetail {
     && nullableString(item.paymentReference) && nullableDate(item.paidAt)
     && list(item.paymentAttempts, (attempt) => text(attempt.provider) && nullableString(attempt.reference) && string(attempt.status)
       && nullableString(attempt.environment) && amount(attempt.amount) && currency(attempt.currency) && date(attempt.startedAt) && date(attempt.changedAt))
-    && list(item.unappliedPayments, (payment) => text(payment.id) && payment.orderNumber === item.number && text(payment.provider) && nullableString(payment.reference)
-      && amount(payment.amount) && currency(payment.currency) && string(payment.reason) && string(payment.status)
-      && date(payment.receivedAt) && date(payment.changedAt) && nullableString(payment.note) && typeof payment.canRefund === "boolean", "id")
+    && list(item.unappliedPayments, (payment) => isUnappliedPayment(payment) && payment.orderNumber === item.number, "id")
     && list(item.returns, (returned) => text(returned.id) && text(returned.number) && string(returned.status) && amount(returned.refundedAmount)
       && nullableString(returned.refund) && nullableString(returned.refundProblem), "id")
     && list(item.documents, (document) => text(document.number) && string(document.kind) && date(document.issuedAt), "number")

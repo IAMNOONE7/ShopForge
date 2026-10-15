@@ -33,6 +33,7 @@ const resources = {
     methods: "Způsoby objednávky",
     discounts: "Slevy",
     orders: "Objednávky",
+    unappliedPayments: "Nepřiřazené platby",
     returns: "Vrácení zboží",
     reviews: "Recenze",
     operations: "Provoz",
@@ -1043,6 +1044,71 @@ const resources = {
       "gatewayRefusal": "Server odmítl ruční potvrzení, protože brána stále drží otevřenou platbu. Zkontrolujte obnovené pokusy.",
       "carrierRefusal": "Uložený dopravce objednávky není aktuálně dostupný. Obnovte a zkontrolujte doručovací údaje před pokračováním.",
       "writeFailureHint": "Akce nebyla potvrzena. Načítají se aktuální údaje objednávky; před dalším pokusem je zkontrolujte. I neúspěšná odpověď může znamenat změnu na serveru."
+  },
+  unapplied: {
+      "provider": "Poskytovatel",
+      "title": "Nepřiřazené platby",
+      "intro": "Peníze přijaté poskytovatelem, které nešlo přiřadit k objednávce. Posuzujte každou platbu zvlášť; různé měny se nesčítají.",
+      "statusFilter": "Stav zpracování",
+      "allStatuses": "Všechny stavy",
+      "newestFirst": "Od nejnověji přijatých.",
+      "invalidQuery": "Některé volby seznamu byly neplatné. Pro tyto hodnoty se zobrazují výchozí volby.",
+      "loading": "Načítání nepřiřazených plateb",
+      "stale": "Záznamy se obnovují nebo je nešlo obnovit. Akce čekají na aktuální odpověď serveru.",
+      "emptyTitle": "V tomto přehledu nejsou platby",
+      "outOfRange": "Na této stránce nejsou platby",
+      "emptyFiltered": "Tomuto stavu zpracování neodpovídá žádná platba. Pro další záznamy zvolte jiný stav.",
+      "emptyAll": "Tento obchod nemá evidované nepřiřazené platby.",
+      "openOrder": "Objednávka {{number}}",
+      "paging": "Stránky nepřiřazených plateb",
+      "action": {
+          "refund": "Posoudit vrácení přes poskytovatele",
+          "close": "Posoudit ruční uzavření"
+      },
+      "confirmTitle": {
+          "refund": "Vrátit platbu k objednávce {{number}}?",
+          "close": "Ručně uzavřít platbu k objednávce {{number}}?"
+      },
+      "confirmHint": {
+          "refund": "Požádejte o vrácení celé částky přes poskytovatele, který ji přijal. Poskytovatel může vrácení odmítnout. Nepotvrzený výsledek je nutné ověřit u něj před jakýmkoliv dalším vrácením.",
+          "close": "Záznam uzavřete až po ověření u poskytovatele a vyřešení peněz se zákazníkem. Tím se zaznamená vaše rozhodnutí; peníze se neodesílají a nejde o potvrzení vrácení poskytovatelem."
+      },
+      "confirmAction": {
+          "refund": "Potvrdit vrácení přes poskytovatele",
+          "close": "Potvrdit ruční uzavření"
+      },
+      "cancel": "Zrušit akci",
+      "note": "Jak byla platba vyřešena?",
+      "noteHint": "Povinné, nejvýše 500 znaků. Popište, co jste ověřili a jak se s penězi naložilo.",
+      "savedNote": "Toto je přesná poznámka z předchozího požadavku. Obnovení ji odešle beze změny.",
+      "noteInvalid": "Zadejte poznámku o 1–500 znacích po odstranění krajních mezer.",
+      "verified": "Ověřil/a jsem výsledek u poskytovatele a zkontroloval/a, že je tato platba vyřešena.",
+      "verificationRequired": "Před uzavřením ověřte, že je platba vyřešena.",
+      "reviewRequired": "Potvrzení vyžaduje aktuální záznam. Obnovte jej a před pokračováním znovu posuďte.",
+      "reviewUpdated": "Posoudit aktuální záznam",
+      "externalRefund": "U tohoto záznamu nelze zde požádat o vrácení. Vyřešte platbu u poskytovatele nebo se zákazníkem a pak zaznamenejte ruční uzavření.",
+      "writeFailure": "Požadavek nebyl na této obrazovce potvrzen. Před další akcí posuďte aktuální záznam. Načtení lze opakovat; zápisy se nikdy neopakují automaticky.",
+      "storageBlocked": "Požadavek na platbu nešlo bezpečně uložit v této kartě prohlížeče. Akce nejsou dostupné. Před pokračováním obnovte úložiště relace a načtěte stránku znovu.",
+      "recoveryTitle": "Posouzení předchozího požadavku",
+      "recoveryHint": "Požadavek nemá na této obrazovce potvrzenou odpověď. Další akce čekají na ověření aktuálního záznamu. Samotné načtení přehledu žádný požadavek neodesílá.",
+      "recoveryLoading": "Ověřování platby u objednávky",
+      "sameKeyHint": "Záznam tuto akci stále dovoluje. Můžete výslovně obnovit stejný požadavek s původním klíčem a nezměněnou poznámkou. Výsledek vrácení může být stále potřeba ověřit u poskytovatele.",
+      "reviewRecovery": "Posoudit stejný požadavek",
+      "recoveryNoResend": "Aktuální záznam nedovoluje tento požadavek opakovat. Vrácení s nevyřešeným výsledkem znovu neodesílejte. Dokončete posouzení a pokračujte z obnoveného seznamu; ruční uzavření stále vyžaduje vaše ověření.",
+      "finishReview": "Dokončit posouzení a obnovit seznam",
+      "success": {
+          "refund": "Požadavek na vrácení přes poskytovatele byl přijat. Zkontrolujte níže obnovený stav zpracování.",
+          "close": "Ruční uzavření bylo zaznamenáno. Nejde o potvrzení poskytovatele, že byly peníze vráceny."
+      },
+      "problems": {
+          "cannotRefund": "Tento poskytovatel zde platbu vrátit nemůže. Vyřešte ji u poskytovatele a pak zaznamenejte ruční uzavření.",
+          "refused": "Poskytovatel vrácení odmítl. Před posouzením nového požadavku ověřte příčinu.",
+          "unconfirmed": "Poskytovatel nepotvrdil výsledek vrácení. Ověřte jej u něj; další vrácení neodesílejte.",
+          "settled": "Tuto platbu již někdo vyřešil. Posuďte její aktuální stav.",
+          "changed": "Platba se během uzavírání změnila. Před pokračováním posuďte aktuální stav.",
+          "inFlight": "Původní požadavek se stále zpracovává. Počkejte a pak před obnovením stejného požadavku načtěte záznam znovu.",
+          "keyMismatch": "Uložený klíč patří jinému požadavku. Před pokračováním posuďte aktuální záznam."
+      }
   },
   orders: {
     listHint: "Vyhledejte a otevřete objednávky obchodu {{store}}.",

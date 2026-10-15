@@ -148,6 +148,12 @@ export function AdminNavigation({
             {t("navigation:orders")}
           </NavLink>
           <NavLink
+            to={`/stores/${selectedStore.id}/unapplied-payments`}
+            onClick={onNavigate}
+          >
+            {t("navigation:unappliedPayments")}
+          </NavLink>
+          <NavLink
             to={`/stores/${selectedStore.id}/returns`}
             onClick={onNavigate}
           >

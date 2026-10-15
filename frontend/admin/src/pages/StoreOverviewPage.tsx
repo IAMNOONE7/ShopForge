@@ -17,6 +17,7 @@ export function StoreOverviewPage() {
     ["methods", t("navigation:methods")],
     ["discounts", t("navigation:discounts")],
     ["orders", t("navigation:orders")],
+    ["unapplied-payments", t("navigation:unappliedPayments")],
     ["returns", t("navigation:returns")],
     ["reviews", t("navigation:reviews")],
     ["operations", t("navigation:operations")],

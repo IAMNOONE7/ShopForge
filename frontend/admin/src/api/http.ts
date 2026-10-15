@@ -45,6 +45,7 @@ type RequestOptions = {
   body?: unknown;
   signal?: AbortSignal;
   notifyUnauthorized?: boolean;
+  idempotencyKey?: string;
 };
 
 export type Download = { blob: Blob; filename: string };
@@ -133,14 +134,14 @@ async function send(url: string, options: RequestOptions) {
       ? undefined
       : (formBody ?? JSON.stringify(options.body));
   let response: Response;
+  const headers: Record<string, string> = {};
+  if (options.body !== undefined && !formBody) headers["Content-Type"] = "application/json";
+  if (options.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
   try {
     response = await fetch(url, {
       method: options.method ?? "GET",
       signal: options.signal,
-      headers:
-        options.body === undefined || formBody
-          ? undefined
-          : { "Content-Type": "application/json" },
+      headers: Object.keys(headers).length ? headers : undefined,
       body,
     });
   } catch (error) {

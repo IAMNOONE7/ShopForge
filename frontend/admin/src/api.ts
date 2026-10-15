@@ -4,6 +4,7 @@ import { getStoreReadiness } from "./api/readiness";
 import { getStoreDomains, addStoreDomain, verifyStoreDomain, makeStoreDomainPrimary, removeStoreDomain } from "./api/domains";
 import { getOrders } from "./api/orders";
 import { changeOrder, getOrderDetails } from "./api/orderDetails";
+import { changeUnappliedPayment, getUnappliedPayments } from "./api/unappliedPayments";
 
 export type SignInResponse = {
   twoFactorRequired: boolean;
@@ -671,6 +672,8 @@ export const api = {
     ),
 
   orders: getOrders,
+  unappliedPayments: getUnappliedPayments,
+  changeUnappliedPayment,
   order: getOrderDetails,
   confirmOrderPayment: (storeId: string, number: string) =>
     changeOrder(storeId, number, "payment"),

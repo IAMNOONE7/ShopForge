@@ -39,6 +39,7 @@ const ListingsPage = lazy(() => import("./pages/ListingPages").then((pages) => (
 const StoreDomainsPage = lazy(() => import("./pages/StoreDomainsPage").then((pages) => ({ default: pages.StoreDomainsPage })));
 const StoreOrdersPage = lazy(() => import("./pages/OrderPages").then((pages) => ({ default: pages.StoreOrdersPage })));
 const StoreOrderPage = lazy(() => import("./pages/OrderPages").then((pages) => ({ default: pages.StoreOrderPage })));
+const UnappliedPaymentsPage = lazy(() => import("./pages/UnappliedPaymentsPage").then((pages) => ({ default: pages.UnappliedPaymentsPage })));
 const NewListingPage = lazy(() => import("./pages/ListingPages").then((pages) => ({ default: pages.NewListingPage })));
 const ListingDetailPage = lazy(() => import("./pages/ListingPages").then((pages) => ({ default: pages.ListingDetailPage })));
 
@@ -201,6 +202,7 @@ function App() {
                   <Route path="discounts" element={<StoreDiscountsPage />} />
                   <Route path="orders" element={<DeferredPage><StoreOrdersPage /></DeferredPage>} />
                   <Route path="orders/:number" element={<DeferredPage><StoreOrderPage /></DeferredPage>} />
+                  <Route path="unapplied-payments" element={<DeferredPage><UnappliedPaymentsPage /></DeferredPage>} />
                   <Route path="returns" element={<StoreReturnsPage />} />
                   <Route path="reviews" element={<StoreReviewsPage />} />
                   <Route path="operations" element={<StoreOperationsPage />} />

@@ -686,6 +686,19 @@ tbody tr:last-child td {
 .order-environment[data-environment="test"], .order-test-hint { color: var(--color-danger); background: var(--color-danger-surface); }
 .order-test-hint { padding: var(--space-3); border-radius: var(--radius-control); }
 .order-record-note { white-space: pre-wrap; }
+.unapplied-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-6); list-style: none; margin: 0; padding: 0; }
+.unapplied-page .order-list-controls { align-items: end; }
+.unapplied-page .order-panel > .badge { justify-self: start; white-space: normal; }
+.unapplied-page h1, .unapplied-page h2, .unapplied-page h3, .unapplied-identity, .unapplied-recovery a { overflow-wrap: anywhere; }
+.unapplied-page .order-record-note { overflow-wrap: anywhere; }
+.unapplied-page .order-confirmation { background: var(--color-surface); }
+.unapplied-page .order-confirmation h3, .unapplied-page .order-confirmation p { margin: 0; }
+.unapplied-note { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+.unapplied-note label { font-weight: 650; }
+.unapplied-note textarea { box-sizing: border-box; min-width: 0; width: 100%; resize: vertical; }
+.unapplied-verification { display: flex; align-items: start; gap: var(--space-3); }
+.unapplied-verification input { flex: 0 0 auto; margin-top: .2em; }
+.unapplied-recovery { border-color: var(--color-border-strong); }
 .order-totals { display: grid; gap: var(--space-3); margin: 0; }
 .order-totals > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2) var(--space-4); }
 .order-totals dd { margin: 0; font-variant-numeric: tabular-nums; }

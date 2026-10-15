@@ -33,6 +33,7 @@ const resources = {
     methods: "Checkout methods",
     discounts: "Discounts",
     orders: "Orders",
+    unappliedPayments: "Unapplied payments",
     returns: "Returns",
     reviews: "Reviews",
     operations: "Operations",
@@ -1041,6 +1042,71 @@ const resources = {
       "gatewayRefusal": "The server refused manual confirmation because a gateway still holds an open payment. Review the refreshed attempts.",
       "carrierRefusal": "The order’s saved carrier is currently unavailable. Refresh and check the delivery details before continuing.",
       "writeFailureHint": "The action was not confirmed. Fresh order details are being checked; review them before trying again. A failed response can still leave the server changed."
+  },
+  unapplied: {
+      "provider": "Provider",
+      "title": "Unapplied payments",
+      "intro": "Money received by a provider that could not be applied to its order. Review each payment separately; currencies are not combined.",
+      "statusFilter": "Processing status",
+      "allStatuses": "All statuses",
+      "newestFirst": "Newest received first.",
+      "invalidQuery": "Some list options were invalid. Showing the default options for those values.",
+      "loading": "Loading unapplied payments",
+      "stale": "These records are being refreshed or could not be refreshed. Actions wait for a current server response.",
+      "emptyTitle": "No payments in this view",
+      "outOfRange": "No payments on this page",
+      "emptyFiltered": "No payments match this processing status. Choose another status to review other records.",
+      "emptyAll": "No unapplied payments are recorded for this store.",
+      "openOrder": "Order {{number}}",
+      "paging": "Unapplied payment pages",
+      "action": {
+          "refund": "Review provider refund",
+          "close": "Review manual closure"
+      },
+      "confirmTitle": {
+          "refund": "Refund payment for {{number}}?",
+          "close": "Close payment for {{number}} manually?"
+      },
+      "confirmHint": {
+          "refund": "Request the full amount back through the provider that took it. The provider may refuse. An unconfirmed outcome must be checked there before any further refund.",
+          "close": "Close this record only after checking at the provider and resolving the money with the customer. This records your decision; it does not send money or establish a provider refund."
+      },
+      "confirmAction": {
+          "refund": "Confirm provider refund",
+          "close": "Confirm manual closure"
+      },
+      "cancel": "Cancel action",
+      "note": "How was this payment resolved?",
+      "noteHint": "Required, up to 500 characters. Describe what you checked and how the money was dealt with.",
+      "savedNote": "This is the exact note from the previous request. Recovery sends it unchanged.",
+      "noteInvalid": "Enter a note of 1–500 characters after trimming spaces.",
+      "verified": "I checked the outcome with the provider and verified that this payment has been resolved.",
+      "verificationRequired": "Verify that the payment has been resolved before closing it.",
+      "reviewRequired": "This confirmation needs a current record. Refresh and review it again before continuing.",
+      "reviewUpdated": "Review current record",
+      "externalRefund": "A refund cannot be requested here for this record. Resolve it at the provider or with the customer, then record a manual closure.",
+      "writeFailure": "The request was not confirmed on this screen. Review the latest record before another action. Reads can be retried; writes are never repeated automatically.",
+      "storageBlocked": "The payment request could not be saved safely in this browser tab. Actions are unavailable. Restore session storage and reload before continuing.",
+      "recoveryTitle": "Review a previous request",
+      "recoveryHint": "A request has no confirmed answer on this screen. Other actions wait while its current record is checked. No request is sent by loading this review.",
+      "recoveryLoading": "Checking the payment on its order",
+      "sameKeyHint": "The record still permits this action. You can explicitly recover the same request, with its original key and unchanged note. A refund outcome may still need checking with the provider.",
+      "reviewRecovery": "Review same request",
+      "recoveryNoResend": "The current record does not permit this request again. Do not resend a refund with an unresolved outcome. Finish this review to work from the refreshed list; manual closure still requires your verification.",
+      "finishReview": "Finish review and refresh list",
+      "success": {
+          "refund": "The provider refund request was accepted. Review the refreshed processing status below.",
+          "close": "Manual closure was recorded. This is not provider confirmation that money was refunded."
+      },
+      "problems": {
+          "cannotRefund": "This provider cannot refund the payment here. Resolve it at the provider, then record a manual closure.",
+          "refused": "The provider refused the refund. Check the cause before reviewing a new request.",
+          "unconfirmed": "The provider did not confirm the refund outcome. Check it there; do not send another refund.",
+          "settled": "Someone has already settled this payment. Review its latest status.",
+          "changed": "The payment changed during closure. Review its latest status before continuing.",
+          "inFlight": "The original request is still in progress. Wait, then refresh its record before recovering the same request.",
+          "keyMismatch": "The saved key belongs to a different request. Review the current record before continuing."
+      }
   },
   orders: {
     listHint: "Find and open orders for {{store}}.",
