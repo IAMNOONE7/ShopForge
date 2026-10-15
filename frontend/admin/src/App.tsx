@@ -25,7 +25,6 @@ import {
   StoreImportPage,
   StoreMethodsPage,
   StoreOperationsPage,
-  StoreReturnsPage,
   StoreReviewsPage,
   StoreSettingsPage,
 } from "./pages/StorePage";
@@ -40,6 +39,8 @@ const StoreDomainsPage = lazy(() => import("./pages/StoreDomainsPage").then((pag
 const StoreOrdersPage = lazy(() => import("./pages/OrderPages").then((pages) => ({ default: pages.StoreOrdersPage })));
 const StoreOrderPage = lazy(() => import("./pages/OrderPages").then((pages) => ({ default: pages.StoreOrderPage })));
 const UnappliedPaymentsPage = lazy(() => import("./pages/UnappliedPaymentsPage").then((pages) => ({ default: pages.UnappliedPaymentsPage })));
+const StoreReturnsPage = lazy(() => import("./pages/ReturnPages").then((pages) => ({ default: pages.StoreReturnsPage })));
+const StoreReturnPage = lazy(() => import("./pages/ReturnPages").then((pages) => ({ default: pages.StoreReturnPage })));
 const NewListingPage = lazy(() => import("./pages/ListingPages").then((pages) => ({ default: pages.NewListingPage })));
 const ListingDetailPage = lazy(() => import("./pages/ListingPages").then((pages) => ({ default: pages.ListingDetailPage })));
 
@@ -203,7 +204,8 @@ function App() {
                   <Route path="orders" element={<DeferredPage><StoreOrdersPage /></DeferredPage>} />
                   <Route path="orders/:number" element={<DeferredPage><StoreOrderPage /></DeferredPage>} />
                   <Route path="unapplied-payments" element={<DeferredPage><UnappliedPaymentsPage /></DeferredPage>} />
-                  <Route path="returns" element={<StoreReturnsPage />} />
+                  <Route path="returns" element={<DeferredPage><StoreReturnsPage /></DeferredPage>} />
+                  <Route path="returns/:returnId" element={<DeferredPage><StoreReturnPage /></DeferredPage>} />
                   <Route path="reviews" element={<StoreReviewsPage />} />
                   <Route path="operations" element={<StoreOperationsPage />} />
                   <Route path="*" element={<NotFoundPage />} />

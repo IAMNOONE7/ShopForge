@@ -5,6 +5,7 @@ import { getStoreDomains, addStoreDomain, verifyStoreDomain, makeStoreDomainPrim
 import { getOrders } from "./api/orders";
 import { changeOrder, getOrderDetails } from "./api/orderDetails";
 import { changeUnappliedPayment, getUnappliedPayments } from "./api/unappliedPayments";
+import { decideReturn, getReturns } from "./api/returns";
 
 export type SignInResponse = {
   twoFactorRequired: boolean;
@@ -368,6 +369,9 @@ export type OrderReturn = {
   refundedAmount: number;
   reason: string | null;
   lines: { productName: string; quantity: number }[];
+  refund: string | null;
+  refundProblem: string | null;
+  refundNote: string | null;
 };
 
 export type Review = {
@@ -624,22 +628,8 @@ export const api = {
       `/api/admin/stores/${storeId}/failed-messages/${messageId}/requeue`,
     ),
 
-  returns: (storeId: string, signal?: AbortSignal) =>
-    request<OrderReturn[]>(
-      "GET",
-      `/api/admin/stores/${storeId}/returns`,
-      undefined,
-      signal,
-    ),
-  decideReturn: (
-    storeId: string,
-    returnId: string,
-    decision: "accept" | "refuse" | "receive",
-  ) =>
-    request<OrderReturn>(
-      "POST",
-      `/api/admin/stores/${storeId}/returns/${returnId}/${decision}`,
-    ),
+  returns: getReturns,
+  decideReturn,
 
   reviews: (storeId: string, status?: string, signal?: AbortSignal) =>
     request<Review[]>(

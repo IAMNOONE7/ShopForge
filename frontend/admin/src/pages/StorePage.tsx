@@ -6,7 +6,6 @@ import { FailedMessagesSection } from "../components/FailedMessagesSection";
 import { ImportSection } from "../components/ImportSection";
 import { MethodsSection } from "../components/MethodsSection";
 import { PermissionScope } from "../components/PermissionScope";
-import { ReturnsSection } from "../components/ReturnsSection";
 import { ReviewsSection } from "../components/ReviewsSection";
 import { StoreLogoSection } from "../components/StoreLogoSection";
 import { StorePublicationSection } from "../components/StorePublicationSection";
@@ -101,20 +100,6 @@ export function StoreImportPage() {
     <StoreRoute title={t("import:title")} allowed={canManageCatalog(user.role)}>
       {error !== null && <RequestError error={error} operation="write" />}
       <ImportSection storeId={store.id} run={run} />
-    </StoreRoute>
-  );
-}
-
-export function StoreReturnsPage() {
-  const { t, i18n } = useTranslation("returns");
-  const { user } = useSession();
-  const { store } = useSelectedStore();
-  return (
-    <StoreRoute title={t("title")} allowed={canManageStore(user.role)}>
-      <ReturnsSection
-        storeId={store.id}
-        money={currencyFormatter(store.currency, i18n.resolvedLanguage)}
-      />
     </StoreRoute>
   );
 }

@@ -4,6 +4,7 @@ import { Link } from "react-router";
 import { api, type AdminAddress, type AdminOrderDetail } from "../api";
 import { currencyFormatter, formatDateTime, formatNumber } from "../utils/format";
 import { safeTrackingUrl } from "./orderDetailFacts";
+import { returnReviewPath } from "../utils/returnQuery";
 import { DownloadButton } from "./ui/DownloadButton";
 
 const attemptStates = ["Started", "Pending", "Authorized", "Unrecognised", "Paid", "Failed"] as const;
@@ -56,7 +57,7 @@ export function OrderPaymentAttempts({ order }: { order: AdminOrderDetail }) {
 }
 
 export function OrderRelatedRecords({ order, storeId }: { order: AdminOrderDetail; storeId: string }) {
-  const { t, i18n } = useTranslation(["orderDetails", "unapplied"]);
+  const { t, i18n } = useTranslation(["orderDetails", "unapplied", "returnReview"]);
   return <>
     <section className="order-panel" aria-labelledby="order-unapplied">
       <div className="order-record-heading"><h2 id="order-unapplied" tabIndex={-1}>{t("unappliedTitle")}</h2><Link to={`/stores/${encodeURIComponent(storeId)}/unapplied-payments?status=`}>{t("unapplied:title")}</Link></div>
@@ -92,6 +93,7 @@ export function OrderRelatedRecords({ order, storeId }: { order: AdminOrderDetai
           {returned.refund === "ByStore" && <p className="hint">{t("refundByStoreHint")}</p>}
           {returned.refund === "ClosedByHand" && <p className="hint">{t("closedByHandHint")}</p>}
           {returned.refundProblem !== null && <p className="order-record-note">{t("refundProblem")}: {returned.refundProblem}</p>}
+          <Link to={returnReviewPath(storeId, returned.id, order.number)}>{t("returnReview:reviewReturn")}</Link>
         </li>)}
       </ul>}
     </section>

@@ -1230,6 +1230,83 @@ const resources = {
       unknown: "Unknown",
     },
   },
+  returnReview: {
+      "intro": "Review the returned goods and the refund independently. Accepting a request does not record receipt or send money.",
+      "filtersTitle": "Filter returns",
+      "handlingStatus": "Return status",
+      "refundStatus": "Refund status",
+      "allHandling": "All return statuses",
+      "allRefunds": "All refund statuses",
+      "clearFilters": "Clear filters",
+      "invalidFilters": "Some filters were invalid and have been cleared. Other valid filters still apply.",
+      "collectionLimit": "This collection shows up to the 200 newest returns matching the selected filters. Amounts and original order context are on each review.",
+      "atLimit": "The 200-record limit has been reached. Older matching returns may be missing. Narrow the filters or open the original order to review its return summaries.",
+      "loadingList": "Loading returns",
+      "shown": "Records shown: {{number}}",
+      "emptyTitle": "No returns recorded",
+      "emptyHint": "No returns are included in the current collection.",
+      "emptyFilteredTitle": "No matching returns",
+      "emptyFilteredHint": "No returns in this view match both filters. Clear or change a filter to continue.",
+      "orderLink": "Order {{number}}",
+      "lineCount": "Recorded lines: {{number}}",
+      "backToReturns": "Back to returns",
+      "detailTitle": "Return review",
+      "loadingDetail": "Loading return and original order",
+      "reviewReturn": "Review return",
+      "outsideTitle": "Return outside the available collection",
+      "outsideHint": "This return is not included in the latest 200 records available here. It may be older or unavailable to this store. Check its original order; this screen cannot establish that it was deleted.",
+      "summaryOnly": "The original order contains this return summary, but its full record is outside the available collection. Items, customer reason and manual refund note cannot be reviewed here. Decisions require the full current record.",
+      "stateTitle": "Goods and money",
+      "refundNote": "Manual refund note",
+      "itemsTitle": "Items in this return",
+      "itemIdentityHint": "These are saved product names and quantities. Variant details are not available here; matching names can refer to different items. Check the original order before deciding.",
+      "lineNumber": "Line {{number}}",
+      "quantity": "Quantity: {{quantity}}",
+      "noLines": "No lines are included in this record.",
+      "reasonTitle": "Customer reason",
+      "noReason": "No reason recorded.",
+      "handlingHint": {
+          "Requested": "This request is awaiting a decision. Goods have not been recorded as received.",
+          "Accepted": "The request is accepted. Wait for the goods before recording receipt.",
+          "Refused": "The return request was declined. This does not describe a payment refund.",
+          "Received": "Receipt of goods and the credit have been recorded. Check the separate refund status.",
+          "unknown": "This return has an unknown status. Review the order before taking further action."
+      },
+      "moneyHint": {
+          "none": "No refund processing status is recorded. A credit amount alone does not confirm payment to the customer.",
+          "Pending": "A refund was requested without a confirmed outcome. Check the provider before any further refund; do not resend it.",
+          "Refunded": "The refund is recorded as confirmed, or no money needed to be returned. This is separate from the credit.",
+          "Failed": "The provider refused the refund. The customer may still be owed money; investigate the recorded problem.",
+          "ByStore": "The store is responsible for returning the money through its own payment method. Receipt and credit do not establish that it has done so.",
+          "ClosedByHand": "Someone recorded manual resolution. This is not provider confirmation of a refund.",
+          "unknown": "The refund has an unknown status. Do not infer that money has reached the customer."
+      },
+      "actionsTitle": "Return decision",
+      "noDecisions": "No accept or refuse action is available for this return.",
+      "confirmTitle": {
+          "accept": "Accept {{number}}?",
+          "refuse": "Refuse {{number}}?"
+      },
+      "confirmHint": {
+          "accept": "Approve this return request. This does not record receipt, restock items, book a credit or send a refund.",
+          "refuse": "Decline this return. This does not record receipt or issue a payment refund."
+      },
+      "confirmAction": {
+          "accept": "Confirm acceptance",
+          "refuse": "Confirm refusal"
+      },
+      "cancelDecision": "Keep current decision",
+      "confirmationStale": "The record changed or was refreshed. Review the current record before confirming this decision.",
+      "reviewUpdated": "Review current record",
+      "conflict": "This return has already been dealt with. Review its latest state before deciding again.",
+      "writeFailure": "The decision was not confirmed on this screen. The latest record is being checked. No decision is retried automatically.",
+      "staleDetail": "The return or its order could not be refreshed, or is being refreshed. Decisions wait for current records.",
+      "readOnly": "You can review returns. Only a store owner or administrator can accept or refuse them.",
+      "success": {
+          "accept": "The return was accepted. Receipt of goods and payment refund are separate steps.",
+          "refuse": "The return was refused. This decision did not issue a payment refund."
+      }
+  },
   returns: {
     title: "Returns",
     hint: "Money and stock move when you mark the parcel as received, not before.",

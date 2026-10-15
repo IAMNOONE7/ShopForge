@@ -1232,6 +1232,83 @@ const resources = {
       unknown: "Neznámý",
     },
   },
+  returnReview: {
+      "intro": "Vrácené zboží a vrácení peněz posuzujte odděleně. Přijetí žádosti nezaznamená převzetí zboží ani neodešle peníze.",
+      "filtersTitle": "Filtrování vrácení zboží",
+      "handlingStatus": "Stav vrácení zboží",
+      "refundStatus": "Stav vrácení peněz",
+      "allHandling": "Všechny stavy vrácení zboží",
+      "allRefunds": "Všechny stavy vrácení peněz",
+      "clearFilters": "Zrušit filtry",
+      "invalidFilters": "Některé filtry byly neplatné a byly zrušeny. Ostatní platné filtry zůstávají použité.",
+      "collectionLimit": "Přehled zobrazuje nejvýše 200 nejnovějších vrácení odpovídajících filtrům. Částky a původní objednávku najdete v jednotlivých detailech.",
+      "atLimit": "Byl dosažen limit 200 záznamů. Starší odpovídající vrácení mohou chybět. Upřesněte filtry nebo otevřete původní objednávku a její souhrny vrácení.",
+      "loadingList": "Načítání vrácení zboží",
+      "shown": "Zobrazené záznamy: {{number}}",
+      "emptyTitle": "Žádné evidované vrácení",
+      "emptyHint": "V aktuálním přehledu nejsou zahrnuta žádná vrácení.",
+      "emptyFilteredTitle": "Žádné odpovídající vrácení",
+      "emptyFilteredHint": "Žádné vrácení v tomto přehledu neodpovídá oběma filtrům. Pro pokračování filtr změňte nebo zrušte.",
+      "orderLink": "Objednávka {{number}}",
+      "lineCount": "Evidované položky: {{number}}",
+      "backToReturns": "Zpět na vrácení zboží",
+      "detailTitle": "Posouzení vrácení",
+      "loadingDetail": "Načítání vrácení a původní objednávky",
+      "reviewReturn": "Posoudit vrácení",
+      "outsideTitle": "Vrácení není v dostupném přehledu",
+      "outsideHint": "Toto vrácení není zahrnuto mezi nejnovějšími 200 dostupnými záznamy. Může být starší nebo pro tento obchod nedostupné. Zkontrolujte původní objednávku; tato obrazovka nemůže určit, že bylo smazáno.",
+      "summaryOnly": "Původní objednávka obsahuje souhrn tohoto vrácení, ale úplný záznam je mimo dostupný přehled. Nelze zde posoudit položky, důvod zákazníka ani poznámku k ručnímu vrácení peněz. Rozhodnutí vyžaduje úplný aktuální záznam.",
+      "stateTitle": "Zboží a peníze",
+      "refundNote": "Poznámka k ručnímu vrácení peněz",
+      "itemsTitle": "Položky tohoto vrácení",
+      "itemIdentityHint": "Jde o uložené názvy produktů a množství. Podrobnosti variant zde nejsou dostupné; stejné názvy mohou patřit různým položkám. Před rozhodnutím zkontrolujte původní objednávku.",
+      "lineNumber": "Položka {{number}}",
+      "quantity": "Množství: {{quantity}}",
+      "noLines": "Záznam neobsahuje žádné položky.",
+      "reasonTitle": "Důvod zákazníka",
+      "noReason": "Důvod není zaznamenán.",
+      "handlingHint": {
+          "Requested": "Žádost čeká na rozhodnutí. Převzetí zboží nebylo zaznamenáno.",
+          "Accepted": "Žádost je přijata. Před zaznamenáním převzetí vyčkejte na zboží.",
+          "Refused": "Žádost o vrácení byla odmítnuta. Tento stav nepopisuje vrácení peněz.",
+          "Received": "Převzetí zboží a dobropis byly zaznamenány. Zkontrolujte samostatný stav vrácení peněz.",
+          "unknown": "Toto vrácení má neznámý stav. Před další akcí posuďte objednávku."
+      },
+      "moneyHint": {
+          "none": "Stav zpracování vrácení peněz není zaznamenán. Samotná částka dobropisu nepotvrzuje platbu zákazníkovi.",
+          "Pending": "O vrácení peněz bylo požádáno bez potvrzeného výsledku. Před dalším vrácením ověřte stav u poskytovatele; znovu je neodesílejte.",
+          "Refunded": "Vrácení peněz je zaznamenáno jako potvrzené nebo nebylo potřeba peníze vracet. Jde o stav oddělený od dobropisu.",
+          "Failed": "Poskytovatel vrácení peněz odmítl. Zákazníkovi mohou být peníze stále dluženy; prověřte zaznamenaný problém.",
+          "ByStore": "Obchod odpovídá za vrácení peněz vlastním platebním způsobem. Převzetí ani dobropis nepotvrzují, že je vrátil.",
+          "ClosedByHand": "Někdo zaznamenal ruční vyřešení. Nejde o potvrzení poskytovatele, že byly peníze vráceny.",
+          "unknown": "Vrácení peněz má neznámý stav. Nepředpokládejte, že peníze dorazily zákazníkovi."
+      },
+      "actionsTitle": "Rozhodnutí o vrácení",
+      "noDecisions": "Pro toto vrácení není dostupné přijetí ani odmítnutí.",
+      "confirmTitle": {
+          "accept": "Přijmout {{number}}?",
+          "refuse": "Odmítnout {{number}}?"
+      },
+      "confirmHint": {
+          "accept": "Schvalte tuto žádost o vrácení. Tím se nezaznamená převzetí, nenaskladní položky, nevystaví dobropis ani neodešlou peníze.",
+          "refuse": "Odmítněte toto vrácení. Tím se nezaznamená převzetí ani nevrátí platba."
+      },
+      "confirmAction": {
+          "accept": "Potvrdit přijetí",
+          "refuse": "Potvrdit odmítnutí"
+      },
+      "cancelDecision": "Ponechat současné rozhodnutí",
+      "confirmationStale": "Záznam se změnil nebo byl obnoven. Před potvrzením rozhodnutí posuďte aktuální záznam.",
+      "reviewUpdated": "Posoudit aktuální záznam",
+      "conflict": "Toto vrácení již bylo vyřízeno. Před dalším rozhodnutím posuďte aktuální stav.",
+      "writeFailure": "Rozhodnutí nebylo na této obrazovce potvrzeno. Ověřuje se aktuální záznam. Žádné rozhodnutí se neopakuje automaticky.",
+      "staleDetail": "Vrácení nebo objednávku nešlo obnovit nebo se právě obnovují. Rozhodnutí čekají na aktuální záznamy.",
+      "readOnly": "Vrácení můžete prohlížet. Přijmout nebo odmítnout je může jen vlastník obchodu nebo administrátor.",
+      "success": {
+          "accept": "Vrácení bylo přijato. Převzetí zboží a vrácení platby jsou samostatné kroky.",
+          "refuse": "Vrácení bylo odmítnuto. Tímto rozhodnutím nebyla vrácena platba."
+      }
+  },
   returns: {
     title: "Vrácení",
     hint: "Peníze a sklad se změní až po označení zásilky jako přijaté.",

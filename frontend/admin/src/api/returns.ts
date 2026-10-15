@@ -1,0 +1,39 @@
+import type { OrderReturn } from "../api";
+import { refundStatuses, returnLimit, returnStatuses, type ReturnQuery } from "../utils/returnQuery";
+import { HttpError, requestJson } from "./http";
+
+function isReturn(value: unknown): value is OrderReturn {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const item = value as Record<string, unknown>;
+  const text = (value: unknown) => typeof value === "string" && value.trim().length > 0;
+  const nullableText = (value: unknown) => value === null || typeof value === "string";
+  return text(item.id) && text(item.number) && text(item.orderNumber) && typeof item.status === "string"
+    && typeof item.requestedAt === "string" && Number.isFinite(Date.parse(item.requestedAt))
+    && typeof item.refundedAmount === "number" && Number.isFinite(item.refundedAmount)
+    && nullableText(item.reason) && nullableText(item.refund) && nullableText(item.refundProblem) && nullableText(item.refundNote)
+    && Array.isArray(item.lines) && item.lines.every((line: unknown) => {
+      if (typeof line !== "object" || line === null || Array.isArray(line)) return false;
+      const row = line as Record<string, unknown>;
+      return typeof row.productName === "string" && Number.isSafeInteger(row.quantity) && Number(row.quantity) > 0;
+    });
+}
+const path = (storeId: string) => `/api/admin/stores/${encodeURIComponent(storeId)}/returns`;
+
+export async function getReturns(storeId: string, signal?: AbortSignal, query: ReturnQuery = { status: "", refund: "" }): Promise<OrderReturn[]> {
+  if ((query.status !== "" && !returnStatuses.includes(query.status)) || (query.refund !== "" && !refundStatuses.includes(query.refund))) throw new RangeError("Invalid return filter.");
+  const parameters = new URLSearchParams();
+  if (query.status) parameters.set("status", query.status);
+  if (query.refund) parameters.set("refund", query.refund);
+  const value = await requestJson<unknown>(`${path(storeId)}${parameters.size ? `?${parameters}` : ""}`, { signal });
+  if (!Array.isArray(value) || value.length > returnLimit || !value.every(isReturn)
+    || new Set(value.map((item) => item.id)).size !== value.length || new Set(value.map((item) => item.number)).size !== value.length
+    || value.some((item) => (query.status && item.status !== query.status) || (query.refund && item.refund !== query.refund))) throw new HttpError("invalid-response", 200);
+  return value;
+}
+
+export type ReturnDecision = "accept" | "refuse";
+export async function decideReturn(storeId: string, id: string, decision: ReturnDecision) {
+  const value = await requestJson<unknown>(`${path(storeId)}/${encodeURIComponent(id)}/${decision}`, { method: "POST" });
+  if (!isReturn(value) || value.id !== id || value.status !== (decision === "accept" ? "Accepted" : "Refused")) throw new HttpError("invalid-response", 200);
+  return value;
+}
