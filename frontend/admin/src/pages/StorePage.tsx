@@ -5,7 +5,6 @@ import { DiscountsSection } from "../components/DiscountsSection";
 import { FailedMessagesSection } from "../components/FailedMessagesSection";
 import { ImportSection } from "../components/ImportSection";
 import { MethodsSection } from "../components/MethodsSection";
-import { OrdersSection } from "../components/OrdersSection";
 import { PermissionScope } from "../components/PermissionScope";
 import { ReturnsSection } from "../components/ReturnsSection";
 import { ReviewsSection } from "../components/ReviewsSection";
@@ -103,18 +102,6 @@ export function StoreImportPage() {
       {error !== null && <RequestError error={error} operation="write" />}
       <ImportSection storeId={store.id} run={run} />
     </StoreRoute>
-  );
-}
-
-export function StoreOrdersPage() {
-  const { t } = useTranslation("orders");
-  const { user } = useSession();
-  const { store } = useSelectedStore();
-  return (
-    <div className="admin-route-section">
-      <h1>{t("title")}</h1>
-      <OrdersSection storeId={store.id} canManage={canManageStore(user.role)} />
-    </div>
   );
 }
 

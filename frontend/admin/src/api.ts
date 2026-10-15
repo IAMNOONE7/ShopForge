@@ -2,6 +2,7 @@ import { HttpError, requestBlob, requestJson, saveDownload } from "./api/http";
 import { findStoreProduct, getStoreProducts, hasVisibleStoreProduct } from "./api/listings";
 import { getStoreReadiness } from "./api/readiness";
 import { getStoreDomains, addStoreDomain, verifyStoreDomain, makeStoreDomainPrimary, removeStoreDomain } from "./api/domains";
+import { getOrders } from "./api/orders";
 
 export type SignInResponse = {
   twoFactorRequired: boolean;
@@ -260,6 +261,7 @@ export type AdminOrderDetail = {
   shipment: Shipment | null;
   documents: OrderDocument[];
   lines: AdminOrderLine[];
+  paymentAttempts: { reference: string | null; status: string }[];
 };
 
 export type Stock = {
@@ -628,17 +630,11 @@ export const api = {
       signal,
     ),
 
-  orders: (storeId: string, signal?: AbortSignal) =>
-    request<AdminList<AdminOrder>>(
-      "GET",
-      `/api/admin/stores/${storeId}/orders?page=1&pageSize=50&sort=-placed`,
-      undefined,
-      signal,
-    ),
+  orders: getOrders,
   order: (storeId: string, number: string, signal?: AbortSignal) =>
     request<AdminOrderDetail>(
       "GET",
-      `/api/admin/stores/${storeId}/orders/${number}`,
+      `/api/admin/stores/${encodeURIComponent(storeId)}/orders/${encodeURIComponent(number)}`,
       undefined,
       signal,
     ),

@@ -25,7 +25,6 @@ import {
   StoreImportPage,
   StoreMethodsPage,
   StoreOperationsPage,
-  StoreOrdersPage,
   StoreReturnsPage,
   StoreReviewsPage,
   StoreSettingsPage,
@@ -38,6 +37,8 @@ const NewCategoryPage = lazy(() => import("./pages/CategoryPages").then((pages) 
 const CategoryDetailPage = lazy(() => import("./pages/CategoryPages").then((pages) => ({ default: pages.CategoryDetailPage })));
 const ListingsPage = lazy(() => import("./pages/ListingPages").then((pages) => ({ default: pages.ListingsPage })));
 const StoreDomainsPage = lazy(() => import("./pages/StoreDomainsPage").then((pages) => ({ default: pages.StoreDomainsPage })));
+const StoreOrdersPage = lazy(() => import("./pages/OrderPages").then((pages) => ({ default: pages.StoreOrdersPage })));
+const StoreOrderPage = lazy(() => import("./pages/OrderPages").then((pages) => ({ default: pages.StoreOrderPage })));
 const NewListingPage = lazy(() => import("./pages/ListingPages").then((pages) => ({ default: pages.NewListingPage })));
 const ListingDetailPage = lazy(() => import("./pages/ListingPages").then((pages) => ({ default: pages.ListingDetailPage })));
 
@@ -198,7 +199,8 @@ function App() {
                   <Route path="import" element={<StoreImportPage />} />
                   <Route path="methods" element={<StoreMethodsPage />} />
                   <Route path="discounts" element={<StoreDiscountsPage />} />
-                  <Route path="orders" element={<StoreOrdersPage />} />
+                  <Route path="orders" element={<DeferredPage><StoreOrdersPage /></DeferredPage>} />
+                  <Route path="orders/:number" element={<DeferredPage><StoreOrderPage /></DeferredPage>} />
                   <Route path="returns" element={<StoreReturnsPage />} />
                   <Route path="reviews" element={<StoreReviewsPage />} />
                   <Route path="operations" element={<StoreOperationsPage />} />
