@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
 import { api, type AdminStore, type StoreSettings } from "../api";
 import { useAction } from "../useAction";
@@ -21,9 +22,11 @@ import { RequestError } from "./ui/RequestError";
 export function StoreSettingsSection({
   store,
   reloadStores,
+  canManageDomains = false,
 }: {
   store: AdminStore;
   reloadStores: () => void;
+  canManageDomains?: boolean;
 }) {
   const { t } = useTranslation("stores");
   const [draft, setDraft] = useState<StoreSettingsDraft>(() =>
@@ -104,7 +107,7 @@ export function StoreSettingsSection({
                 value={store.primaryHostName ?? ""}
                 readOnly
                 aria-readonly="true"
-                hint={t("addressReadOnlyHint")}
+                hint={<>{t("addressReadOnlyHint")} {canManageDomains && <Link to={`/stores/${store.id}/domains`}>{t("manageDomains")}</Link>}</>}
               />
               <Field
                 id="currency"

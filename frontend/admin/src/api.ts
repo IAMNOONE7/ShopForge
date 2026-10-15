@@ -1,6 +1,7 @@
 import { HttpError, requestBlob, requestJson, saveDownload } from "./api/http";
 import { findStoreProduct, getStoreProducts, hasVisibleStoreProduct } from "./api/listings";
 import { getStoreReadiness } from "./api/readiness";
+import { getStoreDomains, addStoreDomain, verifyStoreDomain, makeStoreDomainPrimary, removeStoreDomain } from "./api/domains";
 
 export type SignInResponse = {
   twoFactorRequired: boolean;
@@ -421,6 +422,11 @@ export const api = {
   updateStore: (storeId: string, input: StoreSettings) =>
     request<AdminStore>("PUT", `/api/admin/stores/${storeId}`, input),
   storeReadiness: getStoreReadiness,
+  storeDomains: getStoreDomains,
+  addStoreDomain,
+  verifyStoreDomain,
+  makeStoreDomainPrimary,
+  removeStoreDomain,
   publishStore: (storeId: string) =>
     request<AdminStore>("POST", `/api/admin/stores/${storeId}/publish`),
   unpublishStore: (storeId: string) =>

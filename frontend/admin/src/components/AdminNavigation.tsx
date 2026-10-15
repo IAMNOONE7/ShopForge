@@ -104,6 +104,7 @@ export function AdminNavigation({
           >
             {t("navigation:settings")}
           </NavLink>
+          {canManageStore(role) && <NavLink to={`/stores/${selectedStore.id}/domains`} onClick={onNavigate}>{t("navigation:domains")}</NavLink>}
           <NavLink
             to={`/stores/${selectedStore.id}/products`}
             onClick={onNavigate}

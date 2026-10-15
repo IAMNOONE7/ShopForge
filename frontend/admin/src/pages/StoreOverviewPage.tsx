@@ -1,12 +1,15 @@
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import { useSelectedStore } from "../adminContext";
+import { canManageStore, useSession } from "../session";
 
 export function StoreOverviewPage() {
   const { t } = useTranslation(["stores", "navigation", "common"]);
   const { store } = useSelectedStore();
+  const { user } = useSession();
   const links = [
     ["settings", t("navigation:settings")],
+    ...(canManageStore(user.role) ? [["domains", t("navigation:domains")]] : []),
     ["products", t("navigation:storeProducts")],
     ["categories", t("navigation:categories")],
     ["attributes", t("navigation:attributes")],

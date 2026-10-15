@@ -568,19 +568,21 @@ tbody tr:last-child td {
 
 @media (max-width: 40rem) {
   .admin-header-inner {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    flex-wrap: wrap;
     gap: var(--space-2) var(--space-3);
   }
 
+  .admin-brand {
+    flex: 1 1 8rem;
+  }
+
   .mobile-admin-navigation {
-    grid-column: 2;
-    grid-row: 1;
+    max-width: 100%;
   }
 
   .admin-user {
     width: 100%;
-    grid-column: 1 / -1;
+    flex-basis: 100%;
     justify-content: space-between;
     margin-left: 0;
   }
@@ -635,6 +637,35 @@ tbody tr:last-child td {
 }
 
 /* Store creation, settings and publication */
+.domain-workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-6); min-width: 0; max-width: 70rem; overflow-wrap: anywhere; }
+.domain-workspace button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.domain-page-heading, .domain-card-heading { display: flex; align-items: start; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3); }
+.domain-page-heading h1, .domain-card-heading h3 { margin: 0; overflow-wrap: anywhere; }
+.domain-page-heading > div { flex: 1 1 25rem; min-width: 0; }
+.domain-page-heading a { display: inline-flex; align-items: center; min-height: 2.75rem; }
+.domain-list { display: grid; gap: var(--space-4); list-style: none; padding: 0; margin: 0; min-width: 0; }
+.domain-card { min-width: 0; overflow-wrap: anywhere; }
+.domain-card-heading h3 { flex: 1 1 20rem; }
+.domain-card .badge { white-space: normal; }
+.domain-dns-record { display: grid; gap: var(--space-4); padding: var(--space-4); background: var(--color-surface-subtle); border: 1px solid var(--color-border); border-radius: var(--radius-control); }
+.domain-dns-record p { margin-block: var(--space-2) 0; }
+.domain-dns-value { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2) var(--space-4); align-items: end; min-width: 0; }
+.domain-dns-value > [role="status"] { grid-column: 1 / -1; }
+.domain-dns-value input { font-family: var(--font-mono, monospace); }
+.domain-add-form { display: flex; flex-wrap: wrap; align-items: start; gap: var(--space-4); }
+.domain-add-form > div { flex: 1 1 25rem; min-width: 0; }
+.domain-add-form > button { margin-top: 1.6rem; }
+.domain-actions button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: left; }
+.domain-confirmation { padding: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-control); margin-top: var(--space-4); }
+.domain-confirmation h4 { margin-top: 0; }
+.domain-expired { font-weight: 650; }
+@media (max-width: 48rem) {
+  .domain-dns-value { grid-template-columns: minmax(0, 1fr); align-items: start; }
+  .domain-dns-value > button { justify-self: start; }
+  .domain-add-form > button { margin-top: 0; }
+  .domain-card { padding: var(--space-4); }
+}
+
 .store-settings-workspace,
 .new-store-form {
   display: grid;

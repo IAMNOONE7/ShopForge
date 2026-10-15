@@ -37,6 +37,7 @@ const CategoriesPage = lazy(() => import("./pages/CategoryPages").then((pages) =
 const NewCategoryPage = lazy(() => import("./pages/CategoryPages").then((pages) => ({ default: pages.NewCategoryPage })));
 const CategoryDetailPage = lazy(() => import("./pages/CategoryPages").then((pages) => ({ default: pages.CategoryDetailPage })));
 const ListingsPage = lazy(() => import("./pages/ListingPages").then((pages) => ({ default: pages.ListingsPage })));
+const StoreDomainsPage = lazy(() => import("./pages/StoreDomainsPage").then((pages) => ({ default: pages.StoreDomainsPage })));
 const NewListingPage = lazy(() => import("./pages/ListingPages").then((pages) => ({ default: pages.NewListingPage })));
 const ListingDetailPage = lazy(() => import("./pages/ListingPages").then((pages) => ({ default: pages.ListingDetailPage })));
 
@@ -184,6 +185,7 @@ function App() {
                 <Route path="stores/:storeId" element={<StoreLayout />}>
                   <Route index element={<StoreOverviewPage />} />
                   <Route path="settings" element={<StoreSettingsPage />} />
+                  <Route path="domains" element={canManageStore(session.user.role) ? <DeferredPage><StoreDomainsPage /></DeferredPage> : <ForbiddenPage />} />
                   <Route path="products" element={<DeferredPage><ListingsPage /></DeferredPage>} />
                   <Route path="products/new" element={<DeferredPage><NewListingPage /></DeferredPage>} />
                   <Route path="products/:listingId" element={<DeferredPage><ListingDetailPage /></DeferredPage>} />

@@ -4,13 +4,13 @@ import type { StoreReadinessCheck } from "../api";
 
 type Definition = {
   label: "logo" | "company" | "product" | "payment" | "shipping" | "domain" | "paymentConnected" | "shippingConnected" | "tax" | "email" | "emailSender";
-  destination?: "products" | "methods";
+  destination?: "products" | "methods" | "domains";
   heading?: "store-logo-title" | "store-details-title";
 };
 const definitions = new Map<string, Definition>([
   ["store.logo", { label: "logo", heading: "store-logo-title" }],
   ["store.company", { label: "company", heading: "store-details-title" }],
-  ["store.primary-domain", { label: "domain" }],
+  ["store.primary-domain", { label: "domain", destination: "domains" }],
   ["catalog.visible-products", { label: "product", destination: "products" }],
   ["catalog.tax-classes", { label: "tax" }],
   ["orders.payment-method", { label: "payment", destination: "methods" }],

@@ -51,6 +51,7 @@ export function StoreSettingsPage() {
         <StoreSettingsSection
           store={store}
           reloadStores={reloadStores}
+          canManageDomains={canManageStore(user.role)}
         />
         <StoreLogoSection
           key={store.id}
