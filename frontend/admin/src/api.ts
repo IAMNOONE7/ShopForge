@@ -3,6 +3,7 @@ import { findStoreProduct, getStoreProducts, hasVisibleStoreProduct } from "./ap
 import { getStoreReadiness } from "./api/readiness";
 import { getStoreDomains, addStoreDomain, verifyStoreDomain, makeStoreDomainPrimary, removeStoreDomain } from "./api/domains";
 import { getOrders } from "./api/orders";
+import { changeOrder, getOrderDetails } from "./api/orderDetails";
 
 export type SignInResponse = {
   twoFactorRequired: boolean;
@@ -239,6 +240,41 @@ export type AdminOrderLine = {
   lineTotal: number;
 };
 
+export type AdminPaymentAttempt = {
+  provider: string;
+  reference: string | null;
+  status: string;
+  environment: string | null;
+  amount: number;
+  currency: string;
+  startedAt: string;
+  changedAt: string;
+};
+
+export type AdminUnappliedPayment = {
+  id: string;
+  orderNumber: string;
+  provider: string;
+  reference: string | null;
+  amount: number;
+  currency: string;
+  reason: string;
+  status: string;
+  receivedAt: string;
+  changedAt: string;
+  note: string | null;
+  canRefund: boolean;
+};
+
+export type AdminOrderReturn = {
+  id: string;
+  number: string;
+  status: string;
+  refundedAmount: number;
+  refund: string | null;
+  refundProblem: string | null;
+};
+
 export type AdminOrderDetail = {
   number: string;
   placedAt: string;
@@ -261,7 +297,11 @@ export type AdminOrderDetail = {
   shipment: Shipment | null;
   documents: OrderDocument[];
   lines: AdminOrderLine[];
-  paymentAttempts: { reference: string | null; status: string }[];
+  paymentReference: string | null;
+  paidAt: string | null;
+  paymentAttempts: AdminPaymentAttempt[];
+  unappliedPayments: AdminUnappliedPayment[];
+  returns: AdminOrderReturn[];
 };
 
 export type Stock = {
@@ -631,41 +671,22 @@ export const api = {
     ),
 
   orders: getOrders,
-  order: (storeId: string, number: string, signal?: AbortSignal) =>
-    request<AdminOrderDetail>(
-      "GET",
-      `/api/admin/stores/${encodeURIComponent(storeId)}/orders/${encodeURIComponent(number)}`,
-      undefined,
-      signal,
-    ),
+  order: getOrderDetails,
   confirmOrderPayment: (storeId: string, number: string) =>
-    request<AdminOrderDetail>(
-      "POST",
-      `/api/admin/stores/${storeId}/orders/${number}/payment`,
-    ),
+    changeOrder(storeId, number, "payment"),
   cancelOrder: (storeId: string, number: string) =>
-    request<AdminOrderDetail>(
-      "POST",
-      `/api/admin/stores/${storeId}/orders/${number}/cancel`,
-    ),
+    changeOrder(storeId, number, "cancel"),
   createShipment: (storeId: string, number: string, trackingNumber: string) =>
-    request<AdminOrderDetail>(
-      "POST",
-      `/api/admin/stores/${storeId}/orders/${number}/shipment`,
-      { trackingNumber },
-    ),
+    changeOrder(storeId, number, "shipment", { trackingNumber }),
   refundOrder: (storeId: string, number: string) =>
-    request<AdminOrderDetail>(
-      "POST",
-      `/api/admin/stores/${storeId}/orders/${number}/refund`,
-    ),
+    changeOrder(storeId, number, "refund"),
   downloadDocument: async (
     storeId: string,
     orderNumber: string,
     documentNumber: string,
   ) => {
     const download = await requestBlob(
-      `/api/admin/stores/${storeId}/orders/${orderNumber}/documents/${documentNumber}`,
+      `/api/admin/stores/${encodeURIComponent(storeId)}/orders/${encodeURIComponent(orderNumber)}/documents/${encodeURIComponent(documentNumber)}`,
       `${documentNumber}.pdf`,
     );
     saveDownload(download);

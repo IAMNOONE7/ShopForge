@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { api, type AdminList, type AdminOrder } from "../api";
-import { order, orderPage } from "../test/orderFixtures";
+import { order, orderPage, orderDetail } from "../test/orderFixtures";
 import { maxOrderPage } from "../utils/orderListQuery";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -34,7 +34,7 @@ it.each([null, [], {}, { ...orderPage, items: [order, order] }, { ...orderPage, 
 });
 
 it("does not request unsafe offsets and encodes direct detail identities", async () => {
-  const fetch = vi.fn().mockResolvedValue(Response.json({})); vi.stubGlobal("fetch", fetch);
+  const fetch = vi.fn().mockResolvedValue(Response.json({ ...orderDetail, number: "2026/1 #" })); vi.stubGlobal("fetch", fetch);
   await expect(api.orders("store-a", undefined, { page: maxOrderPage + 1, sort: "-placed", q: "" })).rejects.toThrow(RangeError);
   expect(fetch).not.toHaveBeenCalled();
   await api.order("store/a", "2026/1 #");

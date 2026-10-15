@@ -84,7 +84,7 @@ describe("focused order list", () => {
     route("/stores/store-a/orders?page=2&q=50%25+%26+buyer&sort=-status");
     const link = await screen.findByRole("link", { name: number });
     expect(link.getAttribute("href")).toBe("/stores/store-a/orders/RETURNED%20number%2F1?page=2&q=50%25+%26+buyer&sort=-status");
-    await user.click(link); await screen.findByText("€149.00");
+    await user.click(link); await screen.findAllByText("€149.00");
     expect(api.order).toHaveBeenCalledWith("store-a", number, expect.any(AbortSignal));
     expect(api.orders).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("link", { name: "Back to orders" }));
@@ -166,7 +166,7 @@ describe("focused order list", () => {
 
   it.each(["Owner", "Admin", "CatalogManager", "OrderManager", "Warehouse", "Support", "unknown"])("keeps direct detail reads available and gates retained actions for %s", async (role) => {
     route(`/stores/store-a/orders/${order.number}?page=2&q=buyer`, role);
-    await screen.findByText("€149.00"); expect(api.orders).not.toHaveBeenCalled();
+    await screen.findAllByText("€149.00"); expect(api.orders).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Mark as paid" }) !== null).toBe(["Owner", "Admin"].includes(role));
     expect(screen.getByRole("link", { name: "Back to orders" }).getAttribute("href")).toBe("/stores/store-a/orders?page=2&q=buyer");
   });
@@ -184,7 +184,7 @@ describe("focused order list", () => {
     vi.spyOn(api, "me").mockResolvedValue({ id: "owner", email: "owner@example.test", role: "Support", tenantId: "tenant" });
     vi.spyOn(api, "stores").mockResolvedValue([store]);
     window.history.replaceState(null, "", `/stores/store-a/orders/${order.number}?sort=status`);
-    render(<App />); await screen.findByText("€149.00");
+    render(<App />); await screen.findAllByText("€149.00");
     expect(api.orders).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Mark as paid" })).toBeNull();
   });
