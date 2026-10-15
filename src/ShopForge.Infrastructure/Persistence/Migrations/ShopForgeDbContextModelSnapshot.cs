@@ -18,7 +18,7 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.12")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -1640,6 +1640,32 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_outbox_messages_store_id_status_created_at");
 
                     b.ToTable("outbox_messages", "messaging");
+                });
+
+            modelBuilder.Entity("ShopForge.Infrastructure.Messaging.ScheduledRun", b =>
+                {
+                    b.Property<string>("Name")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<DateTimeOffset?>("ClaimedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("claimed_at");
+
+                    b.Property<string>("ClaimedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("claimed_by");
+
+                    b.Property<DateTimeOffset>("DueAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("due_at");
+
+                    b.HasKey("Name")
+                        .HasName("pk_scheduled_runs");
+
+                    b.ToTable("scheduled_runs", "messaging");
                 });
 
             modelBuilder.Entity("ShopForge.Inventory.Domain.InventoryItem", b =>

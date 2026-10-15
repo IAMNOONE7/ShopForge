@@ -65,7 +65,7 @@ public static class OrdersModule
         services.AddScoped<IStoreCatchUp, PaymentReconciliation>();
         services.AddScoped<IStoreCatchUp, StatementImport>();
         services.AddSingleton<ExpiredOrders>();
-        services.AddHostedService<ExpiredOrderSweeper>();
+        services.AddSingleton<IScheduledPass>(provider => provider.GetRequiredService<ExpiredOrders>());
 
         return services;
     }

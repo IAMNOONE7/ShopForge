@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ShopForge.Shared.Maintenance;
 using ShopForge.Shared.Stores;
@@ -7,8 +6,17 @@ using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Infrastructure.Messaging;
 
-internal sealed class StoreMaintenance(IServiceProvider services, ILogger<StoreMaintenance> logger)
+// The nightly housekeeping: every module's cleanup in every store, then what no store owns. Once a day, by whichever
+// replica takes it, at a time the database keeps — so a deployment that restarts every few hours still has it done
+// (D-202). One store's cleanup failing is logged and the rest carries on, as the catch-up pass already did.
+internal sealed class StoreMaintenance(IServiceProvider services, ILogger<StoreMaintenance> logger) : IScheduledPass
 {
+    public string Name => "store-maintenance";
+
+    public TimeSpan Period => TimeSpan.FromHours(24);
+
+    Task IScheduledPass.RunAsync(CancellationToken cancellationToken) => RunAsync(cancellationToken);
+
     public async Task<int> RunAsync(CancellationToken cancellationToken)
     {
         await using var scope = services.CreateAsyncScope();
@@ -34,14 +42,7 @@ internal sealed class StoreMaintenance(IServiceProvider services, ILogger<StoreM
 
         foreach (var maintenance in scope.ServiceProvider.GetServices<IMaintenanceOutsideStores>())
         {
-            var count = await maintenance.RunAsync(cancellationToken);
-
-            if (count > 0)
-            {
-                logger.LogInformation("{Maintenance} removed {Count} rows outside any store.", maintenance.Name, count);
-            }
-
-            removed += count;
+            removed += await RunOneAsync(maintenance.Name, null, () => maintenance.RunAsync(cancellationToken), cancellationToken);
         }
 
         return removed;
@@ -56,38 +57,30 @@ internal sealed class StoreMaintenance(IServiceProvider services, ILogger<StoreM
 
         foreach (var maintenance in scope.ServiceProvider.GetServices<IStoreMaintenance>())
         {
-            var count = await maintenance.RunAsync(cancellationToken);
-
-            if (count > 0)
-            {
-                logger.LogInformation("{Maintenance} removed {Count} rows in store {StoreId}.", maintenance.Name, count, store.StoreId);
-            }
-
-            removed += count;
+            removed += await RunOneAsync(maintenance.Name, store.StoreId, () => maintenance.RunAsync(cancellationToken), cancellationToken);
         }
 
         return removed;
     }
-}
 
-internal sealed class MaintenanceWorker(StoreMaintenance maintenance, TimeProvider clock, ILogger<MaintenanceWorker> logger) : BackgroundService
-{
-    private static readonly TimeSpan Period = TimeSpan.FromHours(24);
-
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    private async Task<int> RunOneAsync(string name, Guid? storeId, Func<Task<int>> run, CancellationToken cancellationToken)
     {
-        using var timer = new PeriodicTimer(Period, clock);
-
-        while (await timer.WaitForNextTickAsync(stoppingToken))
+        try
         {
-            try
+            var count = await run();
+
+            if (count > 0)
             {
-                await maintenance.RunAsync(stoppingToken);
+                logger.LogInformation("{Maintenance} removed {Count} rows in store {StoreId}.", name, count, storeId);
             }
-            catch (Exception exception) when (exception is not OperationCanceledException)
-            {
-                logger.LogError(exception, "Store maintenance failed; the next run picks it up.");
-            }
+
+            return count;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            logger.LogError(exception, "{Maintenance} failed in store {StoreId}; tomorrow's pass tries again.", name, storeId);
+
+            return 0;
         }
     }
 }

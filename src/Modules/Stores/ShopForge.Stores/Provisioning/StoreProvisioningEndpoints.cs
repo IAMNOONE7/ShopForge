@@ -231,7 +231,7 @@ internal static class StoreProvisioningEndpoints
         await dbContext.SaveChangesAsync(cancellationToken);
 
         // Host lookups are cached, so a store going live (or offline) has to drop its cached entries.
-        resolver.Forget(store.Domains.Select(domain => domain.HostName));
+        await resolver.ForgetAsync(store.Domains.Select(domain => domain.HostName), cancellationToken);
 
         return AdminStoreResponse.From(store, PrimaryHostName(store));
     }

@@ -6,7 +6,9 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using ShopForge.Infrastructure.Auditing;
+using ShopForge.Infrastructure.Caching;
 using ShopForge.Infrastructure.Connections;
 using ShopForge.Infrastructure.Diagnostics;
 using ShopForge.Infrastructure.Dns;
@@ -21,6 +23,7 @@ using ShopForge.Infrastructure.Persistence;
 using ShopForge.Infrastructure.Secrets;
 using ShopForge.Infrastructure.Shipping.Packeta;
 using ShopForge.Shared.Auditing;
+using ShopForge.Shared.Caching;
 using ShopForge.Shared.Connections;
 using ShopForge.Shared.Dns;
 using ShopForge.Shared.Documents;
@@ -62,6 +65,13 @@ public static class DependencyInjection
             .SetApplicationName("ShopForge")
             .PersistKeysToDbContext<ShopForgeDbContext>();
 
+        // What a replica keeps of what every replica reads, and the channel that tells it to forget (D-202).
+        services.AddMemoryCache();
+        services.AddSingleton(provider => new CacheChannel(connectionString, provider.GetRequiredService<ILogger<CacheChannel>>()));
+        services.AddSingleton<ReplicaCache>();
+        services.AddSingleton<IReplicaCache>(provider => provider.GetRequiredService<ReplicaCache>());
+        services.AddHostedService<CacheListener>();
+
         var fileStorageConnectionString = configuration.GetConnectionString("FileStorage")
             ?? throw new InvalidOperationException("Connection string 'FileStorage' is not configured.");
         var containerName = configuration["FileStorage:Container"] ?? "media";
@@ -90,9 +100,14 @@ public static class DependencyInjection
         services.AddScoped<IMaintenanceOutsideStores, AuditCleanup>();
         services.AddScoped<IMaintenanceOutsideStores, IdempotencyCleanup>();
         services.AddSingleton<StoreMaintenance>();
-        services.AddHostedService<MaintenanceWorker>();
+        services.AddSingleton<IScheduledPass>(provider => provider.GetRequiredService<StoreMaintenance>());
         services.AddSingleton<StoreCatchUp>();
-        services.AddHostedService<CatchUpWorker>();
+        services.AddSingleton<IScheduledPass>(provider => provider.GetRequiredService<StoreCatchUp>());
+
+        // Every pass any module schedules, each taken by one replica when it falls due (D-202).
+        services.AddSingleton<RunSchedule>();
+        services.AddSingleton(new ScheduleOptions(configuration.GetValue("Schedules:Enabled", true)));
+        services.AddHostedService<ScheduledPasses>();
 
         AddSecretStore(services, configuration);
         AddComgate(services, configuration);
@@ -153,8 +168,6 @@ public static class DependencyInjection
 
     private static void AddSecretStore(IServiceCollection services, IConfiguration configuration)
     {
-        services.AddMemoryCache();
-
         if (configuration[SecretStoreOptions.VaultUri] is not { Length: > 0 } vaultUri)
         {
             services.AddSingleton<ISecretStore, ConfigurationSecretStore>();

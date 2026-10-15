@@ -109,6 +109,11 @@ public sealed class ShopForgeApiFactory : WebApplicationFactory<Program>, IAsync
         builder.UseSetting("RateLimiting:Expensive:PermitLimit", "100000");
         builder.UseSetting("RateLimiting:Global:PermitLimit", "1000000");
 
+        // Every host built in the suite shares one database but not its stand-ins for the outside world, so one
+        // host's sweep would act on another test's orders with a gateway that knows nothing of them — which once
+        // let an order go unasked mid-test. Each test runs the pass it needs itself (D-202).
+        builder.UseSetting("Schedules:Enabled", "false");
+
         // The test host speaks plain HTTP, so cookies cannot be marked Secure the way a deployment marks them.
         builder.UseSetting("Security:RequireSecureCookies", "false");
 
@@ -200,16 +205,28 @@ public sealed class RecordedEmails
 internal sealed class RecordingEmailDelivery(RecordedEmails recorded) : IEmailDelivery
 {
     private readonly ConcurrentDictionary<string, byte> _failing = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, byte> _timingOut = new(StringComparer.OrdinalIgnoreCase);
 
     public void FailFor(string recipient) => _failing[recipient] = 0;
 
     public void StopFailingFor(string recipient) => _failing.TryRemove(recipient, out _);
+
+    // What HttpClient throws when a provider does not answer in time: a cancellation nobody asked for.
+    public void TimeOutFor(string recipient) => _timingOut[recipient] = 0;
+
+    public void StopTimingOutFor(string recipient) => _timingOut.TryRemove(recipient, out _);
 
     public Task DeliverAsync(EmailMessage message, IReadOnlyList<EmailAttachment> attachments, CancellationToken cancellationToken)
     {
         if (_failing.ContainsKey(message.To))
         {
             return Task.FromException(new InvalidOperationException("The mail server is not answering."));
+        }
+
+        if (_timingOut.ContainsKey(message.To))
+        {
+            return Task.FromException(new TaskCanceledException(
+                "The request was canceled due to the configured HttpClient.Timeout of 100 seconds elapsing.", new TimeoutException()));
         }
 
         recorded.Add(message, attachments);

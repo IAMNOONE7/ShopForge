@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using ShopForge.Infrastructure.Messaging;
 using ShopForge.IntegrationTests.Catalog;
 using ShopForge.IntegrationTests.Orders;
@@ -160,6 +161,41 @@ public sealed class OutboxTests(ShopForgeApiFactory factory)
         Assert.Contains(delivered, message => message.Subject.Contains("invited", StringComparison.Ordinal));
     }
 
+    // A mail server that does not answer in time makes HttpClient give up with a cancellation nobody asked for. That
+    // is a delivery to try again. Before D-202 it went past every catch that let cancellations through and ended the
+    // worker's loop — and a background service that ends that way makes the host stop the whole application.
+    [Fact]
+    public async Task A_mail_server_that_times_out_is_a_delivery_to_try_again()
+    {
+        var recipient = $"slow-{Guid.NewGuid():N}@example.test";
+        factory.EmailDelivery.TimeOutFor(recipient);
+
+        try
+        {
+            await using (var scope = factory.Services.CreateAsyncScope())
+            {
+                await scope.ServiceProvider.GetRequiredService<ShopForge.Shared.Email.IEmailSender>().SendOutsideStoreAsync(
+                    new ShopForge.Shared.Email.EmailMessage(recipient, "Hello", "Is anybody there?"), CancellationToken);
+                await scope.ServiceProvider.GetRequiredService<DbContext>().SaveChangesAsync(CancellationToken);
+            }
+
+            await factory.DispatchOutboxAsync(CancellationToken);
+        }
+        finally
+        {
+            factory.EmailDelivery.StopTimingOutFor(recipient);
+        }
+
+        var message = await OutsideStoresAsync(dbContext => dbContext.Database
+            .SqlQuery<OutboxRow>($"SELECT attempts, status, error FROM messaging.outbox_messages WHERE store_id IS NULL AND payload LIKE {'%' + recipient + '%'}")
+            .SingleAsync(CancellationToken));
+
+        Assert.Equal("Pending", message.Status);
+        Assert.True(message.Attempts >= 1);
+        Assert.Contains("HttpClient.Timeout", message.Error, StringComparison.Ordinal);
+        Assert.False(factory.Services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping.IsCancellationRequested);
+    }
+
     [Fact]
     public async Task Maintenance_clears_abandoned_carts_and_unconfirmed_sign_ups()
     {
@@ -285,4 +321,6 @@ public sealed class OutboxTests(ShopForgeApiFactory factory)
     private sealed record MessageView(string Type, string Status);
 
     private sealed record FailedMessageView(Guid Id, string Type, int Attempts, DateTimeOffset CreatedAt, string? Error);
+
+    private sealed record OutboxRow(int Attempts, string Status, string? Error);
 }

@@ -114,7 +114,7 @@ internal static class StoreDomainEndpoints
         await dbContext.SaveChangesAsync(cancellationToken);
 
         // Host lookups are cached, and this host has just started resolving.
-        resolver.Forget([domain.HostName]);
+        await resolver.ForgetAsync([domain.HostName], cancellationToken);
 
         return TypedResults.Ok(Describe(domain));
     }
@@ -145,7 +145,7 @@ internal static class StoreDomainEndpoints
         store.MakePrimary(domain);
         audit.Record("domain.made-primary", domain.HostName);
         await dbContext.SaveChangesAsync(cancellationToken);
-        resolver.Forget(store.Domains.Select(candidate => candidate.HostName));
+        await resolver.ForgetAsync(store.Domains.Select(candidate => candidate.HostName), cancellationToken);
 
         return TypedResults.Ok(Describe(domain));
     }
@@ -180,7 +180,7 @@ internal static class StoreDomainEndpoints
         dbContext.Remove(domain);
         audit.Record("domain.removed", hostName);
         await dbContext.SaveChangesAsync(cancellationToken);
-        resolver.Forget([hostName]);
+        await resolver.ForgetAsync([hostName], cancellationToken);
 
         return TypedResults.NoContent();
     }

@@ -81,12 +81,14 @@ internal sealed class OutboxDispatcher(IServiceProvider services, OutboxEventTyp
         activity?.SetTag("shopforge.store_id", message.StoreId);
         activity?.SetTag("messaging.message.id", message.Id);
 
+        // A handler's own timeout — an HTTP client giving up on Mailgun — is a cancellation too, and it is a failed
+        // delivery to try again rather than the worker being stopped. Only this run's own token stopping is let through.
         try
         {
             await eventTypes.DeliverAsync(scope.ServiceProvider, message.Type, message.Payload, cancellationToken);
             message.Succeed(clock.GetUtcNow());
         }
-        catch (Exception exception) when (exception is not OperationCanceledException)
+        catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             logger.LogError(exception, "Handling outbox message {MessageId} ({Type}) failed on attempt {Attempt}.", message.Id, message.Type, message.Attempts + 1);
             activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
@@ -113,7 +115,7 @@ internal sealed class OutboxWorker(OutboxDispatcher dispatcher, TimeProvider clo
             {
                 await dispatcher.DispatchAsync(stoppingToken);
             }
-            catch (Exception exception) when (exception is not OperationCanceledException)
+            catch (Exception exception) when (exception is not OperationCanceledException || !stoppingToken.IsCancellationRequested)
             {
                 logger.LogError(exception, "The outbox run failed; the next one picks the messages up again.");
             }

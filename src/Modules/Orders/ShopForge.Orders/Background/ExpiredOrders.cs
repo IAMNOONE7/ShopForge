@@ -1,11 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ShopForge.Orders.Domain;
 using ShopForge.Orders.Payments;
 using ShopForge.Shared.Diagnostics;
 using ShopForge.Shared.Inventory;
+using ShopForge.Shared.Maintenance;
 using ShopForge.Shared.Messaging;
 using ShopForge.Shared.Payments;
 using ShopForge.Shared.Stores;
@@ -18,11 +18,20 @@ namespace ShopForge.Orders.Background;
 //
 // Before an order with a gateway payment still open is let go, the gateway is asked. A shopper who paid in the last
 // minutes, and whose notification was lost, is owed the order rather than a refund (D-199).
-internal sealed class ExpiredOrders(IServiceProvider services, TimeProvider clock, ILogger<ExpiredOrders> logger)
+//
+// Every minute, by one replica (D-202). The claim on each order below is what makes two sweeps safe; one sweep at a
+// time is what keeps a gateway from being asked the same question by every replica.
+internal sealed class ExpiredOrders(IServiceProvider services, TimeProvider clock, ILogger<ExpiredOrders> logger) : IScheduledPass
 {
     // How long past its reservation an order is kept while its gateway cannot be asked about it: long enough for a
     // gateway having a bad minute, not so long that a silent one holds the stock.
     public static readonly TimeSpan AskingGrace = TimeSpan.FromMinutes(10);
+
+    public string Name => "expired-orders";
+
+    public TimeSpan Period => TimeSpan.FromMinutes(1);
+
+    Task IScheduledPass.RunAsync(CancellationToken cancellationToken) => SweepAsync(cancellationToken);
 
     public async Task<int> SweepAsync(CancellationToken cancellationToken)
     {
@@ -144,27 +153,5 @@ internal sealed class ExpiredOrders(IServiceProvider services, TimeProvider cloc
         }
 
         return asked;
-    }
-}
-
-internal sealed class ExpiredOrderSweeper(ExpiredOrders expiredOrders, TimeProvider clock, ILogger<ExpiredOrderSweeper> logger) : BackgroundService
-{
-    private static readonly TimeSpan Period = TimeSpan.FromMinutes(1);
-
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        using var timer = new PeriodicTimer(Period, clock);
-
-        while (await timer.WaitForNextTickAsync(stoppingToken))
-        {
-            try
-            {
-                await expiredOrders.SweepAsync(stoppingToken);
-            }
-            catch (Exception exception) when (exception is not OperationCanceledException)
-            {
-                logger.LogError(exception, "Sweeping expired orders failed; retrying on the next run.");
-            }
-        }
     }
 }

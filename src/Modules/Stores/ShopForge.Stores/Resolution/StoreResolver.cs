@@ -1,10 +1,13 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
+using ShopForge.Shared.Caching;
 using ShopForge.Stores.Domain;
 
 namespace ShopForge.Stores.Resolution;
 
-internal sealed class StoreResolver(DbContext dbContext, IMemoryCache cache)
+// A host name is looked up on every storefront request, so the answer is kept. Every replica keeps its own, and a
+// change that makes a host stop resolving — a company suspended, a store taken offline, a domain removed — is
+// forgotten on all of them as soon as it is saved, not five minutes later (D-202).
+internal sealed class StoreResolver(DbContext dbContext, IReplicaCache cache)
 {
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(5);
 
@@ -17,32 +20,25 @@ internal sealed class StoreResolver(DbContext dbContext, IMemoryCache cache)
             return null;
         }
 
-        var cacheKey = CacheKey(hostName);
-
-        if (cache.TryGetValue(cacheKey, out ResolvedStore? store))
-        {
-            return store;
-        }
-
-        store = await (
-                from domain in dbContext.Set<StoreDomain>().IgnoreQueryFilters()
-                join owner in dbContext.Set<Store>().IgnoreQueryFilters() on domain.StoreId equals owner.Id
-                join tenant in dbContext.Set<Tenant>() on owner.TenantId equals tenant.Id
-                where domain.HostName == hostName
-                    && domain.VerifiedAt != null
-                    && owner.Status == StoreStatus.Published
-                    && tenant.Status == TenantStatus.Active
-                select new ResolvedStore(owner.Id, owner.TenantId))
-            .SingleOrDefaultAsync(cancellationToken);
-
-        // Only hits are cached; caching misses would let arbitrary Host headers grow the cache.
-        if (store is not null)
-        {
-            cache.Set(cacheKey, store, CacheDuration);
-        }
-
-        return store;
+        // Only hits are kept; keeping misses would let arbitrary Host headers grow the cache.
+        return await cache.GetAsync(
+            CacheKey(hostName),
+            CacheDuration,
+            looking => LookUpAsync(hostName, looking),
+            store => store is not null,
+            cancellationToken);
     }
+
+    private Task<ResolvedStore?> LookUpAsync(string hostName, CancellationToken cancellationToken) =>
+        (from domain in dbContext.Set<StoreDomain>().IgnoreQueryFilters()
+         join owner in dbContext.Set<Store>().IgnoreQueryFilters() on domain.StoreId equals owner.Id
+         join tenant in dbContext.Set<Tenant>() on owner.TenantId equals tenant.Id
+         where domain.HostName == hostName
+             && domain.VerifiedAt != null
+             && owner.Status == StoreStatus.Published
+             && tenant.Status == TenantStatus.Active
+         select new ResolvedStore(owner.Id, owner.TenantId))
+        .SingleOrDefaultAsync(cancellationToken);
 
     public Task<ResolvedStore?> FindForTenantAsync(Guid storeId, Guid tenantId, CancellationToken cancellationToken) =>
         dbContext.Set<Store>()
@@ -61,16 +57,12 @@ internal sealed class StoreResolver(DbContext dbContext, IMemoryCache cache)
                 select domain.HostName)
             .ToListAsync(cancellationToken);
 
-        Forget(hostNames);
+        await ForgetAsync(hostNames, cancellationToken);
     }
 
-    public void Forget(IEnumerable<string> hostNames)
-    {
-        foreach (var hostName in hostNames)
-        {
-            cache.Remove(CacheKey(hostName));
-        }
-    }
+    // After the change is saved, on this replica and every other.
+    public Task ForgetAsync(IEnumerable<string> hostNames, CancellationToken cancellationToken) =>
+        cache.ForgetAsync([.. hostNames.Select(CacheKey)], cancellationToken);
 
     private static string CacheKey(string hostName) => $"stores:host:{hostName}";
 }

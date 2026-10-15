@@ -41,7 +41,7 @@ internal sealed class ExpiredDomainClaims(DbContext dbContext, StoreResolver res
 
         // Nothing was resolving to these — an unproved name is not served — but the cache holds misses nowhere
         // and hits for proved names only, so forgetting them is cheap and keeps the two in step.
-        resolver.Forget(lapsed.Select(domain => domain.HostName));
+        await resolver.ForgetAsync(lapsed.Select(domain => domain.HostName), cancellationToken);
 
         return lapsed.Count;
     }

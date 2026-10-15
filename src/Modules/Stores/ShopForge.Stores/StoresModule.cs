@@ -30,7 +30,6 @@ public static class StoresModule
         // What the platform owns. An empty suffix means it hands out no store addresses at all, which is the
         // only safe answer when nobody has told it what it controls (D-189).
         services.AddSingleton(configuration.GetSection(PlatformHosts.Section).Get<PlatformHosts>() ?? new PlatformHosts());
-        services.AddMemoryCache();
         services.AddScoped<StoreResolver>();
         services.AddScoped<IStorePublishCheck, StoreBrandingPublishCheck>();
         services.AddScoped<IStorePublishCheck, StoreCompanyPublishCheck>();
