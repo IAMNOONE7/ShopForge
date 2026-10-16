@@ -14,7 +14,12 @@ export type OrderReading = {
 };
 export type StockReading = { sku: string; onHand: number; reserved: number; available: number };
 export type Letter = { id: string; to: string; subject: string; attachments: string[]; links: string[] };
-export type GatewayReading = { merchant: string; transactions: { id: string; referenceId: string; status: string; price: number; currency: string; test: boolean; refunded: number }[] };
+export type GatewayBehaviour = { push: "deliver" | "drop" | "twice"; statusFails: boolean };
+export type GatewayTransaction = {
+  id: string; referenceId: string; status: string; price: number; currency: string; test: boolean; refunded: number;
+  pushes: { at: string; answered: number | null; what: string }[];
+};
+export type GatewayReading = { merchant: string; behaviour: GatewayBehaviour; transactions: GatewayTransaction[] };
 type MerchantReturn = { id: string; number: string; orderNumber: string; status: string; refundedAmount: number; refund: string | null; refundProblem: string | null };
 export type RunSession = {
   environment: IsolatedEnvironment; run: IsolatedRun; marker: Marker;
@@ -23,6 +28,8 @@ export type RunSession = {
   stock: (sku: string) => Promise<StockReading>;
   mail: (to: string) => Promise<Letter[]>;
   gateway: () => Promise<GatewayReading>;
+  configureGateway: (behaviour: GatewayBehaviour) => Promise<void>;
+  setGatewayStatus: (id: string, status: "REVERSAL_PENDING" | "PAID") => Promise<void>;
   pushAgain: (id: string) => Promise<void>;
   advanceReturn: (store: RunStore, orderNumber: string, returnNumber: string, action: "accept" | "receive") => Promise<MerchantReturn>;
 };
@@ -58,6 +65,10 @@ export const test = base.extend<{ runSession: RunSession; isolatedBrowser: void 
         expect({ id: served.id, name: served.name }).toEqual({ id: store.id, name: store.name });
         expect({ currency: served.currency, culture: served.culture }).toEqual({ currency: "CZK", culture: "cs-CZ" });
       }
+      const ownTransaction = async (id: string) => {
+        const reading = await json<GatewayReading>(request, `${root}/comgate/`);
+        if (!reading.transactions.some(transaction => transaction.id === id)) throw new Error("Foreign gateway transaction.");
+      };
       const session: RunSession = {
         environment, run, marker, origin: store => {
           if (!run.stores.some(candidate => candidate.id === store.id && candidate.host === store.host)) throw new Error("Foreign store target.");
@@ -76,7 +87,21 @@ export const test = base.extend<{ runSession: RunSession; isolatedBrowser: void 
           return json(request, `${root}/mail?to=${encodeURIComponent(to)}`);
         },
         gateway: () => json(request, `${root}/comgate/`),
-        pushAgain: async id => { await json(request, `${root}/comgate/transactions/${encodeURIComponent(id)}/push`, 200, "POST"); },
+        configureGateway: async behaviour => {
+          const response = await request.put(`${root}/comgate/behaviour`, { data: behaviour, maxRedirects: 0, maxRetries: 0, timeout: 5_000 });
+          expect(response.status(), "Configure only this run's stand-in").toBe(200);
+          expect(await response.json()).toMatchObject(behaviour);
+        },
+        setGatewayStatus: async (id, status) => {
+          await ownTransaction(id);
+          const response = await request.post(`${root}/comgate/transactions/${encodeURIComponent(id)}`, { data: { status, push: true }, maxRedirects: 0, maxRetries: 0, timeout: 10_000 });
+          expect(response.status(), "Change only this run's transaction").toBe(200);
+          expect(await response.json()).toMatchObject({ id, status });
+        },
+        pushAgain: async id => {
+          await ownTransaction(id);
+          await json(request, `${root}/comgate/transactions/${encodeURIComponent(id)}/push`, 200, "POST", 10_000);
+        },
         advanceReturn: async (store, orderNumber, returnNumber, action) => {
           if (!run.stores.some(candidate => candidate.id === store.id)) throw new Error("Foreign return target.");
           const owner = parseRunOwner(created, run);

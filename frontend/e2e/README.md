@@ -129,12 +129,20 @@ retry. This is fixture progression, not merchant browser coverage. Owner credent
 are validated against the run and never attached to run metadata. Verification links
 keep the mailed host/path/token and map that host to the local preview port.
 All money and mail stay in the disposable stack.
+Payment recovery cases drop a notification, fail the provider status lookup or return
+an unrecognised status. The receipt must stay awaiting payment with reserved stock,
+no invoice and no paid mail. A later successful status read, delivered twice, updates
+the same receipt through real GET polling and deducts stock once, without another
+checkout or browser POST. The rig's recorded push outcomes and read-only oracle prove
+the intermediate and recovered states. Only per-run provider controls are used;
+these cases do not certify scheduled reconciliation or reservation expiry.
 Each test ends only its own run via `DELETE /runs/{run}` and verifies it is forgotten.
 This suspends the tenant; its database rows remain until the stack is taken down.
 
 The normal matrix has a ten-minute deadline, one worker and zero retries.
-`npm run test:isolated:repeat` repeats every case twenty times with a thirty-minute
-deadline. To focus a repeat, append e.g. `-- --project=en-desktop --grep 'a guest buys'`.
+`npm run test:isolated:repeat` repeats every case twenty times, stops on the first
+failure and has a 200-minute deadline (twenty ten-minute matrices). To focus a repeat,
+append e.g. `-- --project=en-desktop --grep 'payment recovery'`.
 Every repetition creates its own run; a failed test is never retried. Reports, per-run
 identities and order/stock/mail facts are under ignored `artifacts/isolated/`; use
 `npx playwright show-report artifacts/isolated/report` to inspect them. Failure traces,
@@ -142,8 +150,9 @@ videos and screenshots are retained. Reports remain private because network reco
 can contain guest receipt tokens. Save reports before another invocation replaces them.
 
 When finished, run `tests/e2e/stack.sh down` from the repository root to stop only the
-disposable stack and discard its data. Merchant/operator browser flows, uncertain
-provider outcomes, complete repeat acceptance, CI wiring and DNS remain separate work.
+disposable stack and discard its data. Lost checkout/return answers, merchant/operator
+browser flows, refund uncertainty, scheduled recovery, complete repeat acceptance,
+CI wiring and DNS remain separate work.
 These journeys do not advance the stack-wide clock or run scheduled passes. Public
 credited amounts remain distinct from provider settlement; settlement is asserted
 through the current oracle and stand-in rather than inferred from the shopper label.
