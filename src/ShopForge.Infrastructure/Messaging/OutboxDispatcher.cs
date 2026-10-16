@@ -101,13 +101,11 @@ internal sealed class OutboxDispatcher(IServiceProvider services, OutboxEventTyp
     }
 }
 
-internal sealed class OutboxWorker(OutboxDispatcher dispatcher, TimeProvider clock, ILogger<OutboxWorker> logger) : BackgroundService
+internal sealed class OutboxWorker(OutboxDispatcher dispatcher, OutboxOptions options, TimeProvider clock, ILogger<OutboxWorker> logger) : BackgroundService
 {
-    private static readonly TimeSpan Period = TimeSpan.FromSeconds(10);
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var timer = new PeriodicTimer(Period, clock);
+        using var timer = new PeriodicTimer(options.Interval, clock);
 
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
@@ -122,3 +120,7 @@ internal sealed class OutboxWorker(OutboxDispatcher dispatcher, TimeProvider clo
         }
     }
 }
+
+// Ten seconds unless the deployment says otherwise: the end-to-end stack polls every second, so a journey waiting for
+// a letter does not wait ten (D-203).
+internal sealed record OutboxOptions(TimeSpan Interval);

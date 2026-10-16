@@ -15,7 +15,9 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/ShopForge.ArchitectureTests/ShopForge.ArchitectureTests.csproj" />
+    <Project Path="tests/ShopForge.EndToEndTests/ShopForge.EndToEndTests.csproj" />
     <Project Path="tests/ShopForge.IntegrationTests/ShopForge.IntegrationTests.csproj" />
+    <Project Path="tests/ShopForge.TestRig/ShopForge.TestRig.csproj" />
     <Project Path="tests/ShopForge.UnitTests/ShopForge.UnitTests.csproj" />
   </Folder>
 </Solution>

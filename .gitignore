@@ -24,6 +24,9 @@ dist/
 .env
 *.local
 
+# The end-to-end stack's logs, processes and addresses (tests/e2e/stack.sh)
+.e2e/
+
 # OS
 .DS_Store
 Thumbs.db

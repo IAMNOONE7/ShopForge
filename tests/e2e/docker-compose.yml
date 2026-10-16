@@ -1,0 +1,26 @@
+# The end-to-end stack's own dependencies, held in memory: nothing survives `stack.sh down`, and nothing here is the
+# development stack's (D-203).
+name: shopforge-e2e
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: shopforge_e2e
+      POSTGRES_USER: shopforge
+      POSTGRES_PASSWORD: shopforge
+    ports:
+      - "127.0.0.1:5434:5432"
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shopforge -d shopforge_e2e"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:3.37.0
+    command: azurite-blob --blobHost 0.0.0.0 --inMemoryPersistence --skipApiVersionCheck
+    ports:
+      - "127.0.0.1:10010:10000"

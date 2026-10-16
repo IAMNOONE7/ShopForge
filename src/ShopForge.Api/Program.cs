@@ -10,6 +10,7 @@ using ShopForge.Api.Auditing;
 using ShopForge.Api.Connections;
 using ShopForge.Api.Diagnostics;
 using ShopForge.Api.Email;
+using ShopForge.Api.EndToEnd;
 using ShopForge.Api.Errors;
 using ShopForge.Api.Health;
 using ShopForge.Api.Messaging;
@@ -135,6 +136,12 @@ builder.Services.AddInventoryModule();
 builder.Services.AddOrdersModule();
 builder.Services.AddPlatformModule(requireSecureCookies);
 
+// A deployment for browser journeys and nothing else, which refuses to start pointed at anything real (D-203).
+if (builder.Environment.IsEndToEnd())
+{
+    builder.Services.AddEndToEnd(builder.Configuration);
+}
+
 // The three sign-in schemes set this for their own cookies; this sets it for every cookie, including the cart's,
 // which is a bearer capability for somebody's basket and was the one that did not (D-192). A policy rather than a
 // line at each call site, so a cookie nobody remembers to mark is marked anyway.
@@ -224,6 +231,11 @@ if (app.Environment.IsDevelopment())
     await app.Services.SeedDevelopmentPlatformUsersAsync();
     await app.Services.SeedDevelopmentCatalogAsync(demo.TenantId, demo.WoodenHomeStoreId, demo.VoltElectronicsStoreId);
     await app.Services.SeedDevelopmentMethodsAsync(demo.TenantId, [demo.WoodenHomeStoreId, demo.VoltElectronicsStoreId]);
+}
+else if (app.Environment.IsEndToEnd())
+{
+    app.MapEndToEnd();
+    await app.PrepareEndToEndAsync();
 }
 
 await app.RunAsync();

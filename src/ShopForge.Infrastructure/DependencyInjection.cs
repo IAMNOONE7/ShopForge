@@ -85,6 +85,7 @@ public static class DependencyInjection
         services.AddScoped<IEventHandler<EmailRequested>, EmailRequestedHandler>();
         services.AddSingleton<OutboxEventTypes>();
         services.AddSingleton<OutboxDispatcher>();
+        services.AddSingleton(new OutboxOptions(TimeSpan.FromSeconds(configuration.GetValue("Outbox:IntervalSeconds", 10))));
         services.AddHostedService<OutboxWorker>();
         services.AddScoped<OutboxAdmin>();
         services.AddScoped<EmailSuppression>();

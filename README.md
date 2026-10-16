@@ -130,6 +130,36 @@ dotnet test
 
 Integration tests start their own PostgreSQL and Azurite containers, so Docker needs to be running.
 
+### The end-to-end stack
+
+Browser journeys run against a stack of their own: a throwaway PostgreSQL and Azurite in compose, the API in its `E2E`
+environment on `127.0.0.1:5180`, and a test rig on `127.0.0.1:5190` that stands in for Comgate and Mailgun. The `E2E`
+environment refuses to start pointed at anything off this machine.
+
+```bash
+tests/e2e/stack.sh up      # addresses in .e2e/stack.json
+curl -X POST http://127.0.0.1:5190/runs
+dotnet test --project tests/ShopForge.EndToEndTests
+tests/e2e/stack.sh down    # and the data with it
+```
+
+A run is a company of its own with two published stores on `<run>-a.localhost` and `<run>-b.localhost`, a T-shirt in
+three sizes and a mug. The rig answers for the run under `/runs/{run}`:
+
+| | |
+|---|---|
+| `GET /runs/{run}` | the run: stores, hosts, products, variants, the owner's sign-in |
+| `PUT /runs/{run}/comgate/behaviour` | `push` (`deliver`, `drop`, `twice`), `pushDelayMs`, `statusDelayMs`, `statusFails`, `refund` (`accept`, `refuse`, `fail`), `createFails` |
+| `POST /runs/{run}/comgate/transactions/{id}` | `{ "status": "PAID", "push": true }`; any status, including one Comgate does not have |
+| `GET /runs/{run}/mail?to=` | letters to the run's addresses, with their links |
+| `GET /runs/{run}/stores/{store}/orders/{number}` | the order, its attempts, answers, kept money, returns, documents and letters |
+| `GET /runs/{run}/stock/{sku}` | on hand, reserved, available |
+| `POST /runs/{run}/clock` | `{ "advanceMinutes": 40 }`: the stack's clock, for every run on it |
+| `POST /runs/{run}/passes/{name}` | `expired-orders`, `store-catch-up` or `store-maintenance`, now |
+
+A checkout with Comgate sends the browser to the rig's payment page, whose Pay, Decline and Leave pending buttons send
+it back to the store.
+
 ## Repository layout
 
 ```
@@ -149,6 +179,9 @@ tests/
   ShopForge.UnitTests
   ShopForge.IntegrationTests
   ShopForge.ArchitectureTests module dependency rules
+  ShopForge.TestRig           stand-ins for Comgate and Mailgun, runs and read-only readings for the end-to-end stack
+  ShopForge.EndToEndTests     the harness checked against a running end-to-end stack
+  e2e/                        the end-to-end stack's compose file and script
 frontend/
   storefront                  customer-facing store
   admin                       store administration
