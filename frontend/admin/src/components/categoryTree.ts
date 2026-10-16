@@ -16,6 +16,11 @@ export function categoryPath(categories: Category[], id: string): Category[] {
   return path;
 }
 
+export function unavailableCategoryAncestor(categories: Category[], id: string): string | null {
+  const first = categoryPath(categories, id)[0];
+  return first?.parentId && !categories.some((category) => category.id === first.parentId) ? first.parentId : null;
+}
+
 export function categoryDescendants(categories: Category[], id: string): Set<string> {
   const found = new Set([id]);
   const pending = [id];

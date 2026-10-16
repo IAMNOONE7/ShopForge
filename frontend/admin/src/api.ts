@@ -1,5 +1,6 @@
 import { HttpError, requestBlob, requestJson, saveDownload } from "./api/http";
 import { findStoreProduct, getStoreProducts, hasVisibleStoreProduct } from "./api/listings";
+import { changeCatalogLifecycle } from "./api/catalogLifecycle";
 import { getStoreReadiness } from "./api/readiness";
 import { getStoreDomains, addStoreDomain, verifyStoreDomain, makeStoreDomainPrimary, removeStoreDomain } from "./api/domains";
 import { getOrders } from "./api/orders";
@@ -523,6 +524,7 @@ export const api = {
     ),
 
   storeProducts: getStoreProducts,
+  changeCatalogLifecycle,
   findStoreProduct,
   hasVisibleStoreProduct,
   listProduct: (storeId: string, productId: string, input: StoreProductInput) =>
@@ -803,10 +805,10 @@ export const api = {
       input,
     ),
 
-  categories: (storeId: string, signal?: AbortSignal) =>
+  categories: (storeId: string, signal?: AbortSignal, archived = false) =>
     request<Category[]>(
       "GET",
-      `/api/admin/stores/${storeId}/categories`,
+      `/api/admin/stores/${storeId}/categories${archived ? "?archived=true" : ""}`,
       undefined,
       signal,
     ),

@@ -5,6 +5,7 @@ import { useAction } from "../useAction";
 import type { RequestState } from "../useRequest";
 import { CategoryAttributeForm } from "./CategoryAttributeForm";
 import { CategoryForm } from "./CategoryForm";
+import { CatalogRetirement } from "./CatalogRetirement";
 import { Button } from "./ui/Button";
 import { InlineMessage } from "./ui/InlineMessage";
 import { LoadingState } from "./ui/LoadingState";
@@ -12,22 +13,24 @@ import { RequestError } from "./ui/RequestError";
 
 type Editor = { kind: "details" | "attributes"; category: Category; categories: Category[]; attributes: AttributeDefinition[] };
 
-export function CategoryEditor({ storeId, category, categories, attributes, reloadAttributes, allowed, refreshing, refreshFailed, reload }: {
+export function CategoryEditor({ storeId, category, categories, attributes, reloadAttributes, allowed, refreshing, refreshFailed, reload, archived = false }: {
   storeId: string; category: Category; categories: Category[]; attributes: RequestState<AttributeDefinition[]>;
-  reloadAttributes: () => void; allowed: boolean; refreshing: boolean; refreshFailed: boolean; reload: () => void;
+  reloadAttributes: () => void; allowed: boolean; refreshing: boolean; refreshFailed: boolean; reload: () => void; archived?: boolean;
 }) {
   const { t } = useTranslation("categories");
   const [editor, setEditor] = useState<Editor | null>(null);
   const [saved, setSaved] = useState(false);
   const [attempted, setAttempted] = useState(false);
-  const [error, run, pending] = useAction(reload);
+  const [error, run, pending] = useAction(reload, { manageControls: false });
+  const [retirementOpen, setRetirementOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const opener = useRef<HTMLButtonElement | null>(null);
   const attributesReady = attributes.status === "ready" && !attributes.refreshing && attributes.refreshError === null;
   const stale = editor !== null && (JSON.stringify(editor.categories) !== JSON.stringify(categories)
     || (editor.kind === "attributes" && attributes.status === "ready" && JSON.stringify(editor.attributes) !== JSON.stringify(attributes.data)));
-  const disabled = !allowed || pending || refreshing || refreshFailed || stale;
+  const baseDisabled = !allowed || pending || refreshing || refreshFailed || stale;
+  const disabled = baseDisabled || retirementOpen || archived;
 
   useEffect(() => {
     if (editor) (root.current?.querySelector<HTMLElement>("input") ?? root.current?.querySelector<HTMLElement>("h2"))?.focus();
@@ -58,7 +61,7 @@ export function CategoryEditor({ storeId, category, categories, attributes, relo
     {!allowed && <InlineMessage>{t("readOnly")}</InlineMessage>}
     <section className="physical-panel" aria-labelledby="category-details-title">
       <div className="category-section-heading"><h2 id="category-details-title" ref={heading} tabIndex={-1}>{t("details")}</h2>
-        {allowed && <Button type="button" variant="secondary" disabled={disabled || !!editor} onClick={(event) => open("details", event.currentTarget)}>{t("editDetails")}</Button>}
+        {allowed && !archived && <Button type="button" variant="secondary" disabled={disabled || !!editor} onClick={(event) => open("details", event.currentTarget)}>{t("editDetails")}</Button>}
       </div>
       <dl className="category-facts">
         <div><dt>{t("slug")}</dt><dd><code>{category.slug}</code></dd></div>
@@ -69,7 +72,7 @@ export function CategoryEditor({ storeId, category, categories, attributes, relo
     </section>
     <section className="physical-panel" aria-labelledby="category-attributes-title">
       <div className="category-section-heading"><h2 id="category-attributes-title">{t("assignedAttributes")}</h2>
-        {allowed && <Button type="button" variant="secondary" disabled={disabled || !!editor || !attributesReady} onClick={(event) => open("attributes", event.currentTarget)}>{t("editAttributes")}</Button>}
+        {allowed && !archived && <Button type="button" variant="secondary" disabled={disabled || !!editor || !attributesReady} onClick={(event) => open("attributes", event.currentTarget)}>{t("editAttributes")}</Button>}
       </div>
       <p className="hint">{t("attributesHint")}</p>
       {attributes.status === "loading" && <LoadingState label={t("loadingAttributes")} lines={2} />}
@@ -82,6 +85,8 @@ export function CategoryEditor({ storeId, category, categories, attributes, relo
         })}</ol> : <p>{t("noAssignedAttributes")}</p>}
       </>}
     </section>
+    <CatalogRetirement storeId={storeId} kind="categories" id={category.id} name={category.name} snapshot={JSON.stringify({ category, archived })}
+      archived={archived} allowed={allowed} disabled={baseDisabled || !!editor} pending={pending} run={run} reload={reload} onOpenChange={setRetirementOpen} />
     {editor && <section className="physical-panel category-editor" ref={root}>
       {editor.kind === "details" ? <CategoryForm category={editor.category} categories={editor.categories} disabled={disabled} pending={pending} onCancel={close}
         onSave={(input) => save(() => api.updateCategory(storeId, category.id, input))} /> :
