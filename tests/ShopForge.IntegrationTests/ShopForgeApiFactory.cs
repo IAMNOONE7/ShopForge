@@ -41,6 +41,9 @@ public sealed class ShopForgeApiFactory : WebApplicationFactory<Program>, IAsync
     // starting a second container.
     internal string DatabaseConnectionString => Started(_databaseConnectionString);
 
+    // The suite's own Azurite, for a process that runs outside every host, as a release's migration job does.
+    internal string FileStorageConnectionString => Started(_fileStorageConnectionString);
+
     public RecordedEmails Emails { get; } = new();
 
     internal RecordingEmailDelivery EmailDelivery { get; }

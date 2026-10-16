@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <!--
+    The Bicep compiler the Azure CLI downloads, as a package for the machine that builds, so the templates are
+    compiled and linted on every build with no CLI, no subscription and no network beyond the restore.
+  -->
+  <PropertyGroup>
+    <BuildArchitecture>$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)</BuildArchitecture>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Azure.Bicep.CommandLine.linux-x64" Condition="$([MSBuild]::IsOSPlatform('Linux')) And '$(BuildArchitecture)' == 'X64'" />
+    <PackageReference Include="Azure.Bicep.CommandLine.linux-arm64" Condition="$([MSBuild]::IsOSPlatform('Linux')) And '$(BuildArchitecture)' == 'Arm64'" />
+    <PackageReference Include="Azure.Bicep.CommandLine.osx-x64" Condition="$([MSBuild]::IsOSPlatform('OSX')) And '$(BuildArchitecture)' == 'X64'" />
+    <PackageReference Include="Azure.Bicep.CommandLine.osx-arm64" Condition="$([MSBuild]::IsOSPlatform('OSX')) And '$(BuildArchitecture)' == 'Arm64'" />
+    <PackageReference Include="Azure.Bicep.CommandLine.win-x64" Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="BicepPath" Value="$(BicepPath)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

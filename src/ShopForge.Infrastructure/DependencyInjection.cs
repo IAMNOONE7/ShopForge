@@ -55,6 +55,7 @@ public static class DependencyInjection
             .UseNpgsql(connectionString)
             .UseSnakeCaseNamingConvention());
         services.AddScoped<DbContext>(provider => provider.GetRequiredService<ShopForgeDbContext>());
+        services.AddSingleton<SchemaGate>();
 
         // Without this every replica keeps its own key ring in its own filesystem, so a cookie one replica
         // issued is unreadable by the next and a sign-in does not survive the load balancer — and a container

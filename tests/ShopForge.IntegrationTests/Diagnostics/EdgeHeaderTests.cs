@@ -18,7 +18,7 @@ public sealed class EdgeHeaderTests(ShopForgeApiFactory factory) : IDisposable
 
     private readonly WebApplicationFactory<Program> _behindEdge = factory.WithWebHostBuilder(builder =>
     {
-        builder.UseEnvironment("Production");
+        builder.AsDeployed();
         builder.UseSetting("Edge:FrontDoorId", FrontDoorId);
         builder.UseSetting("Security:RequireSecureCookies", "false");
     });
@@ -56,7 +56,7 @@ public sealed class EdgeHeaderTests(ShopForgeApiFactory factory) : IDisposable
     {
         using var deployed = factory.WithWebHostBuilder(builder =>
         {
-            builder.UseEnvironment("Production");
+            builder.AsDeployed();
             builder.UseSetting("Security:RequireSecureCookies", "true");
         });
         var options = deployed.Services.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>();

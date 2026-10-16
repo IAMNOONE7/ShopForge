@@ -8,6 +8,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageVersion Include="Azure.Bicep.CommandLine.linux-arm64" Version="0.47.16" />
+    <PackageVersion Include="Azure.Bicep.CommandLine.linux-x64" Version="0.47.16" />
+    <PackageVersion Include="Azure.Bicep.CommandLine.osx-arm64" Version="0.47.16" />
+    <PackageVersion Include="Azure.Bicep.CommandLine.osx-x64" Version="0.47.16" />
+    <PackageVersion Include="Azure.Bicep.CommandLine.win-x64" Version="0.47.16" />
     <PackageVersion Include="Azure.Extensions.AspNetCore.Configuration.Secrets" Version="1.5.2" />
     <PackageVersion Include="Azure.Monitor.OpenTelemetry.AspNetCore" Version="1.6.0" />
     <PackageVersion Include="Azure.Security.KeyVault.Secrets" Version="4.11.0" />

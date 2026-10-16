@@ -27,6 +27,9 @@ dist/
 # The end-to-end stack's logs, processes and addresses (tests/e2e/stack.sh)
 .e2e/
 
+# The release rehearsal's builds and logs (tests/release/rehearse.sh)
+.release-rehearsal/
+
 # OS
 .DS_Store
 Thumbs.db

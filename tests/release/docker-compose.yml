@@ -1,0 +1,26 @@
+# The release rehearsal's own database and storage, held in memory: nothing survives the rehearsal, and nothing here
+# is the development stack's or the end-to-end stack's (D-205).
+name: shopforge-release
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: shopforge
+      POSTGRES_USER: shopforge
+      POSTGRES_PASSWORD: rehearsal
+    ports:
+      - "127.0.0.1:5436:5432"
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shopforge -d shopforge"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:3.37.0
+    command: azurite-blob --blobHost 0.0.0.0 --inMemoryPersistence --skipApiVersionCheck
+    ports:
+      - "127.0.0.1:10012:10000"

@@ -1,4 +1,5 @@
 using System.Net;
+using System.Reflection;
 using Microsoft.AspNetCore.Hosting;
 
 namespace ShopForge.IntegrationTests.Health;
@@ -25,6 +26,21 @@ public sealed class HealthEndpointTests(ShopForgeApiFactory factory)
         using var response = await client.GetAsync("/health/ready", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    // The commit the build was made from rides on its version, so a release can tell its own revision from the one it
+    // replaced (D-205).
+    [Fact]
+    public async Task The_build_says_which_build_it_is()
+    {
+        using var client = factory.CreateClient();
+
+        var version = await client.GetStringAsync("/health/version", TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            typeof(Program).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion,
+            version);
+        Assert.Matches("^[0-9]+\\.[0-9]+\\.[0-9]+", version);
     }
 
     [Fact]

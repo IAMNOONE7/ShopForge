@@ -19,6 +19,7 @@ using ShopForge.Catalog;
 using ShopForge.Catalog.Development;
 using ShopForge.Customers;
 using ShopForge.Infrastructure;
+using ShopForge.Infrastructure.Email;
 using ShopForge.Infrastructure.Files;
 using ShopForge.Infrastructure.Persistence;
 using ShopForge.Inventory;
@@ -39,6 +40,17 @@ var builder = WebApplication.CreateBuilder(args);
 if (builder.Configuration["KeyVault:Uri"] is { Length: > 0 } keyVaultUri)
 {
     builder.Configuration.AddAzureKeyVault(new Uri(keyVaultUri), new Azure.Identity.DefaultAzureCredential());
+}
+
+// Mail that never leaves looks exactly like mail that does, until a customer waits for a confirmation that will not
+// come. Outside development and the test hosts, a deployment that would only log its mail refuses to start (D-205).
+if (!builder.Environment.IsDevelopment()
+    && !builder.Environment.IsEnvironment("Testing")
+    && !builder.Environment.IsEndToEnd()
+    && string.Equals(builder.Configuration["Email:Provider"] ?? EmailOptions.LogProvider, EmailOptions.LogProvider, StringComparison.OrdinalIgnoreCase))
+{
+    throw new InvalidOperationException(
+        $"Email:Provider is '{EmailOptions.LogProvider}', which sends nothing. A deployment has to name a provider that delivers mail.");
 }
 
 builder.Services.AddSingleton(TimeProvider.System);
@@ -151,9 +163,24 @@ builder.Services.Configure<CookiePolicyOptions>(options =>
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<ShopForgeDbContext>("database", tags: [HealthEndpoints.ReadinessTag])
     .AddCheck<FileStorageHealthCheck>("file-storage", tags: [HealthEndpoints.ReadinessTag])
-    .AddCheck<SecretStoreHealthCheck>("secret-store", tags: [HealthEndpoints.ReadinessTag]);
+    .AddCheck<SecretStoreHealthCheck>("secret-store", tags: [HealthEndpoints.ReadinessTag])
+    .AddCheck<SchemaHealthCheck>("schema", tags: [HealthEndpoints.ReadinessTag]);
 
 var app = builder.Build();
+
+// A release migrates the schema with its own image, as a job of its own, before its revision serves (D-205). Run with
+// `migrate`, the build applies what the database lacks and exits instead of serving.
+if (args is ["migrate"])
+{
+    var applied = await app.Services.MigrateDatabaseAsync();
+    app.Logger.LogInformation(
+        "Applied {Count} migration(s){Migrations}.",
+        applied.Count,
+        applied.Count == 0 ? "; the database already had every one" : ": " + string.Join(", ", applied));
+    await app.DisposeAsync();
+
+    return;
+}
 
 app.UseEdgeHeaders();
 app.UseCookiePolicy();
@@ -175,6 +202,7 @@ app.UseMiddleware<CorrelationMiddleware>();
 app.UseHttpLogging();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
+app.UseSchemaGate();
 app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();
@@ -221,7 +249,7 @@ storeAdmin.MapOrdersStoreAdminEndpoints();
 storeAdmin.MapAdminOutboxEndpoints();
 storeAdmin.MapAdminSuppressionEndpoints();
 
-// Outside Development the schema is migrated by the pipeline before a new revision starts (D-074).
+// Outside Development the schema is migrated before a new revision starts, by the release's own job (D-074, D-205).
 if (app.Environment.IsDevelopment())
 {
     await app.Services.MigrateDatabaseAsync();

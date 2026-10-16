@@ -1,6 +1,7 @@
 param location string
 param namePrefix string
-param readerPrincipalId string
+@description('The app\'s own identity, which reads this vault and writes the provider vault (D-205).')
+param appPrincipalId string
 param storageAccountName string
 param insightsName string
 param postgresHost string
@@ -14,6 +15,8 @@ param stripeSecretKey string
 param stripeWebhookSecret string
 @secure()
 param mailgunApiKey string
+@secure()
+param mailgunWebhookSigningKey string
 
 resource storage 'Microsoft.Storage/storageAccounts@2024-01-01' existing = {
   name: storageAccountName
@@ -22,8 +25,6 @@ resource storage 'Microsoft.Storage/storageAccounts@2024-01-01' existing = {
 resource insights 'Microsoft.Insights/components@2020-02-02' existing = {
   name: insightsName
 }
-
-
 
 resource vault 'Microsoft.KeyVault/vaults@2024-11-01' = {
   name: '${namePrefix}-kv'
@@ -82,7 +83,9 @@ resource stripeWebhookSecretValue 'Microsoft.KeyVault/vaults/secrets@2024-11-01'
   }
 }
 
-resource mailgunApiKeySecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = if (!empty(mailgunApiKey)) {
+// A deployment always sends mail (D-205), so both of Mailgun's keys are always here: the one it sends with, and the
+// one the delivery events it posts back are signed with (19d).
+resource mailgunApiKeySecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = {
   parent: vault
   name: 'Email--Mailgun--ApiKey'
   properties: {
@@ -90,13 +93,21 @@ resource mailgunApiKeySecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = if
   }
 }
 
-// Key Vault Secrets User: the container app reads what it needs and nothing writes from the outside.
+resource mailgunWebhookSigningKeySecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = {
+  parent: vault
+  name: 'Email--Mailgun--WebhookSigningKey'
+  properties: {
+    value: mailgunWebhookSigningKey
+  }
+}
+
+// Key Vault Secrets User: the app and its migration job read what they need, and nothing writes from the outside.
 resource reader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: vault
-  name: guid(vault.id, readerPrincipalId, '4633458b-17de-408a-b874-0445c86b69e6')
+  name: guid(vault.id, appPrincipalId, '4633458b-17de-408a-b874-0445c86b69e6')
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
-    principalId: readerPrincipalId
+    principalId: appPrincipalId
     principalType: 'ServicePrincipal'
   }
 }
@@ -126,10 +137,10 @@ resource providerVault 'Microsoft.KeyVault/vaults@2024-11-01' = {
 // Key Vault Secrets Officer, scoped to the provider vault alone: read, write and rotate what a merchant owns.
 resource providerSecretsOfficer 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: providerVault
-  name: guid(providerVault.id, readerPrincipalId, 'b86a8fe4-44ce-4948-aee7-eccb2c155cd7')
+  name: guid(providerVault.id, appPrincipalId, 'b86a8fe4-44ce-4948-aee7-eccb2c155cd7')
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b86a8fe4-44ce-4948-aee7-eccb2c155cd7')
-    principalId: readerPrincipalId
+    principalId: appPrincipalId
     principalType: 'ServicePrincipal'
   }
 }

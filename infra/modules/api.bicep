@@ -1,44 +1,22 @@
 param location string
 param namePrefix string
-param workspaceName string
-param image string
+param environmentId string
+param identityId string
 param registryServer string
-param keyVaultUri string
-param providerVaultUri string
-param frontDoorId string
-@description('Which e-mail provider carries transactional mail; "log" sends nothing.')
-param emailProvider string = 'log'
-param emailSenderAddress string = ''
-param mailgunDomain string = ''
-@description('The zone store subdomains are composed under, e.g. shops.example.cz. Without it no store can be created.')
-param storeHostSuffix string
-
-resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
-  name: workspaceName
-}
-
-resource environment 'Microsoft.App/managedEnvironments@2024-03-01' = {
-  name: '${namePrefix}-env'
-  location: location
-  properties: {
-    appLogsConfiguration: {
-      destination: 'log-analytics'
-      logAnalyticsConfiguration: {
-        customerId: workspace.properties.customerId
-        sharedKey: workspace.listKeys().primarySharedKey
-      }
-    }
-  }
-}
+param image string
+param settings array
 
 resource api 'Microsoft.App/containerApps@2024-03-01' = {
   name: '${namePrefix}-api'
   location: location
   identity: {
-    type: 'SystemAssigned'
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${identityId}': {}
+    }
   }
   properties: {
-    managedEnvironmentId: environment.id
+    managedEnvironmentId: environmentId
     configuration: {
       ingress: {
         external: true
@@ -50,7 +28,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
       registries: [
         {
           server: registryServer
-          identity: 'system'
+          identity: identityId
         }
       ]
     }
@@ -63,16 +41,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             cpu: json('0.5')
             memory: '1Gi'
           }
-          env: [
-            { name: 'ASPNETCORE_ENVIRONMENT', value: 'Production' }
-            { name: 'KeyVault__Uri', value: keyVaultUri }
-            { name: 'ProviderSecrets__VaultUri', value: providerVaultUri }
-            { name: 'Edge__FrontDoorId', value: frontDoorId }
-            { name: 'Email__Provider', value: emailProvider }
-            { name: 'Email__SenderAddress', value: emailSenderAddress }
-            { name: 'Email__Mailgun__Domain', value: mailgunDomain }
-            { name: 'StoreHosts__Suffix', value: storeHostSuffix }
-          ]
+          env: settings
           probes: [
             {
               type: 'Liveness'
@@ -80,6 +49,8 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
               periodSeconds: 30
             }
             {
+              // Not ready until the database has every migration the image carries, so the revision it replaces keeps
+              // serving until then (D-205).
               type: 'Readiness'
               httpGet: { path: '/health/ready', port: 8080 }
               periodSeconds: 10
@@ -105,5 +76,4 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
   }
 }
 
-output principalId string = api.identity.principalId
 output fqdn string = api.properties.configuration.ingress.fqdn

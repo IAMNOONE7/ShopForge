@@ -13,21 +13,48 @@ permissions:
   contents: read
   id-token: write
 
+# A release migrates first, serves second and is verified third (D-205). The schema moves before the new image serves
+# anywhere, the build that answers is checked to be the release's own, and the frontends are checked once published.
 jobs:
   deploy:
     name: Deploy to ${{ inputs.environment }}
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
+    # One release at a time per environment: two would migrate and swap images over each other.
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+    env:
+      NAME_PREFIX: ${{ vars.NAME_PREFIX }}
+      LOCATION: ${{ vars.LOCATION }}
+      REGISTRY_NAME: ${{ vars.REGISTRY_NAME }}
+      REGISTRY_SERVER: ${{ vars.REGISTRY_SERVER }}
+      REGISTRY_RESOURCE_GROUP: ${{ vars.REGISTRY_RESOURCE_GROUP }}
+      STORAGE_ACCOUNT: ${{ vars.STORAGE_ACCOUNT }}
+      STOREFRONT_FQDN: ${{ vars.STOREFRONT_FQDN }}
+      STORE_HOST_SUFFIX: ${{ vars.STORE_HOST_SUFFIX }}
+      API_BASE_URL: ${{ vars.API_BASE_URL }}
+      SITE_URL: ${{ vars.SITE_URL }}
+      ADMIN_URL: ${{ vars.ADMIN_URL }}
+      SMOKE_STORE_HOST: ${{ vars.SMOKE_STORE_HOST }}
+      EMAIL_PROVIDER: ${{ vars.EMAIL_PROVIDER }}
+      EMAIL_SENDER_ADDRESS: ${{ vars.EMAIL_SENDER_ADDRESS }}
+      MAILGUN_DOMAIN: ${{ vars.MAILGUN_DOMAIN }}
+      IMAGE: ${{ vars.REGISTRY_SERVER }}/shopforge-api:${{ github.sha }}
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: 10.0.x
+      # A release missing an input, or one that would send no mail, stops before anything is built.
+      - name: Check the release's inputs
+        env:
+          DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
+          MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
+          MAILGUN_WEBHOOK_SIGNING_KEY: ${{ secrets.MAILGUN_WEBHOOK_SIGNING_KEY }}
+        run: scripts/release-inputs.sh
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           cache-dependency-path: frontend/*/package-lock.json
 
@@ -37,55 +64,54 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      # The commit goes into the build's version, which is how the smoke test knows the release's own build answered.
       - name: Build and push the image
         run: |
-          az acr login --name "${{ vars.REGISTRY_NAME }}"
-          docker build --tag "${{ vars.REGISTRY_SERVER }}/shopforge-api:${{ github.sha }}" .
-          docker push "${{ vars.REGISTRY_SERVER }}/shopforge-api:${{ github.sha }}"
+          az acr login --name "$REGISTRY_NAME"
+          docker build --build-arg SOURCE_VERSION="${{ github.sha }}" --tag "$IMAGE" .
+          docker push "$IMAGE"
 
       - name: Build the storefront and admin
         run: |
           npm ci --prefix frontend/storefront && npm run build --prefix frontend/storefront
           npm ci --prefix frontend/admin && npm run build --prefix frontend/admin
 
-      - name: Provision or update the environment
-        run: |
-          az deployment sub create \
-            --location "${{ vars.LOCATION }}" \
-            --template-file infra/main.bicep \
-            --parameters namePrefix="${{ vars.NAME_PREFIX }}" \
-                         location="${{ vars.LOCATION }}" \
-                         image="${{ vars.REGISTRY_SERVER }}/shopforge-api:${{ github.sha }}" \
-                         registryServer="${{ vars.REGISTRY_SERVER }}" \
-                         storefrontFqdn="${{ vars.STOREFRONT_FQDN }}" \
-                         storeHostSuffix="${{ vars.STORE_HOST_SUFFIX }}" \
-                         databasePassword="${{ secrets.DATABASE_PASSWORD }}" \
-                         stripeSecretKey="${{ secrets.STRIPE_SECRET_KEY }}" \
-                         stripeWebhookSecret="${{ secrets.STRIPE_WEBHOOK_SECRET }}"
-
-      # The schema is migrated before the new revision serves traffic, never by the application itself (D-074).
-      # The bundle builds the application's host to find the context, so it needs the same configuration the app does.
-      - name: Apply database migrations
+      # Everything the release needs, including the job that migrates with its image, while the app keeps serving.
+      - name: Prepare the environment, leaving the serving app alone
         env:
-          ConnectionStrings__ShopForge: ${{ secrets.DATABASE_CONNECTION_STRING }}
-          ConnectionStrings__FileStorage: ${{ secrets.FILE_STORAGE_CONNECTION_STRING }}
-        run: |
-          dotnet tool restore
-          dotnet ef migrations bundle \
-            --project src/ShopForge.Infrastructure \
-            --startup-project src/ShopForge.Api \
-            --configuration Release \
-            --self-contained --runtime linux-x64 \
-            --output ./migrate
-          ./migrate
+          DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
+          MAILGUN_WEBHOOK_SIGNING_KEY: ${{ secrets.MAILGUN_WEBHOOK_SIGNING_KEY }}
+        run: scripts/provision.sh without-app
 
-      # Nobody is told a deployment succeeded until the thing it deployed answers (D-125).
-      - name: Smoke test
-        run: scripts/smoke.sh "${{ vars.API_BASE_URL }}" "${{ vars.SMOKE_STOREFRONT_HOST }}"
+      # The release's own image migrates the schema from inside the environment, never by the app as it starts (D-074).
+      - name: Migrate the schema
+        run: scripts/migrate.sh "$NAME_PREFIX-rg" "$NAME_PREFIX-migrate"
+
+      # The new revision is ready only once it finds every migration it carries; the one it replaces serves until then.
+      - name: Release the image
+        env:
+          DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
+          MAILGUN_WEBHOOK_SIGNING_KEY: ${{ secrets.MAILGUN_WEBHOOK_SIGNING_KEY }}
+        run: scripts/provision.sh with-app
+
+      # Nobody is told a deployment succeeded until the thing it deployed answers (D-125), as the release's own build.
+      - name: Smoke test the API
+        run: scripts/smoke.sh --api "$API_BASE_URL" --version "${{ github.sha }}" --store-host "$SMOKE_STORE_HOST"
 
       - name: Publish the built frontends
         run: |
-          az storage blob upload-batch --account-name "${{ vars.STORAGE_ACCOUNT }}" --auth-mode login \
+          az storage blob upload-batch --account-name "$STORAGE_ACCOUNT" --auth-mode login \
             --source frontend/storefront/dist --destination '$web' --overwrite
-          az storage blob upload-batch --account-name "${{ vars.STORAGE_ACCOUNT }}" --auth-mode login \
+          az storage blob upload-batch --account-name "$STORAGE_ACCOUNT" --auth-mode login \
             --source frontend/admin/dist --destination '$web/admin' --overwrite
+
+      - name: Smoke test the published site
+        run: |
+          scripts/smoke.sh --site "$SITE_URL" --admin "$ADMIN_URL" \
+            --http "http://${SITE_URL#https://}" --store "https://$SMOKE_STORE_HOST/"

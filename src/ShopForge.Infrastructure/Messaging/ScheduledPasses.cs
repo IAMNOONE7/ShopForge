@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using ShopForge.Infrastructure.Persistence;
 using ShopForge.Shared.Maintenance;
 
 namespace ShopForge.Infrastructure.Messaging;
@@ -11,13 +12,23 @@ internal sealed class ScheduledPasses(
     IEnumerable<IScheduledPass> passes,
     RunSchedule schedule,
     ScheduleOptions options,
+    SchemaGate schema,
     TimeProvider clock,
     ILogger<ScheduledPasses> logger) : BackgroundService
 {
     private static readonly TimeSpan LongestWait = TimeSpan.FromMinutes(1);
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        options.Enabled ? Task.WhenAll(passes.Select(pass => KeepAsync(pass, stoppingToken))) : Task.CompletedTask;
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        if (!options.Enabled)
+        {
+            return;
+        }
+
+        // The schedule itself is a table, so not even the claim is tried before the schema has caught up (D-205).
+        await schema.WaitAsync(stoppingToken);
+        await Task.WhenAll(passes.Select(pass => KeepAsync(pass, stoppingToken)));
+    }
 
     private async Task KeepAsync(IScheduledPass pass, CancellationToken stoppingToken)
     {

@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ShopForge.Infrastructure.Diagnostics;
+using ShopForge.Infrastructure.Persistence;
 using ShopForge.Shared.Messaging;
 using ShopForge.Shared.Tenancy;
 
@@ -101,10 +102,14 @@ internal sealed class OutboxDispatcher(IServiceProvider services, OutboxEventTyp
     }
 }
 
-internal sealed class OutboxWorker(OutboxDispatcher dispatcher, OutboxOptions options, TimeProvider clock, ILogger<OutboxWorker> logger) : BackgroundService
+internal sealed class OutboxWorker(
+    OutboxDispatcher dispatcher, OutboxOptions options, SchemaGate schema, TimeProvider clock, ILogger<OutboxWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Nothing is delivered by a build whose tables are not there yet (D-205).
+        await schema.WaitAsync(stoppingToken);
+
         using var timer = new PeriodicTimer(options.Interval, clock);
 
         while (await timer.WaitForNextTickAsync(stoppingToken))

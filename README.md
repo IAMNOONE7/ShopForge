@@ -103,17 +103,26 @@ The API exposes `/health/live` and `/health/ready`.
 
 ## Deployment
 
-`infra/` describes the whole Azure environment in Bicep: Log Analytics and Application Insights, Key Vault, Storage (product media plus the built frontends), PostgreSQL Flexible Server, the Container Apps environment and Front Door with its routes.
+`infra/` describes the whole Azure environment in Bicep: Log Analytics and Application Insights, the app's managed identity and its roles, Key Vault, Storage (product media plus the built frontends), PostgreSQL Flexible Server, the Container Apps environment with the app and its migration job, and Front Door with its routes. `tests/ShopForge.DeploymentTests` compiles and lints the templates on every build, with the Bicep compiler as a package.
 
-```bash
-az deployment sub create --location westeurope --template-file infra/main.bicep --parameters infra/main.sample.bicepparam
-```
+The GitHub Actions `Deploy` workflow runs a release in this order:
 
-The GitHub Actions `Deploy` workflow builds the image, pushes it, deploys the template, applies the migrations and uploads the built frontends. Three things are worth knowing:
+1. `scripts/release-inputs.sh` checks every input by name, and refuses a release that would send no mail.
+2. The image is built, stamped with its commit, and pushed. The frontends are built.
+3. `scripts/provision.sh without-app` deploys everything the app needs, including the migration job on the new image. The serving app is left alone.
+4. `scripts/migrate.sh` runs that job: the release's own image, run with `migrate`, applies its migrations from inside the environment.
+5. `scripts/provision.sh with-app` puts the image on the app.
+6. `scripts/smoke.sh --api` checks the API, including that the answering build is the release's own (`/health/version`).
+7. The frontends are published, and `scripts/smoke.sh --site` checks what a shopper and a merchant open.
 
-- The application migrates the database only in Development. Everywhere else a migration bundle runs in the pipeline before the new revision starts serving.
-- Secrets (database, storage, Stripe, Application Insights) live in Key Vault and are read by the container app's managed identity; the app is given only the vault's URI.
+A few things are worth knowing:
+
+- The application migrates the database only in Development. A build whose database lacks any of its migrations is not ready: it answers every request except `/health/*` with a 503, and does no background work until the migrations are in.
+- Outside Development and the test environments, the application refuses to start if its mail would only be logged.
+- Secrets (database, storage, Mailgun, Stripe, Application Insights) live in Key Vault, read by the app's own managed identity; the app is given only the vault's URI.
 - Behind Front Door the original host arrives as a header, which is trusted only when `X-Azure-FDID` matches the configured profile — otherwise the forwarded headers are dropped.
+
+`tests/release/rehearse.sh` rehearses a release on this machine. It runs the previous build and the working tree's across a real migration, the rollback included, against a throwaway PostgreSQL and Azurite.
 
 ## Database migrations
 

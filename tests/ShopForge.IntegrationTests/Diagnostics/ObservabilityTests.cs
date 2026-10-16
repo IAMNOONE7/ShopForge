@@ -41,7 +41,7 @@ public sealed class ObservabilityTests(ShopForgeApiFactory factory)
 
         Assert.Equal(HttpStatusCode.OK, ready.StatusCode);
         Assert.Equal(HttpStatusCode.OK, live.StatusCode);
-        Assert.Equal(["database", "file-storage", "secret-store"], checks);
+        Assert.Equal(["database", "file-storage", "schema", "secret-store"], checks);
     }
 
     // Placing an order and the e-mail the worker sends afterwards belong to one story (D-070).

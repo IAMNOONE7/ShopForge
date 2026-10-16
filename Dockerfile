@@ -1,9 +1,12 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
+# The commit the image is built from. The source arrives without its history, so it is passed in, and the build puts
+# it on its version, which is how a release tells its own revision from the one it replaces (D-205).
+ARG SOURCE_VERSION=
 WORKDIR /src
 
 COPY Directory.Build.props Directory.Packages.props global.json ShopForge.slnx ./
 COPY src ./src
-RUN dotnet publish src/ShopForge.Api/ShopForge.Api.csproj --configuration Release --output /app
+RUN dotnet publish src/ShopForge.Api/ShopForge.Api.csproj --configuration Release --output /app -p:SourceRevisionId="$SOURCE_VERSION"
 
 # The -extra variant carries ICU and time-zone data. The plain Alpine image has neither and runs invariant, where
 # asking for a shop's culture throws, and statement days are Prague days (D-197).
