@@ -5,6 +5,9 @@ import { api } from "../api";
 import { useSelectedStore } from "../adminContext";
 import { CatalogChangeNotice, CatalogCollections } from "../components/CatalogRetirement";
 import { ListingEditor, ListingRead } from "../components/ListingEditor";
+import { ListingBulkPanel } from "../components/ListingBulkPanel";
+import { maxBulkListings } from "../api/bulkListings";
+import { useBulkListings } from "../useBulkListings";
 import { ListingForm } from "../components/ListingForm";
 import { Button } from "../components/ui/Button";
 import { EmptyState } from "../components/ui/EmptyState";
@@ -28,12 +31,18 @@ function ListingSearch({ q, onSearch }: { q: string; onSearch: (q: string) => vo
     <Button type="submit">{t("searchAction")}</Button>{q && <Button type="button" variant="secondary" onClick={() => onSearch("")}>{t("clearSearch")}</Button>}</form>;
 }
 export function ListingsPage() {
-  const { t, i18n } = useTranslation(["listings", "retirement"]); const { store } = useSelectedStore(); const { user } = useSession();
+  const { store } = useSelectedStore(); const { user } = useSession(); const [parameters] = useSearchParams();
+  return <ListingsWorkspace key={`${store.id}:${store.currency}:${user.id}:${user.role}:${parameters.get("archived") === "true"}`} />;
+}
+function ListingsWorkspace() {
+  const { t, i18n } = useTranslation(["listings", "retirement", "bulkListings"]); const { store, storeRefreshing, storeRefreshError } = useSelectedStore(); const { user } = useSession();
   const [parameters, setParameters] = useSearchParams(); const rawPage = parameters.get("page") ?? "1";
   const page = /^\d+$/.test(rawPage) && Number(rawPage) >= 1 && Number(rawPage) <= 100000 ? Number(rawPage) : 1;
   const typedQuery = (parameters.get("q") ?? "").trim(); const q = typedQuery.length >= 2 ? typedQuery : ""; const sort = sorts.find((key) => key === parameters.get("sort")) ?? "default";
   const archived = parameters.get("archived") === "true";
   const [state, reload] = useRequest(`listings:${store.id}:${archived}:${page}:${sort}:${q}`, (signal) => api.storeProducts(store.id, signal, { page, pageSize: 25, sort, q, ...(archived ? { archived: true } : {}) }));
+  const bulk = useBulkListings(store.id, archived, state.status === "ready" && !state.refreshing && state.refreshError === null && !storeRefreshing && storeRefreshError === null, reload);
+  const allowed = canManageCatalog(user.role);
   const query = searchParameters(page, q, sort, archived).toString();
   return <div className="listing-page"><div className="page-heading-row"><div><h1>{t("title")}</h1><p className="hint">{t("listHint", { store: store.name })}</p></div>
     {canManageCatalog(user.role) && <Link className="button" to="new">{t("newListing")}</Link>}</div>
@@ -43,9 +52,14 @@ export function ListingsPage() {
     {typedQuery.length === 1 && <InlineMessage>{t("searchInvalid")}</InlineMessage>}
     <section className="listing-list-controls"><ListingSearch key={q} q={q} onSearch={(next) => setParameters(searchParameters(1, next, sort, archived))} />
       <div className="listing-field"><label htmlFor="listing-sort">{t("sort")}</label><select id="listing-sort" value={sort} onChange={(event) => setParameters(searchParameters(1, q, event.target.value, archived))}>{sorts.map((key) => <option key={key} value={key}>{t(`sorts.${key}`)}</option>)}</select></div>
-    </section><ListingRead state={state} reload={reload} label={t("loading")} />
+    </section>
+    <ListingRead state={state} reload={reload} label={t("loading")} />
+    {allowed && <ListingBulkPanel bulk={bulk} storeId={store.id} currency={store.currency} archived={archived} items={state.status === "ready" ? state.data.items : []} />}
     {state.status === "ready" && <><p className="hint">{t("resultCount", { count: state.data.totalCount })}</p>
-      {state.data.items.length ? <ul className="listing-list">{state.data.items.map((item) => <li key={item.id} className="listing-list-row"><div><Link to={`${item.id}${query ? `?${query}` : ""}`}>{item.name}</Link><p className="hint"><code>{item.sku}</code> · {item.slug}</p></div>
+      {state.data.items.length ? <ul className="listing-list">{state.data.items.map((item) => <li key={item.id} className="listing-list-row"><div className="listing-selectable-row">
+        {allowed && <label className="listing-row-selection"><input type="checkbox" name="selectedListings" value={item.id} checked={bulk.selection.has(item.id)} disabled={bulk.locked || !bulk.selection.has(item.id) && bulk.selection.size >= maxBulkListings}
+          onChange={event => bulk.toggle([item], event.target.checked)} /><span className="sr-only">{t("bulkListings:selectListing", { name: item.name, sku: item.sku })}</span></label>}
+        <div><Link to={`${item.id}${query ? `?${query}` : ""}`}>{item.name}</Link><p className="hint"><code>{item.sku}</code> · {item.slug}</p></div></div>
         <dl className="listing-facts"><div><dt>{t("price")}</dt><dd>{currencyFormatter(store.currency, i18n.resolvedLanguage).format(item.price)}</dd></div><div><dt>{t("visibility")}</dt><dd>{t(archived ? "retirement:archived" : item.isVisible ? "visible" : "hidden")}</dd></div><div><dt>{t("sortOrder")}</dt><dd>{item.sortOrder}</dd></div></dl></li>)}</ul>
         : <EmptyState headingLevel={2} title={t(q ? "noMatchesTitle" : page > 1 ? "emptyPageTitle" : archived ? "retirement:emptyArchived" : "emptyTitle")}><p>{t(q ? "noMatchesBody" : page > 1 ? "emptyPageBody" : archived ? "retirement:emptyArchivedBody" : "emptyBody")}</p></EmptyState>}
       <nav className="listing-pagination" aria-label={t("paging")}><Button type="button" variant="secondary" disabled={page === 1 || state.refreshing} onClick={() => setParameters(searchParameters(page - 1, q, sort, archived))}>{t("previous")}</Button>

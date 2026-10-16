@@ -1,6 +1,7 @@
 import { HttpError, requestBlob, requestJson, saveDownload } from "./api/http";
 import { findStoreProduct, getStoreProducts, hasVisibleStoreProduct } from "./api/listings";
 import { changeCatalogLifecycle } from "./api/catalogLifecycle";
+import { changeBulkListings } from "./api/bulkListings";
 import { getStoreReadiness } from "./api/readiness";
 import { getStoreDomains, addStoreDomain, verifyStoreDomain, makeStoreDomainPrimary, removeStoreDomain } from "./api/domains";
 import { getOrders } from "./api/orders";
@@ -525,6 +526,7 @@ export const api = {
 
   storeProducts: getStoreProducts,
   changeCatalogLifecycle,
+  changeBulkListings,
   findStoreProduct,
   hasVisibleStoreProduct,
   listProduct: (storeId: string, productId: string, input: StoreProductInput) =>
