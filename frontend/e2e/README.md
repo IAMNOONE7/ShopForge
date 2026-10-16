@@ -111,7 +111,12 @@ and fresh stock readings. Both storefront proxies must resolve the returned stor
 and the same API process marker. Only then may the browser write to the explicit cart,
 checkout, registration, verification, sign-in/out and return-request routes on those
 hosts, or submit the rig's payment form. Responses come from the real
-services; routing only blocks writes outside that boundary. No provider credentials,
+services; routing blocks writes outside that boundary. Response-loss cases also forward
+one allowed checkout or return POST, wait for its real successful answer, then abort
+delivery to the browser. Forwarding uses a separate cookie jar so response cookies
+are also lost; the checkout check verifies the browser retains its original cookies.
+These cases never fabricate a success or retry the forwarded write.
+No provider credentials,
 mail links or guest receipt tokens are copied into the run metadata attachment.
 
 Four CS/EN phone/desktop projects exercise selected-variant guest checkout, Comgate
@@ -136,6 +141,14 @@ the same receipt through real GET polling and deducts stock once, without anothe
 checkout or browser POST. The rig's recorded push outcomes and read-only oracle prove
 the intermediate and recovered states. Only per-run provider controls are used;
 these cases do not certify scheduled reconciliation or reservation expiry.
+Lost-write-answer cases verify the order or return committed while the browser still
+shows uncertainty. Editing that draft blocks submission; restoring it permits an
+explicit retry with the identical body and key. The API's `Idempotent-Replay` header,
+account history, oracle and gateway prove one order/payment/return, one stock effect
+and one invoice/credit note. Real payment and parcel-receipt progression complete the
+recovered flows, including PDF downloads and captured mail. Exactly one failed browser
+write transport is expected in each response-loss case; other failed writes fail checks.
+This covers recovery on the same page with the retained attempt, not reload persistence.
 Each test ends only its own run via `DELETE /runs/{run}` and verifies it is forgotten.
 This suspends the tenant; its database rows remain until the stack is taken down.
 
@@ -143,6 +156,8 @@ The normal matrix has a ten-minute deadline, one worker and zero retries.
 `npm run test:isolated:repeat` repeats every case twenty times, stops on the first
 failure and has a 200-minute deadline (twenty ten-minute matrices). To focus a repeat,
 append e.g. `-- --project=en-desktop --grep 'payment recovery'`.
+Use `-- --project=en-desktop --grep 'lost (checkout|return) answer'` for the
+post-commit response-loss cases.
 Every repetition creates its own run; a failed test is never retried. Reports, per-run
 identities and order/stock/mail facts are under ignored `artifacts/isolated/`; use
 `npx playwright show-report artifacts/isolated/report` to inspect them. Failure traces,
@@ -150,8 +165,8 @@ videos and screenshots are retained. Reports remain private because network reco
 can contain guest receipt tokens. Save reports before another invocation replaces them.
 
 When finished, run `tests/e2e/stack.sh down` from the repository root to stop only the
-disposable stack and discard its data. Lost checkout/return answers, merchant/operator
-browser flows, refund uncertainty, scheduled recovery, complete repeat acceptance,
+disposable stack and discard its data. Merchant/operator browser flows, refund
+uncertainty, scheduled recovery, complete repeat acceptance,
 CI wiring and DNS remain separate work.
 These journeys do not advance the stack-wide clock or run scheduled passes. Public
 credited amounts remain distinct from provider settlement; settlement is asserted

@@ -21,6 +21,11 @@ export type GatewayTransaction = {
 };
 export type GatewayReading = { merchant: string; behaviour: GatewayBehaviour; transactions: GatewayTransaction[] };
 type MerchantReturn = { id: string; number: string; orderNumber: string; status: string; refundedAmount: number; refund: string | null; refundProblem: string | null };
+export type LostWriteAnswer = {
+  url: string; dropped: boolean; committed: { status: number; body: unknown } | null;
+  requests: { key: string | undefined; body: string | null }[];
+};
+type WriteTransport = { loss: LostWriteAnswer | null; loseNextAnswer: (url: string) => LostWriteAnswer };
 export type RunSession = {
   environment: IsolatedEnvironment; run: IsolatedRun; marker: Marker;
   origin: (store: RunStore) => string;
@@ -41,7 +46,7 @@ async function json<T>(client: APIRequestContext, url: string, status = 200, met
   return await response.json() as T;
 }
 
-export const test = base.extend<{ runSession: RunSession; isolatedBrowser: void }>({
+export const test = base.extend<{ runSession: RunSession; writeTransport: WriteTransport; isolatedBrowser: void }>({
   runSession: async ({ request, playwright }, use, testInfo) => {
     const environment = loadStack();
     for (const path of ["/health/live", "/health/ready"]) expect((await request.get(environment.apiOrigin + path, { maxRedirects: 0, timeout: 5_000 })).status()).toBe(200);
@@ -135,13 +140,32 @@ export const test = base.extend<{ runSession: RunSession; isolatedBrowser: void 
       expect((await request.get(root, { maxRedirects: 0 })).status()).toBe(404);
     }
   },
-  isolatedBrowser: [async ({ context, runSession }, use, testInfo) => {
+  writeTransport: async ({ runSession }, use) => {
+    const origins = new Set(runSession.run.stores.map(store => runSession.origin(store)));
+    const transport: WriteTransport = {
+      loss: null,
+      loseNextAnswer: target => {
+        const url = new URL(target);
+        const checkout = url.pathname === "/api/storefront/checkout";
+        const returns = /^\/api\/storefront\/account\/orders\/\d{4}-\d+\/returns$/.test(url.pathname);
+        if (!origins.has(url.origin) || url.search || url.hash || url.username || url.password || (!checkout && !returns)) throw new Error("Response loss requires this run's checkout or return request.");
+        if (transport.loss !== null) throw new Error("Only one response loss per test is supported.");
+        transport.loss = { url: url.href, dropped: false, committed: null, requests: [] };
+        return transport.loss;
+      },
+    };
+    await use(transport);
+  },
+  isolatedBrowser: [async ({ context, playwright, runSession, writeTransport }, use, testInfo) => {
     const { environment, run } = runSession;
     const origins = new Set(run.stores.map(store => runSession.origin(store)));
-    const blocked: string[] = [], pageErrors: string[] = [], consoleErrors: string[] = [], apiErrors: string[] = [], writes: string[] = [];
+    const blocked: string[] = [], pageErrors: string[] = [], consoleErrors: string[] = [], apiErrors: string[] = [], writes: string[] = [], writeFailures: string[] = [];
     context.on("page", page => {
       page.on("pageerror", error => pageErrors.push(error.message));
       page.on("console", message => { if (message.type() === "error") consoleErrors.push(message.text()); });
+      page.on("requestfailed", request => {
+        if (!["GET", "HEAD", "OPTIONS"].includes(request.method())) writeFailures.push(`${request.method()} ${new URL(request.url()).pathname}`);
+      });
       page.on("response", response => {
         const path = new URL(response.url()).pathname;
         const guest = path === "/api/storefront/account/me" && response.status() === 401 && response.request().method() === "GET";
@@ -152,15 +176,41 @@ export const test = base.extend<{ runSession: RunSession; isolatedBrowser: void 
       const request = route.request(), url = new URL(request.url());
       const read = ["GET", "HEAD", "OPTIONS"].includes(request.method());
       if (!read && !allowedBrowserWrite(request.method(), url, origins, environment.rigOrigin)) { blocked.push(`${request.method()} ${url.origin}${url.pathname}`); await route.abort("blockedbyclient"); }
-      else { if (!read) writes.push(`${request.method()} ${url.origin}${url.pathname}`); await route.continue(); }
+      else {
+        if (!read) writes.push(`${request.method()} ${url.origin}${url.pathname}`);
+        const loss = writeTransport.loss;
+        if (request.method() === "POST" && loss?.url === url.href) {
+          loss.requests.push({ key: request.headers()["idempotency-key"], body: request.postData() });
+          if (!loss.dropped) {
+            loss.dropped = true;
+            const upstream = await playwright.request.newContext();
+            try {
+              // A separate cookie jar also hides response cookies, including checkout's cart deletion.
+              const response = await upstream.fetch(request.url(), {
+                method: request.method(), headers: await request.allHeaders(), data: request.postDataBuffer() ?? undefined,
+                maxRedirects: 0, maxRetries: 0, timeout: 15_000,
+              });
+              expect(response.status(), "Committed write before response loss").toBe(url.pathname === "/api/storefront/checkout" ? 201 : 200);
+              loss.committed = { status: response.status(), body: await response.json() };
+            } finally {
+              await upstream.dispose();
+              await route.abort("failed");
+            }
+            return;
+          }
+        }
+        await route.continue();
+      }
     });
     await use();
     const path = testInfo.outputPath("browser-errors.json");
-    writeFileSync(path, JSON.stringify({ blocked, pageErrors, consoleErrors, apiErrors, writes }, null, 2));
+    const loss = writeTransport.loss;
+    writeFileSync(path, JSON.stringify({ blocked, pageErrors, consoleErrors, apiErrors, writes, writeFailures, responseLoss: loss === null ? null : { path: new URL(loss.url).pathname, dropped: loss.dropped, committedStatus: loss.committed?.status, requests: loss.requests.length } }, null, 2));
     await testInfo.attach("browser-errors", { path, contentType: "application/json" });
     expect(blocked, "Write outside this run's storefronts or fake payment page").toEqual([]);
     expect(pageErrors, "Uncaught browser errors").toEqual([]);
     expect(apiErrors, "Unexpected API errors").toEqual([]);
+    expect(writeFailures, "Only the deliberately lost write answer may fail transport").toEqual(loss?.dropped ? [`POST ${new URL(loss.url).pathname}`] : []);
     expect(consoleErrors.filter(message => message.includes("Encountered two children with the same key")), "Duplicate React keys").toEqual([]);
   }, { auto: true }],
 });

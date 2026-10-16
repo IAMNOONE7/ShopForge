@@ -34,8 +34,8 @@ export async function cartReading(page: Page): Promise<CartReading> {
   });
 }
 
-export async function checkout(page: Page, session: RunSession, store: RunStore, product: RunProduct, testInfo: TestInfo) {
-  const words = labels(testInfo), origin = session.origin(store), email = `buyer@${session.run.emailDomain}`;
+export async function fillCheckout(page: Page, session: RunSession, store: RunStore, product: RunProduct) {
+  const origin = session.origin(store), email = `buyer@${session.run.emailDomain}`;
   await page.goto(`${origin}/checkout`);
   const emailField = page.locator('input[name="email"]');
   if (await emailField.getAttribute("readonly") !== null) await expect(emailField).toHaveValue(email);
@@ -49,8 +49,16 @@ export async function checkout(page: Page, session: RunSession, store: RunStore,
   await expect(page.locator(".checkout-final-review")).toContainText(email);
   await expect(page.locator(".checkout-total strong")).toHaveText(money(product.price));
   await noOverflow(page);
+}
+
+export async function checkout(page: Page, session: RunSession, store: RunStore, product: RunProduct, testInfo: TestInfo) {
+  await fillCheckout(page, session, store, product);
+  return submitCheckout(page, session, store, product, testInfo);
+}
+
+export async function submitCheckout(page: Page, session: RunSession, store: RunStore, product: RunProduct, testInfo: TestInfo) {
   const response = page.waitForResponse(answer => new URL(answer.url()).pathname === "/api/storefront/checkout" && answer.request().method() === "POST");
-  await page.getByRole("button", { name: words.checkout.placeOrder, exact: true }).click();
+  await page.getByRole("button", { name: labels(testInfo).checkout.placeOrder, exact: true }).click();
   const placed = await response;
   expect(placed.status()).toBe(201);
   expect(placed.request().headers()["idempotency-key"]).toBeTruthy();
@@ -62,7 +70,7 @@ export async function checkout(page: Page, session: RunSession, store: RunStore,
   expect(transaction).toMatchObject({ price: product.price * 100, currency: "CZK", test: true });
   expect(transaction!.referenceId).toMatch(/^\d{4}-\d+$/);
   await expect(page.getByRole("heading", { name: "Comgate stand-in", exact: true })).toBeVisible();
-  return { number: transaction!.referenceId, transactionId: transaction!.id, email, origin };
+  return { number: transaction!.referenceId, transactionId: transaction!.id, email: `buyer@${session.run.emailDomain}`, origin: session.origin(store), replayed: placed.headers()["idempotent-replay"] === "true" };
 }
 
 export async function expectReceipt(page: Page, origin: string, number: string) {
