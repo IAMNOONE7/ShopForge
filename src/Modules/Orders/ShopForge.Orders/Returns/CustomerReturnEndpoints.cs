@@ -108,19 +108,30 @@ internal sealed record CustomerReturnsResponse(
 
 internal sealed record ReturnableLineResponse(Guid StoreProductId, Guid VariantId, string ProductName, int Quantity);
 
+// The refunded amount is what was credited once the parcel arrived; whether that money is back with the customer is
+// the refund's state, and is said separately (D-204).
 internal sealed record CustomerReturnResponse(
     string Number,
     string Status,
     DateTimeOffset RequestedAt,
     decimal RefundedAmount,
-    List<ReturnLineResponse> Lines)
+    List<ReturnLineResponse> Lines,
+    string? RefundState,
+    DateTimeOffset? RefundSettledAt)
 {
     public static CustomerReturnResponse From(OrderReturn orderReturn) => new(
         orderReturn.Number,
         orderReturn.Status.ToString(),
         orderReturn.RequestedAt,
         orderReturn.RefundedAmount,
-        [.. orderReturn.Lines.Select(line => new ReturnLineResponse(line.ProductName, line.Quantity))]);
+        [.. orderReturn.Lines.Select(ReturnLineResponse.From)],
+        CustomerRefunds.StateOf(orderReturn),
+        CustomerRefunds.SettledAtOf(orderReturn));
 }
 
-internal sealed record ReturnLineResponse(string ProductName, int Quantity);
+// The listing and the form that came back, by the ids that stay put, under the name the order gave them — the
+// variant's options as they were sold, not as the product is described today (D-204).
+internal sealed record ReturnLineResponse(Guid StoreProductId, Guid VariantId, string ProductName, int Quantity)
+{
+    public static ReturnLineResponse From(OrderReturnLine line) => new(line.StoreProductId, line.VariantId, line.ProductName, line.Quantity);
+}

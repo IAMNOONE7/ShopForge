@@ -263,10 +263,46 @@ public sealed class ReturnTests(ShopForgeApiFactory factory)
             $"/api/admin/stores/{other.Store.StoreId}/returns", CancellationToken);
         using var reachedAcross = await other.Admin.PostAsync(
             $"/api/admin/stores/{other.Store.StoreId}/returns/{id}/accept", null, CancellationToken);
+        using var readAcross = await other.Admin.GetAsync(
+            $"/api/admin/stores/{other.Store.StoreId}/returns/{id}", CancellationToken);
 
         Assert.Equal(requested.Returns[0].Number, (await ReturnsAsync(furniture)).Single().Number);
         Assert.Empty(theirs!);
-        Assert.Equal(HttpStatusCode.NotFound, reachedAcross.StatusCode);
+        Assert.Equal((HttpStatusCode.NotFound, HttpStatusCode.NotFound), (reachedAcross.StatusCode, readAcross.StatusCode));
+    }
+
+    // A return can be linked to and reloaded by its id. Its lines name the listing and the form that came back by the
+    // ids that stay put, so nobody has to work them out from a name the product may since have changed (D-204).
+    [Fact]
+    public async Task A_return_is_read_by_its_id_with_what_came_back_and_when()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+        using var buyer = await BuyerAsync(furniture);
+        var order = await PaidOrderAsync(furniture, buyer, [("oak-chair", 2)]);
+        var requested = await RequestAsync(buyer, order.Number, [(furniture.Products["oak-chair"], 1)], reason: "One too many.");
+        var number = requested.Returns[0].Number;
+        var path = $"/api/admin/stores/{furniture.Store.StoreId}/returns/{(await ReturnsAsync(furniture)).Single().Id}";
+
+        var asked = await furniture.Admin.GetFromJsonAsync<AdminReturnView>(path, CancellationToken);
+        await DecideAsync(furniture, number, "accept");
+        await DecideAsync(furniture, number, "receive");
+        var received = await furniture.Admin.GetFromJsonAsync<AdminReturnView>(path, CancellationToken);
+        var customerSees = await buyer.GetJsonAsync<CustomerReturnsView>($"/api/storefront/account/orders/{order.Number}/returns");
+        using var unknown = await furniture.Admin.GetAsync(
+            $"/api/admin/stores/{furniture.Store.StoreId}/returns/{Guid.NewGuid()}", CancellationToken);
+
+        var chair = new ReturnLineView(furniture.Products["oak-chair"], furniture.VariantIds["oak-chair"], "Oak Chair", 1);
+        Assert.Equal((number, "Requested", "One too many."), (asked!.Number, asked.Status, asked.Reason));
+        Assert.Equal(((DateTimeOffset?)null, (DateTimeOffset?)null), (asked.DecidedAt, asked.ReceivedAt));
+        Assert.Equal(chair, Assert.Single(asked.Lines));
+        Assert.Equal(("Received", 100m), (received!.Status, received.RefundedAmount));
+        Assert.NotNull(received.DecidedAt);
+        Assert.True(received.DecidedAt < received.ReceivedAt);
+
+        // Paid by bank transfer, so the store gives the money back itself and nobody here can say when it did.
+        Assert.Equal(("ByStore", (DateTimeOffset?)null), (received.Refund, received.RefundSettledAt));
+        Assert.Equal(chair, Assert.Single(Assert.Single(customerSees.Returns).Lines));
+        Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
     }
 
     [Fact]
@@ -446,7 +482,10 @@ public sealed class ReturnTests(ShopForgeApiFactory factory)
 
     private sealed record ReturnableView(Guid StoreProductId, string ProductName, int Quantity);
 
-    private sealed record CustomerReturnView(string Number, string Status, DateTimeOffset RequestedAt, decimal RefundedAmount);
+    private sealed record CustomerReturnView(string Number, string Status, DateTimeOffset RequestedAt, decimal RefundedAmount)
+    {
+        public List<ReturnLineView> Lines { get; init; } = [];
+    }
 
     private sealed record AdminReturnView(
         Guid Id,
@@ -456,9 +495,13 @@ public sealed class ReturnTests(ShopForgeApiFactory factory)
         DateTimeOffset RequestedAt,
         decimal RefundedAmount,
         string? Reason,
-        List<AdminReturnLineView> Lines);
+        List<ReturnLineView> Lines,
+        string? Refund = null,
+        DateTimeOffset? DecidedAt = null,
+        DateTimeOffset? ReceivedAt = null,
+        DateTimeOffset? RefundSettledAt = null);
 
-    private sealed record AdminReturnLineView(string ProductName, int Quantity);
+    private sealed record ReturnLineView(Guid StoreProductId, Guid VariantId, string ProductName, int Quantity);
 
     private sealed record AdminStoreView(Guid Id, string Name, string Currency, string Culture, ThemeView Theme, int ReturnWindowDays, object? Company);
 

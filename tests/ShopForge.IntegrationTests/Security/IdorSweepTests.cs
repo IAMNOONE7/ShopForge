@@ -22,6 +22,7 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
     // Store-scoped routes, called under a sibling store of the same company with the first store's ids.
     private static readonly (string Method, string Route, string? Body)[] StoreScoped =
     [
+        ("GET", "products/{storeProduct}", null),
         ("PUT", "products/{storeProduct}", """{"name":"Taken","price":1,"vatRate":21,"isVisible":true,"sortOrder":0}"""),
         ("PUT", "products/{storeProduct}/categories", """{"categoryIds":[]}"""),
         ("GET", "products/{storeProduct}/attributes", null),
@@ -37,6 +38,7 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
         ("POST", "attributes/{attribute}/options", """{"name":"Taken"}"""),
         ("POST", "reviews/{review}/publish", null),
         ("POST", "reviews/{review}/reject", null),
+        ("GET", "returns/{return}", null),
         ("POST", "returns/{return}/accept", null),
         ("POST", "returns/{return}/refuse", null),
         ("POST", "returns/{return}/receive", null),

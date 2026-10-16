@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
+using ShopForge.Access.Domain;
 using ShopForge.IntegrationTests.Catalog;
 using ShopForge.IntegrationTests.Orders;
 using ShopForge.Orders.Domain;
@@ -264,6 +265,37 @@ public sealed class TaxByDestinationTests(ShopForgeApiFactory factory)
             CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    // Whoever keeps the catalogue says which class each listing is, so they can read the classes there are. What a
+    // class is, and what each country charges for it, stays with whoever runs the store (D-204).
+    [Fact]
+    public async Task The_catalogue_staff_read_the_classes_and_change_none_of_them()
+    {
+        var furniture = await BooksStoreAsync();
+        using var catalogue = await TestUsers.LoginAsync(
+            factory, await TestUsers.CreateAsync(factory.Services, furniture.Store.TenantId, TenantRole.CatalogManager));
+        using var warehouse = await TestUsers.LoginAsync(
+            factory, await TestUsers.CreateAsync(factory.Services, furniture.Store.TenantId, TenantRole.Warehouse));
+        var classes = $"/api/admin/stores/{furniture.Store.StoreId}/tax-classes";
+
+        var read = await catalogue.GetFromJsonAsync<List<TaxClassView>>(classes, CancellationToken);
+        using var created = await catalogue.PostAsJsonAsync(classes, new { Name = "Food", Code = "food" }, CancellationToken);
+        using var renamed = await catalogue.PutAsJsonAsync($"{classes}/books", new { Name = "Printed books" }, CancellationToken);
+        using var priced = await catalogue.PutAsJsonAsync($"{classes}/books/rates/IE", new { Rate = 0m }, CancellationToken);
+        using var unpriced = await catalogue.DeleteAsync($"{classes}/books/rates/DE", CancellationToken);
+        using var deleted = await catalogue.DeleteAsync($"{classes}/books", CancellationToken);
+        using var warehouseRead = await warehouse.GetAsync(classes, CancellationToken);
+        var after = await furniture.Admin.GetFromJsonAsync<List<TaxClassView>>(classes, CancellationToken);
+
+        var books = Assert.Single(read!);
+        Assert.Equal(("books", "Books"), (books.Code, books.Name));
+        Assert.Equal([("CZ", 10m), ("DE", 7m)], books.Rates.Select(rate => (rate.Country, rate.Rate)).Order());
+        Assert.All(
+            [created, renamed, priced, unpriced, deleted],
+            response => Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode));
+        Assert.Equal(HttpStatusCode.Forbidden, warehouseRead.StatusCode);
+        Assert.Equivalent(read, after, strict: true);
     }
 
     private static List<(decimal Rate, decimal Net, decimal Vat, decimal Gross)> Rows(Invoice invoice) =>

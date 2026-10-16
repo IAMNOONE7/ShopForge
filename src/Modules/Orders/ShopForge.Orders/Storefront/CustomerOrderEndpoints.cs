@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Orders.Domain;
+using ShopForge.Orders.Returns;
 using ShopForge.Shared.Customers;
 using ShopForge.Shared.Security;
 
@@ -55,7 +56,10 @@ internal static class CustomerOrderEndpoints
 
         return order is null
             ? TypedResults.NotFound()
-            : TypedResults.Ok(OrderResponse.From(order, await Documents.OfAsync(dbContext, order.Number, cancellationToken)));
+            : TypedResults.Ok(OrderResponse.From(
+                order,
+                await Documents.OfAsync(dbContext, order.Number, cancellationToken),
+                await CustomerRefunds.OfOrderAsync(dbContext, order.Number, cancellationToken)));
     }
 }
 

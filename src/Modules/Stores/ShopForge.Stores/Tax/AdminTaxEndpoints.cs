@@ -19,14 +19,16 @@ internal static class AdminTaxEndpoints
 {
     public static IEndpointRouteBuilder MapAdminTaxRules(this IEndpointRouteBuilder storeAdmin)
     {
-        var classes = storeAdmin.MapGroup("/tax-classes").RequireAuthorization(AdminPolicies.StoreManagement);
+        var classes = storeAdmin.MapGroup("/tax-classes");
 
-        classes.MapGet("/", GetClassesAsync);
-        classes.MapPost("/", CreateClassAsync);
-        classes.MapPut("/{code}", RenameClassAsync);
-        classes.MapDelete("/{code}", DeleteClassAsync);
-        classes.MapPut("/{code}/rates/{country}", SetRateAsync);
-        classes.MapDelete("/{code}/rates/{country}", RemoveRateAsync);
+        // Whoever keeps the catalogue says which class each listing is, so they can see the classes there are. What a
+        // class is, and what each country charges for it, stays with whoever runs the store (D-204).
+        classes.MapGet("/", GetClassesAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
+        classes.MapPost("/", CreateClassAsync).RequireAuthorization(AdminPolicies.StoreManagement);
+        classes.MapPut("/{code}", RenameClassAsync).RequireAuthorization(AdminPolicies.StoreManagement);
+        classes.MapDelete("/{code}", DeleteClassAsync).RequireAuthorization(AdminPolicies.StoreManagement);
+        classes.MapPut("/{code}/rates/{country}", SetRateAsync).RequireAuthorization(AdminPolicies.StoreManagement);
+        classes.MapDelete("/{code}/rates/{country}", RemoveRateAsync).RequireAuthorization(AdminPolicies.StoreManagement);
 
         return storeAdmin;
     }

@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using ShopForge.Orders.Discounts;
 using ShopForge.Orders.Domain;
 using ShopForge.Orders.Persistence;
+using ShopForge.Orders.Returns;
 using ShopForge.Shared.Catalog;
 using ShopForge.Shared.Connections;
 using ShopForge.Shared.Customers;
@@ -36,7 +37,8 @@ internal static class CheckoutEndpoints
         storefront.MapGet("/orders/{number}", GetOrderAsync);
     }
 
-    private static async Task<Ok<CheckoutMethodsResponse>> GetMethodsAsync(
+    private static async Task<Results<Ok<CheckoutMethodsResponse>, ValidationProblem>> GetMethodsAsync(
+        string? country,
         HttpContext httpContext,
         DbContext dbContext,
         IStoreContext storeContext,
@@ -51,6 +53,20 @@ internal static class CheckoutEndpoints
         TimeProvider clock,
         CancellationToken cancellationToken)
     {
+        // Where the parcel is going, as checkout will decide it: the delivery address's country, or the billing
+        // address's when there is no separate delivery address — for a pickup point as much as for a door, because
+        // that is the country checkout holds the method to. Without it the shopper has not said yet, and a method
+        // limited by destination stays on offer and is refused at checkout if the address turns out not to fit
+        // (D-145, D-204).
+        var destination = country?.Trim();
+
+        if (destination is { Length: > 0 } && !(destination.Length == 2 && destination.All(char.IsAsciiLetter)))
+        {
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["country"] = ["A country is its two-letter code, such as CZ."] });
+        }
+
+        destination = destination is { Length: > 0 } ? destination.ToUpperInvariant() : null;
+
         // A method whose provider is not configured on this deployment is not on offer, however active the store left it.
         var providerKeys = await UsableProvidersAsync(paymentProviders, connections, cancellationToken);
         var payment = await dbContext.Set<PaymentMethod>()
@@ -59,14 +75,11 @@ internal static class CheckoutEndpoints
             .Select(method => new PaymentMethodResponse(method.Code, method.Name))
             .ToListAsync(cancellationToken);
 
-        // Where the parcel is going is not known yet — the shopper is still being shown their choices — so a
-        // method limited by destination stays on offer here and is refused at checkout if it turns out not to
-        // serve the address (D-145).
         var carts = new Carts(httpContext, dbContext, storeContext, products, stock, discounts, storeSettings, taxRates, clock);
         var cart = await carts.FindAsync(cancellationToken);
         var parcel = new Parcel(
             cart is null ? null : (await carts.ContentsAsync(cart, cancellationToken)).WeightGrams,
-            DestinationCountry: null);
+            DestinationCountry: destination);
         var carriers = await UsableProvidersAsync(shippingProviders, connections, cancellationToken);
         var methods = await dbContext.Set<ShippingMethod>()
             .Where(method => method.IsActive && carriers.Contains(method.ProviderKey))
@@ -88,7 +101,7 @@ internal static class CheckoutEndpoints
             }
         }
 
-        return TypedResults.Ok(new CheckoutMethodsResponse(payment, shipping));
+        return TypedResults.Ok(new CheckoutMethodsResponse(payment, shipping, destination));
     }
 
     private static async Task<Results<Ok<List<PickupPointResponse>>, NotFound>> GetPickupPointsAsync(
@@ -439,7 +452,10 @@ internal static class CheckoutEndpoints
 
         return order is null
             ? TypedResults.NotFound()
-            : TypedResults.Ok(OrderResponse.From(order, await Documents.OfAsync(dbContext, order.Number, cancellationToken)));
+            : TypedResults.Ok(OrderResponse.From(
+                order,
+                await Documents.OfAsync(dbContext, order.Number, cancellationToken),
+                await CustomerRefunds.OfOrderAsync(dbContext, order.Number, cancellationToken)));
     }
 
     // The store's own language, which is the only one ShopForge has: a shopper reading the storefront in
@@ -544,7 +560,10 @@ internal sealed record AddressRequest(string? FullName, string? Line1, string? L
     public Address ToAddress() => new(FullName!, Line1!, Line2, City!, PostalCode!, Country!);
 }
 
-internal sealed record CheckoutMethodsResponse(List<PaymentMethodResponse> PaymentMethods, List<ShippingMethodResponse> ShippingMethods);
+// The country the methods were chosen for, so a page can tell an answer to an address the shopper has since changed
+// from one to the address in front of them.
+internal sealed record CheckoutMethodsResponse(
+    List<PaymentMethodResponse> PaymentMethods, List<ShippingMethodResponse> ShippingMethods, string? DestinationCountry);
 
 internal sealed record PaymentMethodResponse(string Code, string Name);
 
@@ -579,9 +598,13 @@ internal sealed record OrderResponse(
     string? PickupPoint,
     ShipmentResponse? Shipment,
     List<DocumentResponse> Documents,
-    List<OrderLineResponse> Lines)
+    List<OrderLineResponse> Lines,
+    // When the payment was confirmed, which a status of Paid or later only implies, and where any money given back
+    // stands (D-204).
+    DateTimeOffset? PaidAt,
+    List<CustomerRefundResponse> Refunds)
 {
-    public static OrderResponse From(Order order, List<DocumentResponse> documents) => new(
+    public static OrderResponse From(Order order, List<DocumentResponse> documents, List<CustomerRefundResponse> refunds) => new(
         order.Number,
         order.PlacedAt,
         order.Status.ToString(),
@@ -597,7 +620,9 @@ internal sealed record OrderResponse(
         order.PickupPointName is null ? null : $"{order.PickupPointName}, {order.PickupPointAddress!.Line1}, {order.PickupPointAddress.City}",
         order.Shipment is null ? null : new ShipmentResponse(order.Shipment.Carrier, order.Shipment.TrackingNumber, order.Shipment.TrackingUrl),
         documents,
-        [.. order.Lines.Select(line => new OrderLineResponse(line.ProductName, line.UnitPrice, line.VatRate, line.Quantity, line.LineTotal))]);
+        [.. order.Lines.Select(line => new OrderLineResponse(line.ProductName, line.UnitPrice, line.VatRate, line.Quantity, line.LineTotal))],
+        order.PaidAt,
+        refunds);
 }
 
 internal sealed record ShipmentResponse(string Carrier, string TrackingNumber, string? TrackingUrl);

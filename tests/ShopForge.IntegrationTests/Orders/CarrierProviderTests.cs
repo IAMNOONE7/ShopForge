@@ -108,7 +108,7 @@ public sealed class CarrierProviderTests : IDisposable
         Assert.DoesNotContain(MapCarrier.MethodCode, methods.ShippingMethods.Select(method => method.Code));
     }
 
-    // Where it is going is not known while the shopper is still choosing, so this one is caught at checkout.
+    // Asked without a country, nobody has said where it is going yet, so this one is caught at checkout.
     [Fact]
     public async Task A_method_that_does_not_serve_the_country_is_refused_when_the_address_says_so()
     {
@@ -119,8 +119,39 @@ public sealed class CarrierProviderTests : IDisposable
         using var athome = await world.Shopper.PostAsync("/api/storefront/checkout", CarrierCheckout("Z-BOX-0042", country: "CZ"));
 
         Assert.Contains(MapCarrier.MethodCode, methods.ShippingMethods.Select(method => method.Code));
+        Assert.Null(methods.DestinationCountry);
         Assert.Equal(HttpStatusCode.BadRequest, elsewhere.StatusCode);
         Assert.Equal(HttpStatusCode.Created, athome.StatusCode);
+    }
+
+    // Once the shopper has said where it is going, a method that does not go there is not offered at all, and one
+    // that goes anywhere still is.
+    [Fact]
+    public async Task Methods_asked_for_a_country_leave_out_those_that_do_not_go_there()
+    {
+        var world = await CarrierStoreAsync(countries: ["CZ"]);
+
+        var athome = await world.Shopper.GetJsonAsync<MethodsView>("/api/storefront/checkout/methods?country=cz");
+        var abroad = await world.Shopper.GetJsonAsync<MethodsView>("/api/storefront/checkout/methods?country=IE");
+
+        Assert.Contains(MapCarrier.MethodCode, athome.ShippingMethods.Select(method => method.Code));
+        Assert.DoesNotContain(MapCarrier.MethodCode, abroad.ShippingMethods.Select(method => method.Code));
+        Assert.Contains("courier", abroad.ShippingMethods.Select(method => method.Code));
+        Assert.Equal(("CZ", "IE"), (athome.DestinationCountry, abroad.DestinationCountry));
+    }
+
+    [Theory]
+    [InlineData("CZE")]
+    [InlineData("C")]
+    [InlineData("1Z")]
+    [InlineData("%C4%8C%C5%BD")]
+    public async Task A_country_that_is_not_a_two_letter_code_is_refused(string country)
+    {
+        var world = await CarrierStoreAsync(countries: ["CZ"]);
+
+        using var refused = await world.Shopper.GetAsync($"/api/storefront/checkout/methods?country={country}");
+
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
     }
 
     private static object CarrierCheckout(string pickupPointCode, string country = "IE") => new
@@ -185,7 +216,7 @@ public sealed class CarrierProviderTests : IDisposable
 
     private sealed record CarrierWorld(FurnitureStore Furniture, StorefrontApi Shopper);
 
-    private sealed record MethodsView(List<ShippingMethodView> ShippingMethods);
+    private sealed record MethodsView(List<ShippingMethodView> ShippingMethods, string? DestinationCountry);
 
     private sealed record ShippingMethodView(string Code, string Name, decimal Price, bool RequiresPickupPoint);
 

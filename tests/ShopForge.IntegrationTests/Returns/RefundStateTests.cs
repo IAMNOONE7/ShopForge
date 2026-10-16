@@ -1,6 +1,7 @@
 using System.Diagnostics.Metrics;
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
@@ -241,9 +242,15 @@ public sealed class RefundStateTests : IDisposable
             $"/api/admin/stores/{furniture.Store.StoreId}/orders/{order.Number}/refund", null, CancellationToken);
         var returned = Assert.Single((await refunded.Content.ReadFromJsonAsync<OrderWithReturns>(CancellationToken))!.Returns);
 
+        var told = await buyer.GetJsonAsync<CustomerOrderView>($"/api/storefront/orders/{order.Number}?token={order.Token}");
+
         Assert.Equal(HttpStatusCode.OK, refunded.StatusCode);
         Assert.Equal("ByStore", returned.Refund);
         Assert.Empty(_comgate.Refunded);
+
+        // The customer hears it is the store's to give back, and no time it was, because nobody here can know it.
+        var refund = Assert.Single(told.Refunds);
+        Assert.Equal(("ByStore", (DateTimeOffset?)null), (refund.State, refund.SettledAt));
     }
 
     [Fact]
@@ -324,10 +331,89 @@ public sealed class RefundStateTests : IDisposable
         Assert.Equal(RefundStatus.Failed, (await ReturnRowAsync(world, returnId)).Refund);
     }
 
+    // The same refund as its customer sees it: nothing to say before the parcel is in, still on its way while the
+    // store puts a refusal right — never why — and once it has gone through, that it has and when (D-204).
+    [Fact]
+    public async Task A_customer_is_told_a_refused_refund_is_still_in_progress_and_never_why()
+    {
+        var world = await PaidAtComgateAsync(withAccount: true);
+        var returnId = await AcceptedReturnAsync(world);
+        var returnsPath = $"/api/storefront/account/orders/{world.Number}/returns";
+        var beforeTheParcel = await world.Buyer!.GetJsonAsync<CustomerReturnsView>(returnsPath);
+        var orderBeforeTheParcel = await world.Buyer.GetJsonAsync<CustomerOrderView>($"/api/storefront/account/orders/{world.Number}");
+        _comgate.Says = Transaction(world, "CANCELLED");
+        using var received = await AdminAsync(world, $"returns/{returnId}/receive");
+
+        var refusedJson = await ReadAsync(world.Buyer, returnsPath);
+
+        _comgate.Says = Transaction(world, "PAID");
+        using var again = await AdminAsync(world, $"returns/{returnId}/refund");
+        var settled = Assert.Single((await world.Buyer.GetJsonAsync<CustomerReturnsView>(returnsPath)).Returns);
+        var order = await world.Buyer.GetJsonAsync<CustomerOrderView>($"/api/storefront/account/orders/{world.Number}");
+
+        var waiting = Assert.Single(beforeTheParcel.Returns);
+        Assert.Equal(((string?)null, (DateTimeOffset?)null), (waiting.RefundState, waiting.RefundSettledAt));
+        Assert.Empty(orderBeforeTheParcel.Refunds);
+        var whileRefused = Assert.Single(JsonSerializer.Deserialize<CustomerReturnsView>(refusedJson, JsonSerializerOptions.Web)!.Returns);
+        Assert.Equal(("InProgress", (DateTimeOffset?)null, world.Total), (whileRefused.RefundState, whileRefused.RefundSettledAt, whileRefused.RefundedAmount));
+        Assert.DoesNotContain("not a payment to refund", refusedJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("refundProblem", refusedJson, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Equal(HttpStatusCode.OK, again.StatusCode);
+        Assert.Equal("Settled", settled.RefundState);
+        Assert.Equal((await ReturnRowAsync(world, returnId)).RefundSettledAt, settled.RefundSettledAt);
+        Assert.NotNull(settled.RefundSettledAt);
+        Assert.Equal(
+            new CustomerRefundView(settled.Number, world.Total, "Settled", settled.RefundSettledAt),
+            Assert.Single(order.Refunds));
+        Assert.Equal((await OrderRowAsync(world)).PaidAt, order.PaidAt);
+        Assert.NotNull(order.PaidAt);
+    }
+
+    // A guest has no returns to look at, only the order and its link. The store's refund of it is there: unanswered,
+    // still on its way; closed by hand, settled — without a word of what the store wrote about closing it. The shop's
+    // other orders hear nothing of it.
+    [Fact]
+    public async Task A_guest_sees_where_the_money_given_back_stands_on_the_order()
+    {
+        var world = await PaidAtComgateAsync(withAccount: false);
+        _comgate.RefundGoesUnanswered = true;
+        var returnId = await RefundedOrderAsync(world);
+        using var guest = new StorefrontApi(_withComgate, world.Store.Store);
+        var orderPath = $"/api/storefront/orders/{world.Number}?token={world.Token}";
+
+        var unanswered = await guest.GetJsonAsync<CustomerOrderView>(orderPath);
+        using var closed = await AdminAsync(world, $"returns/{returnId}/refund/close", new { Note = "Comgate shows it refunded on the 12th." });
+        var settledJson = await ReadAsync(guest, orderPath);
+        var settled = JsonSerializer.Deserialize<CustomerOrderView>(settledJson, JsonSerializerOptions.Web)!;
+        using var added = await guest.PostAsync("/api/storefront/cart/items", new { StoreProductId = world.Store.Products["beech-stool"], Quantity = 1 });
+        using var placed = await guest.PostAsync("/api/storefront/checkout", Checkout.Request());
+        var another = await guest.ReadAsync<PlacedOrder>(placed, HttpStatusCode.Created);
+        var anotherOrder = await guest.GetJsonAsync<CustomerOrderView>($"/api/storefront/orders/{another.Number}?token={another.Token}");
+
+        var stillOwed = Assert.Single(unanswered.Refunds);
+        Assert.Equal(("InProgress", (DateTimeOffset?)null, world.Total), (stillOwed.State, stillOwed.SettledAt, stillOwed.Credited));
+        Assert.Equal(HttpStatusCode.OK, closed.StatusCode);
+        var refund = Assert.Single(settled.Refunds);
+        Assert.Equal(("Settled", (await ReturnRowAsync(world, returnId)).RefundSettledAt), (refund.State, refund.SettledAt));
+        Assert.NotNull(refund.SettledAt);
+        Assert.DoesNotContain("12th", settledJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("refundNote", settledJson, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(anotherOrder.Refunds);
+    }
+
     private Task<HttpResponseMessage> AdminAsync(ComgateWorld world, string path, object? body = null) =>
         body is null
             ? world.Admin.PostAsync($"/api/admin/stores/{world.Store.Store.StoreId}/{path}", null, CancellationToken)
             : world.Admin.PostAsJsonAsync($"/api/admin/stores/{world.Store.Store.StoreId}/{path}", body, CancellationToken);
+
+    private static async Task<string> ReadAsync(StorefrontApi customer, string path)
+    {
+        using var response = await customer.GetAsync(path);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        return await response.Content.ReadAsStringAsync(CancellationToken);
+    }
 
     // The store refunds the whole order, which is a return it makes and receives itself (D-098).
     private async Task<Guid> RefundedOrderAsync(ComgateWorld world)
@@ -390,7 +476,7 @@ public sealed class RefundStateTests : IDisposable
         var attempt = await _factory.QueryAsync(store.Store, dbContext => dbContext.Set<PaymentAttempt>()
             .AsNoTracking()
             .SingleAsync(candidate => candidate.OrderNumber == order.Number, CancellationToken));
-        var world = new ComgateWorld(store, admin, withAccount ? buyer : null, merchant, order.Number, attempt.Reference!, attempt.Amount);
+        var world = new ComgateWorld(store, admin, withAccount ? buyer : null, merchant, order.Number, order.Token, attempt.Reference!, attempt.Amount);
 
         if (!withAccount)
         {
@@ -476,11 +562,19 @@ public sealed class RefundStateTests : IDisposable
             .SingleAsync(CancellationToken));
 
     private sealed record ComgateWorld(
-        FurnitureStore Store, HttpClient Admin, StorefrontApi? Buyer, string Merchant, string Number, string TransactionId, decimal Total);
+        FurnitureStore Store, HttpClient Admin, StorefrontApi? Buyer, string Merchant, string Number, Guid Token, string TransactionId, decimal Total);
 
     private sealed record ReturnView(Guid Id, string Status, string? Refund, string? RefundProblem, string? RefundNote);
 
     private sealed record OrderWithReturns(List<ReturnView> Returns);
 
     private sealed record StockView(Guid VariantId, int OnHand);
+
+    private sealed record CustomerReturnsView(List<CustomerReturnView> Returns);
+
+    private sealed record CustomerReturnView(string Number, decimal RefundedAmount, string? RefundState, DateTimeOffset? RefundSettledAt);
+
+    private sealed record CustomerOrderView(DateTimeOffset? PaidAt, List<CustomerRefundView> Refunds);
+
+    private sealed record CustomerRefundView(string ReturnNumber, decimal Credited, string State, DateTimeOffset? SettledAt);
 }

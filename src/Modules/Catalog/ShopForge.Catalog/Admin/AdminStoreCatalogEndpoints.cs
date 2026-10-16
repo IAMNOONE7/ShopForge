@@ -24,6 +24,7 @@ internal static class AdminStoreCatalogEndpoints
     public static void MapAdminStoreCatalog(this IEndpointRouteBuilder storeAdmin)
     {
         storeAdmin.MapGet("/products", GetStoreProductsAsync);
+        storeAdmin.MapGet("/products/{storeProductId:guid}", GetStoreProductAsync);
         storeAdmin.MapPost("/products", ListProductAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
         storeAdmin.MapPut("/products/{storeProductId:guid}", UpdateStoreProductAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
         storeAdmin.MapPut("/products/{storeProductId:guid}/categories", AssignCategoriesAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
@@ -105,10 +106,39 @@ internal static class AdminStoreCatalogEndpoints
                 listing.SeoTitle,
                 listing.SeoDescription,
                 listing.SeoSocialImageUrl,
-                listing.SeoNoIndex))
+                listing.SeoNoIndex,
+                listing.ArchivedAt))
             .ToListAsync(cancellationToken);
 
         return TypedResults.Ok(new AdminListResponse<AdminStoreProductResponse>(wanted, total, listed.Page, listed.PageSize));
+    }
+
+    // One listing by its id, whether in use or retired — the editor a merchant reloads or is linked to, which the list
+    // can miss while somebody reorders it. Retired ones are answered too, with when they were retired, because a link
+    // to one is still a link to something real (D-204).
+    private static async Task<Results<Ok<AdminStoreProductResponse>, NotFound>> GetStoreProductAsync(
+        Guid storeProductId,
+        DbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var listing = await dbContext.Set<StoreProduct>()
+            .AsNoTracking()
+            .IgnoreQueryFilters([TenancyFilters.Archived])
+            .Include(candidate => candidate.Categories)
+            .SingleOrDefaultAsync(candidate => candidate.Id == storeProductId, cancellationToken);
+
+        if (listing is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var product = await dbContext.Set<Product>()
+            .AsNoTracking()
+            .IgnoreQueryFilters([TenancyFilters.Archived])
+            .Include(candidate => candidate.Variants)
+            .SingleAsync(candidate => candidate.Id == listing.ProductId, cancellationToken);
+
+        return TypedResults.Ok(AdminStoreProductResponse.From(listing, product));
     }
 
     private static async Task<Results<Created<AdminStoreProductResponse>, ValidationProblem, ProblemHttpResult>> ListProductAsync(
@@ -693,7 +723,9 @@ internal sealed record AdminStoreProductResponse(
     string? SeoTitle,
     string? SeoDescription,
     string? SeoSocialImageUrl,
-    bool SeoNoIndex)
+    bool SeoNoIndex,
+    // Null for a listing in use; when it was retired for one that is not (D-180).
+    DateTimeOffset? ArchivedAt = null)
 {
     public static AdminStoreProductResponse From(StoreProduct storeProduct, Product product) => new(
         storeProduct.Id,
@@ -711,5 +743,6 @@ internal sealed record AdminStoreProductResponse(
         storeProduct.SeoTitle,
         storeProduct.SeoDescription,
         storeProduct.SeoSocialImageUrl,
-        storeProduct.SeoNoIndex);
+        storeProduct.SeoNoIndex,
+        storeProduct.ArchivedAt);
 }

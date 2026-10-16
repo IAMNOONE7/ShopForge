@@ -16,6 +16,7 @@ internal static class AdminReturnEndpoints
     public static void MapAdminReturns(this IEndpointRouteBuilder storeAdmin)
     {
         storeAdmin.MapGet("/returns", GetReturnsAsync);
+        storeAdmin.MapGet("/returns/{returnId:guid}", GetReturnAsync);
         storeAdmin.MapPost("/returns/{returnId:guid}/accept", AcceptAsync).RequireAuthorization(AdminPolicies.StoreManagement);
         storeAdmin.MapPost("/returns/{returnId:guid}/refuse", RefuseAsync).RequireAuthorization(AdminPolicies.StoreManagement);
         storeAdmin.MapPost("/returns/{returnId:guid}/receive", ReceiveAsync).RequireAuthorization(AdminPolicies.StoreManagement).Idempotent();
@@ -45,6 +46,15 @@ internal static class AdminReturnEndpoints
 
         return TypedResults.Ok(returns.Select(AdminReturnResponse.From).ToList());
     }
+
+    // One return by its id, so a screen can be linked to and reloaded without walking the list for it (D-204).
+    private static async Task<Results<Ok<AdminReturnResponse>, NotFound>> GetReturnAsync(
+        Guid returnId,
+        DbContext dbContext,
+        CancellationToken cancellationToken) =>
+        await dbContext.Set<OrderReturn>().AsNoTracking().SingleOrDefaultAsync(orderReturn => orderReturn.Id == returnId, cancellationToken) is { } found
+            ? TypedResults.Ok(AdminReturnResponse.From(found))
+            : TypedResults.NotFound();
 
     private static Task<Results<Ok<AdminReturnResponse>, NotFound, ProblemHttpResult>> AcceptAsync(
         Guid returnId,
@@ -237,7 +247,10 @@ internal sealed record AdminReturnResponse(
     // Where the money stands once the parcel is in, and why if it has not gone back (D-194).
     string? Refund,
     string? RefundProblem,
-    string? RefundNote)
+    string? RefundNote,
+    DateTimeOffset? DecidedAt,
+    DateTimeOffset? ReceivedAt,
+    DateTimeOffset? RefundSettledAt)
 {
     public static AdminReturnResponse From(OrderReturn orderReturn) => new(
         orderReturn.Id,
@@ -247,10 +260,15 @@ internal sealed record AdminReturnResponse(
         orderReturn.RequestedAt,
         orderReturn.RefundedAmount,
         orderReturn.Reason,
-        [.. orderReturn.Lines.Select(line => new ReturnLineResponse(line.ProductName, line.Quantity))],
+        [.. orderReturn.Lines.Select(ReturnLineResponse.From)],
         orderReturn.Refund?.ToString(),
         orderReturn.RefundProblem,
-        orderReturn.RefundNote);
+        orderReturn.RefundNote,
+        orderReturn.DecidedAt,
+        orderReturn.ReceivedAt,
+        // Only a refund that is settled has a time it was settled: one tried again keeps the time of the try before,
+        // and one the store pays back itself was not settled by anybody ShopForge can see.
+        orderReturn.Refund is RefundStatus.Refunded or RefundStatus.ClosedByHand ? orderReturn.RefundSettledAt : null);
 }
 
 internal sealed record RefundClosingRequest(string? Note);
