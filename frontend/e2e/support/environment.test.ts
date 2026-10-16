@@ -17,7 +17,7 @@ test("accepts two explicitly identified hosts and normalizes origins and IDs", (
   ] }), targets);
 });
 
-test("refuses missing configuration and unimplemented write/isolation modes", () => {
+test("refuses missing configuration and writable modes in read-only smoke targets", () => {
   for (const value of [null, [], {}, { ...targets, mode: "isolated" }, { ...targets, mode: "write" }]) {
     assert.throws(() => parseEnvironment(value), /read-only/);
   }

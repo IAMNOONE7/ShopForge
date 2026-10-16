@@ -1,11 +1,11 @@
-# Browser smoke tests
+# Browser checks
 
-This package runs Playwright against the real storefront and API. It checks boot,
+This package runs Playwright against the real storefront and API. The default smoke checks cover boot,
 store identity on two hostnames, Czech/English, phone/desktop navigation and product
 page reloads. Browser contexts start without saved sessions. Browser writes are
 blocked and fail the test. API responses are never replaced with fixtures.
 
-These are **read-only smoke checks**, not isolated checkout/payment/return journeys.
+The default checks are **read-only smoke checks**, separate from the isolated journeys below.
 They can use existing demo stores and do not seed, reset or clean up business data.
 The target file is frontend runner input, not a backend endpoint or fixture contract.
 
@@ -82,26 +82,55 @@ Treat reports as private: browser snapshots/network records can contain store da
 CI should install this package/browser, supply targets and running services, run the
 checks above and upload `artifacts/` even on failure. No CI workflow is changed here.
 
-## Isolated journey prerequisites
+## Isolated guest journeys
 
-The current root compose file has PostgreSQL, Azurite and telemetry only. The API
-seeds development demo data. `FakeGateway`, `FakeComgate`, in-memory secret storage
-and payment simulations are backend integration-test helpers, not browser-reachable
-compose services. Supplying `mode: "isolated"` is refused rather than granting writes.
+Use the backend-owned [end-to-end stack](../../README.md#the-end-to-end-stack), which
+provides the E2E API, run setup, provider stand-ins, captured mail and read-only oracle.
+Start it from the repository root and keep its services running during the checks:
 
-Before checkout/return or merchant/operator journeys can be enabled, the backend-owned
-test environment must provide:
+```bash
+tests/e2e/stack.sh up
+cd frontend/e2e
+npm run test:isolated
+```
 
-- A disposable database/storage dataset, per-run tenant/store identities and hosts,
-  deterministic setup/reset and cleanup that cannot target the shared demo dataset.
-- Browser-reachable payment/refund controls for success, refusal, delay, no answer
-  and unknown status, with no live provider credentials or calls.
-- Test-only writable secret storage, controlled DNS and verification-mail/document access.
-- A read-only oracle for stock, orders, attempts, returns and credits, and a way to
-  establish that the application, controls and oracle belong to the same isolated run.
-- A compose/API/CI entry point that publishes the real transport/URLs and fails outside
-  its explicit test environment.
+The runner reads API/rig origins from ignored `.e2e/stack.json` at the repository root.
+`SHOPFORGE_E2E_STACK` can select another descriptor (relative to `frontend/e2e` or absolute).
+Only plain HTTP loopback origins are accepted. Do not publish the descriptor: it also
+contains operator credentials. The runner uses only its API/rig addresses.
 
-Those transports are not implemented or assumed here. After they exist, add the actual
-setup/teardown fixture and server-state assertions before permitting money/data writes.
-Response interception or an asserted `runId` in a local file is not data isolation.
+Playwright builds and owns a separate storefront preview on port 5175, setting
+`SHOPFORGE_API_TARGET` to the descriptor's API address and preserving the Host header.
+It refuses to reuse an existing server; `SHOPFORGE_E2E_STOREFRONT_PORT` can choose a
+different unprivileged port. The runner never starts, resets or stops the API/rig.
+The read-only target file remains read-only and still rejects `mode: "isolated"`.
+
+Each test verifies the API's E2E/database marker, creates exactly one run through
+`POST /runs`, and validates its two distinct published hosts, listing/variant identities
+and fresh stock readings. Both storefront proxies must resolve the returned store IDs
+and the same API process marker. Only then may the browser write to those hosts' cart
+and checkout routes or submit the rig's payment form. Responses come from the real
+services; routing only blocks writes outside that boundary. No provider credentials,
+mail links or guest receipt tokens are copied into the run metadata attachment.
+
+Four CS/EN phone/desktop projects exercise selected-variant guest checkout, Comgate
+Pay/Decline/Leave pending, receipt recovery after decline and independent carts on
+both hosts in one browser context. They assert checkout/receipt totals, exact variant,
+payment attempt and stock facts, duplicate notification handling, captured order/paid
+mail and a real invoice PDF download. All money and mail stay in the disposable stack.
+Each test ends only its own run via `DELETE /runs/{run}` and verifies it is forgotten.
+This suspends the tenant; its database rows remain until the stack is taken down.
+
+The normal matrix has a ten-minute deadline, one worker and zero retries.
+`npm run test:isolated:repeat` repeats every case twenty times with a thirty-minute
+deadline. To focus a repeat, append e.g. `-- --project=en-desktop --grep 'a guest buys'`.
+Every repetition creates its own run; a failed test is never retried. Reports, per-run
+identities and order/stock/mail facts are under ignored `artifacts/isolated/`; use
+`npx playwright show-report artifacts/isolated/report` to inspect them. Failure traces,
+videos and screenshots are retained. Reports remain private because network records
+can contain guest receipt tokens. Save reports before another invocation replaces them.
+
+When finished, run `tests/e2e/stack.sh down` from the repository root to stop only the
+disposable stack and discard its data. Registered-shopper returns/credits, merchant
+and operator flows, uncertain provider outcomes and DNS are still separate acceptance
+work. These journeys do not advance the stack-wide clock or run scheduled passes.

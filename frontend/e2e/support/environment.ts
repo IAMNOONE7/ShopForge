@@ -24,7 +24,7 @@ function origin(value: unknown, label: string) {
 
 export function parseEnvironment(value: unknown): SmokeEnvironment {
   if (!object(value) || value.mode !== "read-only") {
-    throw new Error("This harness supports read-only smoke checks. Isolated write journeys need the backend test environment first.");
+    throw new Error("Smoke targets support read-only checks. Use the separate isolated journey configuration for the E2E stack.");
   }
   if (!Array.isArray(value.stores) || value.stores.length !== 2) {
     throw new Error("Configure exactly two real storefront targets.");
