@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { parseMarker, parseRun, parseStack, storeOrigin } from "./isolatedEnvironment.ts";
+import { parseMarker, parseRun, parseRunOwner, parseStack, storeOrigin, verificationUrl } from "./isolatedEnvironment.ts";
 
 const id = (n: number) => `00000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
 const stack = { api: "http://127.0.0.1:5180", rig: "http://127.0.0.1:5190", operator: { email: "operator@example.test", password: "not-exported" } };
@@ -55,4 +55,23 @@ test("requires unique stocked variants and a real listing for both owned stores"
     (run: ReturnType<typeof describedRun>) => { run.products[1].variants[0].id = run.products[0].variants[0].id; },
     (run: ReturnType<typeof describedRun>) => { run.products[1].listings[id(3)] = run.products[0].listings[id(3)]; },
   ]) { const run = describedRun(); mutate(run); assert.throws(() => parseRun(run)); }
+});
+test("reads owner credentials separately and refuses credentials outside this run", () => {
+  const raw = describedRun(), run = parseRun(raw);
+  raw.owner.email = `owner@${run.emailDomain}`;
+  assert.deepEqual(parseRunOwner(raw, run), raw.owner);
+  assert.equal("owner" in parseRun(raw), false);
+  for (const owner of [null, {}, { ...raw.owner, email: "owner@other.e2e.test" }, { ...raw.owner, password: "short" }, { ...raw.owner, password: "x".repeat(129) }]) {
+    assert.throws(() => parseRunOwner({ ...raw, owner }, run));
+  }
+});
+test("keeps the mailed verification token and path while mapping this store to its preview port", () => {
+  const store = describedRun().stores[0], origin = `http://${store.host}:5175`;
+  assert.equal(verificationUrl([`https://${store.host}/account/verify?token=from-the-mail`], store, origin), `${origin}/account/verify?token=from-the-mail`);
+  for (const link of ["https://other-a.localhost/account/verify?token=secret", `https://user:secret@${store.host}/account/verify?token=secret`, `https://${store.host}/account/verify`, `https://${store.host}/account/verify?token=secret#fragment`, `ftp://${store.host}/account/verify?token=secret`, `https://${store.host}/account/reset-password?token=secret`]) {
+    assert.throws(() => verificationUrl([link], store, origin));
+  }
+  assert.throws(() => verificationUrl([], store, origin));
+  assert.throws(() => verificationUrl([`${origin}/account/verify?token=a`, `${origin}/account/verify?token=b`], store, origin));
+  assert.throws(() => verificationUrl([`${origin}/account/verify?token=a`], store, "http://other-a.localhost:5175"));
 });

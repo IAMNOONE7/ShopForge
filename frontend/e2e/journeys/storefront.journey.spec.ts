@@ -1,5 +1,5 @@
 import { test, expect } from "../support/isolatedFixtures.ts";
-import { addVariant, cartReading, checkout, downloadInvoice, expectReceipt, labels, money, noOverflow } from "../support/shopper.ts";
+import { addVariant, cartReading, checkout, downloadOrderDocument, expectReceipt, labels, money, noOverflow } from "../support/shopper.ts";
 
 test("a guest buys the selected variant, pays once and downloads the issued invoice", async ({ page, runSession }, testInfo) => {
   const store = runSession.run.stores[0], product = runSession.run.products.find(product => product.variants.some(variant => variant.size === "M"))!;
@@ -24,7 +24,7 @@ test("a guest buys the selected variant, pays once and downloads the issued invo
   expect(await runSession.stock(variant.sku)).toEqual({ sku: variant.sku, onHand: variant.stock - 1, reserved: 0, available: variant.stock - 1 });
   const invoice = reading.documents.find(document => document.kind === "Invoice")!;
   await page.reload(); await expect(page.locator(".order-grand-total dd")).toHaveText(money(product.price));
-  await downloadInvoice(page, invoice.number, testInfo); await noOverflow(page);
+  await downloadOrderDocument(page, invoice.number, testInfo); await noOverflow(page);
   await expect.poll(async () => (await runSession.mail(placed.email)).some(letter => letter.subject === `${store.name}: Payment received for order ${placed.number}` && letter.attachments.some(name => name.endsWith(".pdf")))).toBe(true);
   const letters = await runSession.mail(placed.email);
   expect(letters.some(letter => letter.subject === `${store.name}: Your order ${placed.number}`)).toBe(true);

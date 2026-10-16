@@ -7,6 +7,7 @@ export type RunVariant = { id: string; sku: string; size: string | null; stock: 
 export type RunProduct = { id: string; name: string; slug: string; price: number; variants: RunVariant[]; listings: Record<string, string> };
 export type IsolatedRun = { id: string; emailDomain: string; tenantId: string; stores: RunStore[]; products: RunProduct[] };
 export type Marker = { environment: "E2E"; database: "shopforge_e2e"; startedAt: string };
+export type RunOwner = { email: string; password: string };
 
 function object(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
 function uuid(value: unknown): value is string { return typeof value === "string" && /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value); }
@@ -60,3 +61,22 @@ export function parseRun(value: unknown): IsolatedRun {
 }
 
 export function storeOrigin(environment: IsolatedEnvironment, store: RunStore) { return `http://${store.host}:${environment.storefrontPort}`; }
+
+export function parseRunOwner(value: unknown, run: IsolatedRun): RunOwner {
+  if (!object(value) || !object(value.owner) || value.owner.email !== `owner@${run.emailDomain}` || typeof value.owner.password !== "string" || value.owner.password.length < 10 || value.owner.password.length > 128) {
+    throw new Error("The owner must belong to this disposable run.");
+  }
+  return { email: value.owner.email as string, password: value.owner.password };
+}
+
+export function verificationUrl(links: readonly string[], store: RunStore, frontendOrigin: string) {
+  const matches = links.map(link => new URL(link)).filter(url => url.pathname === "/account/verify");
+  const target = new URL(frontendOrigin);
+  if (matches.length !== 1 || target.hostname !== store.host) throw new Error("Expected one verification link for this store.");
+  const source = matches[0];
+  if (!["http:", "https:"].includes(source.protocol) || source.hostname !== store.host || source.username || source.password || source.hash || !source.searchParams.get("token")) {
+    throw new Error("Verification link does not belong to this store.");
+  }
+  // Published mail URLs omit the local preview port; keep the mailed path/token.
+  return new URL(source.pathname + source.search, target.origin).href;
+}

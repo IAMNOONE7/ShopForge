@@ -82,7 +82,7 @@ Treat reports as private: browser snapshots/network records can contain store da
 CI should install this package/browser, supply targets and running services, run the
 checks above and upload `artifacts/` even on failure. No CI workflow is changed here.
 
-## Isolated guest journeys
+## Isolated shopper journeys
 
 Use the backend-owned [end-to-end stack](../../README.md#the-end-to-end-stack), which
 provides the E2E API, run setup, provider stand-ins, captured mail and read-only oracle.
@@ -108,8 +108,9 @@ The read-only target file remains read-only and still rejects `mode: "isolated"`
 Each test verifies the API's E2E/database marker, creates exactly one run through
 `POST /runs`, and validates its two distinct published hosts, listing/variant identities
 and fresh stock readings. Both storefront proxies must resolve the returned store IDs
-and the same API process marker. Only then may the browser write to those hosts' cart
-and checkout routes or submit the rig's payment form. Responses come from the real
+and the same API process marker. Only then may the browser write to the explicit cart,
+checkout, registration, verification, sign-in/out and return-request routes on those
+hosts, or submit the rig's payment form. Responses come from the real
 services; routing only blocks writes outside that boundary. No provider credentials,
 mail links or guest receipt tokens are copied into the run metadata attachment.
 
@@ -117,7 +118,17 @@ Four CS/EN phone/desktop projects exercise selected-variant guest checkout, Comg
 Pay/Decline/Leave pending, receipt recovery after decline and independent carts on
 both hosts in one browser context. They assert checkout/receipt totals, exact variant,
 payment attempt and stock facts, duplicate notification handling, captured order/paid
-mail and a real invoice PDF download. All money and mail stay in the disposable stack.
+mail and a real invoice PDF download. A registered shopper verifies captured mail,
+signs in, buys a variant, requests a return and downloads the credit note after parcel
+receipt and refund. The oracle and stand-in verify exact variant/amount, restored stock
+and provider refund. Logout and the second host show the private-order sign-in prompt,
+with no document controls.
+The run owner's authenticated API session performs only the required acceptance and
+parcel-receipt progression, with one keyed receipt request and no automatic write
+retry. This is fixture progression, not merchant browser coverage. Owner credentials
+are validated against the run and never attached to run metadata. Verification links
+keep the mailed host/path/token and map that host to the local preview port.
+All money and mail stay in the disposable stack.
 Each test ends only its own run via `DELETE /runs/{run}` and verifies it is forgotten.
 This suspends the tenant; its database rows remain until the stack is taken down.
 
@@ -131,6 +142,8 @@ videos and screenshots are retained. Reports remain private because network reco
 can contain guest receipt tokens. Save reports before another invocation replaces them.
 
 When finished, run `tests/e2e/stack.sh down` from the repository root to stop only the
-disposable stack and discard its data. Registered-shopper returns/credits, merchant
-and operator flows, uncertain provider outcomes and DNS are still separate acceptance
-work. These journeys do not advance the stack-wide clock or run scheduled passes.
+disposable stack and discard its data. Merchant/operator browser flows, uncertain
+provider outcomes, complete repeat acceptance, CI wiring and DNS remain separate work.
+These journeys do not advance the stack-wide clock or run scheduled passes. Public
+credited amounts remain distinct from provider settlement; settlement is asserted
+through the current oracle and stand-in rather than inferred from the shopper label.

@@ -37,7 +37,9 @@ export async function cartReading(page: Page): Promise<CartReading> {
 export async function checkout(page: Page, session: RunSession, store: RunStore, product: RunProduct, testInfo: TestInfo) {
   const words = labels(testInfo), origin = session.origin(store), email = `buyer@${session.run.emailDomain}`;
   await page.goto(`${origin}/checkout`);
-  await page.locator('input[name="email"]').fill(email);
+  const emailField = page.locator('input[name="email"]');
+  if (await emailField.getAttribute("readonly") !== null) await expect(emailField).toHaveValue(email);
+  else await emailField.fill(email);
   await page.locator('input[name="phone"]').fill("+420 777 123 456");
   for (const [field, value] of Object.entries({ fullName: "Eva Kupující", line1: "Testovací 1", city: "Brno", postalCode: "602 00", country: "CZ" })) {
     await page.locator(`input[name="billing.${field}"]`).fill(value);
@@ -71,12 +73,12 @@ export async function noOverflow(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
 }
 
-export async function downloadInvoice(page: Page, number: string, testInfo: TestInfo) {
+export async function downloadOrderDocument(page: Page, number: string, testInfo: TestInfo) {
   const download = page.waitForEvent("download");
   const response = page.waitForResponse(answer => new URL(answer.url()).pathname.includes("/documents/") && answer.request().method() === "GET");
   await page.locator(".order-documents").getByRole("button", { name: new RegExp(number) }).click();
   const document = await download, answer = await response;
   expect(answer.status()).toBe(200); expect(answer.headers()["content-type"]).toContain("application/pdf");
-  const path = testInfo.outputPath("invoice.pdf"); await document.saveAs(path);
+  const path = testInfo.outputPath(`document-${number}.pdf`); await document.saveAs(path);
   expect((await readFile(path)).subarray(0, 5).toString()).toBe("%PDF-");
 }

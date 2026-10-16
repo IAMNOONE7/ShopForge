@@ -1,17 +1,21 @@
 import { test as base, expect, type APIRequestContext } from "@playwright/test";
 import { writeFileSync } from "node:fs";
-import { loadStack, parseMarker, parseRun, storeOrigin, type IsolatedEnvironment, type IsolatedRun, type Marker, type RunStore } from "./isolatedEnvironment.ts";
+import { randomUUID } from "node:crypto";
+import { loadStack, parseMarker, parseRun, parseRunOwner, storeOrigin, type IsolatedEnvironment, type IsolatedRun, type Marker, type RunStore } from "./isolatedEnvironment.ts";
+import { allowedBrowserWrite } from "./writeBoundary.ts";
 
 export type OrderReading = {
   order: { number: string; status: string; email: string; currency: string; paidAt: string | null; paymentReference: string | null; refundedTotal: number };
   lines: { productName: string; variantId: string | null; quantity: number; unitPrice: number; discount: number }[];
   attempts: { provider: string; reference: string | null; status: string; amount: number; currency: string; environment: string | null }[];
-  answersRecorded: number; kept: unknown[]; returns: unknown[];
+  answersRecorded: number; kept: unknown[];
+  returns: { number: string; status: string; refundStatus: string | null; refundedAmount: number | null; refundProblem: string | null }[];
   documents: { number: string; kind: string }[]; letters: { type: string; status: string }[];
 };
 export type StockReading = { sku: string; onHand: number; reserved: number; available: number };
 export type Letter = { id: string; to: string; subject: string; attachments: string[]; links: string[] };
 export type GatewayReading = { merchant: string; transactions: { id: string; referenceId: string; status: string; price: number; currency: string; test: boolean; refunded: number }[] };
+type MerchantReturn = { id: string; number: string; orderNumber: string; status: string; refundedAmount: number; refund: string | null; refundProblem: string | null };
 export type RunSession = {
   environment: IsolatedEnvironment; run: IsolatedRun; marker: Marker;
   origin: (store: RunStore) => string;
@@ -20,6 +24,7 @@ export type RunSession = {
   mail: (to: string) => Promise<Letter[]>;
   gateway: () => Promise<GatewayReading>;
   pushAgain: (id: string) => Promise<void>;
+  advanceReturn: (store: RunStore, orderNumber: string, returnNumber: string, action: "accept" | "receive") => Promise<MerchantReturn>;
 };
 
 async function json<T>(client: APIRequestContext, url: string, status = 200, method: "GET" | "POST" = "GET", timeout = 5_000): Promise<T> {
@@ -30,7 +35,7 @@ async function json<T>(client: APIRequestContext, url: string, status = 200, met
 }
 
 export const test = base.extend<{ runSession: RunSession; isolatedBrowser: void }>({
-  runSession: async ({ request }, use, testInfo) => {
+  runSession: async ({ request, playwright }, use, testInfo) => {
     const environment = loadStack();
     for (const path of ["/health/live", "/health/ready"]) expect((await request.get(environment.apiOrigin + path, { maxRedirects: 0, timeout: 5_000 })).status()).toBe(200);
     const marker = parseMarker(await json(request, `${environment.apiOrigin}/api/e2e/`));
@@ -72,6 +77,27 @@ export const test = base.extend<{ runSession: RunSession; isolatedBrowser: void 
         },
         gateway: () => json(request, `${root}/comgate/`),
         pushAgain: async id => { await json(request, `${root}/comgate/transactions/${encodeURIComponent(id)}/push`, 200, "POST"); },
+        advanceReturn: async (store, orderNumber, returnNumber, action) => {
+          if (!run.stores.some(candidate => candidate.id === store.id)) throw new Error("Foreign return target.");
+          const owner = parseRunOwner(created, run);
+          const admin = await playwright.request.newContext({ timeout: 10_000 });
+          try {
+            const signedIn = await admin.post(`${environment.apiOrigin}/api/admin/auth/login`, { data: owner, maxRedirects: 0, maxRetries: 0 });
+            expect(signedIn.status(), "Run owner sign-in").toBe(200);
+            const path = `${environment.apiOrigin}/api/admin/stores/${store.id}/returns`;
+            const found = (await json<MerchantReturn[]>(admin, path)).filter(candidate => candidate.orderNumber === orderNumber && candidate.number === returnNumber);
+            expect(found, "Exactly this run store's requested return").toHaveLength(1);
+            expect(found[0].id).toMatch(/^[0-9a-f-]{36}$/i);
+            expect(found[0].status).toBe(action === "accept" ? "Requested" : "Accepted");
+            const response = await admin.post(`${path}/${found[0].id}/${action}`, {
+              headers: action === "receive" ? { "Idempotency-Key": randomUUID() } : {}, maxRedirects: 0, maxRetries: 0,
+            });
+            expect(response.status(), `Run owner ${action}`).toBe(200);
+            const advanced = await response.json() as MerchantReturn;
+            expect(advanced).toMatchObject({ id: found[0].id, number: returnNumber, orderNumber, status: action === "accept" ? "Accepted" : "Received" });
+            return advanced;
+          } finally { await admin.dispose(); }
+        },
       };
       for (const variant of run.products.flatMap(product => product.variants)) {
         expect(await session.stock(variant.sku)).toEqual({ sku: variant.sku, onHand: variant.stock, reserved: 0, available: variant.stock });
@@ -100,9 +126,7 @@ export const test = base.extend<{ runSession: RunSession; isolatedBrowser: void 
     await context.route("**/*", async route => {
       const request = route.request(), url = new URL(request.url());
       const read = ["GET", "HEAD", "OPTIONS"].includes(request.method());
-      const cart = origins.has(url.origin) && (url.pathname.startsWith("/api/storefront/cart/") || url.pathname === "/api/storefront/checkout");
-      const gateway = url.origin === environment.rigOrigin && /^\/comgate\/pay\/[^/]+$/.test(url.pathname) && request.method() === "POST";
-      if (!read && !cart && !gateway) { blocked.push(`${request.method()} ${url.origin}${url.pathname}`); await route.abort("blockedbyclient"); }
+      if (!read && !allowedBrowserWrite(request.method(), url, origins, environment.rigOrigin)) { blocked.push(`${request.method()} ${url.origin}${url.pathname}`); await route.abort("blockedbyclient"); }
       else { if (!read) writes.push(`${request.method()} ${url.origin}${url.pathname}`); await route.continue(); }
     });
     await use();
