@@ -133,6 +133,7 @@ function AuthenticatedAccountOrder({ number }: { number: string }) {
         orderStatus={request.data.status}
         currency={request.data.currency}
         onReturned={refresh}
+        refundVersion={JSON.stringify(request.data.refunds)}
       />
     </OrderReceipt>
   );

@@ -128,9 +128,10 @@ signs in, buys a variant, requests a return and downloads the credit note after 
 receipt and refund. The oracle and stand-in verify exact variant/amount, restored stock
 and provider refund. Logout and the second host show the private-order sign-in prompt,
 with no document controls.
-The run owner's authenticated API session performs only the required acceptance and
-parcel-receipt progression, with one keyed receipt request and no automatic write
-retry. This is fixture progression, not merchant browser coverage. Owner credentials
+The run owner's authenticated API session performs the required acceptance,
+parcel receipt, whole-order refund and explicit retry of a Failed refund. Financial
+actions carry fresh keys and are never automatically retried. This is fixture
+progression, not merchant browser coverage. Owner credentials
 are validated against the run and never attached to run metadata. Verification links
 keep the mailed host/path/token and map that host to the local preview port.
 All money and mail stay in the disposable stack.
@@ -149,6 +150,16 @@ and one invoice/credit note. Real payment and parcel-receipt progression complet
 recovered flows, including PDF downloads and captured mail. Exactly one failed browser
 write transport is expected in each response-loss case; other failed writes fail checks.
 This covers recovery on the same page with the retained attempt, not reload persistence.
+Public refund checks use the additive contracts in backend `41d06f7`. Both guest and
+account receipts show the recorded payment time, credited amount and public settlement
+state separately. Account return history retains the saved listing/variant identities
+and agrees with the order's refund facts. A guest sees a store-initiated whole-order
+refund without needing an account return request. A refused provider refund remains
+InProgress without a settlement date or private provider reason; after the owner
+explicitly retries it, bounded receipt GET polling discovers Settled and its recorded
+time. The original order total, one stock restoration, one credit note and one provider
+refund are checked, with a real guest PDF download and no further browser business write.
+These checks do not certify ByStore completion or uncertain provider refund outcomes.
 Each test ends only its own run via `DELETE /runs/{run}` and verifies it is forgotten.
 This suspends the tenant; its database rows remain until the stack is taken down.
 
@@ -158,6 +169,8 @@ failure and has a 200-minute deadline (twenty ten-minute matrices). To focus a r
 append e.g. `-- --project=en-desktop --grep 'payment recovery'`.
 Use `-- --project=en-desktop --grep 'lost (checkout|return) answer'` for the
 post-commit response-loss cases.
+Use `-- --project=en-desktop --grep 'store-initiated'` for the whole-order public
+refund cases.
 Every repetition creates its own run; a failed test is never retried. Reports, per-run
 identities and order/stock/mail facts are under ignored `artifacts/isolated/`; use
 `npx playwright show-report artifacts/isolated/report` to inspect them. Failure traces,

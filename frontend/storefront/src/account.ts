@@ -1,5 +1,6 @@
 import { requestJson } from "./api/http";
 import type { Order } from "./cart";
+import { withOrderFacts, withReturnFacts } from "./refundFacts";
 
 export type Customer = {
   email: string;
@@ -85,7 +86,7 @@ export const getAccountOrder = (number: string, signal?: AbortSignal) =>
   requestJson<Order>(
     `/api/storefront/account/orders/${encodeURIComponent(number)}`,
     { signal },
-  );
+  ).then(withOrderFacts);
 
 export type ReturnableLine = {
   storeProductId: string;
@@ -99,7 +100,9 @@ export type CustomerReturn = {
   status: string;
   requestedAt: string;
   refundedAmount: number;
-  lines: { productName: string; quantity: number }[];
+  lines: ReturnableLine[];
+  refundState: string | null;
+  refundSettledAt: string | null;
 };
 
 export type Returns = {
@@ -112,7 +115,7 @@ export const getReturns = (number: string, signal?: AbortSignal) =>
   requestJson<Returns>(
     `/api/storefront/account/orders/${encodeURIComponent(number)}/returns`,
     { signal },
-  );
+  ).then(withReturnFacts);
 
 export type ReturnRequest = {
   lines: { storeProductId: string; variantId: string; quantity: number }[];
@@ -123,7 +126,7 @@ export const requestReturn = (number: string, request: ReturnRequest, idempotenc
   requestJson<Returns>(
     `/api/storefront/account/orders/${encodeURIComponent(number)}/returns`,
     { method: "POST", body: request, headers: { "Idempotency-Key": idempotencyKey } },
-  );
+  ).then(withReturnFacts);
 
 export type WishlistItem = {
   storeProductId: string;

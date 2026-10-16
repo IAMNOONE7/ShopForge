@@ -1,4 +1,5 @@
 import { requestJson } from "./api/http";
+import { withOrderFacts, type CustomerRefund } from "./refundFacts";
 
 export type CartLine = {
   storeProductId: string;
@@ -134,6 +135,8 @@ export type Order = {
   shipment: Shipment | null;
   documents: OrderDocument[];
   lines: OrderLine[];
+  paidAt: string | null;
+  refunds: CustomerRefund[];
 };
 
 export const getCart = (signal?: AbortSignal) =>
@@ -185,4 +188,4 @@ export const getOrder = (number: string, token: string, signal: AbortSignal) =>
   requestJson<Order>(
     `/api/storefront/orders/${encodeURIComponent(number)}?token=${encodeURIComponent(token)}`,
     { signal },
-  );
+  ).then(withOrderFacts);

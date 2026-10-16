@@ -50,6 +50,8 @@ function makeOrder(overrides: Partial<Order> = {}): Order {
     discount: null,
     pickupPoint: null,
     shipment: null,
+    paidAt: null,
+    refunds: [],
     documents: [],
     lines: [
       {

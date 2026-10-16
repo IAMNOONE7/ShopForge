@@ -52,6 +52,44 @@ afterEach(() => {
 afterAll(() => i18n.changeLanguage("en"));
 
 describe("account order returns", () => {
+  it.each(["en", "cs"].flatMap(language => ["Settled", "InProgress", "ByStore", "FutureState", null].map(state => ({ language, state }))))("separates receipt and $state repayment in $language", async ({ language, state }) => {
+    await i18n.changeLanguage(language);
+    const settledAt = "2026-10-16T10:00:00Z";
+    mocks.getReturns.mockResolvedValue({ ...returns, returnable: [], returns: [{
+      number: "RET-1", status: "Received", requestedAt: "2026-10-15T10:00:00Z", refundedAmount: 14.5,
+      refundState: state, refundSettledAt: settledAt,
+      lines: [{ storeProductId: "hoodie", variantId: "medium-blue", productName: "Saved shirt (M / Blue)", quantity: 1 },
+        { storeProductId: "hoodie", variantId: "small-red", productName: "Saved shirt (S / Red)", quantity: 1 }],
+    }] });
+    renderReturns("Refunded");
+    await screen.findByText(/RET-1/);
+    const known = state === "Settled" || state === "InProgress" || state === "ByStore" ? state : "unknown";
+    expect(screen.getByText(i18n.t(`orders:refundState.${known}`))).toBeTruthy();
+    expect(document.querySelector(".return-list")?.textContent).toContain("Saved shirt (M / Blue)");
+    expect(document.querySelector(".return-list")?.textContent).toContain("Saved shirt (S / Red)");
+    expect(document.querySelector(".return-handling-status")?.textContent).toMatch(/14,50/);
+    expect(document.querySelectorAll(".return-list time")).toHaveLength(state === "Settled" ? 1 : 0);
+    expect(document.body.textContent).not.toContain("FutureState");
+    expect(document.body.textContent).not.toContain("Kč");
+    expect(mocks.requestReturn).not.toHaveBeenCalled();
+    await i18n.changeLanguage("en");
+  });
+
+  it("reloads return history when the order's public refund facts change, without writing", async () => {
+    const record = { number: "RET-1", status: "Received", requestedAt: "2026-10-15T10:00:00Z", refundedAmount: 14.5,
+      refundState: "InProgress", refundSettledAt: null, lines: [] };
+    mocks.getReturns.mockResolvedValueOnce({ ...returns, returnable: [], returns: [record] })
+      .mockResolvedValueOnce({ ...returns, returnable: [], returns: [{ ...record, refundState: "Settled", refundSettledAt: "2026-10-16T10:00:00Z" }] });
+    const view = (version: string) => <StoreContext value={store}><OrderReturns number="2026-00023" orderStatus="Refunded" currency="EUR" onReturned={vi.fn()} refundVersion={version} /></StoreContext>;
+    const rendered = render(view("in-progress"));
+    await screen.findByText("Refund in progress");
+    rendered.rerender(view("settled"));
+    await screen.findByText("Refund settled");
+    expect(screen.queryByText("Refund in progress")).toBeNull();
+    expect(mocks.getReturns).toHaveBeenCalledTimes(2);
+    expect(mocks.requestReturn).not.toHaveBeenCalled();
+  });
+
   it("retries a lost return response with the same variant payload and key", async () => {
     mocks.getReturns.mockResolvedValue(returns);
     mocks.requestReturn

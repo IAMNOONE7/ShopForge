@@ -111,6 +111,7 @@ export function useOrderRefresh(
 }
 
 export function orderNeedsRefresh(order: Order) {
+  if (order.refunds?.some(refund => refund.state === "InProgress")) return true;
   if (order.status === "AwaitingPayment") return true;
   if (
     (order.status === "Paid" || order.status === "Shipped") &&

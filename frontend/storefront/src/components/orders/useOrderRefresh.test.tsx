@@ -23,6 +23,8 @@ function makeOrder(
     discount: null,
     pickupPoint: null,
     shipment: null,
+    paidAt: null,
+    refunds: [],
     documents,
     lines: [],
   };
@@ -51,6 +53,22 @@ afterEach(() => {
 });
 
 describe("useOrderRefresh", () => {
+  it("polls only reads until an in-progress refund settles, then stops", async () => {
+    vi.useFakeTimers();
+    const documents = [{ number: "CN-1", kind: "CreditNote", issuedAt: "2026-10-16T10:00:00Z" }];
+    const refund = { returnNumber: "RET-1", credited: 120, state: "InProgress", settledAt: null };
+    const pending = { ...makeOrder("Refunded", documents), refunds: [refund] };
+    const settled = { ...pending, refunds: [{ ...refund, state: "Settled", settledAt: "2026-10-16T11:00:00Z" }] };
+    const load = vi.fn().mockResolvedValueOnce(pending).mockResolvedValueOnce(settled);
+    const { result } = renderHook(() => useOrderRefresh("refund:1", load));
+    await act(async () => undefined);
+    expect(result.current.waiting).toBe(true);
+    await advance(3_000);
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(result.current.waiting).toBe(false);
+    await advance(60_000);
+    expect(load).toHaveBeenCalledTimes(2);
+  });
   it("retains the current receipt while polling and stops when the invoice arrives", async () => {
     vi.useFakeTimers();
     const refresh = deferred<Order>();
@@ -161,6 +179,10 @@ describe("useOrderRefresh", () => {
 });
 
 describe("orderNeedsRefresh", () => {
+  it.each(["Settled", "ByStore", "FutureState"])("does not keep polling a %s refund with its document present", state => {
+    const order = makeOrder("Refunded", [{ number: "CN-1", kind: "CreditNote", issuedAt: "2026-10-16T10:00:00Z" }]);
+    expect(orderNeedsRefresh({ ...order, refunds: [{ returnNumber: "RET-1", credited: 120, state, settledAt: null }] })).toBe(false);
+  });
   it("only polls states with a pending status or expected document", () => {
     expect(orderNeedsRefresh(makeOrder("AwaitingPayment"))).toBe(true);
     expect(orderNeedsRefresh(makeOrder("Paid"))).toBe(true);

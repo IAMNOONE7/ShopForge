@@ -1,6 +1,6 @@
 import { test, expect } from "../support/isolatedFixtures.ts";
 import { registerShopper, signInShopper, signOutShopper } from "../support/registeredShopper.ts";
-import { addVariant, checkout, downloadOrderDocument, expectReceipt, labels, money, noOverflow } from "../support/shopper.ts";
+import { addVariant, checkout, downloadOrderDocument, expectPublicRefund, expectReceipt, labels, money, noOverflow } from "../support/shopper.ts";
 
 type ReturnsReading = { returnable: unknown[]; returns: { number: string; status: string; refundedAmount: number; lines: { productName: string; quantity: number }[] }[] };
 
@@ -45,15 +45,16 @@ test("a registered shopper returns the purchased variant and downloads the credi
   const returns = await requested.json() as ReturnsReading;
   expect(returns.returns).toHaveLength(1); expect(returns.returnable).toEqual([]);
   const returned = returns.returns[0];
-  expect(returned).toMatchObject({ status: "Requested", refundedAmount: 0, lines: [{ productName: savedName, quantity: 1 }] });
+  expect(returned).toMatchObject({ status: "Requested", refundedAmount: 0, refundState: null, refundSettledAt: null,
+    lines: [{ storeProductId: product.listings[store.id], variantId: variant.id, productName: savedName, quantity: 1 }] });
   await expect(page.locator(".return-list")).toContainText(returned.number);
-  await expect(page.locator(".return-list .hint")).toHaveText(words.orders.returnStatus.Requested);
+  await expect(page.locator(".return-list .return-handling-status")).toHaveText(words.orders.returnStatus.Requested);
   await expect(page.locator(".returns .return-form")).toHaveCount(0);
   await noOverflow(page);
 
   await runSession.advanceReturn(store, placed.number, returned.number, "accept");
   await page.reload();
-  await expect(page.locator(".return-list .hint")).toHaveText(words.orders.returnStatus.Accepted);
+  await expect(page.locator(".return-list .return-handling-status")).toHaveText(words.orders.returnStatus.Accepted);
   expect(await runSession.stock(variant.sku)).toEqual({ sku: variant.sku, onHand: variant.stock - 1, reserved: 0, available: variant.stock - 1 });
   const received = await runSession.advanceReturn(store, placed.number, returned.number, "receive");
   expect(received).toMatchObject({ status: "Received", refund: "Refunded", refundedAmount: product.price, refundProblem: null });
@@ -73,8 +74,10 @@ test("a registered shopper returns the purchased variant and downloads the credi
   await page.reload();
   await expect(page.locator(".order-status.refunded")).toHaveText(words.orders.status.Refunded);
   await expect(page.locator(".return-list")).toContainText(savedName);
-  await expect(page.locator(".return-list .hint")).toHaveText(words.orders.returnStatus.Received.replace("{{amount}}", money(product.price)));
-  await expect(page.locator(".returns")).toContainText(words.orders.returnCreditHint);
+  await expect(page.locator(".return-list .return-handling-status")).toHaveText(words.orders.returnStatus.Received.replace("{{amount}}", money(product.price)));
+  await expect(page.locator(".returns .refund-state")).toHaveText(words.orders.refundState.Settled);
+  const publicFacts = await expectPublicRefund(page, placed.number, "Settled", product.price, testInfo);
+  await expect(page.locator(".return-list time")).toHaveAttribute("datetime", publicFacts.refunds[0].settledAt!);
   const credit = reading.documents.find(document => document.kind === "CreditNote")!;
   await downloadOrderDocument(page, credit.number, testInfo);
   await noOverflow(page);
@@ -93,7 +96,7 @@ test("a registered shopper returns the purchased variant and downloads the credi
   await page.locator("main").getByRole("link", { name: words.auth.signIn, exact: true }).click();
   await signInShopper(page, shopper, testInfo);
   await expect(page).toHaveURL(accountOrder);
-  await expect(page.locator(".return-list .hint")).toHaveText(words.orders.returnStatus.Received.replace("{{amount}}", money(product.price)));
+  await expect(page.locator(".return-list .return-handling-status")).toHaveText(words.orders.returnStatus.Received.replace("{{amount}}", money(product.price)));
   await downloadOrderDocument(page, credit.number, testInfo);
   expect(returnWrites).toHaveLength(1); expect(returnWrites[0]).toBeTruthy();
   expect(checkouts).toHaveLength(1); expect(checkouts[0]).toBeTruthy();

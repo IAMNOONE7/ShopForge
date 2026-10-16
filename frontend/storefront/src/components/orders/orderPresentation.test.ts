@@ -23,6 +23,8 @@ function order(status: string, documents: Order["documents"] = []): Order {
     discount: null,
     pickupPoint: null,
     shipment: null,
+    paidAt: null,
+    refunds: [],
     documents,
     lines: [],
   };

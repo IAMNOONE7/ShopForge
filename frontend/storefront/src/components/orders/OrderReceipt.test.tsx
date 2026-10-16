@@ -15,7 +15,7 @@ const invoice = { number: "INV-1", kind: "Invoice", issuedAt: "2026-10-07T10:00:
 const creditNote = { number: "CN-1", kind: "CreditNote", issuedAt: "2026-10-07T11:00:00Z" };
 const order: Order = { number: "2026-1", placedAt: "2026-10-07T09:30:00Z", status: "Refunded", email: "shopper@example.test",
   currency: "EUR", paymentMethod: "Bank transfer", shippingMethod: "Pickup", shippingPrice: 10, itemsTotal: 108, vatTotal: 18,
-  grandTotal: 118, discount: { code: "SAVE", name: "Savings", amount: 12 }, pickupPoint: null, shipment: null,
+  grandTotal: 118, discount: { code: "SAVE", name: "Savings", amount: 12 }, pickupPoint: null, shipment: null, paidAt: null, refunds: [],
   documents: [invoice], lines: [{ productName: "Chair", quantity: 1, unitPrice: 120, lineTotal: 108, vatRate: 20 }] };
 function receipt(value = order, download = vi.fn().mockResolvedValue(undefined)) {
   return <MemoryRouter><OrderReceipt order={value} store={store} heading="Order 2026-1" introduction={<p>Saved order</p>}
@@ -25,6 +25,50 @@ beforeAll(initializeI18n);
 afterEach(async () => { cleanup(); await i18n.changeLanguage("en"); });
 
 describe("order receipt", () => {
+  it.each(["en", "cs"])("shows each public refund separately from saved totals in %s", async language => {
+    await i18n.changeLanguage(language);
+    const settledAt = "2026-10-08T11:00:00Z", paidAt = "2026-10-07T09:40:00Z";
+    render(receipt({ ...order, paidAt, refunds: [
+      { returnNumber: "RET-1", credited: 14.5, state: "Settled", settledAt },
+      { returnNumber: "RET-2", credited: 0, state: "InProgress", settledAt },
+      { returnNumber: "RET-3", credited: 25, state: "ByStore", settledAt },
+      { returnNumber: "RET-4", credited: 5, state: "FutureState", settledAt },
+    ] }));
+    const panel = screen.getByRole("region", { name: language === "en" ? "Refunds" : "Vrácení peněz" });
+    expect(screen.getByText(language === "en" ? "The order has been credited. Repayment is shown separately under Refunds." : "Objednávka byla dobropisována. Stav vrácení peněz najdete v samostatném přehledu níže.")).toBeTruthy();
+    expect(within(panel).getAllByRole("listitem")).toHaveLength(4);
+    expect(within(panel).getByText("€14.50")).toBeTruthy();
+    expect(within(panel).getByText("€0.00")).toBeTruthy();
+    expect(within(panel).getByText(language === "en" ? "Refund settled" : "Vrácení peněz potvrzeno")).toBeTruthy();
+    expect(within(panel).getByText(language === "en" ? "Refund in progress" : "Vrácení peněz probíhá")).toBeTruthy();
+    expect(within(panel).getByText(language === "en" ? "Repayment handled by the store" : "Peníze vrací obchod")).toBeTruthy();
+    expect(within(panel).getByText(language === "en" ? "Refund status unavailable" : "Stav vrácení peněz není dostupný")).toBeTruthy();
+    expect(panel.querySelectorAll("time")).toHaveLength(1);
+    expect(panel.querySelector("time")?.dateTime).toBe(settledAt);
+    expect(document.querySelector(`.order-details time[datetime="${paidAt}"]`)).not.toBeNull();
+    expect(document.querySelector(".order-grand-total dd")?.textContent).toBe("€118.00");
+    expect(document.body.textContent).not.toContain("Kč");
+    expect(document.body.textContent).not.toContain("FutureState");
+    expect(screen.getByRole("link", { name: language === "en" ? "Refunds" : "Vrácení peněz" }).getAttribute("href")).toBe("#order-refunds-heading");
+  });
+
+  it("does not invent recorded payment or settlement times", () => {
+    render(receipt({ ...order, paidAt: "invalid", refunds: [{ returnNumber: "RET-1", credited: 0, state: "Settled", settledAt: null }] }));
+    expect(screen.getByText("Not recorded")).toBeTruthy();
+    expect(screen.getByText("The settlement time is not recorded.")).toBeTruthy();
+    expect(document.querySelector<HTMLTimeElement>(".order-details time")?.dateTime).toBe(order.placedAt);
+    expect(document.querySelectorAll(".order-refunds time")).toHaveLength(0);
+  });
+
+  it("shows a partial refund while keeping the original paid order and total", () => {
+    render(receipt({ ...order, status: "Paid", refunds: [{ returnNumber: "RET-PART", credited: 14.5, state: "InProgress", settledAt: null }] }));
+    expect(document.querySelector(".order-status.paid")?.textContent).toBe("Paid");
+    expect(screen.getByText("Refund in progress")).toBeTruthy();
+    expect(screen.getByText("€14.50")).toBeTruthy();
+    expect(document.querySelector(".order-grand-total dd")?.textContent).toBe("€118.00");
+    expect(screen.queryByText("Refund settled")).toBeNull();
+  });
+
   it.each(["en", "cs"])("describes a credited order without claiming refund settlement in %s", async (language) => {
     await i18n.changeLanguage(language);
     const view = render(receipt());

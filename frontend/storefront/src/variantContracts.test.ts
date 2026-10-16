@@ -5,8 +5,12 @@ import { placeOrder, removeFromCart, setCartQuantity } from "./cart";
 afterEach(() => vi.unstubAllGlobals());
 
 it("sends variant identities and idempotency headers on commerce writes", async () => {
-  const fetcher = vi.fn().mockImplementation(() => Promise.resolve(
-    new Response("{}", { headers: { "Content-Type": "application/json" } }),
+  const fetcher = vi.fn().mockImplementation((url: string) => Promise.resolve(
+    new Response(url.endsWith("/returns") ? JSON.stringify({ closesAt: null, returnable: [], returns: [{
+      number: "RET-1", status: "Requested", requestedAt: "2026-10-16T10:00:00Z", refundedAmount: 0,
+      refundState: null, refundSettledAt: null,
+      lines: [{ storeProductId: "listing-id", variantId: "blue-id", productName: "Shirt (Blue)", quantity: 1 }],
+    }] }) : "{}", { headers: { "Content-Type": "application/json" } }),
   ));
   vi.stubGlobal("fetch", fetcher);
 

@@ -140,7 +140,7 @@ test("lost return answer replays one request and credits the purchased variant o
   expect(JSON.parse(loss.requests[0].body!)).toEqual({ lines: [{ storeProductId: product.listings[store.id], variantId: variant.id, quantity: 1 }], reason });
   await expect(page.locator(".return-list > li")).toHaveCount(1);
   await expect(page.locator(".return-list")).toContainText(returned.number);
-  await expect(page.locator(".return-list .hint")).toHaveText(words.orders.returnStatus.Requested);
+  await expect(page.locator(".return-list .return-handling-status")).toHaveText(words.orders.returnStatus.Requested);
   await expect(page.locator(".return-form")).toHaveCount(0);
   expect((await runSession.order(store, placed.number)).returns).toEqual(before.returns);
   await runSession.advanceReturn(store, placed.number, returned.number, "accept");
@@ -162,7 +162,7 @@ test("lost return answer replays one request and credits the purchased variant o
   await page.reload();
   await expect(page.locator(".order-status.refunded")).toHaveText(words.orders.status.Refunded);
   await expect(page.locator(".return-list > li")).toHaveCount(1);
-  await expect(page.locator(".return-list .hint")).toHaveText(words.orders.returnStatus.Received.replace("{{amount}}", money(product.price)));
+  await expect(page.locator(".return-list .return-handling-status")).toHaveText(words.orders.returnStatus.Received.replace("{{amount}}", money(product.price)));
   await downloadOrderDocument(page, credited.documents.find(document => document.kind === "CreditNote")!.number, testInfo);
   for (const subject of [`Return ${returned.number} for order ${placed.number}`, `Refund for order ${placed.number}`]) await expect.poll(async () => (await runSession.mail(shopper.email)).filter(letter => letter.subject === `${store.name}: ${subject}`).length).toBe(1);
   expect(await accountOrders(page)).toEqual([expect.objectContaining({ number: placed.number, status: "Refunded", grandTotal: product.price, items: 1 })]);

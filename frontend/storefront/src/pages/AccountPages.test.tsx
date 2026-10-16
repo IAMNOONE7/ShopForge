@@ -110,6 +110,8 @@ function makeOrder(): Order {
     discount: null,
     pickupPoint: "Prague showroom",
     shipment: null,
+    paidAt: null,
+    refunds: [],
     documents: [
       {
         number: "INV-2026-00012",

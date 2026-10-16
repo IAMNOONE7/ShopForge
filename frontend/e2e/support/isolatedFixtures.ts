@@ -14,7 +14,7 @@ export type OrderReading = {
 };
 export type StockReading = { sku: string; onHand: number; reserved: number; available: number };
 export type Letter = { id: string; to: string; subject: string; attachments: string[]; links: string[] };
-export type GatewayBehaviour = { push: "deliver" | "drop" | "twice"; statusFails: boolean };
+export type GatewayBehaviour = { push: "deliver" | "drop" | "twice"; statusFails: boolean; refund?: "accept" | "refuse" };
 export type GatewayTransaction = {
   id: string; referenceId: string; status: string; price: number; currency: string; test: boolean; refunded: number;
   pushes: { at: string; answered: number | null; what: string }[];
@@ -36,7 +36,8 @@ export type RunSession = {
   configureGateway: (behaviour: GatewayBehaviour) => Promise<void>;
   setGatewayStatus: (id: string, status: "REVERSAL_PENDING" | "PAID") => Promise<void>;
   pushAgain: (id: string) => Promise<void>;
-  advanceReturn: (store: RunStore, orderNumber: string, returnNumber: string, action: "accept" | "receive") => Promise<MerchantReturn>;
+  refundOrder: (store: RunStore, number: string) => Promise<void>;
+  advanceReturn: (store: RunStore, orderNumber: string, returnNumber: string, action: "accept" | "receive" | "retry") => Promise<MerchantReturn>;
 };
 
 async function json<T>(client: APIRequestContext, url: string, status = 200, method: "GET" | "POST" = "GET", timeout = 5_000): Promise<T> {
@@ -74,6 +75,15 @@ export const test = base.extend<{ runSession: RunSession; writeTransport: WriteT
         const reading = await json<GatewayReading>(request, `${root}/comgate/`);
         if (!reading.transactions.some(transaction => transaction.id === id)) throw new Error("Foreign gateway transaction.");
       };
+      const withOwner = async <T>(operation: (admin: APIRequestContext) => Promise<T>) => {
+        const owner = parseRunOwner(created, run);
+        const admin = await playwright.request.newContext({ timeout: 10_000 });
+        try {
+          const signedIn = await admin.post(`${environment.apiOrigin}/api/admin/auth/login`, { data: owner, maxRedirects: 0, maxRetries: 0 });
+          expect(signedIn.status(), "Run owner sign-in").toBe(200);
+          return await operation(admin);
+        } finally { await admin.dispose(); }
+      };
       const session: RunSession = {
         environment, run, marker, origin: store => {
           if (!run.stores.some(candidate => candidate.id === store.id && candidate.host === store.host)) throw new Error("Foreign store target.");
@@ -107,26 +117,33 @@ export const test = base.extend<{ runSession: RunSession; writeTransport: WriteT
           await ownTransaction(id);
           await json(request, `${root}/comgate/transactions/${encodeURIComponent(id)}/push`, 200, "POST", 10_000);
         },
+        refundOrder: async (store, number) => {
+          if (!run.stores.some(candidate => candidate.id === store.id)) throw new Error("Foreign order target.");
+          await withOwner(async admin => {
+            const path = `${environment.apiOrigin}/api/admin/stores/${store.id}/orders/${encodeURIComponent(number)}`;
+            expect(await json(admin, path)).toMatchObject({ number, status: "Paid", returns: [] });
+            const response = await admin.post(`${path}/refund`, { headers: { "Idempotency-Key": randomUUID() }, maxRedirects: 0, maxRetries: 0 });
+            expect(response.status(), "Run owner whole-order refund").toBe(200);
+            expect(await response.json()).toMatchObject({ number, returns: [expect.objectContaining({ status: "Received" })] });
+          });
+        },
         advanceReturn: async (store, orderNumber, returnNumber, action) => {
           if (!run.stores.some(candidate => candidate.id === store.id)) throw new Error("Foreign return target.");
-          const owner = parseRunOwner(created, run);
-          const admin = await playwright.request.newContext({ timeout: 10_000 });
-          try {
-            const signedIn = await admin.post(`${environment.apiOrigin}/api/admin/auth/login`, { data: owner, maxRedirects: 0, maxRetries: 0 });
-            expect(signedIn.status(), "Run owner sign-in").toBe(200);
+          return withOwner(async admin => {
             const path = `${environment.apiOrigin}/api/admin/stores/${store.id}/returns`;
             const found = (await json<MerchantReturn[]>(admin, path)).filter(candidate => candidate.orderNumber === orderNumber && candidate.number === returnNumber);
             expect(found, "Exactly this run store's requested return").toHaveLength(1);
             expect(found[0].id).toMatch(/^[0-9a-f-]{36}$/i);
-            expect(found[0].status).toBe(action === "accept" ? "Requested" : "Accepted");
-            const response = await admin.post(`${path}/${found[0].id}/${action}`, {
-              headers: action === "receive" ? { "Idempotency-Key": randomUUID() } : {}, maxRedirects: 0, maxRetries: 0,
+            expect(found[0].status).toBe(action === "accept" ? "Requested" : action === "receive" ? "Accepted" : "Received");
+            if (action === "retry") expect(found[0].refund).toBe("Failed");
+            const response = await admin.post(`${path}/${found[0].id}/${action === "retry" ? "refund" : action}`, {
+              headers: action === "accept" ? {} : { "Idempotency-Key": randomUUID() }, maxRedirects: 0, maxRetries: 0,
             });
             expect(response.status(), `Run owner ${action}`).toBe(200);
             const advanced = await response.json() as MerchantReturn;
             expect(advanced).toMatchObject({ id: found[0].id, number: returnNumber, orderNumber, status: action === "accept" ? "Accepted" : "Received" });
             return advanced;
-          } finally { await admin.dispose(); }
+          });
         },
       };
       for (const variant of run.products.flatMap(product => product.variants)) {

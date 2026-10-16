@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
 import type { Order, OrderDocument } from "../../cart";
 import type { Store } from "../../store";
+import { recordedDate } from "../../refundFacts";
 import { formatCurrency, formatDateTime } from "../../utils/format";
 import { DownloadButton } from "../ui/DownloadButton";
 import { RequestError } from "../ui/RequestError";
@@ -15,6 +16,7 @@ import {
   type KnownOrderStatus,
 } from "./orderPresentation";
 import { OrderStatusBadge } from "./OrderStatusBadge";
+import { RefundStatus } from "./RefundStatus";
 
 const statusNoticeKeys = {
   AwaitingPayment: "orders:statusNotice.AwaitingPayment",
@@ -63,6 +65,8 @@ export function OrderReceipt({
     formatCurrency(value, store.culture, order.currency);
   const status = knownOrderStatus(order.status);
   const expectedDocument = expectedDocumentKind(order);
+  const paidAt = recordedDate(order.paidAt);
+  const refunds = order.refunds ?? [];
 
   const preparingDocument = expectedDocument !== null && !order.documents.some((document) => document.kind === expectedDocument);
 
@@ -81,6 +85,7 @@ export function OrderReceipt({
         <a href="#order-items-heading">{t("orders:itemsHeading")}</a>
         <a href="#order-details-heading">{t("orders:detailsHeading")}</a>
         <a href="#order-documents-heading">{t("orders:documentsHeading")}</a>
+        {refunds.length > 0 && <a href="#order-refunds-heading">{t("orders:refundsHeading")}</a>}
         {children && <a href="#returns-heading">{t("orders:returnTitle")}</a>}
       </nav>
       <div className="order-receipt-layout">
@@ -90,7 +95,7 @@ export function OrderReceipt({
             <OrderStatusBadge value={order.status} />
           </div>
           <div className="order-status-copy" aria-live="polite">
-            <p>{t(statusNoticeKeys[status])}</p>
+            <p>{t(status === "Refunded" && refunds.length > 0 ? "orders:creditedWithRefunds" : statusNoticeKeys[status])}</p>
           </div>
           {status === "AwaitingPayment" && instructions && (
             <div className="order-instructions">
@@ -143,6 +148,7 @@ export function OrderReceipt({
             <div><dt>{t("orders:placedLabel")}</dt><dd><time dateTime={order.placedAt}>{formatDateTime(order.placedAt, store.culture)}</time></dd></div>
             <div><dt>{t("orders:emailLabel")}</dt><dd><bdi>{order.email}</bdi></dd></div>
             <div><dt>{t("orders:paymentLabel")}</dt><dd lang={store.culture}>{order.paymentMethod}</dd></div>
+            <div><dt>{t("orders:paidAtLabel")}</dt><dd>{paidAt ? <time dateTime={paidAt}>{formatDateTime(paidAt, store.culture)}</time> : t("orders:paymentTimeNotRecorded")}</dd></div>
             <div><dt>{t("orders:shippingLabel")}</dt><dd lang={store.culture}>{order.shippingMethod}</dd></div>
             {order.pickupPoint && <div><dt>{t("orders:pickupLabel")}</dt><dd lang={store.culture}>{order.pickupPoint}</dd></div>}
             <div><dt>{t("orders:vatLabel")}</dt><dd>{money(order.vatTotal)}</dd></div>
@@ -178,6 +184,19 @@ export function OrderReceipt({
             <p className="hint">{t(status === "AwaitingPayment" ? "orders:documentsAfterPayment" : "orders:noDocuments")}</p>
           )}
         </section>
+        {refunds.length > 0 && <section className="order-panel order-refunds" aria-labelledby="order-refunds-heading">
+          <h2 id="order-refunds-heading" tabIndex={-1}>{t("orders:refundsHeading")}</h2>
+          <p className="hint">{t("orders:refundsHint")}</p>
+          <ul className="order-refund-list" aria-live="polite">
+            {refunds.map(refund => <li key={refund.returnNumber}>
+              <div className="refund-credit">
+                <strong><bdi>{refund.returnNumber}</bdi></strong>
+                <dl><div><dt>{t("orders:creditedLabel")}</dt><dd>{money(refund.credited)}</dd></div></dl>
+              </div>
+              <RefundStatus state={refund.state} settledAt={refund.settledAt} culture={store.culture} />
+            </li>)}
+          </ul>
+        </section>}
       </div>
       {children}
     </section>

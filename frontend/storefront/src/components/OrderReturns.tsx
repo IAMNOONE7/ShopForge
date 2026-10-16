@@ -10,17 +10,20 @@ import { formatCurrency, formatDate } from "../utils/format";
 import { InlineMessage } from "./ui/InlineMessage";
 import { LoadingState } from "./ui/LoadingState";
 import { RequestError } from "./ui/RequestError";
+import { RefundStatus } from "./orders/RefundStatus";
 
 export function OrderReturns({
   number,
   orderStatus,
   currency,
   onReturned,
+  refundVersion = "",
 }: {
   number: string;
   orderStatus: string;
   currency: string;
   onReturned: () => void;
+  refundVersion?: string;
 }) {
   const { t } = useTranslation("orders");
   const store = useStore();
@@ -34,7 +37,7 @@ export function OrderReturns({
   const [now, setNow] = useState<number | null>(null);
   const lock = useRef(false);
   const reviewNotice = useRef<HTMLDivElement>(null);
-  const answer = useRequest(`returns:${number}`, (signal) => getReturns(number, signal));
+  const answer = useRequest(`returns:${number}:${refundVersion}`, (signal) => getReturns(number, signal));
 
   useEffect(() => {
     const check = () => setNow(Date.now());
@@ -154,18 +157,18 @@ export function OrderReturns({
                       {sent.lines.map((line) => `${line.quantity} × ${line.productName}`).join(", ")}
                     </span>
                   </span>
-                  <span className="hint">
+                  <span className="hint return-handling-status">
                     {sent.status === "Received"
                       ? t("returnStatus.Received", {
                           amount: formatCurrency(sent.refundedAmount, store.culture, currency),
                         })
                       : t(`returnStatus.${knownReturnStatus(sent.status)}`)}
                   </span>
+                  {sent.status === "Received" && <RefundStatus state={sent.refundState} settledAt={sent.refundSettledAt} culture={store.culture} />}
                 </li>
               ))}
             </ul>
           )}
-          {data.returns.some((sent) => sent.status === "Received") && <p className="hint">{t("returnCreditHint")}</p>}
           {success && <InlineMessage tone="success">{t("returnRequested")}</InlineMessage>}
           {refreshError !== null && (
             <RequestError error={refreshError} operation="read" onRetry={answer.reload} />
