@@ -736,6 +736,8 @@ const resources = {
     },
   },
   listings: {
+    archivedAt: "Archived on",
+    physicalUnavailable: "This physical product is not in the active product list. The saved listing remains available; variant and stock links cannot be shown here.",
     savedVisibility: "Saved visibility",
     archivedValues: "Attribute values cannot be read while this listing is archived. Restore it to review or edit those values.",
     title: "Products in this store",

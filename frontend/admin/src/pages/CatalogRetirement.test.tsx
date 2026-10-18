@@ -14,13 +14,13 @@ import { ListingsPage, ListingDetailPage } from "./ListingPages";
 
 const store: AdminStore = { id: "store-a", name: "Store A", currency: "CZK", culture: "cs-CZ", status: "draft", theme: { primaryColor: "#123456", secondaryColor: "#fff", borderRadius: 4 }, logoUrl: null, primaryHostName: null, returnWindowDays: 14, company: null };
 const category: Category = { id: "record-a", name: "Chairs", slug: "chairs", parentId: null, sortOrder: 0, attributeIds: [], seoTitle: null, seoDescription: null, pageText: null };
-const listing: StoreProduct = { id: "record-a", productId: "physical", sku: "CHAIR", name: "Chair", slug: "chair", description: null, price: 100, vatRate: 21, isVisible: true, sortOrder: 0, categoryIds: [], taxClass: null, seoTitle: null, seoDescription: null, seoSocialImageUrl: null, seoNoIndex: false };
+const listing: StoreProduct = { id: "record-a", productId: "physical", sku: "CHAIR", name: "Chair", slug: "chair", description: null, price: 100, vatRate: 21, isVisible: true, sortOrder: 0, categoryIds: [], archivedAt: null, taxClass: null, seoTitle: null, seoDescription: null, seoSocialImageUrl: null, seoNoIndex: false };
 const child = { ...category, id: "child", name: "Dining chairs", parentId: category.id };
 let retired: boolean; let removed: boolean;
 function reads() {
   retired = false; removed = false;
-  vi.spyOn(api, "findStoreProduct").mockImplementation(async (_store, _id, _signal, archived = false) => !removed && archived === retired ? listing : null);
-  vi.spyOn(api, "storeProducts").mockImplementation(async (_store, _signal, query = {}) => ({ items: !removed && !!query.archived === retired ? [listing] : [], totalCount: !removed && !!query.archived === retired ? 1 : 0, page: query.page ?? 1, pageSize: 25, hasMore: false }));
+  vi.spyOn(api, "findStoreProduct").mockImplementation(async () => removed ? null : { ...listing, archivedAt: retired ? "2026-10-12T10:00:00Z" : null });
+  vi.spyOn(api, "storeProducts").mockImplementation(async (_store, _signal, query = {}) => ({ items: !removed && !!query.archived === retired ? [{ ...listing, archivedAt: retired ? "2026-10-12T10:00:00Z" : null }] : [], totalCount: !removed && !!query.archived === retired ? 1 : 0, page: query.page ?? 1, pageSize: 25, hasMore: false }));
   vi.spyOn(api, "categories").mockImplementation(async (_store, _signal, archived = false) => !removed && archived === retired ? [category] : []);
   vi.spyOn(api, "attributes").mockResolvedValue([]); vi.spyOn(api, "productAttributes").mockResolvedValue({ values: {} }); vi.spyOn(api, "products").mockResolvedValue([]);
   return vi.spyOn(api, "changeCatalogLifecycle").mockImplementation(async (_store, _kind, _id, action) => { if (action === "delete") removed = true; else retired = action === "archive"; });
@@ -126,9 +126,9 @@ describe.each(["products", "categories"] as CatalogKind[])("%s contract edge cas
   it.each(["Admin", "CatalogManager"])("allows %s to manage retirement", async role => {
     reads(); route(kind, "/record-a", role); expect(await screen.findByRole("button", { name: "Archive" })).toBeTruthy();
   });
-  it("reports archive fallback failure as a read error rather than a missing record", async () => {
+  it("reports a failed lifecycle read as an error rather than a missing record", async () => {
     reads();
-    if (kind === "products") vi.mocked(api.findStoreProduct).mockResolvedValueOnce(null).mockRejectedValueOnce(new HttpError("http", 503));
+    if (kind === "products") vi.mocked(api.findStoreProduct).mockRejectedValueOnce(new HttpError("http", 503));
     else vi.mocked(api.categories).mockResolvedValueOnce([]).mockRejectedValueOnce(new HttpError("http", 503));
     route(kind); await screen.findByRole("alert"); expect(screen.queryByText(kind === "products" ? "Listing not found" : "Category not found")).toBeNull(); expect(screen.queryByRole("button", { name: "Archive" })).toBeNull();
   });

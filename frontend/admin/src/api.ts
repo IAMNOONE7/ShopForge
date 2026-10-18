@@ -125,6 +125,7 @@ export type StoreProduct = {
   isVisible: boolean;
   sortOrder: number;
   categoryIds: string[];
+  archivedAt: string | null;
   taxClass: string | null;
   seoTitle: string | null;
   seoDescription: string | null;

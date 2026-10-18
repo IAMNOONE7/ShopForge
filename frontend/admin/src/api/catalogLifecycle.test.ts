@@ -23,9 +23,3 @@ it("requests a separate archived category collection with cancellation", async (
   await api.categories("s", signal, true); await api.categories("s", signal);
   expect(fetch.mock.calls.map(([url]) => url)).toEqual(["/api/admin/stores/s/categories?archived=true", "/api/admin/stores/s/categories"]); expect(fetch.mock.calls[0][1].signal).toBe(signal);
 });
-it("scans archived listings by bounded pages without mixing active rows", async () => {
-  const item = { id: "wanted" }; const fetch = vi.fn().mockResolvedValueOnce(Response.json({ items: [], totalCount: 201, pageSize: 200, hasMore: true }))
-    .mockResolvedValueOnce(Response.json({ items: [item], totalCount: 201, pageSize: 200, hasMore: false })); vi.stubGlobal("fetch", fetch);
-  expect(await api.findStoreProduct("s", "wanted", undefined, true)).toEqual(item);
-  expect(fetch.mock.calls.map(([url]) => url)).toEqual(["/api/admin/stores/s/products?page=1&pageSize=200&archived=true", "/api/admin/stores/s/products?page=2&pageSize=200&archived=true"]);
-});

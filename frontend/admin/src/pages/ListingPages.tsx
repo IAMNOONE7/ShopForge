@@ -17,7 +17,7 @@ import { RequestError } from "../components/ui/RequestError";
 import { canManageCatalog, useSession } from "../session";
 import { useAction } from "../useAction";
 import { useRequest } from "../useRequest";
-import { currencyFormatter } from "../utils/format";
+import { currencyFormatter, formatDateTime } from "../utils/format";
 import { ForbiddenPage } from "./RouteStatePage";
 
 const sorts = ["default", "name", "-name", "price", "-price"] as const;
@@ -60,7 +60,7 @@ function ListingsWorkspace() {
         {allowed && <label className="listing-row-selection"><input type="checkbox" name="selectedListings" value={item.id} checked={bulk.selection.has(item.id)} disabled={bulk.locked || !bulk.selection.has(item.id) && bulk.selection.size >= maxBulkListings}
           onChange={event => bulk.toggle([item], event.target.checked)} /><span className="sr-only">{t("bulkListings:selectListing", { name: item.name, sku: item.sku })}</span></label>}
         <div><Link to={`${item.id}${query ? `?${query}` : ""}`}>{item.name}</Link><p className="hint"><code>{item.sku}</code> · {item.slug}</p></div></div>
-        <dl className="listing-facts"><div><dt>{t("price")}</dt><dd>{currencyFormatter(store.currency, i18n.resolvedLanguage).format(item.price)}</dd></div><div><dt>{t("visibility")}</dt><dd>{t(archived ? "retirement:archived" : item.isVisible ? "visible" : "hidden")}</dd></div><div><dt>{t("sortOrder")}</dt><dd>{item.sortOrder}</dd></div></dl></li>)}</ul>
+        <dl className="listing-facts"><div><dt>{t("price")}</dt><dd>{currencyFormatter(store.currency, i18n.resolvedLanguage).format(item.price)}</dd></div><div><dt>{t("visibility")}</dt><dd>{t(item.archivedAt !== null ? "retirement:archived" : item.isVisible ? "visible" : "hidden")}</dd></div><div><dt>{t("sortOrder")}</dt><dd>{item.sortOrder}</dd></div></dl></li>)}</ul>
         : <EmptyState headingLevel={2} title={t(q ? "noMatchesTitle" : page > 1 ? "emptyPageTitle" : archived ? "retirement:emptyArchived" : "emptyTitle")}><p>{t(q ? "noMatchesBody" : page > 1 ? "emptyPageBody" : archived ? "retirement:emptyArchivedBody" : "emptyBody")}</p></EmptyState>}
       <nav className="listing-pagination" aria-label={t("paging")}><Button type="button" variant="secondary" disabled={page === 1 || state.refreshing} onClick={() => setParameters(searchParameters(page - 1, q, sort, archived))}>{t("previous")}</Button>
         <span>{t("pageSummary", { page: state.data.page, pages: Math.max(1, Math.ceil(state.data.totalCount / state.data.pageSize)) })}</span><Button type="button" variant="secondary" disabled={!state.data.hasMore || state.refreshing} onClick={() => setParameters(searchParameters(page + 1, q, sort, archived))}>{t("next")}</Button>
@@ -82,29 +82,27 @@ function NewListingWorkspace({ storeId }: { storeId: string }) {
   </div>;
 }
 
-export function ListingDetailPage() { const { store } = useSelectedStore(); const { listingId = "" } = useParams(); return <ListingDetailWorkspace key={`${store.id}:${listingId}`} storeId={store.id} listingId={listingId} />; }
+export function ListingDetailPage() { const { store } = useSelectedStore(); const { user } = useSession(); const { listingId = "" } = useParams(); return <ListingDetailWorkspace key={`${user.tenantId}:${user.id}:${user.role}:${store.id}:${store.currency}:${listingId}`} storeId={store.id} listingId={listingId} />; }
 function ListingDetailWorkspace({ storeId, listingId }: { storeId: string; listingId: string }) {
-  const { t } = useTranslation("listings"); const { store } = useSelectedStore(); const { user } = useSession(); const [parameters] = useSearchParams();
-  const [state, reload] = useRequest(`listing:${storeId}:${listingId}`, async (signal) => {
-    const active = await api.findStoreProduct(storeId, listingId, signal);
-    if (active) return { item: active, archived: false };
-    return { item: await api.findStoreProduct(storeId, listingId, signal, true), archived: true };
-  });
+  const { t, i18n } = useTranslation("listings"); const { store, storeRefreshing, storeRefreshError } = useSelectedStore(); const { user } = useSession(); const [parameters] = useSearchParams();
+  const [state, reload] = useRequest(`listing:${storeId}:${listingId}`, (signal) => api.findStoreProduct(storeId, listingId, signal));
   const [categories, reloadCategories] = useRequest(`listing-categories:${storeId}:${listingId}`, (signal) => api.categories(storeId, signal));
   const [definitions, reloadDefinitions] = useRequest(`listing-definitions:${storeId}:${listingId}`, (signal) => api.attributes(storeId, signal));
-  const canReadValues = state.status === "ready" && state.data.item !== null && !state.data.archived;
+  const canReadValues = state.status === "ready" && state.data !== null && state.data.archivedAt === null;
   const [values, reloadValues] = useRequest(`listing-values:${storeId}:${listingId}:${canReadValues}`, (signal) => canReadValues ? api.productAttributes(storeId, listingId, signal) : Promise.resolve({ values: {} }));
   const [products, reloadProducts] = useRequest(`listing-physical:${storeId}:${listingId}`, api.products);
-  const item = state.status === "ready" ? state.data.item : null;
-  const product = products.status === "ready" && item ? products.data.find((candidate) => candidate.id === item.productId) : undefined;
+  const item = state.status === "ready" ? state.data : null;
+  const product = products.status === "ready" && item ? products.data.find((candidate) => candidate.id.toLowerCase() === item.productId.toLowerCase()) : undefined;
   return <div className="listing-page"><Link className="physical-back-link" to={`/stores/${storeId}/products${parameters.size ? `?${parameters}` : ""}`}>{t("back")}</Link>
     <div className="page-heading-row"><h1>{item?.name ?? t("details")}</h1>{state.status === "ready" && <Button type="button" variant="secondary" disabled={state.refreshing} onClick={() => { reload(); reloadCategories(); reloadDefinitions(); reloadValues(); reloadProducts(); }}>{t("refresh")}</Button>}</div>
     <ListingRead state={state} reload={reload} label={t("loadingDetail")} />
     {state.status === "ready" && (item ? <>
-      <section className="physical-panel"><h2>{t("physicalContext")}</h2><p><Link to={`/products/${item.productId}`}>{t("physicalProduct", { sku: item.sku })}</Link></p><p className="hint">{t("variantHint")}</p>
+      {item.archivedAt !== null && <dl className="listing-facts"><div><dt>{t("archivedAt")}</dt><dd><time dateTime={item.archivedAt}>{formatDateTime(item.archivedAt, i18n.resolvedLanguage)}</time></dd></div></dl>}
+      <section className="physical-panel"><h2>{t("physicalContext")}</h2><p>{product ? <Link to={`/products/${item.productId}`}>{t("physicalProduct", { sku: item.sku })}</Link> : <code>{item.sku}</code>}</p><p className="hint">{t("variantHint")}</p>
+        {products.status === "ready" && !products.refreshing && products.refreshError === null && !product && <InlineMessage>{t("physicalUnavailable")}</InlineMessage>}
         <ListingRead state={products} reload={reloadProducts} label={t("loadingProducts")} />{product && <ul className="listing-variants">{product.variants.map((variant) => <li key={variant.id}><strong>{variant.sku}</strong>{variant.optionValues.length > 0 && <span> · {product.optionNames.map((name, index) => `${name}: ${variant.optionValues[index]}`).join(" · ")}</span>} <Link to={`/stock/${variant.id}`}>{t("stockLink", { sku: variant.sku })}</Link></li>)}</ul>}
-      </section><ListingEditor storeId={storeId} currency={store.currency} item={item} allowed={canManageCatalog(user.role)} refreshing={state.refreshing} refreshFailed={state.refreshError !== null}
-        archived={state.data.archived} categories={categories} definitions={definitions} values={values} reloadCategories={reloadCategories} reloadDefinitions={reloadDefinitions} reloadValues={reloadValues} reload={reload} />
+      </section><ListingEditor storeId={storeId} currency={store.currency} item={item} allowed={canManageCatalog(user.role)} refreshing={state.refreshing || storeRefreshing} refreshFailed={state.refreshError !== null || storeRefreshError !== null}
+        archived={item.archivedAt !== null} categories={categories} definitions={definitions} values={values} reloadCategories={reloadCategories} reloadDefinitions={reloadDefinitions} reloadValues={reloadValues} reload={reload} />
     </> : <EmptyState headingLevel={2} title={t("missingTitle")}><p>{t("missingBody")}</p></EmptyState>)}
   </div>;
 }

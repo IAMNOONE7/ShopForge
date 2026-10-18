@@ -12,7 +12,7 @@ import { useBulkListings } from "../useBulkListings";
 import { ListingsPage } from "./ListingPages";
 
 const store: AdminStore = { id: "store-a", name: "Store A", currency: "CZK", culture: "cs-CZ", status: "draft", theme: { primaryColor: "#123456", secondaryColor: "#fff", borderRadius: 4 }, logoUrl: null, primaryHostName: null, returnWindowDays: 14, company: null };
-const item: StoreProduct = { id: "a", productId: "physical-a", sku: "SKU-A", name: "Chair A", slug: "chair-a", description: null, price: 100, vatRate: 21, isVisible: true, sortOrder: 0, categoryIds: [], taxClass: "standard", seoTitle: null, seoDescription: null, seoSocialImageUrl: null, seoNoIndex: false };
+const item: StoreProduct = { id: "a", productId: "physical-a", sku: "SKU-A", name: "Chair A", slug: "chair-a", description: null, price: 100, vatRate: 21, isVisible: true, sortOrder: 0, categoryIds: [], archivedAt: null, taxClass: "standard", seoTitle: null, seoDescription: null, seoSocialImageUrl: null, seoNoIndex: false };
 const second = { ...item, id: "b", name: "Chair B", sku: "SKU-B" }, third = { ...item, id: "c", name: "Chair C", sku: "SKU-C" };
 const category: Category = { id: "old", name: "Furniture", slug: "furniture", parentId: null, sortOrder: 0, attributeIds: [], seoTitle: null, seoDescription: null, pageText: null };
 const sale = { ...category, id: "sale", name: "Sale" }, retiredCategory = { ...category, id: "retired", name: "Old category" };

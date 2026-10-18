@@ -738,6 +738,8 @@ const resources = {
     },
   },
   listings: {
+    archivedAt: "Archivováno dne",
+    physicalUnavailable: "Tento fyzický produkt není v seznamu aktivních produktů. Uložená nabídka je nadále dostupná; odkazy na varianty a zásoby zde nelze zobrazit.",
     savedVisibility: "Uložená viditelnost",
     archivedValues: "Hodnoty vlastností nelze u archivované nabídky načíst. Pro jejich kontrolu nebo úpravu nabídku obnovte.",
     title: "Produkty v tomto obchodě",

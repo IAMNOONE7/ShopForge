@@ -15,7 +15,7 @@ import { ListingDetailPage, ListingsPage, NewListingPage } from "./ListingPages"
 const store: AdminStore = { id: "store-a", name: "Store A", currency: "CZK", culture: "cs-CZ", status: "draft",
   theme: { primaryColor: "#123456", secondaryColor: "#fff", borderRadius: 4 }, logoUrl: null, primaryHostName: null, returnWindowDays: 14, company: null };
 const item: StoreProduct = { id: "listing-a", productId: "physical-a", sku: "CHAIR", name: "Chair", slug: "chair", description: "Plain description",
-  price: 100, vatRate: 21, isVisible: true, sortOrder: 0, categoryIds: ["child"], taxClass: "standard", seoTitle: "Saved SEO title", seoDescription: "Saved SEO text", seoSocialImageUrl: "https://example.test/social.png", seoNoIndex: true };
+  price: 100, vatRate: 21, isVisible: true, sortOrder: 0, categoryIds: ["child"], archivedAt: null, taxClass: "standard", seoTitle: "Saved SEO title", seoDescription: "Saved SEO text", seoSocialImageUrl: "https://example.test/social.png", seoNoIndex: true };
 const parent: Category = { id: "root", name: "Furniture", slug: "furniture", parentId: null, sortOrder: 0, attributeIds: [], seoTitle: null, seoDescription: null, pageText: null };
 const child: Category = { ...parent, id: "child", name: "Chairs", slug: "chairs", parentId: "root" };
 const product: Product = { id: item.productId, sku: "CHAIR", ean: null, weightGrams: null, brand: null, optionNames: ["Colour"], images: [],
@@ -26,10 +26,10 @@ function definition(code: string, type: AttributeType): AttributeDefinition {
 }
 const definitions = [definition("text", "text"), definition("integer", "integer"), definition("decimal", "decimal"), definition("boolean", "boolean"), definition("date", "date"), definition("select", "select"), definition("multi", "multiSelect")];
 const page = { items: [item], page: 1, pageSize: 25, totalCount: 26, hasMore: true };
-function route(path = "/stores/store-a/products/listing-a", role = "Owner") {
+function route(path = "/stores/store-a/products/listing-a", role = "Owner", freshness: { refreshing?: boolean; error?: unknown } = {}) {
   return render(<SessionContext.Provider value={{ user: { id: "user-a", email: "owner@example.test", role, tenantId: "tenant-a" }, logout: async () => undefined, logoutPending: false, logoutError: null }}>
     <MemoryRouter initialEntries={[path]}><Link to="/stores/store-b/products/listing-a">Switch store</Link><Link to="/stores/store-a/products/listing-b">Switch listing</Link>
-      <Routes><Route element={<Outlet context={{ stores: { status: "ready", data: [store, { ...store, id: "store-b", name: "Store B" }], refreshing: false, refreshError: null }, reloadStores: () => undefined }} />}>
+      <Routes><Route element={<Outlet context={{ stores: { status: "ready", data: [store, { ...store, id: "store-b", name: "Store B" }], refreshing: freshness.refreshing ?? false, refreshError: freshness.error ?? null }, reloadStores: () => undefined }} />}>
         <Route path="/stores/:storeId" element={<StoreLayout />}><Route path="products" element={<ListingsPage />} /><Route path="products/new" element={<NewListingPage />} /><Route path="products/:listingId" element={<ListingDetailPage />} /></Route>
       </Route></Routes>
     </MemoryRouter>
@@ -213,6 +213,78 @@ describe("focused store listings", () => {
     reads(); route("/stores/missing/products/new"); await screen.findByText("Store not found"); expect(api.products).not.toHaveBeenCalled(); cleanup();
     route("/stores/store-a/products/new", "Support"); expect(screen.queryByRole("button", { name: "List product" })).toBeNull(); expect(api.products).not.toHaveBeenCalled(); cleanup();
     vi.mocked(api.findStoreProduct).mockResolvedValue(null); route(); expect(await screen.findByText("Listing not found")).toBeTruthy(); expect(screen.queryByRole("button", { name: "Edit listing" })).toBeNull();
+  });
+
+  it.each([false, true])("uses the direct record's lifecycle rather than query hints (retired=%s)", async retired => {
+    reads(); const archivedAt = retired ? "2026-10-12T10:00:00Z" : null;
+    vi.mocked(api.findStoreProduct).mockResolvedValue({ ...item, archivedAt });
+    const list = vi.spyOn(api, "storeProducts");
+    route(`/stores/store-a/products/listing-a?archived=${!retired}&page=4&q=CHAIR&sort=-price`);
+    await screen.findByRole("heading", { name: "Chair" });
+    expect(api.findStoreProduct).toHaveBeenCalledExactlyOnceWith("store-a", item.id, expect.any(AbortSignal));
+    expect(list).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: retired ? "Restore" : "Archive" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Edit listing" }) === null).toBe(retired);
+    expect(document.querySelector("time")?.getAttribute("datetime") ?? null).toBe(archivedAt);
+    expect(screen.getByRole("link", { name: "Back to listings" }).getAttribute("href"))
+      .toBe(`/stores/store-a/products?archived=${!retired}&page=4&q=CHAIR&sort=-price`);
+    if (retired) expect(api.productAttributes).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])("keeps a listing whose parent is absent from the active product collection (retired=%s)", async retired => {
+    reads(); vi.mocked(api.products).mockResolvedValue([]);
+    vi.mocked(api.findStoreProduct).mockResolvedValue({ ...item, archivedAt: retired ? "2026-10-12T10:00:00Z" : null });
+    route(); await screen.findByRole("heading", { name: item.name });
+    expect(await screen.findByText(i18n.t("listings:physicalUnavailable"))).toBeTruthy();
+    expect(screen.getByText(item.sku, { selector: "code" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Open physical product CHAIR" })).toBeNull();
+    expect(screen.queryByText("Listing not found")).toBeNull();
+    expect(screen.getByRole("button", { name: retired ? "Restore" : "Archive" })).toBeTruthy();
+  });
+
+  it("retains the authoritative listing when its supporting physical-product read fails", async () => {
+    reads(); vi.mocked(api.products).mockRejectedValue(new HttpError("http", 503));
+    route(); await screen.findByRole("heading", { name: item.name });
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Archive" })).toHaveProperty("disabled", false);
+    expect(screen.queryByText("Listing not found")).toBeNull();
+    expect(screen.queryByText(i18n.t("listings:physicalUnavailable"))).toBeNull();
+  });
+
+  it.each([{ refreshing: true }, { error: new HttpError("http", 503) }])("blocks writes while the store context is stale (%j)", async freshness => {
+    reads(); route(undefined, "Owner", freshness); await screen.findByRole("heading", { name: item.name });
+    expect(screen.getByRole("button", { name: "Edit listing" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Archive" })).toHaveProperty("disabled", true);
+  });
+
+  it("blocks lifecycle confirmation through a failed read and requires new review when retirement changes", async () => {
+    const user = userEvent.setup(); reads();
+    vi.mocked(api.findStoreProduct).mockResolvedValueOnce({ ...item, archivedAt: "2026-10-12T10:00:00Z" })
+      .mockRejectedValueOnce(new HttpError("http", 503)).mockResolvedValue(item);
+    const change = vi.spyOn(api, "changeCatalogLifecycle");
+    route(); await user.click(await screen.findByRole("button", { name: "Restore" }));
+    await user.click(screen.getByRole("button", { name: "Refresh listing data" }));
+    const retry = await screen.findByRole("button", { name: "Try again" });
+    expect(within(screen.getByRole("form")).getByRole("button", { name: "Restore" })).toHaveProperty("disabled", true);
+    await user.click(retry); await screen.findByText(i18n.t("retirement:changed"));
+    expect(within(screen.getByRole("form")).getByRole("button", { name: "Restore" })).toHaveProperty("disabled", true);
+    expect(change).not.toHaveBeenCalled();
+    await user.click(within(screen.getByRole("form")).getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("button", { name: "Archive" })).toHaveProperty("disabled", false);
+  });
+
+  it("cancels an old store's direct read and ignores its late answer", async () => {
+    const user = userEvent.setup(); reads(); let release!: (value: StoreProduct) => void;
+    vi.mocked(api.findStoreProduct).mockImplementationOnce(() => new Promise(resolve => { release = resolve; }))
+      .mockResolvedValue({ ...item, name: "Current store B" });
+    route(); await waitFor(() => expect(api.findStoreProduct).toHaveBeenCalledOnce());
+    const signal = vi.mocked(api.findStoreProduct).mock.calls[0][2]!;
+    await user.click(screen.getByRole("link", { name: "Switch store" }));
+    await screen.findByRole("heading", { name: "Current store B" });
+    expect(signal.aborted).toBe(true);
+    await act(async () => release({ ...item, name: "Old store answer" }));
+    expect(screen.queryByText("Old store answer")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Current store B" })).toBeTruthy();
   });
 
   it("localizes validation in Czech while retaining merchant content", async () => {
