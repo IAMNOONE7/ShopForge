@@ -103,24 +103,26 @@ The API exposes `/health/live` and `/health/ready`.
 
 ## Deployment
 
-`infra/` describes the whole Azure environment in Bicep: Log Analytics and Application Insights, the app's managed identity and its roles, Key Vault, Storage (product media plus the built frontends), PostgreSQL Flexible Server, the Container Apps environment with the app and its migration job, and Front Door with its routes. `tests/ShopForge.DeploymentTests` compiles and lints the templates on every build, with the Bicep compiler as a package.
+`infra/` describes the whole Azure environment in Bicep: Log Analytics and Application Insights, the app's managed identity and its roles, Key Vault, Storage (product media), PostgreSQL Flexible Server, the Container Apps environment with the app and its migration job, and Front Door with its route, caching rule, WAF policy and the admin's own domain. `tests/ShopForge.DeploymentTests` compiles and lints the templates on every build, with the Bicep compiler as a package.
 
 The GitHub Actions `Deploy` workflow runs a release in this order:
 
 1. `scripts/release-inputs.sh` checks every input by name, and refuses a release that would send no mail.
-2. The image is built, stamped with its commit, and pushed. The frontends are built.
+2. The image, which builds and carries both frontends, is built, stamped with its commit, and pushed.
 3. `scripts/provision.sh without-app` deploys everything the app needs, including the migration job on the new image. The serving app is left alone.
 4. `scripts/migrate.sh` runs that job: the release's own image, run with `migrate`, applies its migrations from inside the environment.
 5. `scripts/provision.sh with-app` puts the image on the app.
 6. `scripts/smoke.sh --api` checks the API, including that the answering build is the release's own (`/health/version`).
-7. The frontends are published, and `scripts/smoke.sh --site` checks what a shopper and a merchant open.
+7. `scripts/smoke.sh --site` checks what a shopper and a merchant open, and that the app refuses a request that went around Front Door.
 
 A few things are worth knowing:
 
 - The application migrates the database only in Development. A build whose database lacks any of its migrations is not ready: it answers every request except `/health/*` with a 503, and does no background work until the migrations are in.
 - Outside Development and the test environments, the application refuses to start if its mail would only be logged.
 - Secrets (database, storage, Mailgun, Stripe, Application Insights) live in Key Vault, read by the app's own managed identity; the app is given only the vault's URI.
-- Behind Front Door the original host arrives as a header, which is trusted only when `X-Azure-FDID` matches the configured profile — otherwise the forwarded headers are dropped.
+- The app serves both built frontends: the storefront's page for every storefront route, and the admin's under `/admin`, on the platform's admin host only. Each page has its own content security policy. Hashed assets are cached for a year, pages not at all, and nothing under `/api` turns into a page. `robots.txt` and the sitemap answer at each shop's root.
+- Outside development the app answers only Front Door: a request without the configured profile's `X-Azure-FDID` is refused, health probes apart. The original host arrives as a forwarded header, trusted only on a request that carries the profile id.
+- The template owns only the platform's own route, security policy and domains. Merchants' domains belong to a route and a security policy of their own, which a redeploy never touches.
 
 `tests/release/rehearse.sh` rehearses a release on this machine. It runs the previous build and the working tree's across a real migration, the rollback included, against a throwaway PostgreSQL and Azurite.
 

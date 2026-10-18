@@ -14,8 +14,8 @@ param registryName string
 param registryResourceGroup string
 @description('False for the first of a release\'s two deployments: everything the app needs, and the job that migrates for the new image, while the app that is serving is left alone. The release migrates, then deploys again with true (D-205).')
 param deployApp bool = true
-@description('Host name the built storefront is served from (the storage account static website).')
-param storefrontFqdn string
+@description('The platform\'s own host for the admin, e.g. admin.example.cz, proved to Front Door with the TXT record in the adminValidationToken output. Empty serves the admin on the endpoint\'s own host name (D-206).')
+param adminHost string = ''
 @description('The zone store subdomains are composed under, e.g. shops.example.cz (D-189).')
 param storeHostSuffix string
 @secure()
@@ -69,6 +69,17 @@ module edgeProfile 'modules/edge-profile.bicep' = {
   name: 'edge-profile'
   params: {
     namePrefix: namePrefix
+    adminHost: adminHost
+  }
+}
+
+module edgeSecurity 'modules/edge-security.bicep' = {
+  scope: group
+  name: 'edge-security'
+  params: {
+    namePrefix: namePrefix
+    profileName: edgeProfile.outputs.profileName
+    domainIds: concat([edgeProfile.outputs.endpointId], edgeProfile.outputs.platformDomainIds)
   }
 }
 
@@ -134,6 +145,7 @@ var settings = [
   { name: 'Email__SenderAddress', value: emailSenderAddress }
   { name: 'Email__Mailgun__Domain', value: mailgunDomain }
   { name: 'StoreHosts__Suffix', value: storeHostSuffix }
+  { name: 'Frontends__AdminHost', value: edgeProfile.outputs.adminHost }
 ]
 
 module migrations 'modules/migrations.bicep' = {
@@ -171,11 +183,14 @@ module edgeRoutes 'modules/edge-routes.bicep' = if (deployApp) {
     profileName: edgeProfile.outputs.profileName
     endpointName: edgeProfile.outputs.endpointName
     apiFqdn: api!.outputs.fqdn
-    storefrontFqdn: storefrontFqdn
+    platformDomainIds: edgeProfile.outputs.platformDomainIds
   }
 }
 
 output apiFqdn string = deployApp ? api!.outputs.fqdn : ''
 output publicHostName string = edgeProfile.outputs.endpointHostName
+output adminHost string = edgeProfile.outputs.adminHost
+// The value of the TXT record at _dnsauth.<adminHost>, for whoever publishes it; empty when there is no admin domain.
+output adminValidationToken string = edgeProfile.outputs.adminValidationToken
 output vaultUri string = vault.outputs.vaultUri
 output migrationJob string = migrations.outputs.name

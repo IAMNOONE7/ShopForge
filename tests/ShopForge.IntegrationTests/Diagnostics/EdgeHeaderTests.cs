@@ -37,16 +37,30 @@ public sealed class EdgeHeaderTests(ShopForgeApiFactory factory) : IDisposable
         Assert.Equal(furniture.Store.Name, store!.Name);
     }
 
+    // Container Apps cannot keep everybody but Front Door out of the app, so the app does: a request without this
+    // profile's id did not come through the edge, and is refused rather than answered without its headers (D-207).
     [Fact]
-    public async Task A_forwarded_host_from_anyone_else_is_ignored()
+    public async Task A_request_that_did_not_come_through_the_edge_is_refused()
     {
         var furniture = await FurnitureStore.CreateAsync(factory);
 
         using var withoutId = await SendAsync(furniture.Store.HostName, profileId: null);
         using var withWrongId = await SendAsync(furniture.Store.HostName, "99999999-9999-9999-9999-999999999999");
 
-        Assert.Equal(HttpStatusCode.NotFound, withoutId.StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, withWrongId.StatusCode);
+        Assert.Equal((HttpStatusCode.Forbidden, HttpStatusCode.Forbidden), (withoutId.StatusCode, withWrongId.StatusCode));
+    }
+
+    // The platform probes the container itself, not through the edge, and a container it cannot probe it restarts.
+    [Theory]
+    [InlineData("/health/live")]
+    [InlineData("/health/ready")]
+    public async Task The_health_checks_answer_the_platform_directly(string path)
+    {
+        using var client = _behindEdge.CreateClient();
+
+        using var probed = await client.GetAsync(path, CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, probed.StatusCode);
     }
 
     // A deployment does not set this; the environment decides it (Program.cs). What is worth guarding is that both

@@ -13,9 +13,8 @@ public sealed class ReleaseScriptTests : IDisposable
         ["REGISTRY_NAME"] = "shopforgetest",
         ["REGISTRY_SERVER"] = "shopforgetest.azurecr.io",
         ["REGISTRY_RESOURCE_GROUP"] = "shopforge-shared-rg",
-        ["STORAGE_ACCOUNT"] = "shopforgetestmedia",
-        ["STOREFRONT_FQDN"] = "shopforgetestmedia.z6.web.core.windows.net",
         ["STORE_HOST_SUFFIX"] = "shops.example.cz",
+        ["ADMIN_HOST"] = "admin.example.cz",
         ["API_BASE_URL"] = "https://api.example.cz",
         ["SITE_URL"] = "https://www.example.cz/",
         ["ADMIN_URL"] = "https://www.example.cz/admin/orders",
@@ -58,7 +57,6 @@ public sealed class ReleaseScriptTests : IDisposable
             "run: scripts/migrate.sh",
             "run: scripts/provision.sh with-app",
             "scripts/smoke.sh --api",
-            "az storage blob upload-batch",
             "scripts/smoke.sh --site",
         ];
 
@@ -67,8 +65,12 @@ public sealed class ReleaseScriptTests : IDisposable
         Assert.DoesNotContain(-1, positions);
         Assert.Equal(positions.Order(), positions);
         Assert.Equal(1, Occurrences(workflow, "provision.sh with-app"));
-        Assert.DoesNotContain("az deployment", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("az deployment sub create", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("containerapp update", workflow, StringComparison.Ordinal);
+
+        // The frontends ship in the image, so nothing is published beside it, and the site is checked with the origin.
+        Assert.DoesNotContain("upload-batch", workflow, StringComparison.Ordinal);
+        Assert.Contains("--origin \"https://$origin\"", workflow, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -95,10 +97,10 @@ public sealed class ReleaseScriptTests : IDisposable
     [Fact]
     public async Task A_missing_input_is_named_and_no_secret_is_printed()
     {
-        var checkedInputs = await RunAsync("scripts/release-inputs.sh", [], ("MAILGUN_WEBHOOK_SIGNING_KEY", ""), ("STORAGE_ACCOUNT", null));
+        var checkedInputs = await RunAsync("scripts/release-inputs.sh", [], ("MAILGUN_WEBHOOK_SIGNING_KEY", ""), ("SMOKE_STORE_HOST", null));
 
         Assert.Equal(1, checkedInputs.ExitCode);
-        Assert.Contains("The release is missing: STORAGE_ACCOUNT MAILGUN_WEBHOOK_SIGNING_KEY.", checkedInputs.Output, StringComparison.Ordinal);
+        Assert.Contains("The release is missing: SMOKE_STORE_HOST MAILGUN_WEBHOOK_SIGNING_KEY.", checkedInputs.Output, StringComparison.Ordinal);
         Assert.DoesNotContain(Inputs["MAILGUN_API_KEY"]!, checkedInputs.Output, StringComparison.Ordinal);
     }
 
@@ -115,6 +117,7 @@ public sealed class ReleaseScriptTests : IDisposable
         Assert.Equal(deploysApp, (bool)parameters["deployApp"]!["value"]!);
         Assert.Equal(Inputs["IMAGE"], (string?)parameters["image"]!["value"]);
         Assert.Equal(Inputs["MAILGUN_WEBHOOK_SIGNING_KEY"], (string?)parameters["mailgunWebhookSigningKey"]!["value"]);
+        Assert.Equal(Inputs["ADMIN_HOST"], (string?)parameters["adminHost"]!["value"]);
         Assert.Contains(asked, line => line.StartsWith(
             $"deployment sub create --name shopforge-test-{which} --location westeurope --template-file infra/main.bicep --parameters @",
             StringComparison.Ordinal));

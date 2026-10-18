@@ -31,7 +31,7 @@ DEPLOY_APP=$deploy_app jq -n '{
     registryName: { value: env.REGISTRY_NAME },
     registryResourceGroup: { value: env.REGISTRY_RESOURCE_GROUP },
     deployApp: { value: (env.DEPLOY_APP == "true") },
-    storefrontFqdn: { value: env.STOREFRONT_FQDN },
+    adminHost: { value: (env.ADMIN_HOST // "") },
     storeHostSuffix: { value: env.STORE_HOST_SUFFIX },
     databasePassword: { value: env.DATABASE_PASSWORD },
     stripeSecretKey: { value: (env.STRIPE_SECRET_KEY // "") },

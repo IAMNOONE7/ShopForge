@@ -3,8 +3,9 @@ using Microsoft.AspNetCore.HttpOverrides;
 namespace ShopForge.Api.Diagnostics;
 
 // Behind Front Door the original host and scheme arrive as headers, and a header is only worth reading when it comes
-// from the edge: the profile id proves that (D-075). Anything else is ignored, so nobody reaches another store by
-// sending `X-Forwarded-Host` at the container.
+// from the edge: the profile id proves that (D-075). A request without it is refused, not merely stripped (D-207):
+// Container Apps filters its ingress by address range only, so this profile's id is the lock that keeps anybody from
+// reaching the app around the edge. The health checks stay open, because the platform probes the container directly.
 internal static class EdgeHeaders
 {
     private const string ProfileIdHeader = "X-Azure-FDID";
@@ -22,6 +23,13 @@ internal static class EdgeHeaders
         {
             if (!string.Equals(context.Request.Headers[ProfileIdHeader], profileId, StringComparison.OrdinalIgnoreCase))
             {
+                if (!context.Request.Path.StartsWithSegments("/health"))
+                {
+                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
+
+                    return;
+                }
+
                 context.Request.Headers.Remove("X-Forwarded-Host");
                 context.Request.Headers.Remove("X-Forwarded-Proto");
                 context.Request.Headers.Remove("X-Forwarded-For");

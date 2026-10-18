@@ -66,7 +66,7 @@ internal static class SitemapEndpoints
             "Disallow: /*?sort=",
             "Disallow: /*&sort=",
             string.Empty,
-            $"Sitemap: https://{address.Host}/api/storefront/sitemap.xml",
+            $"Sitemap: https://{address.Host}/sitemap.xml",
         };
 
         return Text(string.Join('\n', lines) + "\n");
@@ -99,7 +99,7 @@ internal static class SitemapEndpoints
             Sitemap + "sitemapindex",
             Enumerable.Range(1, chunks).Select(chunk => new XElement(
                 Sitemap + "sitemap",
-                new XElement(Sitemap + "loc", $"https://{pages[0].Host}/api/storefront/sitemap-{chunk}.xml"))));
+                new XElement(Sitemap + "loc", $"https://{pages[0].Host}/sitemap-{chunk}.xml"))));
 
         return Xml(index);
     }

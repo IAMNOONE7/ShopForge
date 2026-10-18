@@ -9,6 +9,8 @@
 #      its health and does no background work.
 #   3. The release's build migrates the schema, as the release's job does, while the previous build keeps serving.
 #   4. The release's build catches up without a restart and passes the smoke test as itself; the previous one stops.
+#      With the frontends built in the source tree (npm run build in frontend/storefront and frontend/admin), it
+#      serves them too, and passes the site's smoke test (D-206).
 #   5. Rollback: the previous build serves again, against the newer schema, and passes the smoke test as itself.
 #
 # The previous build defaults to the commit before the newest migration arrived, so the rehearsal always crosses one.
@@ -122,6 +124,16 @@ echo "Rehearsing the release of $release over $previous."
 git -C "$ROOT" archive "$previous" | tar -x -C "$STATE/previous-source"
 publish previous "$STATE/previous-source" "$previous"
 publish release "$ROOT" "$release"
+
+# The image builds the frontends itself; here they are taken as the source tree last built them, if it did.
+frontends=false
+
+if [ -f "$ROOT/frontend/storefront/dist/index.html" ] && [ -f "$ROOT/frontend/admin/dist/index.html" ]; then
+  mkdir -p "$STATE/release/frontends"
+  cp -R "$ROOT/frontend/storefront/dist" "$STATE/release/frontends/storefront"
+  cp -R "$ROOT/frontend/admin/dist" "$STATE/release/frontends/admin"
+  frontends=true
+fi
 "${COMPOSE[@]}" up -d --wait >/dev/null 2>&1
 
 # The previous release, as it stood: its own schema, and a demo shop to serve. Development is what migrates and
@@ -195,6 +207,13 @@ fi
 expect "the release's build serves the shop" 200 "$(status_of -H "Host: $STORE_HOST" "$RELEASE_URL/api/storefront/products")"
 "$ROOT/scripts/smoke.sh" --api "$RELEASE_URL" --version "$release" --store-host "$STORE_HOST" | sed 's/^/    /' \
   && pass "the smoke test, as the release's build" || fail "the smoke test, as the release's build"
+
+if [ "$frontends" = true ]; then
+  "$ROOT/scripts/smoke.sh" --site "http://$STORE_HOST:5282/" --admin "$RELEASE_URL/admin/orders" --store "http://$STORE_HOST:5282/" \
+    | sed 's/^/    /' && pass "the site's smoke test, as the release's build" || fail "the site's smoke test, as the release's build"
+else
+  echo "  --    the site's smoke test is skipped: no frontends are built in $ROOT/frontend"
+fi
 stop previous
 
 echo "5. Rollback: the previous build serves again, against the newer schema."

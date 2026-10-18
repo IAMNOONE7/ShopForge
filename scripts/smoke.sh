@@ -5,15 +5,16 @@
 #   scripts/smoke.sh --api https://api.example.com [--version <commit>] [--store-host shop.example.com]
 #       the API is alive and ready, is the build that was released, and resolves a published store
 #
-#   scripts/smoke.sh --site https://www.example.com/ [--admin https://www.example.com/admin/orders]
-#                    [--http http://www.example.com/] [--store https://shop.example.com/]
+#   scripts/smoke.sh --site https://www.example.com/ [--admin https://admin.example.com/admin/orders]
+#                    [--http http://www.example.com/] [--store https://shop.example.com/] [--origin https://<app>]
 #       the storefront's page and its bundle, the security headers it is served with, an admin deep link, plain
-#       HTTP sent on to HTTPS, and a store's page with the data it renders from
+#       HTTP sent on to HTTPS, a store's page with the data it renders from, and the app itself refusing a request
+#       that did not come through the edge
 #
 # Every check runs, so one run reports everything that is wrong.
 set -euo pipefail
 
-api='' version='' store_host='' site='' admin='' http='' store=''
+api='' version='' store_host='' site='' admin='' http='' store='' origin=''
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -24,6 +25,7 @@ while [ "$#" -gt 0 ]; do
     --admin) admin=$2 ;;
     --http) http=$2 ;;
     --store) store=$2 ;;
+    --origin) origin=$2 ;;
     *)
       echo "smoke.sh: unknown option $1" >&2
       exit 2
@@ -32,8 +34,8 @@ while [ "$#" -gt 0 ]; do
   shift 2
 done
 
-if [ -z "$api" ] && [ -z "$site" ]; then
-  echo "usage: smoke.sh --api <url> [--version <commit>] [--store-host <host>] | --site <url> [--admin <url>] [--http <url>] [--store <url>]" >&2
+if [ -z "$api" ] && [ -z "$site" ] && [ -z "$origin" ]; then
+  echo "usage: smoke.sh --api <url> [--version <commit>] [--store-host <host>] | --site <url> [--admin <url>] [--http <url>] [--store <url>] [--origin <url>]" >&2
   exit 2
 fi
 
@@ -110,7 +112,7 @@ fi
 
 if [ -n "$site" ]; then
   echo "Site checks against $site"
-  origin=$(printf '%s' "$site" | sed -E 's#^(https?://[^/]+).*#\1#')
+  site_origin=$(printf '%s' "$site" | sed -E 's#^(https?://[^/]+).*#\1#')
   status=$(fetch "$site")
 
   if is_app_page "$status"; then
@@ -122,9 +124,11 @@ if [ -n "$site" ]; then
   cp "$scratch/headers" "$scratch/site-headers"
   bundle=$(grep -oE 'src="/assets/[^"]+\.js"' "$scratch/body" | head -n 1 | sed -E 's/^src="|"$//g' || true)
 
-  # What the edge adds to a page the app does not serve itself.
+  # A plain HTTP site cannot promise HTTPS, so the promise is looked for only where there is HTTPS to promise.
   for name in Strict-Transport-Security Content-Security-Policy Referrer-Policy; do
-    if grep -qi "^$name:" "$scratch/site-headers"; then
+    if [ "$name" = Strict-Transport-Security ] && [[ "$site" != https://* ]]; then
+      echo "  skipped  header $name (the site is plain HTTP)"
+    elif grep -qi "^$name:" "$scratch/site-headers"; then
       ok "header $name"
     else
       failed "header $name is missing"
@@ -147,7 +151,7 @@ if [ -n "$site" ]; then
   if [ -z "$bundle" ]; then
     failed "the storefront's bundle (the page names none)"
   else
-    status=$(fetch "$origin$bundle")
+    status=$(fetch "$site_origin$bundle")
 
     if [ "$status" = 200 ] && header Content-Type | grep -qiE 'javascript|ecmascript'; then
       ok "the storefront's bundle $bundle ($status $(header Content-Type))"
@@ -199,6 +203,13 @@ if [ -n "$site" ]; then
       failed "the store's data behind its page (expected the store as JSON, got $status)"
     fi
   fi
+fi
+
+# The app answers only its edge, so a request straight to it is refused; the platform still probes its health (D-207).
+if [ -n "$origin" ]; then
+  echo "Origin checks against $origin"
+  check "a request around the edge is refused" 403 "$origin/api/storefront/store"
+  check "the platform can still probe it" 200 "$origin/health/live"
 fi
 
 if [ "$failures" -gt 0 ]; then

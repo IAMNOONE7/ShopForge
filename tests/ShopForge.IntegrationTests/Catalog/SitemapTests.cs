@@ -62,11 +62,30 @@ public sealed class SitemapTests(ShopForgeApiFactory factory)
 
         var robots = await RobotsAsync(furniture);
 
-        Assert.Contains($"Sitemap: https://{furniture.Store.HostName}/api/storefront/sitemap.xml", robots, StringComparison.Ordinal);
+        Assert.Contains($"Sitemap: https://{furniture.Store.HostName}/sitemap.xml", robots, StringComparison.Ordinal);
         Assert.Contains("Disallow: /cart", robots, StringComparison.Ordinal);
         Assert.Contains("Disallow: /checkout", robots, StringComparison.Ordinal);
         Assert.Contains("Disallow: /account", robots, StringComparison.Ordinal);
         Assert.DoesNotContain("Disallow: /\n", robots, StringComparison.Ordinal);
+    }
+
+    // At the root of the shop's own host, where a crawler looks, and nowhere else: a host that is not a shop has
+    // neither (D-206).
+    [Fact]
+    public async Task Robots_and_the_sitemap_answer_at_the_root_of_the_shop()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+        using var shopper = new Orders.StorefrontApi(factory, furniture.Store);
+        using var stranger = factory.CreateClient();
+
+        var robots = await shopper.GetStringAsync("/robots.txt");
+        using var sitemap = await shopper.GetAsync("/sitemap.xml");
+        using var notAShop = await stranger.GetAsync("/robots.txt", CancellationToken);
+
+        Assert.Equal(await RobotsAsync(furniture), robots);
+        Assert.Equal(HttpStatusCode.OK, sitemap.StatusCode);
+        Assert.Contains(furniture.Store.HostName, await sitemap.Content.ReadAsStringAsync(CancellationToken), StringComparison.Ordinal);
+        Assert.Equal(HttpStatusCode.NotFound, notAShop.StatusCode);
     }
 
     // A shop that has said it is not ready asks to be left alone entirely, and has nothing to publish.
@@ -101,7 +120,7 @@ public sealed class SitemapTests(ShopForgeApiFactory factory)
         Assert.Equal(Sitemap + "sitemapindex", index.Name);
         Assert.All(
             Locations(index),
-            location => Assert.StartsWith($"https://{furniture.Store.HostName}/api/storefront/sitemap-", location, StringComparison.Ordinal));
+            location => Assert.StartsWith($"https://{furniture.Store.HostName}/sitemap-", location, StringComparison.Ordinal));
         Assert.Equal(2, Locations(first).Count);
         Assert.Equal(Sitemap + "urlset", first.Name);
         Assert.NotEqual(Locations(first), Locations(second));

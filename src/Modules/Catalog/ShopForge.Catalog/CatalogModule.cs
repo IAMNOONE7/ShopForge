@@ -86,4 +86,13 @@ public static class CatalogModule
 
         return storefront;
     }
+
+    // At the root of every shop's host, where a crawler looks for them. A sitemap there may list every page on the host,
+    // which one under /api/storefront may not (D-206). The ones under /api/storefront stay for whoever already uses them.
+    public static IEndpointRouteBuilder MapCatalogSiteRootEndpoints(this IEndpointRouteBuilder site)
+    {
+        site.MapGroup(string.Empty).RequireRateLimiting(RateLimits.Crawlers).MapSeoDocuments();
+
+        return site;
+    }
 }

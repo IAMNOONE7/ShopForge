@@ -22,7 +22,9 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
         external: true
         targetPort: 8080
         transport: 'http'
-        // Only Front Door reaches the app; it proves that with its profile id on every request (D-075).
+        // Container Apps can restrict ingress by address range only, not by Front Door's service tag, and Front Door's
+        // addresses change too often to write down. So the app refuses every request without this profile's id itself,
+        // health probes apart (D-207).
         ipSecurityRestrictions: []
       }
       registries: [

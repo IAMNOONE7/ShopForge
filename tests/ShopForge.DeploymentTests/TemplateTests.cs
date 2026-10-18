@@ -113,6 +113,85 @@ public sealed partial class TemplateTests
                 ((string?)resource["name"])?.Contains($"'{secret}'", StringComparison.Ordinal) == true && resource["condition"] is null));
     }
 
+    // Everything reaches the app through one route to one origin, so the pages and the API share an address (D-206),
+    // and plain HTTP is turned to HTTPS at the edge.
+    [Fact]
+    public async Task The_edge_sends_everything_to_the_app_through_one_route()
+    {
+        var template = await CompiledAsync();
+        var edge = Resources(Deployment(template, "edge-routes")["properties"]!["template"]!).ToList();
+        var route = edge.Single(resource => (string?)resource["type"] == "Microsoft.Cdn/profiles/afdEndpoints/routes")["properties"]!;
+
+        Assert.Single(edge, resource => (string?)resource["type"] == "Microsoft.Cdn/profiles/originGroups");
+        Assert.Single(edge, resource => (string?)resource["type"] == "Microsoft.Cdn/profiles/originGroups/origins");
+        Assert.Equal(["/*"], route["patternsToMatch"]!.AsArray().Select(pattern => (string?)pattern));
+        Assert.Equal(["Http", "Https"], route["supportedProtocols"]!.AsArray().Select(protocol => (string?)protocol));
+        Assert.Equal(("Enabled", "HttpsOnly"), ((string?)route["httpsRedirect"], (string?)route["forwardingProtocol"]));
+        Assert.Null(route["cacheConfiguration"]);
+    }
+
+    // Only files whose names change with their content are cached at the edge, and for as long as the app says; a page
+    // or an answer from the API never is (D-206).
+    [Fact]
+    public async Task Only_hashed_assets_are_cached_at_the_edge()
+    {
+        var template = await CompiledAsync();
+        var rule = Resources(Deployment(template, "edge-routes")["properties"]!["template"]!)
+            .Single(resource => (string?)resource["type"] == "Microsoft.Cdn/profiles/ruleSets/rules")["properties"]!;
+        var condition = rule["conditions"]![0]!["parameters"]!;
+        var cache = rule["actions"]![0]!["parameters"]!["cacheConfiguration"]!;
+
+        Assert.Equal(("BeginsWith", false), ((string?)condition["operator"], (bool?)condition["negateCondition"]));
+        Assert.Equal(["/assets/", "/admin/assets/"], condition["matchValues"]!.AsArray().Select(value => (string?)value));
+        Assert.Equal("RouteConfigurationOverride", (string?)rule["actions"]![0]!["name"]);
+        Assert.Equal("HonorOrigin", (string?)cache["cacheBehavior"]);
+    }
+
+    // The template owns the platform's route, its security policy and its own domains; every merchant's domain, and the
+    // route and policy that carry them, belong to the runtime. A redeploy can then never unbind a shop (D-207).
+    [Fact]
+    public async Task The_template_declares_no_domain_route_or_policy_but_the_platform_s()
+    {
+        var template = await CompiledAsync();
+        var everything = Everywhere(template).ToList();
+
+        Assert.Equal(["platform"], OwnNames(everything, "Microsoft.Cdn/profiles/afdEndpoints/routes"));
+        Assert.Equal(["platform"], OwnNames(everything, "Microsoft.Cdn/profiles/securityPolicies"));
+        Assert.Equal(["admin"], OwnNames(everything, "Microsoft.Cdn/profiles/customDomains"));
+    }
+
+    // A platform domain with a managed certificate, which Front Door issues once _dnsauth.<host> carries the token the
+    // deployment hands out. Without one, the admin is served on the endpoint's own host name (D-206).
+    [Fact]
+    public async Task The_admin_domain_is_the_template_s_and_its_proof_is_handed_out()
+    {
+        var template = await CompiledAsync();
+        var profile = Deployment(template, "edge-profile")["properties"]!["template"]!;
+        var domain = Resources(profile).Single(resource => (string?)resource["type"] == "Microsoft.Cdn/profiles/customDomains");
+
+        Assert.Equal("[not(empty(parameters('adminHost')))]", (string?)domain["condition"]);
+        Assert.Equal(("ManagedCertificate", "TLS12"), ((string?)domain["properties"]!["tlsSettings"]!["certificateType"], (string?)domain["properties"]!["tlsSettings"]!["minimumTlsVersion"]));
+        Assert.Contains("validationProperties.validationToken", (string?)profile["outputs"]!["adminValidationToken"]!["value"], StringComparison.Ordinal);
+        Assert.NotNull(template["outputs"]!["adminValidationToken"]);
+        Assert.Matches(OutputOf("edge-profile", "adminHost"), Setting(Deployment(template, "api")["properties"]!["parameters"]!["settings"]!["value"]!.AsArray(), "Frontends__AdminHost"));
+    }
+
+    // Detection until V19 has seen real traffic; the endpoint's own domain and the platform's are covered from the start.
+    [Fact]
+    public async Task The_firewall_is_defined_in_detection_over_the_platform_s_domains()
+    {
+        var template = await CompiledAsync();
+        var security = Deployment(template, "edge-security");
+        var resources = Resources(security["properties"]!["template"]!).ToList();
+        var policy = resources.Single(resource => (string?)resource["type"] == "Microsoft.Network/FrontDoorWebApplicationFirewallPolicies");
+        var association = resources.Single(resource => (string?)resource["type"] == "Microsoft.Cdn/profiles/securityPolicies")["properties"]!["parameters"]!["associations"]![0]!;
+
+        Assert.Equal(("Detection", "Standard_AzureFrontDoor"), ((string?)policy["properties"]!["policySettings"]!["mode"], (string?)policy["sku"]!["name"]));
+        Assert.Equal(["/*"], association["patternsToMatch"]!.AsArray().Select(pattern => (string?)pattern));
+        Assert.Contains("outputs.endpointId.value", Parameter(security, "domainIds"), StringComparison.Ordinal);
+        Assert.Contains("outputs.platformDomainIds.value", Parameter(security, "domainIds"), StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("param emailProvider = 'log'", "BCP033")]
     [InlineData(null, "BCP258")]
@@ -130,7 +209,6 @@ public sealed partial class TemplateTests
                 "param image = 'registry.azurecr.io/shopforge-api:1'",
                 "param registryName = 'registry'",
                 "param registryResourceGroup = 'shared'",
-                "param storefrontFqdn = 'site.example.cz'",
                 "param storeHostSuffix = 'shops.example.cz'",
                 "param databasePassword = 'made-up'",
                 "param emailSenderAddress = 'shop@mail.example.cz'",
@@ -169,6 +247,16 @@ public sealed partial class TemplateTests
 
     private static Task<JsonNode> CompiledAsync() => Compiled.Value;
 
+    // Every resource in the template and in every module it deploys, however deep.
+    private static IEnumerable<JsonNode> Everywhere(JsonNode template) =>
+        Resources(template).SelectMany(resource => resource["properties"]?["template"] is { } nested
+            ? Everywhere(nested).Prepend(resource)
+            : [resource]);
+
+    private static List<string> OwnNames(IEnumerable<JsonNode> resources, string type) =>
+        [.. resources.Where(resource => (string?)resource["type"] == type)
+            .Select(resource => OwnName().Match((string)resource["name"]!).Groups["name"].Value)];
+
     private static IEnumerable<JsonNode> Resources(JsonNode template) =>
         template["resources"] switch
         {
@@ -199,6 +287,10 @@ public sealed partial class TemplateTests
 
     private static string OutputOf(string deployment, string output) =>
         $"'Microsoft\\.Resources/deployments', '{deployment}'\\), '[0-9-]+'\\)\\.outputs\\.{output}\\.value";
+
+    // `[format('{0}/{1}/{2}', parameters('profileName'), parameters('endpointName'), 'platform')]` is the route named platform.
+    [GeneratedRegex(@"'(?<name>[A-Za-z0-9-]+)'\)\]$")]
+    private static partial Regex OwnName();
 
     [GeneratedRegex(@"'Microsoft\.Resources/deployments', (?<name>'[^']+'|format\([^)]*\)[^)]*\))\)\]$")]
     private static partial Regex DeploymentReference();
