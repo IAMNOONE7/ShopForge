@@ -705,6 +705,11 @@ tbody tr:last-child td {
 .return-record-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .return-lines { display: grid; grid-template-columns: minmax(0, 1fr); list-style: none; margin: 0; padding: 0; gap: var(--space-4); }
 .return-lines li { display: grid; gap: var(--space-2); border-top: 1px solid var(--color-border); padding-top: var(--space-4); overflow-wrap: anywhere; }
+.return-line-identities { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); margin: 0; font-size: var(--text-sm); }
+.return-line-identities > div { min-width: 0; }
+.return-line-identities dt { font-weight: 650; }
+.return-line-identities dd { margin: 0; overflow-wrap: anywhere; }
+
 .refund-outcome, .refund-outcomes, .refund-outcomes li { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); min-width: 0; }
 .refund-outcomes { list-style: none; padding: 0; margin: 0; }
 .refund-outcomes li { padding: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-control); }

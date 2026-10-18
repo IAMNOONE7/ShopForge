@@ -7,7 +7,7 @@ import { getStoreDomains, addStoreDomain, verifyStoreDomain, makeStoreDomainPrim
 import { getOrders } from "./api/orders";
 import { changeOrder, getOrderDetails, refundOrder } from "./api/orderDetails";
 import { changeUnappliedPayment, getUnappliedPayments } from "./api/unappliedPayments";
-import { changeReturnMoney, decideReturn, getReturns } from "./api/returns";
+import { changeReturnMoney, decideReturn, getReturnDetails, getReturns } from "./api/returns";
 
 export type SignInResponse = {
   twoFactorRequired: boolean;
@@ -368,9 +368,12 @@ export type OrderReturn = {
   orderNumber: string;
   status: string;
   requestedAt: string;
+  decidedAt: string | null;
+  receivedAt: string | null;
+  refundSettledAt: string | null;
   refundedAmount: number;
   reason: string | null;
-  lines: { productName: string; quantity: number }[];
+  lines: { storeProductId: string; variantId: string; productName: string; quantity: number }[];
   refund: string | null;
   refundProblem: string | null;
   refundNote: string | null;
@@ -633,6 +636,7 @@ export const api = {
     ),
 
   returns: getReturns,
+  returnDetail: getReturnDetails,
   decideReturn,
   changeReturnMoney,
 

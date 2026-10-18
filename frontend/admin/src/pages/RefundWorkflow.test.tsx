@@ -39,6 +39,11 @@ beforeEach(async () => {
   sessionStorage.clear(); records = [{ ...returnRecord, status: "Accepted" }]; orderStatus = "Paid"; await i18n.changeLanguage("en");
   HTMLElement.prototype.scrollIntoView = vi.fn(); vi.stubGlobal("CSS", { escape: (value: string) => value });
   vi.spyOn(api, "returns").mockImplementation(async () => records);
+  vi.spyOn(api, "returnDetail").mockImplementation(async (_store, id) => {
+    const row = records.find(item => item.id === id);
+    if (!row) throw new HttpError("http", 404);
+    return row;
+  });
   vi.spyOn(api, "order").mockImplementation(async () => currentOrder());
   vi.spyOn(api, "changeReturnMoney").mockImplementation(async (_store, id, action, _key, note) => {
     const row = { ...records.find((item) => item.id === id)!, status: "Received", refundedAmount: 50, refund: action === "close" ? "ClosedByHand" : "Refunded", refundNote: note ?? null };
@@ -97,6 +102,38 @@ describe("return financial actions", () => {
     await user.click(screen.getByRole("checkbox")); await user.click(screen.getByRole("button", { name: "Confirm receipt" })); await screen.findByText(/Receipt and credit were recorded/);
     expect(api.changeReturnMoney).toHaveBeenNthCalledWith(2, "store-a", returnRecord.id, "receive", original.key, undefined);
   });
+  it("recovers an older saved receipt through a direct read, preserving its original key and full variant facts", async () => {
+    const attempt = makeRefundAttempt("receive", currentOrder(), records[0]); sessionStorage.setItem(key, JSON.stringify(attempt));
+    vi.mocked(api.returns).mockResolvedValue([]); route("order"); const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Review same financial request" }));
+    expect(api.returnDetail).toHaveBeenCalledExactlyOnceWith("store-a", returnRecord.id, expect.any(AbortSignal));
+    expect(api.returns).not.toHaveBeenCalled(); expect(api.changeReturnMoney).not.toHaveBeenCalled();
+    const confirmation = screen.getByRole("group", { name: "Receive RET-1?" });
+    for (const line of returnRecord.lines) expect(within(confirmation).getByText(line.variantId)).toBeTruthy();
+    await user.click(screen.getByRole("checkbox")); await user.click(screen.getByRole("button", { name: "Confirm receipt" }));
+    await screen.findByText(/Receipt and credit were recorded/);
+    expect(api.changeReturnMoney).toHaveBeenCalledExactlyOnceWith("store-a", returnRecord.id, "receive", attempt.key, undefined);
+  });
+  it("blocks a saved receipt when newer order facts already record receipt, until matching reads establish the outcome", async () => {
+    const attempt = makeRefundAttempt("receive", currentOrder(), records[0]); sessionStorage.setItem(key, JSON.stringify(attempt));
+    const accepted = records[0]; received("Pending"); vi.mocked(api.returnDetail).mockResolvedValueOnce(accepted);
+    route("order"); const user = userEvent.setup();
+    await screen.findByRole("button", { name: "Try again" });
+    expect(screen.queryByRole("button", { name: "Review same financial request" })).toBeNull();
+    expect(api.changeReturnMoney).not.toHaveBeenCalled(); expect(saved().key).toBe(attempt.key);
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    await screen.findByRole("button", { name: "Finish review and refresh" });
+    expect(screen.queryByRole("button", { name: "Review same financial request" })).toBeNull(); expect(api.changeReturnMoney).not.toHaveBeenCalled();
+  });
+  it("retains the same request through a scoped direct 404 and retries only the read", async () => {
+    const attempt = makeRefundAttempt("receive", currentOrder(), records[0]); sessionStorage.setItem(key, JSON.stringify(attempt));
+    vi.mocked(api.returnDetail).mockRejectedValueOnce(new HttpError("http", 404)); route("order"); const user = userEvent.setup();
+    await screen.findByRole("button", { name: "Try again" }); expect(api.returns).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Review same financial request" })).toBeNull(); expect(saved().key).toBe(attempt.key);
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    await screen.findByRole("button", { name: "Review same financial request" }); expect(api.changeReturnMoney).not.toHaveBeenCalled();
+  });
+
   it("recovers manual closure with an unchanged note and key, and requires verification again", async () => {
     received("Pending"); vi.mocked(api.changeReturnMoney).mockRejectedValueOnce(new HttpError("network", null)); const first = route(); const user = await open("close");
     await user.type(screen.getByRole("textbox"), "  Exact saved\nnote  "); await user.click(screen.getByRole("checkbox")); await user.click(screen.getByRole("button", { name: "Confirm manual resolution" }));
@@ -128,7 +165,7 @@ describe("return financial actions", () => {
     await screen.findByText(/This return or order no longer permits receipt/); expect(screen.getByRole("button", { name: "Confirm receipt" })).toHaveProperty("disabled", true); expect(api.changeReturnMoney).toHaveBeenCalledTimes(1);
   });
   it("keeps acknowledged receipt facts but blocks further financial actions after failed refresh", async () => {
-    route(); const user = await open("receive"); vi.mocked(api.returns).mockRejectedValueOnce(new HttpError("http", 503)); await user.click(screen.getByRole("checkbox")); await user.click(screen.getByRole("button", { name: "Confirm receipt" }));
+    route(); const user = await open("receive"); vi.mocked(api.returnDetail).mockRejectedValueOnce(new HttpError("http", 503)); await user.click(screen.getByRole("checkbox")); await user.click(screen.getByRole("button", { name: "Confirm receipt" }));
     await screen.findByRole("button", { name: "Try again" }); expect(screen.getByRole("button", { name: "Record received goods" })).toHaveProperty("disabled", true); expect(api.changeReturnMoney).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("button", { name: "Try again" })); await screen.findByText(/No receipt, retry or manual resolution action is available/); expect(api.changeReturnMoney).toHaveBeenCalledTimes(1);
   });

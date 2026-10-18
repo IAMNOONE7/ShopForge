@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import type { AdminOrderDetail, OrderReturn } from "../api";
-import { currencyFormatter, formatNumber } from "../utils/format";
+import { currencyFormatter } from "../utils/format";
 import type { RefundAction } from "../utils/refundWorkflow";
 import { Button } from "./ui/Button";
+import { ReturnLines } from "./ReturnLines";
 
 export function RefundConfirmation({ action, order, record, disabled, pending, savedNote, noteError, onConfirm, onClose, onReview }: {
   action: RefundAction; order: AdminOrderDetail; record?: OrderReturn | null; disabled: boolean; pending: boolean;
@@ -28,7 +29,7 @@ export function RefundConfirmation({ action, order, record, disabled, pending, s
     <h3 ref={heading} id="refund-confirm-title" tabIndex={-1}>{t(`confirmTitle.${action}`, { number: record?.number ?? order.number })}</h3>
     <p>{t(`confirmHint.${action}`)}</p>
     {(action === "retry" || action === "close") && record && <p>{t("orderDetails:creditedAmount")}: {currencyFormatter(order.currency, i18n.resolvedLanguage).format(record.refundedAmount)}</p>}
-    {action === "receive" && record && <ol className="return-lines">{record.lines.map((line, index) => <li key={`${index}:${line.productName}`}>{formatNumber(line.quantity, i18n.resolvedLanguage)} × {line.productName}</li>)}</ol>}
+    {action === "receive" && record && <ReturnLines lines={record.lines} />}
     {action === "order-refund" && <p className="hint">{t("remainingHint")}</p>}
     {action === "close" && <div className="unapplied-note"><label htmlFor="refund-note">{t("note")}</label>
       <textarea ref={noteField} id="refund-note" name="refund-note" rows={4} maxLength={500} required value={note} readOnly={savedNote !== undefined} disabled={pending}

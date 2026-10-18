@@ -4,6 +4,7 @@ import { Link } from "react-router";
 import { api } from "../api";
 import { HttpError } from "../api/http";
 import { useRequest } from "../useRequest";
+import { loadReturnReview } from "../utils/returnReview";
 import { canRecoverRefund, type RefundAttempt } from "../utils/refundWorkflow";
 import { RefundConfirmation } from "./RefundConfirmation";
 import { RefundRecords } from "./RefundOutcome";
@@ -15,13 +16,15 @@ export function RefundRecovery({ storeId, attempt, onExecute, onFinish }: { stor
   const { t } = useTranslation(["refunds", "orders", "returnReview"]);
   const [confirming, setConfirming] = useState(false);
   const [state, reload] = useRequest(`refund-recovery:${storeId}:${attempt.key}`, async (signal) => {
+    if (attempt.returnId !== null) {
+      const review = await loadReturnReview(storeId, attempt.returnId, signal);
+      if (review.order.number !== attempt.orderNumber || review.order.currency !== attempt.currency || review.record.number !== attempt.returnNumber)
+        throw new HttpError("invalid-response", 200);
+      return { ...review, records: [review.record] };
+    }
     const order = await api.order(storeId, attempt.orderNumber, signal);
     if (order.number !== attempt.orderNumber || order.currency !== attempt.currency) throw new HttpError("invalid-response", 200);
-    const record = attempt.returnId === null ? null : (await api.returns(storeId, signal)).find((item) => item.id === attempt.returnId) ?? null;
-    const summary = attempt.returnId === null ? null : order.returns.find((item) => item.id === attempt.returnId) ?? null;
-    if (attempt.returnId !== null && (!summary || summary.number !== attempt.returnNumber || (record && (record.orderNumber !== order.number || record.number !== summary.number)))) throw new HttpError("invalid-response", 200);
-    const records = summary ? [summary] : order.returns.filter((item) => !attempt.previousReturnIds.includes(item.id));
-    return { order, record, records };
+    return { order, record: null, records: order.returns.filter(item => !attempt.previousReturnIds.includes(item.id)) };
   });
   const ready = state.status === "ready" ? state : null;
   const fresh = ready !== null && !ready.refreshing && ready.refreshError === null;

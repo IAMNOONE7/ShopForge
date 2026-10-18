@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams, useSearchParams } from "react-router";
 import { useSelectedStore } from "../adminContext";
-import { api, type AdminOrderDetail, type AdminOrderReturn, type OrderReturn } from "../api";
+import { api } from "../api";
 import { HttpError, isHttpError } from "../api/http";
 import type { ReturnDecision } from "../api/returns";
 import { ReturnDecisionPanel } from "../components/ReturnDecisionPanel";
@@ -22,6 +22,7 @@ import { useRefundAction } from "../useRefundAction";
 import { refundProblem } from "../utils/refundWorkflow";
 import { formatDateTime, formatNumber } from "../utils/format";
 import { canDecideReturn } from "../utils/returnDecision";
+import { loadReturnReview } from "../utils/returnReview";
 import { refundStatuses, returnLimit, returnParameters, returnQuery, returnReviewPath, returnStatuses, type ReturnQuery } from "../utils/returnQuery";
 
 export function StoreReturnsPage() {
@@ -74,25 +75,15 @@ function ReturnList({ storeId }: { storeId: string }) {
   </div>;
 }
 
-type ReturnReview = { record: OrderReturn | null; order: AdminOrderDetail | null; summary: AdminOrderReturn | null };
+type ReturnReview = Awaited<ReturnType<typeof loadReturnReview>>;
 export function StoreReturnPage() {
-  const { store } = useSelectedStore(); const { user } = useSession(); const { returnId = "" } = useParams(); const [parameters] = useSearchParams();
-  const orderHint = parameters.get("order") ?? "";
-  return <ReturnWorkspace key={`${user.id}:${store.id}:${returnId}:${orderHint}`} storeId={store.id} userId={user.id} id={returnId} orderHint={orderHint} canManage={canManageStore(user.role)} />;
+  const { store } = useSelectedStore(); const { user } = useSession(); const { returnId = "" } = useParams();
+  return <ReturnWorkspace key={`${user.id}:${user.role}:${store.id}:${returnId}`} storeId={store.id} userId={user.id} id={returnId} canManage={canManageStore(user.role)} />;
 }
-function ReturnWorkspace({ storeId, userId, id, orderHint, canManage }: { storeId: string; userId: string; id: string; orderHint: string; canManage: boolean }) {
+function ReturnWorkspace({ storeId, userId, id, canManage }: { storeId: string; userId: string; id: string; canManage: boolean }) {
   const { t } = useTranslation(["returnReview", "returns", "orders", "refunds"]);
   const [parameters] = useSearchParams(); const query = returnParameters(returnQuery(parameters));
-  const [state, reload] = useRequest(`return:${storeId}:${id}:${orderHint}`, async (signal): Promise<ReturnReview> => {
-    const records = await api.returns(storeId, signal);
-    const record = records.find((item) => item.id === id) ?? null;
-    const number = record?.orderNumber ?? orderHint;
-    if (!number) return { record, order: null, summary: null };
-    const order = await api.order(storeId, number, signal);
-    const summary = order.returns.find((item) => item.id === id) ?? null;
-    if (order.number !== number || (record && (!summary || summary.number !== record.number))) throw new HttpError("invalid-response", 200);
-    return { record, order, summary };
-  });
+  const [state, reload] = useRequest(`return:${storeId}:${id}`, (signal) => loadReturnReview(storeId, id, signal));
   const [error, run, pending] = useAction(() => undefined, { manageControls: false });
   const [stale, setStale] = useState<ReturnReview | null>(null);
   const [success, setSuccess] = useState<ReturnDecision | null>(null);
@@ -113,7 +104,7 @@ function ReturnWorkspace({ storeId, userId, id, orderHint, canManage }: { storeI
     money.clearOutcome();
     await run(async () => {
       try {
-        const changed = await api.decideReturn(storeId, id, decision);
+        const changed = await api.decideReturn(storeId, record.id, decision);
         if (changed.number !== record.number || changed.orderNumber !== record.orderNumber) throw new HttpError("invalid-response", 200);
         if (mounted.current) { setSuccess(decision); setDecisionRevision((version) => version + 1); }
       } finally {
@@ -123,7 +114,7 @@ function ReturnWorkspace({ storeId, userId, id, orderHint, canManage }: { storeI
   }
   return <div className="orders-page returns-page">
     <Link className="physical-back-link" to={`/stores/${encodeURIComponent(storeId)}/returns${query.size ? `?${query}` : ""}`}>{t("backToReturns")}</Link>
-    <div className="order-page-heading"><h1>{record?.number ?? ready?.data.summary?.number ?? t("detailTitle")}</h1>
+    <div className="order-page-heading"><h1>{record?.number ?? t("detailTitle")}</h1>
       <Button type="button" variant="secondary" disabled={pending || state.status === "loading" || ready?.refreshing} onClick={reload}>{t("orders:refresh")}</Button></div>
     {state.status === "loading" && <LoadingState label={t("loadingDetail")} lines={4} />}
     {(state.status === "error" || state.status === "not-found") && <RequestError error={state.error} operation="read" onRetry={reload} />}
@@ -141,9 +132,8 @@ function ReturnWorkspace({ storeId, userId, id, orderHint, canManage }: { storeI
       {ready.refreshing && <p role="status">{t("orders:refreshingDetail")}</p>}
       {ready.refreshError !== null && <RequestError error={ready.refreshError} operation="read" onRetry={reload} />}
       {readStale && !pending && <p role="status" className="hint">{t("staleDetail")}</p>}
-      {ready.data.order && <Link to={`/stores/${encodeURIComponent(storeId)}/orders/${encodeURIComponent(ready.data.order.number)}${ready.data.summary ? `#order-return-${encodeURIComponent(id)}` : ""}`}>{t("orderLink", { number: ready.data.order.number })}</Link>}
-      {!record && <EmptyState headingLevel={2} title={t("outsideTitle")}><p>{t(ready.data.summary ? "summaryOnly" : "outsideHint")}</p></EmptyState>}
-      {ready.data.summary && ready.data.order && <ReturnReviewFacts record={record ?? null} summary={ready.data.summary} order={ready.data.order} />}
+      <Link to={`/stores/${encodeURIComponent(storeId)}/orders/${encodeURIComponent(ready.data.order.number)}#order-return-${encodeURIComponent(ready.data.record.id)}`}>{t("orderLink", { number: ready.data.order.number })}</Link>
+      <ReturnReviewFacts record={ready.data.record} order={ready.data.order} />
       {record && canManage && <ReturnDecisionPanel key={`${id}:${decisionRevision}`} record={record} snapshot={ready.data} disabled={disabled} pending={pending} onDecide={decide} />}
       {record && ready.data.order && canManage && (!money.attempt || pending) && <RefundActions key={`money:${money.revision}`} target="return" order={ready.data.order} record={record} snapshot={ready.data}
         disabled={disabled} pending={pending} noteError={noteError} onExecute={async (attempt) => { setSuccess(null); await money.execute(attempt); }} />}

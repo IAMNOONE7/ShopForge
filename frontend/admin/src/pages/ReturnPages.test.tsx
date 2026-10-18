@@ -28,6 +28,11 @@ beforeAll(initializeI18n);
 beforeEach(async () => {
   records = [structuredClone(returnRecord)]; await i18n.changeLanguage("en");
   vi.spyOn(api, "returns").mockImplementation(async (_store, _signal, query) => records.filter((item) => (!query?.status || item.status === query.status) && (!query?.refund || item.refund === query.refund)));
+  vi.spyOn(api, "returnDetail").mockImplementation(async (_store, id) => {
+    const record = records.find(item => item.id === id);
+    if (!record) throw new HttpError("http", 404);
+    return record;
+  });
   vi.spyOn(api, "order").mockImplementation(async () => returnOrder(records));
   vi.spyOn(api, "decideReturn").mockImplementation(async (_store, id, decision) => {
     const item = records.find((record) => record.id === id)!; const changed = { ...item, status: decision === "accept" ? "Accepted" : "Refused" };
@@ -83,15 +88,67 @@ describe("focused return collection", () => {
 });
 
 describe("focused return review", () => {
-  it("resolves an ID using the unfiltered collection and saved order, with exact duplicate-name lines and original currency", async () => {
+  it("loads an ID directly without reading the bounded collection and saved order, with exact duplicate-name lines and original currency", async () => {
     records = [{ ...returnRecord, status: "Received", refundedAmount: 90, refund: "ClosedByHand", refundNote: "Checked the provider.\nPaid externally." }];
     route(`${detailPath}&status=Requested&refund=Failed`); await screen.findByText("€90.00");
-    expect(api.returns).toHaveBeenCalledWith("store-a", expect.any(AbortSignal)); expect(api.order).toHaveBeenCalledWith("store-a", returnRecord.orderNumber, expect.any(AbortSignal));
+    expect(api.returns).not.toHaveBeenCalled(); expect(api.returnDetail).toHaveBeenCalledWith("store-a", returnRecord.id, expect.any(AbortSignal)); expect(api.order).toHaveBeenCalledWith("store-a", returnRecord.orderNumber, expect.any(AbortSignal));
     expect(screen.getAllByText("Saved product name")).toHaveLength(2); expect(screen.getByText("Quantity: 2")).toBeTruthy(); expect(screen.getByText("Quantity: 1")).toBeTruthy();
     expect(screen.getByText(/The size did not fit/).textContent).toBe(returnRecord.reason); expect(screen.getByText(/Manual refund note: Checked the provider/)).toBeTruthy();
     expect(screen.getByRole("link", { name: "Back to returns" }).getAttribute("href")).toBe("/stores/store-a/returns?status=Requested&refund=Failed");
     expect(screen.queryByRole("button", { name: "Mark as received" })).toBeNull();
   });
+  it.each(["Refunded", "ClosedByHand"])("shows only recorded lifecycle dates and exact saved identities for %s", async refund => {
+    const decidedAt = "2026-10-13T09:00:00Z", receivedAt = "2026-10-14T10:00:00Z", refundSettledAt = "2026-10-15T11:00:00Z";
+    records = [{ ...returnRecord, status: "Received", refund, decidedAt, receivedAt, refundSettledAt }];
+    route(detailPath); await screen.findByRole("heading", { name: "Goods and money" });
+    for (const date of [returnRecord.requestedAt, decidedAt, receivedAt, refundSettledAt])
+      expect(document.querySelector(`time[datetime="${date}"]`)).toBeTruthy();
+    expect(screen.getByText(refund === "ClosedByHand" ? "Manual resolution recorded" : "Refund settlement recorded")).toBeTruthy();
+    const lines = document.querySelectorAll(".return-lines li"); expect(lines).toHaveLength(2);
+    for (let index = 0; index < 2; index++) {
+      expect(within(lines[index] as HTMLElement).getByText(returnRecord.lines[index].storeProductId)).toBeTruthy();
+      expect(within(lines[index] as HTMLElement).getByText(returnRecord.lines[index].variantId)).toBeTruthy();
+    }
+    expect(api.returns).not.toHaveBeenCalled();
+  });
+  it.each([null, "Pending", "Failed", "ByStore", "Future"])("does not invent a settlement date for %s", async refund => {
+    records = [{ ...returnRecord, status: "Received", refund }];
+    route(detailPath); await screen.findByRole("heading", { name: "Goods and money" });
+    expect(document.querySelectorAll("time")).toHaveLength(1);
+    expect(screen.queryByText("Refund settlement recorded")).toBeNull(); expect(screen.queryByText("Manual resolution recorded")).toBeNull();
+  });
+  it("keeps unrecorded decision/receipt dates explicit rather than borrowing the request time", async () => {
+    route(detailPath); await screen.findByRole("heading", { name: "Goods and money" });
+    const facts = document.querySelector("#return-state-title")!.closest("section")!;
+    expect(within(facts).getAllByText("Not recorded").length).toBeGreaterThanOrEqual(2);
+    expect(facts.querySelectorAll("time")).toHaveLength(1);
+  });
+  it.each(["status", "refund", "refundedAmount"])("blocks a return/order race in %s before showing decision controls", async field => {
+    const summary = { ...returnOrder().returns[0], [field]: field === "status" ? "Received" : field === "refund" ? "Pending" : 20 };
+    vi.mocked(api.order).mockResolvedValue({ ...returnOrder(), returns: [summary] });
+    route(detailPath); await screen.findByRole("button", { name: "Try again" });
+    expect(screen.queryByRole("button", { name: "Accept" })).toBeNull(); expect(screen.queryByRole("heading", { name: "Goods and money" })).toBeNull();
+    expect(api.decideReturn).not.toHaveBeenCalled();
+  });
+  it("ignores a departed store's late direct detail and does not read its hinted order", async () => {
+    const old = deferred<OrderReturn>(); vi.mocked(api.returnDetail).mockReturnValueOnce(old.promise).mockRejectedValueOnce(new HttpError("http", 404));
+    route(detailPath); const user = userEvent.setup(); await waitFor(() => expect(api.returnDetail).toHaveBeenCalledTimes(1));
+    const signal = vi.mocked(api.returnDetail).mock.calls[0][2]!;
+    await user.click(screen.getByRole("link", { name: "Switch store" })); await screen.findByRole("button", { name: "Try again" });
+    expect(signal.aborted).toBe(true);
+    await act(async () => old.resolve(returnRecord));
+    expect(api.order).not.toHaveBeenCalled(); expect(screen.queryByText("Saved product name")).toBeNull();
+  });
+  it("keeps the current facts visible but actions disabled after a failed direct refresh", async () => {
+    route(detailPath); const user = userEvent.setup(); await screen.findByRole("button", { name: "Accept" });
+    vi.mocked(api.returnDetail).mockRejectedValueOnce(new HttpError("http", 503));
+    await user.click(screen.getByRole("button", { name: "Refresh" })); await screen.findByRole("button", { name: "Try again" });
+    expect(screen.getByRole("button", { name: "Accept" })).toHaveProperty("disabled", true);
+    expect(screen.getAllByText(returnRecord.lines[0].storeProductId)).toHaveLength(2);
+    await user.click(screen.getByRole("button", { name: "Try again" })); await waitFor(() => expect(screen.getByRole("button", { name: "Accept" })).toHaveProperty("disabled", false));
+    expect(api.returns).not.toHaveBeenCalled(); expect(api.decideReturn).not.toHaveBeenCalled();
+  });
+
   it.each([null, "Pending", "Refunded", "Failed", "ByStore", "ClosedByHand", "FutureMoney"])("keeps received/credited goods separate from refund %s", async (refund) => {
     records = [{ ...returnRecord, status: "Received", refundedAmount: 50, refund, refundProblem: refund === "Failed" ? "Provider refused" : null }];
     route(detailPath); await screen.findByText("€50.00"); expect(screen.getByText(/Receipt of goods and the credit have been recorded/)).toBeTruthy();
@@ -100,20 +157,27 @@ describe("focused return review", () => {
   it("ignores a wrong order hint when the full record provides its real order", async () => {
     route(`/stores/store-a/returns/${returnRecord.id}?order=WRONG`); await screen.findByText("€0.00"); expect(api.order).toHaveBeenCalledWith("store-a", returnRecord.orderNumber, expect.any(AbortSignal));
   });
-  it("shows an older summary from its known order without fabricating full lines, notes or decision eligibility", async () => {
-    vi.mocked(api.returns).mockResolvedValue([]); vi.mocked(api.order).mockResolvedValue(returnOrder([{ ...returnRecord, refundedAmount: 12, refund: "Failed" }]));
-    route(detailPath); await screen.findByText("€12.00"); await screen.findByText(/full record is outside the available collection/);
-    expect(screen.queryByRole("heading", { name: "Items in this return" })).toBeNull(); expect(screen.queryByRole("button", { name: "Accept" })).toBeNull();
-    expect(api.returns).toHaveBeenCalledTimes(1); expect(api.order).toHaveBeenCalledTimes(1);
+  it("loads a complete older return even when it is absent from the latest-200 collection", async () => {
+    vi.mocked(api.returns).mockResolvedValue([]);
+    records = [{ ...returnRecord, status: "Received", refundedAmount: 12, refund: "Failed" }];
+    route(`/stores/store-a/returns/${returnRecord.id}`); await screen.findByText("€12.00");
+    expect(screen.getByRole("heading", { name: "Items in this return" })).toBeTruthy();
+    expect(screen.getAllByText("Saved product name")).toHaveLength(2);
+    expect(api.returnDetail).toHaveBeenCalledExactlyOnceWith("store-a", returnRecord.id, expect.any(AbortSignal));
+    expect(api.returns).not.toHaveBeenCalled(); expect(api.order).toHaveBeenCalledTimes(1);
   });
-  it("honestly describes a missing ID without guessing another endpoint or calling it deleted", async () => {
-    route("/stores/store-a/returns/unknown"); await screen.findByRole("heading", { name: "Return outside the available collection" });
-    expect(api.order).not.toHaveBeenCalled(); expect(screen.queryByRole("button", { name: "Accept" })).toBeNull();
+  it.each(["", "?order=WRONG"])("shows a scoped missing return without reading an order hint %s", async suffix => {
+    route(`/stores/store-a/returns/unknown${suffix}`); await screen.findByRole("button", { name: "Try again" });
+    expect(api.returnDetail).toHaveBeenCalledWith("store-a", "unknown", expect.any(AbortSignal));
+    expect(api.order).not.toHaveBeenCalled(); expect(api.returns).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Accept" })).toBeNull();
+    expect(screen.queryByRole("link", { name: /^Order / })).toBeNull();
   });
-  it("does not create a nonexistent order anchor when the known order has no such return", async () => {
-    vi.mocked(api.returns).mockResolvedValue([]); vi.mocked(api.order).mockResolvedValue(returnOrder([])); route(detailPath);
-    await screen.findByRole("heading", { name: "Return outside the available collection" });
-    expect(screen.getByRole("link", { name: `Order ${returnRecord.orderNumber}` }).getAttribute("href")).toBe(`/stores/store-a/orders/${returnRecord.orderNumber}`);
+  it("blocks a direct record whose original order contains no such return", async () => {
+    vi.mocked(api.order).mockResolvedValue(returnOrder([])); route(detailPath);
+    await screen.findByRole("button", { name: "Try again" });
+    expect(screen.queryByRole("link", { name: `Order ${returnRecord.orderNumber}` })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Accept" })).toBeNull();
   });
   it("blocks review when the full record and order summary do not identify the same return", async () => {
     vi.mocked(api.order).mockResolvedValue({ ...returnOrder(), returns: [{ ...returnOrder().returns[0], number: "OTHER" }] }); route(detailPath);
@@ -156,13 +220,13 @@ describe("focused return review", () => {
   });
   it("retains an uncertain draft and blocks decisions through failed read recovery", async () => {
     vi.mocked(api.decideReturn).mockRejectedValueOnce(new HttpError("network", null)); route(detailPath); const user = await open("refuse");
-    vi.mocked(api.returns).mockRejectedValueOnce(new HttpError("http", 503)); await user.click(screen.getByRole("button", { name: "Confirm refusal" }));
+    vi.mocked(api.returnDetail).mockRejectedValueOnce(new HttpError("http", 503)); await user.click(screen.getByRole("button", { name: "Confirm refusal" }));
     await screen.findByRole("button", { name: "Try again" }); expect(screen.getByRole("button", { name: "Confirm refusal" })).toHaveProperty("disabled", true);
     await user.click(screen.getByRole("button", { name: "Try again" })); await screen.findByRole("button", { name: "Review current record" }); expect(api.decideReturn).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("group", { name: "Refuse RET-1?" })).toBeTruthy();
   });
   it("blocks new decisions after accepted-write→failed-read and retries only the read", async () => {
-    route(detailPath); const user = await open("accept"); vi.mocked(api.returns).mockRejectedValueOnce(new HttpError("http", 503));
+    route(detailPath); const user = await open("accept"); vi.mocked(api.returnDetail).mockRejectedValueOnce(new HttpError("http", 503));
     await user.click(screen.getByRole("button", { name: "Confirm acceptance" })); await screen.findByRole("button", { name: "Try again" }); expect(screen.getByRole("button", { name: "Refuse" })).toHaveProperty("disabled", true);
     await user.click(screen.getByRole("button", { name: "Try again" })); await waitFor(() => expect(screen.getByRole("button", { name: "Refuse" })).toHaveProperty("disabled", false)); expect(api.decideReturn).toHaveBeenCalledTimes(1);
   });
@@ -182,7 +246,7 @@ describe("focused return review", () => {
   it("ignores a departed store's pending decision result", async () => {
     const old = deferred<OrderReturn>(); vi.mocked(api.decideReturn).mockReturnValueOnce(old.promise); route(detailPath); const user = await open("accept");
     await user.click(screen.getByRole("button", { name: "Confirm acceptance" })); await user.click(screen.getByRole("link", { name: "Switch store" })); await screen.findByText("€0.00");
-    await act(async () => old.resolve({ ...returnRecord, status: "Accepted" })); expect(api.returns).toHaveBeenCalledTimes(2); expect(screen.queryByText(/The return was accepted/)).toBeNull();
+    await act(async () => old.resolve({ ...returnRecord, status: "Accepted" })); expect(api.returnDetail).toHaveBeenCalledTimes(2); expect(screen.queryByText(/The return was accepted/)).toBeNull();
   });
   it("provides the actual direct application route and Czech controls without the old workbench", async () => {
     await i18n.changeLanguage("cs"); vi.spyOn(api, "me").mockResolvedValue({ id: "owner", email: "owner@example.test", role: "Support", tenantId: "tenant" }); vi.spyOn(api, "stores").mockResolvedValue([store]);
