@@ -103,24 +103,52 @@ The API exposes `/health/live` and `/health/ready`.
 
 ## Deployment
 
-`infra/` describes the whole Azure environment in Bicep: Log Analytics and Application Insights, the app's managed identity and its roles, Key Vault, Storage (product media), PostgreSQL Flexible Server, the Container Apps environment with the app and its migration job, and Front Door with its route, caching rule, WAF policy and the admin's own domain. `tests/ShopForge.DeploymentTests` compiles and lints the templates on every build, with the Bicep compiler as a package.
+`infra/` describes the whole Azure environment in Bicep: Log Analytics and Application Insights, the app's managed identity and its roles, Key Vault, Storage (product media), PostgreSQL Flexible Server, the Container Apps environment with the app and its migration job, and Front Door with its route, caching rule, WAF policy and the admin's own domain. The vaults, the database and Front Door send their logs to the environment's workspace.
+
+Each environment is `infra/main.bicep` with its own parameter file in `infra/environments/`. The file holds only the environment's name and sizes. Host names, mail, the image and every secret come from the GitHub environment of the same name when a release runs. `infra/bootstrap.bicep` creates what the environments share: the container registry, and the identity the `Deploy` workflow signs in as. `tests/ShopForge.DeploymentTests` compiles and lints all of it on every build, with the Bicep compiler as a package.
 
 The GitHub Actions `Deploy` workflow runs a release in this order:
 
 1. `scripts/release-inputs.sh` checks every input by name, and refuses a release that would send no mail.
 2. The image, which builds and carries both frontends, is built, stamped with its commit, and pushed.
-3. `scripts/provision.sh without-app` deploys everything the app needs, including the migration job on the new image. The serving app is left alone.
-4. `scripts/migrate.sh` runs that job: the release's own image, run with `migrate`, applies its migrations from inside the environment.
-5. `scripts/provision.sh with-app` puts the image on the app.
-6. `scripts/smoke.sh --api` checks the API, including that the answering build is the release's own (`/health/version`).
-7. `scripts/smoke.sh --site` checks what a shopper and a merchant open, and that the app refuses a request that went around Front Door.
+3. `scripts/provision.sh <environment> without-app` deploys everything the app needs, including the migration job on the new image. The serving app is left alone.
+4. `scripts/migrate.sh <environment>` runs that job: the release's own image, run with `migrate`, applies its migrations from inside the environment.
+5. `scripts/provision.sh <environment> with-app` puts the image on the app.
+6. `scripts/release-smoke.sh <environment> <commit> api` checks the API through Front Door, including that the answering build is the release's own (`/health/version`).
+7. `scripts/release-smoke.sh <environment> <commit> site` checks what a shopper and a merchant open, and that the app refuses a request that went around Front Door.
+
+Every address the smoke tests use comes from the release's own deployment, so a new environment is checked before it has a domain or a shop.
+
+### Creating an environment
+
+1. Once per subscription, somebody allowed to assign roles deploys the bootstrap:
+
+   ```bash
+   az deployment sub create --name shopforge-bootstrap --location westeurope \
+     --template-file infra/bootstrap.bicep \
+     --parameters registryName=<registry name> repository=<owner>/<repository>
+   ```
+
+   The identity it creates signs in from this repository's `staging` and `production` GitHub environments only, with no secret. It can manage resources, and it can grant only the three roles a release grants its app: AcrPull and the two Key Vault secrets roles.
+
+2. Create the GitHub environment (`staging` or `production`). Limit its deployment branches to `main`, and give production a required reviewer: a job in that environment is what the deployer trusts.
+   - **Secrets:** `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` and `AZURE_SUBSCRIPTION_ID` from the bootstrap's outputs; `DATABASE_PASSWORD`, `MAILGUN_API_KEY` and `MAILGUN_WEBHOOK_SIGNING_KEY`; and `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` if the deployment takes cards through Stripe.
+   - **Variables:** `LOCATION`, plus `REGISTRY_NAME`, `REGISTRY_SERVER` and `REGISTRY_RESOURCE_GROUP` from the bootstrap's outputs; `STORE_HOST_SUFFIX`; `EMAIL_PROVIDER` (`mailgun`), `EMAIL_SENDER_ADDRESS` and `MAILGUN_DOMAIN`; and `FIRST_OPERATOR_EMAIL`, the person who will run the platform.
+
+3. Run `Deploy` for that environment. The admin is served on Front Door's own host name (the deployment's `publicHostName` output), at `/admin/`, and the smoke tests check everything there.
+
+4. The release's migration job has invited `FIRST_OPERATOR_EMAIL`, and the invitation arrives by mail. Until the admin has a page for it, accept it with the token from the link and a password of your own: `POST https://<publicHostName>/api/platform/invitations/accept` with `{ "token": "…", "password": "…" }`. Until somebody accepts, every release sends a fresh invitation in place of the last, and so does starting the migration job again: `az containerapp job start --name <migrationJob> --resource-group <resourceGroup>`, both deployment outputs. Once the platform has an operator, the variable does nothing; operators invite each other.
+
+5. To give the admin its own domain, set `ADMIN_HOST` and run `Deploy`. Then add a CNAME from the admin host to the `publicHostName` output, and a TXT record at `_dnsauth.<admin host>` holding the `adminValidationToken` output. Front Door validates the domain and issues its certificate. The admin stays on Front Door's own host name too, so nothing waits for the records.
+
+6. Once a store is published, set `SMOKE_STORE_HOST` to its host, and the smoke tests check it too.
 
 A few things are worth knowing:
 
 - The application migrates the database only in Development. A build whose database lacks any of its migrations is not ready: it answers every request except `/health/*` with a 503, and does no background work until the migrations are in.
 - Outside Development and the test environments, the application refuses to start if its mail would only be logged.
 - Secrets (database, storage, Mailgun, Stripe, Application Insights) live in Key Vault, read by the app's own managed identity; the app is given only the vault's URI.
-- The app serves both built frontends: the storefront's page for every storefront route, and the admin's under `/admin`, on the platform's admin host only. Each page has its own content security policy. Hashed assets are cached for a year, pages not at all, and nothing under `/api` turns into a page. `robots.txt` and the sitemap answer at each shop's root.
+- The app serves both built frontends: the storefront's page for every storefront route, and the admin's under `/admin`, on the platform's own hosts only: the admin's domain and Front Door's own host name. Each page has its own content security policy. Hashed assets are cached for a year, pages not at all, and nothing under `/api` turns into a page. `robots.txt` and the sitemap answer at each shop's root.
 - Outside development the app answers only Front Door: a request without the configured profile's `X-Azure-FDID` is refused, health probes apart. The original host arrives as a forwarded header, trusted only on a request that carries the profile id.
 - The template owns only the platform's own route, security policy and domains. Merchants' domains belong to a route and a security policy of their own, which a redeploy never touches.
 
@@ -192,10 +220,17 @@ tests/
   ShopForge.ArchitectureTests module dependency rules
   ShopForge.TestRig           stand-ins for Comgate and Mailgun, runs and read-only readings for the end-to-end stack
   ShopForge.EndToEndTests     the harness checked against a running end-to-end stack
+  ShopForge.DeploymentTests   the templates compiled and linted, the release's scripts run against stand-ins
   e2e/                        the end-to-end stack's compose file and script
+  release/                    a release rehearsed on this machine, across a real migration
 frontend/
   storefront                  customer-facing store
   admin                       store administration
+infra/
+  bootstrap.bicep             what every environment shares: the registry and the identity releases deploy as
+  main.bicep, modules/        one environment
+  environments/               staging and production, a name and sizes each
+scripts/                      a release's steps and its smoke tests
 ```
 
 ## Status

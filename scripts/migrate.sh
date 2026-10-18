@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
 # Runs a release's migration job and waits for it to end: the schema is migrated by the release's own image, inside
-# its environment, before the app is told to run that image (D-205).
+# its environment, before the app is told to run that image (D-205). While the platform has nobody, the same job invites
+# the first operator the environment names (D-208).
 #
-#   scripts/migrate.sh <resource-group> <job>
+#   scripts/migrate.sh <environment>
 #
+# The job and its resource group are what the release's first deployment says they are (D-208).
 # On a first deployment the job can start before the roles it was just granted have reached the vault, and fail to
 # read its settings; so a failed run is tried again, twice, a minute apart. A migration that fails three times fails
 # the release, and the app is never touched.
 set -euo pipefail
 
-group=${1:?"usage: migrate.sh <resource-group> <job>"}
-job=${2:?"usage: migrate.sh <resource-group> <job>"}
+environment=${1:?"usage: migrate.sh <environment>"}
+outputs=$(az deployment sub show --name "shopforge-$environment-without-app" --query properties.outputs --output json)
+group=$(jq -r .resourceGroup.value <<<"$outputs")
+job=$(jq -r .migrationJob.value <<<"$outputs")
 attempts=3
 pause=${MIGRATION_RETRY_PAUSE_SECONDS:-60}
 poll=${MIGRATION_POLL_SECONDS:-10}
@@ -47,5 +51,5 @@ for attempt in $(seq 1 "$attempts"); do
   fi
 done
 
-echo "The schema could not be migrated, so the app was left on the image it was serving."
+echo "The migration job failed, so the app was left on the image it was serving."
 exit 1

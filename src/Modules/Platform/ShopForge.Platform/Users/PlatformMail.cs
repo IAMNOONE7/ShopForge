@@ -14,7 +14,9 @@ internal sealed class PlatformMail(DbContext dbContext, IEmailSender emailSender
 
     private static readonly TimeSpan ResetLifetime = TimeSpan.FromHours(1);
 
-    public async Task<PlatformInvitation> InviteAsync(string email, string invitedBy, DateTimeOffset now, CancellationToken cancellationToken)
+    // A link points at the host of the request that caused it, or, with no request at all, at the origin given.
+    public async Task<PlatformInvitation> InviteAsync(
+        string email, string invitedBy, DateTimeOffset now, CancellationToken cancellationToken, Uri? origin = null)
     {
         var outstanding = await dbContext.Set<PlatformInvitation>()
             .Where(invitation => invitation.Email == email && invitation.AcceptedAt == null)
@@ -30,7 +32,7 @@ internal sealed class PlatformMail(DbContext dbContext, IEmailSender emailSender
             new EmailMessage(
                 email,
                 "You have been invited to run ShopForge",
-                $"{invitedBy} invited you to administer ShopForge itself. Choose a password to accept: {Link("platform/invitations/accept", value)}. "
+                $"{invitedBy} invited you to administer ShopForge itself. Choose a password to accept: {Link("platform/invitations/accept", value, origin)}. "
                 + $"The invitation expires in {InvitationLifetime.Days} days."),
             cancellationToken);
 
@@ -61,10 +63,12 @@ internal sealed class PlatformMail(DbContext dbContext, IEmailSender emailSender
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private string Link(string path, string token)
+    private string Link(string path, string token, Uri? origin = null)
     {
-        var request = httpContextAccessor.HttpContext!.Request;
+        var root = origin is null
+            ? $"{httpContextAccessor.HttpContext!.Request.Scheme}://{httpContextAccessor.HttpContext.Request.Host}"
+            : origin.GetLeftPart(UriPartial.Authority);
 
-        return $"{request.Scheme}://{request.Host}/{path}?token={Uri.EscapeDataString(token)}";
+        return $"{root}/{path}?token={Uri.EscapeDataString(token)}";
     }
 }

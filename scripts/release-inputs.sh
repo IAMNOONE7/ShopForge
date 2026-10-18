@@ -5,9 +5,8 @@
 set -euo pipefail
 
 required=(
-  NAME_PREFIX LOCATION REGISTRY_NAME REGISTRY_SERVER REGISTRY_RESOURCE_GROUP STORE_HOST_SUFFIX
-  API_BASE_URL SITE_URL ADMIN_URL SMOKE_STORE_HOST DATABASE_PASSWORD EMAIL_PROVIDER EMAIL_SENDER_ADDRESS
-  MAILGUN_DOMAIN MAILGUN_API_KEY MAILGUN_WEBHOOK_SIGNING_KEY
+  ENVIRONMENT LOCATION REGISTRY_NAME REGISTRY_SERVER REGISTRY_RESOURCE_GROUP STORE_HOST_SUFFIX DATABASE_PASSWORD
+  EMAIL_PROVIDER EMAIL_SENDER_ADDRESS MAILGUN_DOMAIN MAILGUN_API_KEY MAILGUN_WEBHOOK_SIGNING_KEY
 )
 missing=()
 
@@ -19,6 +18,12 @@ done
 
 if [ "${#missing[@]}" -gt 0 ]; then
   echo "The release is missing: ${missing[*]}."
+  exit 1
+fi
+
+# An environment is a parameter file of its own (D-208).
+if [ ! -f "infra/environments/$ENVIRONMENT.bicepparam" ]; then
+  echo "There is no environment called '$ENVIRONMENT': infra/environments/$ENVIRONMENT.bicepparam does not exist."
   exit 1
 fi
 

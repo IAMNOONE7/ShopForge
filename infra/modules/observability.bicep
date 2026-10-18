@@ -21,4 +21,5 @@ resource insights 'Microsoft.Insights/components@2020-02-02' = {
 }
 
 output workspaceName string = workspace.name
+output workspaceId string = workspace.id
 output insightsName string = insights.name

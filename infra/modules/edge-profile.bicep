@@ -1,4 +1,6 @@
 param namePrefix string
+@description('Where the edge\'s access, health-probe and firewall logs go (D-208).')
+param workspaceId string
 @description('The platform\'s own host for the admin, e.g. admin.example.cz. Empty serves the admin on the endpoint\'s own host name (D-206).')
 param adminHost string = ''
 
@@ -7,6 +9,20 @@ resource profile 'Microsoft.Cdn/profiles@2024-02-01' = {
   location: 'global'
   sku: {
     name: 'Standard_AzureFrontDoor'
+  }
+}
+
+resource edgeLogs 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  scope: profile
+  name: 'logs'
+  properties: {
+    workspaceId: workspaceId
+    logs: [
+      {
+        categoryGroup: 'allLogs'
+        enabled: true
+      }
+    ]
   }
 }
 

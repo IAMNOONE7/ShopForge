@@ -17,6 +17,8 @@ param stripeWebhookSecret string
 param mailgunApiKey string
 @secure()
 param mailgunWebhookSigningKey string
+@description('Where each vault\'s audit log goes: who read or changed which secret (D-208).')
+param workspaceId string
 
 resource storage 'Microsoft.Storage/storageAccounts@2024-01-01' existing = {
   name: storageAccountName
@@ -38,6 +40,20 @@ resource vault 'Microsoft.KeyVault/vaults@2024-11-01' = {
     enableRbacAuthorization: true
     enableSoftDelete: true
     softDeleteRetentionInDays: 30
+  }
+}
+
+resource vaultAudit 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  scope: vault
+  name: 'audit'
+  properties: {
+    workspaceId: workspaceId
+    logs: [
+      {
+        categoryGroup: 'audit'
+        enabled: true
+      }
+    ]
   }
 }
 
@@ -131,6 +147,20 @@ resource providerVault 'Microsoft.KeyVault/vaults@2024-11-01' = {
     softDeleteRetentionInDays: 90
     enablePurgeProtection: true
     publicNetworkAccess: 'Enabled'
+  }
+}
+
+resource providerVaultAudit 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  scope: providerVault
+  name: 'audit'
+  properties: {
+    workspaceId: workspaceId
+    logs: [
+      {
+        categoryGroup: 'audit'
+        enabled: true
+      }
+    ]
   }
 }
 

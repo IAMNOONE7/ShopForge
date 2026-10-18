@@ -10,6 +10,7 @@ namespace ShopForge.IntegrationTests.Frontends;
 public sealed class FrontendHostingTests : IDisposable
 {
     private const string AdminHost = "admin.platform.test";
+    private const string EdgeHost = "shopforge-a1b2.z01.azurefd.test";
     private const string StorefrontPage = "<!doctype html><html><head><script type=\"module\" src=\"/assets/index-S1.js\"></script></head><body><div id=\"root\"></div></body></html>";
     private const string AdminPage = "<!doctype html><html><head><script type=\"module\" src=\"/admin/assets/index-A1.js\"></script></head><body><div id=\"root\"></div></body></html>";
 
@@ -136,6 +137,23 @@ public sealed class FrontendHostingTests : IDisposable
         Assert.Equal(AdminPage, await onThePlatform.Content.ReadAsStringAsync(CancellationToken));
         Assert.Equal(HttpStatusCode.Redirect, platformRoot.StatusCode);
         Assert.Equal("/admin/", platformRoot.Headers.Location?.OriginalString);
+    }
+
+    // The edge's own host name needs no DNS of the platform's, so the admin is there before its domain is, and stays.
+    [Fact]
+    public async Task The_admin_is_served_on_the_edge_s_own_host_too()
+    {
+        await using var platform = _serving.WithWebHostBuilder(builder => builder
+            .UseSetting("Frontends:AdminHost", AdminHost)
+            .UseSetting("Frontends:EdgeHost", EdgeHost));
+
+        using var onTheEdge = await GetAsync(platform, EdgeHost, "/admin/orders");
+        using var edgeRoot = await GetAsync(platform, EdgeHost, "/");
+        using var onAShop = await GetAsync(platform, "shop.example.test", "/admin/orders");
+
+        Assert.Equal(AdminPage, await onTheEdge.Content.ReadAsStringAsync(CancellationToken));
+        Assert.Equal("/admin/", edgeRoot.Headers.Location?.OriginalString);
+        Assert.Equal(HttpStatusCode.NotFound, onAShop.StatusCode);
     }
 
     // Development, and every host in this suite but these, have no built frontends: Vite serves them there.

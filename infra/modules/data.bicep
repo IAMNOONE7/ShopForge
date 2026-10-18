@@ -3,24 +3,44 @@ param namePrefix string
 param databaseAdministrator string
 @secure()
 param databasePassword string
+param skuName string
+param tier string
+param storageGb int
+param backupDays int
+@description('Where the server\'s logs go (D-208).')
+param workspaceId string
 
 resource postgres 'Microsoft.DBforPostgreSQL/flexibleServers@2024-08-01' = {
   name: '${namePrefix}-postgres'
   location: location
   sku: {
-    name: 'Standard_B1ms'
-    tier: 'Burstable'
+    name: skuName
+    tier: tier
   }
   properties: {
     version: '18'
     administratorLogin: databaseAdministrator
     administratorLoginPassword: databasePassword
-    storage: { storageSizeGB: 32 }
+    storage: { storageSizeGB: storageGb }
     backup: {
-      backupRetentionDays: 14
+      backupRetentionDays: backupDays
       geoRedundantBackup: 'Disabled'
     }
     highAvailability: { mode: 'Disabled' }
+  }
+}
+
+resource postgresLogs 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  scope: postgres
+  name: 'logs'
+  properties: {
+    workspaceId: workspaceId
+    logs: [
+      {
+        categoryGroup: 'allLogs'
+        enabled: true
+      }
+    ]
   }
 }
 

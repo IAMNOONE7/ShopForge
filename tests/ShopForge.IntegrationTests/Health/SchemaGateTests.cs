@@ -1,19 +1,12 @@
-using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Npgsql;
-using ShopForge.Infrastructure.Persistence;
 using ShopForge.IntegrationTests.Shipping;
-using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.IntegrationTests.Health;
 
@@ -142,93 +135,8 @@ public sealed class SchemaGateTests(ShopForgeApiFactory factory)
             configure?.Invoke(builder);
         });
 
-    private async Task<(int ExitCode, string Output)> MigrateCommandAsync(OwnDatabase database)
-    {
-        var start = new ProcessStartInfo("dotnet", [Path.Combine(AppContext.BaseDirectory, "ShopForge.Api.dll"), "migrate"])
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            WorkingDirectory = AppContext.BaseDirectory,
-        };
-        start.Environment["ASPNETCORE_ENVIRONMENT"] = "Testing";
-        start.Environment["ConnectionStrings__ShopForge"] = database.ConnectionString;
-        start.Environment["ConnectionStrings__FileStorage"] = factory.FileStorageConnectionString;
-
-        using var process = Process.Start(start)!;
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken);
-        deadline.CancelAfter(TimeSpan.FromMinutes(2));
-        var output = process.StandardOutput.ReadToEndAsync(deadline.Token);
-        var errors = process.StandardError.ReadToEndAsync(deadline.Token);
-
-        // A build that serves instead of exiting fails here rather than hanging the suite.
-        try
-        {
-            await process.WaitForExitAsync(deadline.Token);
-        }
-        catch (OperationCanceledException) when (!CancellationToken.IsCancellationRequested)
-        {
-            process.Kill(entireProcessTree: true);
-
-            return (-1, "The build did not exit within two minutes.");
-        }
-
-        return (process.ExitCode, await output + await errors);
-    }
+    private Task<(int ExitCode, string Output)> MigrateCommandAsync(OwnDatabase database) =>
+        ApiCommand.RunAsync(factory, database, ["migrate"]);
 
     private sealed record ProblemView(string Title);
-
-    // A database of this test's own on the suite's server, the model the application has pointed at it, and gone
-    // again afterwards.
-    private sealed class OwnDatabase : IAsyncDisposable
-    {
-        private readonly ShopForgeApiFactory _factory;
-        private readonly string _name;
-
-        private OwnDatabase(ShopForgeApiFactory factory, string name)
-        {
-            _factory = factory;
-            _name = name;
-            ConnectionString = new NpgsqlConnectionStringBuilder(factory.DatabaseConnectionString) { Database = name }.ConnectionString;
-            Context = new ShopForgeDbContext(
-                new DbContextOptionsBuilder<ShopForgeDbContext>().UseNpgsql(ConnectionString).UseSnakeCaseNamingConvention().Options,
-                new StoreContext(),
-                factory.Services.GetRequiredService<EntityConfigurationAssemblies>());
-            Migrations = [.. Context.Database.GetMigrations()];
-        }
-
-        public string ConnectionString { get; }
-
-        public IReadOnlyList<string> Migrations { get; }
-
-        private ShopForgeDbContext Context { get; }
-
-        public static async Task<OwnDatabase> CreateAsync(ShopForgeApiFactory factory)
-        {
-            var name = $"schema_{Guid.NewGuid():N}";
-            await OnServerAsync(factory, $"CREATE DATABASE {name}");
-
-            return new OwnDatabase(factory, name);
-        }
-
-        public Task MigrateAsync(string? target = null) => Context.GetService<IMigrator>().MigrateAsync(target, CancellationToken);
-
-        public async Task<List<string>> PendingAsync() => [.. await Context.Database.GetPendingMigrationsAsync(CancellationToken)];
-
-        public Task ExecuteAsync(string sql) => Context.Database.ExecuteSqlRawAsync(sql, CancellationToken);
-
-        public async ValueTask DisposeAsync()
-        {
-            await Context.DisposeAsync();
-            await OnServerAsync(_factory, $"DROP DATABASE IF EXISTS {_name} WITH (FORCE)");
-        }
-
-        private static async Task OnServerAsync(ShopForgeApiFactory factory, string sql)
-        {
-            await using var connection = new NpgsqlConnection(factory.DatabaseConnectionString);
-            await connection.OpenAsync(CancellationToken);
-
-            await using var command = new NpgsqlCommand(sql, connection);
-            await command.ExecuteNonQueryAsync(CancellationToken);
-        }
-    }
 }

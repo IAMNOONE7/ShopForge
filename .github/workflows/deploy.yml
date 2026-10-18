@@ -26,16 +26,14 @@ jobs:
       group: deploy-${{ inputs.environment }}
       cancel-in-progress: false
     env:
-      NAME_PREFIX: ${{ vars.NAME_PREFIX }}
+      ENVIRONMENT: ${{ inputs.environment }}
       LOCATION: ${{ vars.LOCATION }}
       REGISTRY_NAME: ${{ vars.REGISTRY_NAME }}
       REGISTRY_SERVER: ${{ vars.REGISTRY_SERVER }}
       REGISTRY_RESOURCE_GROUP: ${{ vars.REGISTRY_RESOURCE_GROUP }}
       STORE_HOST_SUFFIX: ${{ vars.STORE_HOST_SUFFIX }}
       ADMIN_HOST: ${{ vars.ADMIN_HOST }}
-      API_BASE_URL: ${{ vars.API_BASE_URL }}
-      SITE_URL: ${{ vars.SITE_URL }}
-      ADMIN_URL: ${{ vars.ADMIN_URL }}
+      FIRST_OPERATOR_EMAIL: ${{ vars.FIRST_OPERATOR_EMAIL }}
       SMOKE_STORE_HOST: ${{ vars.SMOKE_STORE_HOST }}
       EMAIL_PROVIDER: ${{ vars.EMAIL_PROVIDER }}
       EMAIL_SENDER_ADDRESS: ${{ vars.EMAIL_SENDER_ADDRESS }}
@@ -74,11 +72,11 @@ jobs:
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
           MAILGUN_WEBHOOK_SIGNING_KEY: ${{ secrets.MAILGUN_WEBHOOK_SIGNING_KEY }}
-        run: scripts/provision.sh without-app
+        run: scripts/provision.sh "$ENVIRONMENT" without-app
 
       # The release's own image migrates the schema from inside the environment, never by the app as it starts (D-074).
       - name: Migrate the schema
-        run: scripts/migrate.sh "$NAME_PREFIX-rg" "$NAME_PREFIX-migrate"
+        run: scripts/migrate.sh "$ENVIRONMENT"
 
       # The new revision is ready only once it finds every migration it carries; the one it replaces serves until then.
       - name: Release the image
@@ -88,16 +86,13 @@ jobs:
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
           MAILGUN_WEBHOOK_SIGNING_KEY: ${{ secrets.MAILGUN_WEBHOOK_SIGNING_KEY }}
-        run: scripts/provision.sh with-app
+        run: scripts/provision.sh "$ENVIRONMENT" with-app
 
       # Nobody is told a deployment succeeded until the thing it deployed answers through the edge (D-125), as the
       # release's own build.
       - name: Smoke test the API
-        run: scripts/smoke.sh --api "$API_BASE_URL" --version "${{ github.sha }}"
+        run: scripts/release-smoke.sh "$ENVIRONMENT" "${{ github.sha }}" api
 
       # What a shopper and a merchant open, and the app refusing anybody who goes around the edge (D-206, D-207).
       - name: Smoke test the site
-        run: |
-          origin=$(az deployment sub show --name "$NAME_PREFIX-with-app" --query properties.outputs.apiFqdn.value --output tsv)
-          scripts/smoke.sh --site "$SITE_URL" --admin "$ADMIN_URL" \
-            --http "http://${SITE_URL#https://}" --store "https://$SMOKE_STORE_HOST/" --origin "https://$origin"
+        run: scripts/release-smoke.sh "$ENVIRONMENT" "${{ github.sha }}" site

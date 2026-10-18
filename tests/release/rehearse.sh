@@ -8,6 +8,7 @@
 #   2. The order the deployment used to have: the release's build starts before the migration. It serves nothing but
 #      its health and does no background work.
 #   3. The release's build migrates the schema, as the release's job does, while the previous build keeps serving.
+#      It is told a first operator, as every release is, and invites nobody: the platform already has one (D-208).
 #   4. The release's build catches up without a restart and passes the smoke test as itself; the previous one stops.
 #      With the frontends built in the source tree (npm run build in frontend/storefront and frontend/admin), it
 #      serves them too, and passes the site's smoke test (D-206).
@@ -177,10 +178,17 @@ echo "3. The release's build migrates the schema while the previous build serves
 ) &
 watcher=$!
 
-if (cd "$STATE/release" && env "${settings[@]}" ASPNETCORE_ENVIRONMENT=Production dotnet ShopForge.Api.dll migrate >"$STATE/migrate.log" 2>&1); then
+if (cd "$STATE/release" && env "${settings[@]}" Platform__FirstOperator=operator@rehearsal.invalid Frontends__AdminHost=admin.localhost \
+  ASPNETCORE_ENVIRONMENT=Production dotnet ShopForge.Api.dll migrate >"$STATE/migrate.log" 2>&1); then
   pass "the migration ran ($(grep -o 'Applied [0-9]* migration(s)[^"]*' "$STATE/migrate.log" | head -n 1))"
 else
   fail "the migration ran (see $STATE/migrate.log)"
+fi
+
+if grep -q 'The platform has an operator, so nobody was invited.' "$STATE/migrate.log"; then
+  pass "the first operator it is told of is not invited: the platform has one"
+else
+  fail "the first operator it is told of is not invited: the platform has one (see $STATE/migrate.log)"
 fi
 
 touch "$STATE/migrated"

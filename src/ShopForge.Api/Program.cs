@@ -28,6 +28,7 @@ using ShopForge.Orders;
 using ShopForge.Orders.Development;
 using ShopForge.Platform;
 using ShopForge.Platform.Development;
+using ShopForge.Platform.Users;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Security;
 using ShopForge.Shared.Tenancy;
@@ -178,6 +179,30 @@ if (args is ["migrate"])
         "Applied {Count} migration(s){Migrations}.",
         applied.Count,
         applied.Count == 0 ? "; the database already had every one" : ": " + string.Join(", ", applied));
+
+    // The first operator the environment names, invited on the admin's host while the platform has nobody (D-208). The
+    // running app's outbox delivers the invitation. One that cannot be addressed stops the release before it serves.
+    var firstOperator = app.Configuration["Platform:FirstOperator"];
+
+    if (!string.IsNullOrWhiteSpace(firstOperator))
+    {
+        var adminHost = app.Configuration["Frontends:AdminHost"];
+        var invitation = await app.Services.InviteFirstOperatorAsync(
+            firstOperator,
+            string.IsNullOrWhiteSpace(adminHost) ? null : new Uri($"https://{adminHost}"),
+            app.Services.GetRequiredService<TimeProvider>());
+
+        if (invitation.Refused)
+        {
+            app.Logger.LogError("Nobody was invited: {Refusal}", invitation.Outcome);
+            Environment.ExitCode = 1;
+        }
+        else
+        {
+            app.Logger.LogInformation("{Outcome}", invitation.Outcome);
+        }
+    }
+
     await app.DisposeAsync();
 
     return;

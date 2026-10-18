@@ -9,24 +9,169 @@ namespace ShopForge.DeploymentTests;
 public sealed partial class TemplateTests
 {
     private const string Main = "infra/main.bicep";
+    private const string Bootstrap = "infra/bootstrap.bicep";
 
-    private static readonly Dictionary<string, string?> SampleSecrets = new()
+    private static readonly string[] Environments = ["staging", "production"];
+
+    // What a GitHub environment hands a release, made up; every one of them is read by the parameter files (D-208).
+    private static readonly Dictionary<string, string?> FromTheEnvironment = new()
     {
-        ["SHOPFORGE_DB_PASSWORD"] = "made-up",
+        ["SHOPFORGE_IMAGE"] = "shopforgeshared.azurecr.io/shopforge-api:0123456",
+        ["SHOPFORGE_REGISTRY_NAME"] = "shopforgeshared",
+        ["SHOPFORGE_REGISTRY_RESOURCE_GROUP"] = "shopforge-shared-rg",
+        ["SHOPFORGE_STORE_HOST_SUFFIX"] = "shops.example.cz",
+        ["SHOPFORGE_ADMIN_HOST"] = "admin.example.cz",
+        ["SHOPFORGE_FIRST_OPERATOR"] = "ops@example.cz",
         ["SHOPFORGE_EMAIL_SENDER"] = "shop@mail.example.cz",
         ["SHOPFORGE_MAILGUN_DOMAIN"] = "mail.example.cz",
+        ["SHOPFORGE_DB_PASSWORD"] = "made-up",
         ["SHOPFORGE_MAILGUN_API_KEY"] = "made-up",
         ["SHOPFORGE_MAILGUN_WEBHOOK_SIGNING_KEY"] = "made-up",
     };
 
-    [Fact]
-    public async Task The_templates_compile_and_lint_clean_and_the_sample_parameters_fit_them()
+    [Theory]
+    [InlineData(Main)]
+    [InlineData(Bootstrap)]
+    public async Task The_templates_compile_and_lint_clean(string template)
     {
-        var lint = await Repository.RunAsync(Repository.BicepPath, ["lint", Main]);
-        var sample = await Repository.RunAsync(Repository.BicepPath, ["build-params", "infra/main.sample.bicepparam", "--stdout"], SampleSecrets);
+        var lint = await Repository.RunAsync(Repository.BicepPath, ["lint", template]);
 
         Assert.Equal((0, ""), (lint.ExitCode, (lint.Output + lint.Errors).Trim()));
-        Assert.True(sample.ExitCode == 0, sample.Errors);
+    }
+
+    // Two environments of one topology: what tells them apart is their name and their sizes, and anything else is the
+    // same expression read from each GitHub environment (D-208).
+    [Fact]
+    public async Task Staging_and_production_differ_in_name_and_size_alone()
+    {
+        var staging = await EnvironmentParametersAsync("staging");
+        var production = await EnvironmentParametersAsync("production");
+
+        var different = staging.Select(pair => pair.Key)
+            .Where(name => !JsonNode.DeepEquals(staging[name]!["value"], production[name]!["value"]))
+            .Order(StringComparer.Ordinal);
+
+        Assert.Equal(staging.Select(pair => pair.Key).Order(StringComparer.Ordinal), production.Select(pair => pair.Key).Order(StringComparer.Ordinal));
+        Assert.Subset(
+            new HashSet<string> { "namePrefix", "databaseSkuName", "databaseTier", "databaseStorageGb", "databaseBackupDays", "appMinReplicas", "appMaxReplicas" },
+            different.ToHashSet());
+        Assert.Contains("namePrefix", different);
+    }
+
+    // A secret goes into a deployment from the environment that runs it, never from a file in the repository.
+    [Theory]
+    [InlineData("staging")]
+    [InlineData("production")]
+    public async Task An_environment_s_file_holds_no_secret(string environment)
+    {
+        var template = await CompiledAsync();
+        var file = await File.ReadAllTextAsync(Repository.PathOf($"infra/environments/{environment}.bicepparam"), TestContext.Current.CancellationToken);
+        var secrets = template["parameters"]!.AsObject()
+            .Where(parameter => (string?)parameter.Value!["type"] == "securestring")
+            .Select(parameter => parameter.Key)
+            .ToList();
+
+        Assert.NotEmpty(secrets);
+        Assert.All(secrets, secret => Assert.Matches($@"(?m)^param {secret} = readEnvironmentVariable\('SHOPFORGE_[A-Z_]+'", file));
+    }
+
+    // Who read which secret, what the database and the edge did: each environment keeps all of it beside its traces.
+    [Theory]
+    [InlineData("vault", 2, "audit")]
+    [InlineData("data", 1, "allLogs")]
+    [InlineData("edge-profile", 1, "allLogs")]
+    public async Task Every_environment_keeps_its_logs(string deployment, int count, string categoryGroup)
+    {
+        var template = await CompiledAsync();
+        var module = Deployment(template, deployment);
+
+        var diagnostics = Resources(module["properties"]!["template"]!)
+            .Where(resource => (string?)resource["type"] == "Microsoft.Insights/diagnosticSettings")
+            .ToList();
+
+        Assert.Equal(count, diagnostics.Count);
+        Assert.All(diagnostics, setting =>
+        {
+            Assert.Null(setting["condition"]);
+            Assert.Equal("[parameters('workspaceId')]", (string?)setting["properties"]!["workspaceId"]);
+            Assert.Equal(categoryGroup, (string?)setting["properties"]!["logs"]![0]!["categoryGroup"]);
+        });
+        Assert.Matches(OutputOf("observability", "workspaceId"), Parameter(module, "workspaceId"));
+    }
+
+    [Fact]
+    public async Task An_environment_s_sizes_reach_its_resources()
+    {
+        var template = await CompiledAsync();
+        var data = Deployment(template, "data");
+        var api = Deployment(template, "api");
+        var server = Resources(data["properties"]!["template"]!).Single(resource => (string?)resource["type"] == "Microsoft.DBforPostgreSQL/flexibleServers");
+        var app = Resources(api["properties"]!["template"]!).Single(resource => (string?)resource["type"] == "Microsoft.App/containerApps");
+
+        Assert.Equal(("[parameters('databaseSkuName')]", "[parameters('appMinReplicas')]"), (Parameter(data, "skuName"), Parameter(api, "minReplicas")));
+        Assert.Equal("[parameters('skuName')]", (string?)server["sku"]!["name"]);
+        Assert.Equal("[parameters('backupDays')]", (string?)server["properties"]!["backup"]!["backupRetentionDays"]);
+        Assert.Equal("[parameters('maxReplicas')]", (string?)app["properties"]!["template"]!["scale"]!["maxReplicas"]);
+    }
+
+    // The bootstrap's deployer may assign and remove exactly the roles a release assigns, and no other: a stolen
+    // workflow token cannot make itself Owner of the subscription (D-208).
+    [Fact]
+    public async Task The_deployer_may_grant_exactly_what_a_release_grants()
+    {
+        var bootstrap = await BootstrapAsync();
+        var main = await CompiledAsync();
+        var assignments = Resources(bootstrap).Where(resource => (string?)resource["type"] == "Microsoft.Authorization/roleAssignments").ToList();
+        var granting = assignments.Single(assignment => assignment["properties"]!["condition"] is not null)["properties"]!;
+        var grantable = RoleIds().Matches(Evaluated((string)granting["condition"]!, bootstrap)).Select(match => match.Value).ToHashSet();
+        var granted = Everywhere(main)
+            .Where(resource => (string?)resource["type"] == "Microsoft.Authorization/roleAssignments")
+            .Select(resource => RoleIds().Match((string)resource["properties"]!["roleDefinitionId"]!).Value)
+            .ToHashSet();
+
+        Assert.Equal("2.0", (string?)granting["conditionVersion"]);
+        Assert.Equal("f58310d9-a9f6-439a-9e8d-f62e7b41a168", RoleOf(granting, bootstrap));
+        Assert.Equal(granted.Order(), grantable.Order());
+        Assert.Contains(assignments, assignment => RoleOf(assignment["properties"]!, bootstrap) == "b24988ac-6180-42a0-ab88-20f7382dd24c");
+    }
+
+    // A role assignment's role, written as an id or as one of the template's variables.
+    private static string RoleOf(JsonNode properties, JsonNode template)
+    {
+        var expression = (string)properties["roleDefinitionId"]!;
+
+        return Variable().Match(expression) is { Success: true } variable
+            ? (string)template["variables"]![variable.Groups["name"].Value]!
+            : RoleIds().Match(expression).Value;
+    }
+
+    // No secret exists for the deployer: GitHub proves which repository and environment a job runs in, one environment
+    // per credential.
+    [Fact]
+    public async Task Only_this_repository_s_environments_may_sign_in_as_the_deployer()
+    {
+        var bootstrap = await BootstrapAsync();
+        var deployer = Resources(Deployment(bootstrap, "deployer")["properties"]!["template"]!).ToList();
+        var credential = deployer.Single(resource => (string?)resource["type"] == "Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials");
+
+        Assert.Equal(("serial", 1), ((string?)credential["copy"]!["mode"], (int?)credential["copy"]!["batchSize"]));
+        Assert.Equal("https://token.actions.githubusercontent.com", (string?)credential["properties"]!["issuer"]);
+        Assert.Equal("[format('repo:{0}:environment:{1}', parameters('repository'), parameters('environments')[copyIndex()])]", (string?)credential["properties"]!["subject"]);
+        Assert.Equal(["api://AzureADTokenExchange"], credential["properties"]!["audiences"]!.AsArray().Select(audience => (string?)audience));
+        Assert.Equal(Environments, bootstrap["parameters"]!["environments"]!["defaultValue"]!.AsArray().Select(environment => (string?)environment));
+    }
+
+    [Fact]
+    public async Task The_registry_has_no_password_and_only_the_deployer_pushes()
+    {
+        var bootstrap = await BootstrapAsync();
+        var registry = Resources(Deployment(bootstrap, "registry")["properties"]!["template"]!).ToList();
+        var push = registry.Single(resource => (string?)resource["type"] == "Microsoft.Authorization/roleAssignments")["properties"]!;
+
+        Assert.Equal(false, (bool?)registry.Single(resource => (string?)resource["type"] == "Microsoft.ContainerRegistry/registries")["properties"]!["adminUserEnabled"]);
+        Assert.Contains("8311e382-0749-4cb8-b61a-304f252e45ec", (string?)push["roleDefinitionId"], StringComparison.Ordinal);
+        Assert.Equal("[parameters('pusherPrincipalId')]", (string?)push["principalId"]);
+        Assert.Matches(OutputOf("deployer", "principalId"), Parameter(Deployment(bootstrap, "registry"), "pusherPrincipalId"));
     }
 
     // The app and the job that migrates for it are made only once they may pull their image and read their vault,
@@ -161,19 +306,32 @@ public sealed partial class TemplateTests
     }
 
     // A platform domain with a managed certificate, which Front Door issues once _dnsauth.<host> carries the token the
-    // deployment hands out. Without one, the admin is served on the endpoint's own host name (D-206).
+    // deployment hands out. The admin is on the endpoint's own host name as well, with or without one (D-206, D-208).
     [Fact]
     public async Task The_admin_domain_is_the_template_s_and_its_proof_is_handed_out()
     {
         var template = await CompiledAsync();
         var profile = Deployment(template, "edge-profile")["properties"]!["template"]!;
         var domain = Resources(profile).Single(resource => (string?)resource["type"] == "Microsoft.Cdn/profiles/customDomains");
+        var settings = Deployment(template, "api")["properties"]!["parameters"]!["settings"]!["value"]!.AsArray();
 
         Assert.Equal("[not(empty(parameters('adminHost')))]", (string?)domain["condition"]);
         Assert.Equal(("ManagedCertificate", "TLS12"), ((string?)domain["properties"]!["tlsSettings"]!["certificateType"], (string?)domain["properties"]!["tlsSettings"]!["minimumTlsVersion"]));
         Assert.Contains("validationProperties.validationToken", (string?)profile["outputs"]!["adminValidationToken"]!["value"], StringComparison.Ordinal);
         Assert.NotNull(template["outputs"]!["adminValidationToken"]);
-        Assert.Matches(OutputOf("edge-profile", "adminHost"), Setting(Deployment(template, "api")["properties"]!["parameters"]!["settings"]!["value"]!.AsArray(), "Frontends__AdminHost"));
+        Assert.Matches(OutputOf("edge-profile", "adminHost"), Setting(settings, "Frontends__AdminHost"));
+        Assert.Matches(OutputOf("edge-profile", "endpointHostName"), Setting(settings, "Frontends__EdgeHost"));
+    }
+
+    // The release's migration job is told who first runs the platform, and invites them while nobody does (D-208).
+    [Fact]
+    public async Task The_migration_job_is_told_who_first_runs_the_platform()
+    {
+        var template = await CompiledAsync();
+        var settings = Deployment(template, "migrations")["properties"]!["parameters"]!["settings"]!["value"]!.AsArray();
+
+        Assert.Equal("[parameters('firstOperatorEmail')]", Setting(settings, "Platform__FirstOperator"));
+        Assert.Equal("", (string?)template["parameters"]!["firstOperatorEmail"]!["defaultValue"]);
     }
 
     // Detection until V19 has seen real traffic; the endpoint's own domain and the platform's are covered from the start.
@@ -236,6 +394,37 @@ public sealed partial class TemplateTests
         }
     }
 
+    private static async Task<JsonObject> EnvironmentParametersAsync(string environment)
+    {
+        var built = await Repository.RunAsync(Repository.BicepPath, ["build-params", $"infra/environments/{environment}.bicepparam", "--stdout"], FromTheEnvironment);
+        Assert.True(built.ExitCode == 0, built.Errors);
+
+        return JsonNode.Parse((string)JsonNode.Parse(built.Output)!["parametersJson"]!)!["parameters"]!.AsObject();
+    }
+
+    private static readonly Lazy<Task<JsonNode>> CompiledBootstrap = new(async () =>
+    {
+        var built = await Repository.RunAsync(Repository.BicepPath, ["build", Bootstrap, "--stdout"]);
+        Assert.True(built.ExitCode == 0, built.Errors);
+
+        return JsonNode.Parse(built.Output)!;
+    });
+
+    private static Task<JsonNode> BootstrapAsync() => CompiledBootstrap.Value;
+
+    // A condition is a `format()` the deployment evaluates; this evaluates it the same way, its arguments being the
+    // `join()` of a variable that ARM would compute.
+    private static string Evaluated(string expression, JsonNode template)
+    {
+        var variables = template["variables"]!.AsObject();
+        var call = Format().Match(expression);
+        var arguments = Join().Matches(call.Groups["arguments"].Value)
+            .Select(match => string.Join(match.Groups["separator"].Value, variables[match.Groups["variable"].Value]!.AsArray().Select(value => (string?)value)))
+            .ToArray();
+
+        return string.Format(System.Globalization.CultureInfo.InvariantCulture, call.Groups["format"].Value.Replace("''", "'", StringComparison.Ordinal), arguments);
+    }
+
     // Compiled once for the class: every test reads it and none changes it.
     private static readonly Lazy<Task<JsonNode>> Compiled = new(async () =>
     {
@@ -291,6 +480,18 @@ public sealed partial class TemplateTests
     // `[format('{0}/{1}/{2}', parameters('profileName'), parameters('endpointName'), 'platform')]` is the route named platform.
     [GeneratedRegex(@"'(?<name>[A-Za-z0-9-]+)'\)\]$")]
     private static partial Regex OwnName();
+
+    [GeneratedRegex(@"variables\('(?<name>[a-zA-Z]+)'\)")]
+    private static partial Regex Variable();
+
+    [GeneratedRegex(@"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")]
+    private static partial Regex RoleIds();
+
+    [GeneratedRegex(@"^\[format\('(?<format>(?:[^']|'')*)', (?<arguments>.*)\)\]$")]
+    private static partial Regex Format();
+
+    [GeneratedRegex(@"join\(variables\('(?<variable>[a-zA-Z]+)'\), '(?<separator>[^']*)'\)")]
+    private static partial Regex Join();
 
     [GeneratedRegex(@"'Microsoft\.Resources/deployments', (?<name>'[^']+'|format\([^)]*\)[^)]*\))\)\]$")]
     private static partial Regex DeploymentReference();

@@ -5,6 +5,8 @@ param identityId string
 param registryServer string
 param image string
 param settings array
+param minReplicas int
+param maxReplicas int
 
 resource api 'Microsoft.App/containerApps@2024-03-01' = {
   name: '${namePrefix}-api'
@@ -61,8 +63,8 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
         }
       ]
       scale: {
-        minReplicas: 1
-        maxReplicas: 5
+        minReplicas: minReplicas
+        maxReplicas: maxReplicas
         rules: [
           {
             name: 'http'

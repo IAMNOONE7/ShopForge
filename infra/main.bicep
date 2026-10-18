@@ -6,6 +6,21 @@ param location string = 'westeurope'
 param databaseAdministrator string = 'shopforge'
 @secure()
 param databasePassword string
+// What staging and production differ in besides their names (D-208).
+@description('The database server\'s SKU, e.g. Standard_B1ms.')
+param databaseSkuName string = 'Standard_B1ms'
+@allowed(['Burstable', 'GeneralPurpose', 'MemoryOptimized'])
+param databaseTier string = 'Burstable'
+@minValue(32)
+param databaseStorageGb int = 32
+@minValue(7)
+@maxValue(35)
+param databaseBackupDays int = 14
+@minValue(1)
+param appMinReplicas int = 1
+@minValue(1)
+@maxValue(30)
+param appMaxReplicas int = 5
 @description('The release\'s container image, e.g. myregistry.azurecr.io/shopforge-api:1234. The migration job runs it in both of a release\'s deployments; the app only in the second.')
 param image string
 @description('The container registry the release images are pushed to, which the app and its migration job pull from with their own identity.')
@@ -14,8 +29,10 @@ param registryName string
 param registryResourceGroup string
 @description('False for the first of a release\'s two deployments: everything the app needs, and the job that migrates for the new image, while the app that is serving is left alone. The release migrates, then deploys again with true (D-205).')
 param deployApp bool = true
-@description('The platform\'s own host for the admin, e.g. admin.example.cz, proved to Front Door with the TXT record in the adminValidationToken output. Empty serves the admin on the endpoint\'s own host name (D-206).')
+@description('The platform\'s own host for the admin, e.g. admin.example.cz, proved to Front Door with the TXT record in the adminValidationToken output. The admin is served on the endpoint\'s own host name either way (D-206, D-208).')
 param adminHost string = ''
+@description('Who first runs the platform. A release invites them while the platform has no operator, and once it has one this does nothing (D-208).')
+param firstOperatorEmail string = ''
 @description('The zone store subdomains are composed under, e.g. shops.example.cz (D-189).')
 param storeHostSuffix string
 @secure()
@@ -59,6 +76,11 @@ module data 'modules/data.bicep' = {
     namePrefix: namePrefix
     databaseAdministrator: databaseAdministrator
     databasePassword: databasePassword
+    skuName: databaseSkuName
+    tier: databaseTier
+    storageGb: databaseStorageGb
+    backupDays: databaseBackupDays
+    workspaceId: observability.outputs.workspaceId
   }
 }
 
@@ -70,6 +92,7 @@ module edgeProfile 'modules/edge-profile.bicep' = {
   params: {
     namePrefix: namePrefix
     adminHost: adminHost
+    workspaceId: observability.outputs.workspaceId
   }
 }
 
@@ -120,6 +143,7 @@ module vault 'modules/vault.bicep' = {
     stripeWebhookSecret: stripeWebhookSecret
     mailgunApiKey: mailgunApiKey
     mailgunWebhookSigningKey: mailgunWebhookSigningKey
+    workspaceId: observability.outputs.workspaceId
   }
 }
 
@@ -146,6 +170,8 @@ var settings = [
   { name: 'Email__Mailgun__Domain', value: mailgunDomain }
   { name: 'StoreHosts__Suffix', value: storeHostSuffix }
   { name: 'Frontends__AdminHost', value: edgeProfile.outputs.adminHost }
+  { name: 'Frontends__EdgeHost', value: edgeProfile.outputs.endpointHostName }
+  { name: 'Platform__FirstOperator', value: firstOperatorEmail }
 ]
 
 module migrations 'modules/migrations.bicep' = {
@@ -173,6 +199,8 @@ module api 'modules/api.bicep' = if (deployApp) {
     registryServer: registryAccess.outputs.loginServer
     image: image
     settings: settings
+    minReplicas: appMinReplicas
+    maxReplicas: appMaxReplicas
   }
 }
 
@@ -187,6 +215,7 @@ module edgeRoutes 'modules/edge-routes.bicep' = if (deployApp) {
   }
 }
 
+output resourceGroup string = group.name
 output apiFqdn string = deployApp ? api!.outputs.fqdn : ''
 output publicHostName string = edgeProfile.outputs.endpointHostName
 output adminHost string = edgeProfile.outputs.adminHost

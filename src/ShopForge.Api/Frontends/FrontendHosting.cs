@@ -31,17 +31,25 @@ internal static class FrontendHosting
     public static WebApplication UseFrontends(this WebApplication app)
     {
         var root = app.Configuration["Frontends:Root"] ?? Path.Combine(AppContext.BaseDirectory, "frontends");
-        var adminHost = app.Configuration["Frontends:AdminHost"];
         var admin = Directory.Exists(Path.Combine(root, "admin")) ? new PhysicalFileProvider(Path.Combine(root, "admin")) : null;
         var storefront = Directory.Exists(Path.Combine(root, "storefront")) ? new PhysicalFileProvider(Path.Combine(root, "storefront")) : null;
 
-        // The admin belongs to the platform's own host, not to every shop's: no sign-in page on a merchant's domain, and
-        // no session cookie set there. Its root sends a visitor to the admin.
-        if (!string.IsNullOrWhiteSpace(adminHost))
+        // The admin belongs to the platform's own hosts, not to every shop's: no sign-in page on a merchant's domain, and
+        // no session cookie set there. Those are the admin's domain and the edge's own host name, which needs no DNS of
+        // the platform's, so the admin is there before its domain is and a release checks it there (D-208). A platform
+        // host's root sends a visitor to the admin.
+        string[] adminHosts =
+        [
+            .. new[] { app.Configuration["Frontends:AdminHost"], app.Configuration["Frontends:EdgeHost"] }
+                .OfType<string>()
+                .Where(host => !string.IsNullOrWhiteSpace(host)),
+        ];
+
+        if (adminHosts.Length > 0)
         {
             app.Use(async (context, next) =>
             {
-                var onAdminHost = string.Equals(context.Request.Host.Host, adminHost, StringComparison.OrdinalIgnoreCase);
+                var onAdminHost = adminHosts.Contains(context.Request.Host.Host, StringComparer.OrdinalIgnoreCase);
 
                 if (context.Request.Path.StartsWithSegments(AdminPath) && !onAdminHost)
                 {
