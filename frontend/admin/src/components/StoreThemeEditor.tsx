@@ -1,4 +1,3 @@
-import type { CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { Field } from "./ui/Field";
 import { issueText } from "./storeValidation";
@@ -135,28 +134,39 @@ export function ThemePreview({
   const radius = /^\d+$/.test(value.borderRadius)
     ? Math.min(Number(value.borderRadius), 48)
     : 6;
-  const style = {
-    "--preview-primary": primary,
-    "--preview-secondary": secondary,
-    "--preview-radius": `${radius}px`,
-    "--preview-primary-text": bestTextColor(primary),
-    "--preview-secondary-text": bestTextColor(secondary),
-  } as CSSProperties;
+  const primaryText = bestTextColor(primary) === "#FFFFFF"
+    ? "theme-preview-light-text"
+    : "theme-preview-dark-text";
 
   return (
-    <aside className="theme-preview" style={style} aria-label={t("preview")}>
+    <aside className="theme-preview" aria-label={t("preview")}>
       <span className="theme-preview-label">{t("preview")}</span>
-      <div className="theme-preview-header">
+      <div className={`theme-preview-header ${primaryText}`}>
+        <PreviewSurface color={primary} />
         <strong>{storeName.trim() || t("previewStoreName")}</strong>
       </div>
       <div className="theme-preview-body">
+        <PreviewSurface color={secondary} />
         <div className="theme-preview-card">
+          <PreviewSurface color="#FFFFFF" radius={radius} />
           <span>{t("previewProduct")}</span>
           <strong>{previewPrice ?? t("previewPrice")}</strong>
-          <span className="theme-preview-button">{t("previewAction")}</span>
+          <span className={`theme-preview-button ${primaryText}`}>
+            <PreviewSurface color={primary} radius={radius} />
+            {t("previewAction")}
+          </span>
         </div>
       </div>
     </aside>
+  );
+}
+
+function PreviewSurface({ color, radius = 0 }: { color: string; radius?: number }) {
+  // Presentation attributes keep arbitrary draft colors out of inline styles.
+  return (
+    <svg className="theme-preview-surface" aria-hidden="true" focusable="false">
+      <rect width="100%" height="100%" fill={color} rx={radius} />
+    </svg>
   );
 }
 
