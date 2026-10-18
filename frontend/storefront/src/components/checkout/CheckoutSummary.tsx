@@ -10,7 +10,7 @@ import { CartTotals } from "../cart/CartTotals";
 
 export function CheckoutSummary({ cart, shipping, store, pending, children }: {
   cart: Cart;
-  shipping: ShippingMethod;
+  shipping: ShippingMethod | undefined;
   store: Store;
   pending: boolean;
   children: ReactNode;
@@ -33,6 +33,7 @@ export function CheckoutSummary({ cart, shipping, store, pending, children }: {
       </ul>
       <Link className="checkout-edit-cart" to="/cart">{t("checkout:editCart")}</Link>
       <CartTotals cart={cart} shipping={shipping} />
+      {!shipping && <p className="hint">{t("checkout:deliveryTotalPending")}</p>}
       {pending && <p className="checkout-submitting" role="status">{t("checkout:placingOrder")}</p>}
       {children}
     </aside>

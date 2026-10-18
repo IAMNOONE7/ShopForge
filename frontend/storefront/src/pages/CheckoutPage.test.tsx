@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   afterAll,
@@ -77,6 +77,7 @@ const cart: Cart = {
   discountProblem: null,
 };
 const methods: CheckoutMethods = {
+  destinationCountry: null,
   paymentMethods: [{ code: "cash", name: "Cash" }],
   shippingMethods: [
     {
@@ -137,6 +138,7 @@ function Contexts({
   authenticated?: boolean;
 }) {
   const [currentCart, setCurrentCart] = useState(cart);
+  const [currentStore, setCurrentStore] = useState(store);
   const [adjusted, setAdjusted] = useState(false);
   const [busy, setBusy] = useState(false);
   const cartValue: CartState = {
@@ -159,10 +161,12 @@ function Contexts({
   };
 
   return (
-    <StoreContext value={store}>
+    <StoreContext value={currentStore}>
       <CustomerContext value={customerValue}>
         <CartContext value={cartValue}>
           <button onClick={() => setBusy(true)}>Simulate cart update</button>
+          <button onClick={() => setCurrentCart({ ...cart, count: 2, items: [{ ...cart.items[0], quantity: 2, lineTotal: 240 }], itemsTotal: 240 })}>Change cart contents</button>
+          <button onClick={() => setCurrentStore({ ...store, id: "other-store" })}>Change store</button>
           {children}
         </CartContext>
       </CustomerContext>
@@ -196,7 +200,7 @@ async function fillGuestAddress(user: ReturnType<typeof userEvent.setup>) {
 describe("CheckoutPage", () => {
   it("reviews the submitted contact and separate delivery address with exact method and edit destinations", async () => {
     const user = userEvent.setup();
-    mocks.getCheckoutMethods.mockResolvedValue(methods);
+    offerMethods();
     renderCheckout();
     await screen.findByRole("heading", { name: "Checkout" });
     await fillGuestAddress(user);
@@ -220,7 +224,7 @@ describe("CheckoutPage", () => {
 
   it("keeps checkout inactive while a cart write is unresolved", async () => {
     const user = userEvent.setup();
-    mocks.getCheckoutMethods.mockResolvedValue(methods);
+    offerMethods();
     renderCheckout();
     const submit = await screen.findByRole("button", { name: "Place order" });
     await fillGuestAddress(user);
@@ -234,7 +238,10 @@ describe("CheckoutPage", () => {
 
   it("requires a successful method refresh after a conflict even when a form submission is forced", async () => {
     const user = userEvent.setup();
-    mocks.getCheckoutMethods.mockResolvedValueOnce(methods).mockRejectedValue(new HttpError("network", null));
+    mocks.getCheckoutMethods
+      .mockResolvedValueOnce(methods)
+      .mockResolvedValueOnce({ ...methods, destinationCountry: "IE" })
+      .mockRejectedValue(new HttpError("network", null));
     mocks.getCart.mockResolvedValue(cart);
     mocks.placeOrder.mockRejectedValue(new HttpError("http", 409));
     renderCheckout();
@@ -242,7 +249,7 @@ describe("CheckoutPage", () => {
     await fillGuestAddress(user);
     await user.click(screen.getByRole("button", { name: "Place order" }));
     const review = await screen.findByRole("button", { name: "I reviewed these changes" });
-    await waitFor(() => expect(mocks.getCheckoutMethods).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.getCheckoutMethods).toHaveBeenCalledTimes(3));
     expect(review).toHaveProperty("disabled", true);
     fireEvent.submit(document.querySelector("form.checkout")!);
     expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
@@ -251,7 +258,7 @@ describe("CheckoutPage", () => {
 
   it("replays an unchanged checkout after a lost response with the same key and body", async () => {
     const user = userEvent.setup();
-    mocks.getCheckoutMethods.mockResolvedValue(methods);
+    offerMethods();
     mocks.placeOrder
       .mockRejectedValueOnce(new HttpError("network", null))
       .mockResolvedValueOnce({
@@ -275,7 +282,7 @@ describe("CheckoutPage", () => {
 
   it("requires explicit review before a changed draft starts a new key", async () => {
     const user = userEvent.setup();
-    mocks.getCheckoutMethods.mockResolvedValue(methods);
+    offerMethods();
     mocks.placeOrder
       .mockRejectedValueOnce(new HttpError("network", null))
       .mockRejectedValueOnce(new HttpError("http", 400));
@@ -301,7 +308,7 @@ describe("CheckoutPage", () => {
 
   it("keeps the same request for an in-progress 409 and reviews a mismatched 422", async () => {
     const user = userEvent.setup();
-    mocks.getCheckoutMethods.mockResolvedValue(methods);
+    offerMethods();
     mocks.placeOrder
       .mockRejectedValueOnce(new HttpError("http", 409, { title: "A request with this key is still in progress" }))
       .mockRejectedValueOnce(new HttpError("http", 422))
@@ -326,10 +333,31 @@ describe("CheckoutPage", () => {
     expect(mocks.placeOrder.mock.calls[2][1]).not.toBe(firstKey);
   });
 
+  it("requires a new-attempt warning when the destination changes after an in-progress response", async () => {
+    const user = userEvent.setup();
+    offerMethods();
+    mocks.placeOrder.mockRejectedValue(new HttpError("http", 409, { title: "A request with this key is still in progress" }));
+    renderCheckout(); await fillGuestAddress(user);
+    await user.click(screen.getByRole("button", { name: "Place order" }));
+    await screen.findByText("Your request is still processing");
+    const key = mocks.placeOrder.mock.calls[0][1];
+    fireEvent.change(screen.getByRole("textbox", { name: /^Country/ }), { target: { value: "CZ" } });
+    await screen.findByText("The previous order may have been placed");
+    const review = await screen.findByRole("button", { name: "Start a new attempt" });
+    await waitFor(() => expect(review).toHaveProperty("disabled", false));
+    fireEvent.submit(document.querySelector("form.checkout")!);
+    expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
+    await user.click(review);
+    await user.click(screen.getByRole("button", { name: "Place order" }));
+    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(2));
+    expect(mocks.placeOrder.mock.calls[1][1]).not.toBe(key);
+    expect(mocks.placeOrder.mock.calls[1][0].billingAddress.country).toBe("CZ");
+  });
+
   it("keeps a failed guest draft and serializes rapid order attempts", async () => {
     const user = userEvent.setup();
     const request = deferred<never>();
-    mocks.getCheckoutMethods.mockResolvedValue(methods);
+    offerMethods();
     mocks.placeOrder.mockReturnValue(request.promise);
     renderCheckout();
 
@@ -362,7 +390,7 @@ describe("CheckoutPage", () => {
     const user = userEvent.setup();
     const oldRequest = deferred<PickupPoint[]>();
     const newRequest = deferred<PickupPoint[]>();
-    mocks.getCheckoutMethods.mockResolvedValue(methods);
+    offerMethods();
     mocks.getPickupPoints
       .mockReturnValueOnce(oldRequest.promise)
       .mockReturnValueOnce(newRequest.promise)
@@ -420,9 +448,34 @@ describe("CheckoutPage", () => {
     await waitFor(() => expect(freshSelect).toHaveProperty("value", ""));
   });
 
+  it("requires a fresh listed point when the store removes it during conflict recovery", async () => {
+    const user = userEvent.setup();
+    offerMethods();
+    const point = { code: "old", name: "Old counter", line1: "Street", city: "City", postalCode: "123", country: "IE" };
+    mocks.getPickupPoints.mockResolvedValue([point]);
+    mocks.getCart.mockResolvedValue(cart);
+    mocks.placeOrder.mockRejectedValue(new HttpError("http", 409));
+    renderCheckout(); await fillGuestAddress(user);
+    await user.click(screen.getByRole("radio", { name: /Pickup/ }));
+    await user.selectOptions(await screen.findByRole("combobox", { name: "Pickup point" }), "old");
+    mocks.getPickupPoints.mockResolvedValue([{ ...point, code: "new", name: "New counter" }]);
+    await user.click(screen.getByRole("button", { name: "Place order" }));
+    await screen.findByText(/Choose your pickup point again/);
+    expect(await screen.findByRole("combobox", { name: "Pickup point" })).toHaveProperty("value", "");
+    const review = screen.getByRole("button", { name: "I reviewed these changes" });
+    await waitFor(() => expect(review).toHaveProperty("disabled", false));
+    await user.click(review);
+    fireEvent.submit(document.querySelector("form.checkout")!);
+    expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
+    await user.selectOptions(screen.getByRole("combobox", { name: "Pickup point" }), "new");
+    await user.click(screen.getByRole("button", { name: "Place order" }));
+    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(2));
+    expect(mocks.placeOrder.mock.calls[1][0].pickupPointCode).toBe("new");
+  });
+
   it("requires review after a conflict and saves recovery before navigation", async () => {
     const user = userEvent.setup();
-    mocks.getCheckoutMethods.mockResolvedValue(methods);
+    offerMethods();
     mocks.getCart.mockResolvedValue({
       ...cart,
       itemsTotal: 125,
@@ -477,6 +530,7 @@ describe("CheckoutPage", () => {
 
   it("blocks checkout with a clear explanation when no methods exist", async () => {
     mocks.getCheckoutMethods.mockResolvedValue({
+      destinationCountry: null,
       paymentMethods: [],
       shippingMethods: [],
     });
@@ -487,12 +541,13 @@ describe("CheckoutPage", () => {
         "This store is not taking orders at the moment.",
       ),
     ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Place order" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Place order" }).getAttribute("aria-disabled")).toBe("true");
+    expect(screen.getByRole("textbox", { name: /^Country/ })).toBeTruthy();
   });
 
   it("prefills a signed-in customer and exposes a separate shipping address", async () => {
     const user = userEvent.setup();
-    mocks.getCheckoutMethods.mockResolvedValue(methods);
+    offerMethods();
     renderCheckout({ authenticated: true });
 
     const email = await screen.findByRole("textbox", { name: "E-mail" });
@@ -513,7 +568,7 @@ describe("CheckoutPage", () => {
   // already told the shop their number should not have to type it again.
   it("requires a telephone number and offers the one on the account", async () => {
     const user = userEvent.setup();
-    mocks.getCheckoutMethods.mockResolvedValue(methods);
+    offerMethods();
     renderCheckout();
 
     const phone = await screen.findByRole("textbox", {
@@ -531,7 +586,7 @@ describe("CheckoutPage", () => {
   });
 
   it("carries the telephone number of a signed-in shopper", async () => {
-    mocks.getCheckoutMethods.mockResolvedValue(methods);
+    offerMethods();
     renderCheckout({ authenticated: true });
 
     const phone = await screen.findByRole("textbox", {
@@ -544,7 +599,7 @@ describe("CheckoutPage", () => {
   // was given, and the server asks the carrier whether it is real.
   it("will not order a map method until a point has been chosen", async () => {
     const user = userEvent.setup();
-    mocks.getCheckoutMethods.mockResolvedValue(methods);
+    offerMethods();
     renderCheckout();
 
     await screen.findByRole("button", { name: "Place order" });
@@ -558,7 +613,7 @@ describe("CheckoutPage", () => {
 
   it("sends the point the carrier's map gave back, and nothing else about it", async () => {
     const user = userEvent.setup();
-    mocks.getCheckoutMethods.mockResolvedValue(methods);
+    offerMethods();
     mocks.placeOrder.mockResolvedValue({ number: "2026-00001", token: "t", paymentInstructions: null, redirectUrl: null });
     (window as { Packeta?: unknown }).Packeta = {
       Widget: {
@@ -590,7 +645,7 @@ describe("CheckoutPage", () => {
   // behind, and the doorstep must not open anything.
   it("forgets the chosen box when the shopper asks for their door instead", async () => {
     const user = userEvent.setup();
-    mocks.getCheckoutMethods.mockResolvedValue(methods);
+    offerMethods();
     mocks.placeOrder.mockResolvedValue({ number: "2026-00002", token: "t", paymentInstructions: null, redirectUrl: null });
     (window as { Packeta?: unknown }).Packeta = {
       Widget: {
@@ -632,7 +687,7 @@ describe("CheckoutPage", () => {
 
   it("focuses a linked validation summary and blocks an incomplete order", async () => {
     const user = userEvent.setup();
-    mocks.getCheckoutMethods.mockResolvedValue(methods);
+    offerMethods();
     renderCheckout();
 
     const submit = await screen.findByRole("button", { name: "Place order" });
@@ -655,7 +710,7 @@ describe("CheckoutPage", () => {
 
   it("shows a distinct empty pickup state and keeps checkout blocked", async () => {
     const user = userEvent.setup();
-    mocks.getCheckoutMethods.mockResolvedValue(methods);
+    offerMethods();
     mocks.getPickupPoints.mockResolvedValue([]);
     renderCheckout();
 
@@ -672,6 +727,195 @@ describe("CheckoutPage", () => {
         .getAttribute("aria-disabled"),
     ).toBe("true");
   });
+  it("uses the separate delivery country, retains drafts, and ignores edits to a non-destination billing country", async () => {
+    const user = userEvent.setup();
+    offerMethods();
+    renderCheckout();
+    await fillGuestAddress(user);
+    await waitFor(() => expect(mocks.getCheckoutMethods).toHaveBeenLastCalledWith("IE", expect.any(AbortSignal)));
+    await user.click(screen.getByRole("checkbox", { name: "Ship to a different address" }));
+    const countries = screen.getAllByRole("textbox", { name: /^Country/ });
+    fireEvent.change(countries[1], { target: { value: " sk " } });
+    await waitFor(() => expect(mocks.getCheckoutMethods).toHaveBeenLastCalledWith("SK", expect.any(AbortSignal)));
+    const reads = mocks.getCheckoutMethods.mock.calls.length;
+    fireEvent.change(countries[0], { target: { value: "CZ" } });
+    expect(mocks.getCheckoutMethods).toHaveBeenCalledTimes(reads);
+    await user.click(screen.getByRole("checkbox", { name: "Ship to a different address" }));
+    await waitFor(() => expect(mocks.getCheckoutMethods).toHaveBeenLastCalledWith("CZ", expect.any(AbortSignal)));
+    expect(screen.getByRole("textbox", { name: "Street and number" })).toHaveProperty("value", "1 Main Street");
+    await user.click(screen.getByRole("checkbox", { name: "Ship to a different address" }));
+    expect(screen.getAllByRole("textbox", { name: /^Country/ })[1]).toHaveProperty("value", " sk ");
+  });
+
+  it("discards late country responses and blocks forced submission during a refresh", async () => {
+    const user = userEvent.setup(), oldRead = deferred<CheckoutMethods>(), currentRead = deferred<CheckoutMethods>();
+    offerMethods();
+    renderCheckout();
+    await fillGuestAddress(user);
+    mocks.getCheckoutMethods.mockImplementation((country: string) => country === "CZ" ? oldRead.promise : currentRead.promise);
+    const country = screen.getByRole("textbox", { name: /^Country/ });
+    fireEvent.change(country, { target: { value: "CZ" } });
+    fireEvent.change(country, { target: { value: "SK" } });
+    expect(mocks.getCheckoutMethods.mock.calls.at(-2)![1].aborted).toBe(true);
+    expect(screen.getByRole("button", { name: "Place order" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("textbox", { name: "E-mail" }).matches(":disabled")).toBe(false);
+    expect(document.querySelector(".checkout-total")).toBeNull();
+    fireEvent.submit(document.querySelector("form.checkout")!);
+    expect(mocks.placeOrder).not.toHaveBeenCalled();
+    await act(async () => currentRead.resolve({ ...methods, destinationCountry: "SK" }));
+    await act(async () => oldRead.resolve({ ...methods, destinationCountry: "CZ", shippingMethods: [] }));
+    expect(screen.getByRole("radio", { name: /Courier/ })).toHaveProperty("checked", true);
+    expect(screen.getByRole("button", { name: "Place order" }).getAttribute("aria-disabled")).toBeNull();
+  });
+
+  it.each(["C", "12", "ČZ", "CZE", "ß"])("blocks an incomplete or non-ASCII country %s without querying stale availability", async value => {
+    const user = userEvent.setup();
+    offerMethods(); renderCheckout(); await fillGuestAddress(user);
+    const calls = mocks.getCheckoutMethods.mock.calls.length;
+    fireEvent.change(screen.getByRole("textbox", { name: /^Country/ }), { target: { value } });
+    expect(await screen.findByText("Enter a two-letter delivery country to check available methods.")).toBeTruthy();
+    expect(mocks.getCheckoutMethods).toHaveBeenCalledTimes(calls);
+    fireEvent.submit(document.querySelector("form.checkout")!);
+    expect(mocks.placeOrder).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: /^Country/ }).getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("requires fresh choices when delivery and payment disappear, without falling back or reviving them later", async () => {
+    const user = userEvent.setup();
+    offerMethods(); renderCheckout(); await fillGuestAddress(user);
+    const country = screen.getByRole("textbox", { name: /^Country/ });
+    mocks.getCheckoutMethods.mockResolvedValue({ ...methods, destinationCountry: "CZ",
+      paymentMethods: [{ code: "card", name: "Card" }], shippingMethods: [methods.shippingMethods[3]] });
+    fireEvent.change(country, { target: { value: "CZ" } });
+    await screen.findByText("Delivery options changed. Choose an available shipping method.");
+    expect(screen.getByRole("radio", { name: /Home delivery/ })).toHaveProperty("checked", false);
+    expect(screen.getByRole("radio", { name: "Card" })).toHaveProperty("checked", false);
+    fireEvent.submit(document.querySelector("form.checkout")!);
+    expect(mocks.placeOrder).not.toHaveBeenCalled();
+    offerMethods(); fireEvent.change(country, { target: { value: "IE" } });
+    await screen.findByRole("radio", { name: /Courier/ });
+    expect(screen.getByRole("radio", { name: /Courier/ })).toHaveProperty("checked", false);
+    await user.click(screen.getByRole("radio", { name: /Home delivery/ }));
+    await user.click(screen.getByRole("radio", { name: "Cash" }));
+    expect(screen.getByRole("button", { name: "Place order" }).getAttribute("aria-disabled")).toBeNull();
+  });
+
+  it("preserves contact and address through an empty offer, failed reads and explicit GET-only recovery", async () => {
+    const user = userEvent.setup();
+    offerMethods(); renderCheckout(); await fillGuestAddress(user);
+    mocks.getCheckoutMethods.mockResolvedValue({ ...methods, destinationCountry: "SK", shippingMethods: [] });
+    fireEvent.change(screen.getByRole("textbox", { name: /^Country/ }), { target: { value: "SK" } });
+    await screen.findByText(/No shipping method is currently available/);
+    mocks.getCheckoutMethods.mockRejectedValue(new HttpError("network", null));
+    await user.click(screen.getByRole("button", { name: "Check available methods again" }));
+    await screen.findByRole("button", { name: "Try again" });
+    fireEvent.submit(document.querySelector("form.checkout")!);
+    expect(mocks.placeOrder).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "E-mail" })).toHaveProperty("value", "guest@example.com");
+    expect(screen.getByRole("textbox", { name: "Street and number" })).toHaveProperty("value", "1 Main Street");
+    offerMethods(); await user.click(screen.getByRole("button", { name: "Try again" }));
+    await screen.findByRole("radio", { name: /Courier/ });
+    expect(screen.getByRole("radio", { name: /Courier/ })).toHaveProperty("checked", false);
+    expect(mocks.placeOrder).not.toHaveBeenCalled();
+  });
+
+  it("rejects a mismatched response country and links server country validation to the effective address", async () => {
+    const user = userEvent.setup();
+    offerMethods(); renderCheckout(); await fillGuestAddress(user);
+    mocks.getCheckoutMethods.mockResolvedValue({ ...methods, destinationCountry: "IE" });
+    fireEvent.change(screen.getByRole("textbox", { name: /^Country/ }), { target: { value: "CZ" } });
+    await screen.findByText(/unexpected response/);
+    fireEvent.submit(document.querySelector("form.checkout")!);
+    expect(mocks.placeOrder).not.toHaveBeenCalled();
+    mocks.getCheckoutMethods.mockRejectedValue(new HttpError("http", 400, { errors: { country: ["A country is its two-letter code"] } }));
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    const issue = await screen.findByRole("button", { name: "Use an allowed two-letter country code." });
+    const field = screen.getByRole("textbox", { name: /^Country/ });
+    field.scrollIntoView = vi.fn();
+    await user.click(issue);
+    expect(document.activeElement).toBe(field);
+    expect(field.scrollIntoView).toHaveBeenCalledWith({ block: "center" });
+  });
+
+  it("invalidates method reads on cart and store changes and keeps the current draft only within its store", async () => {
+    const user = userEvent.setup(), oldRead = deferred<CheckoutMethods>();
+    offerMethods(); renderCheckout(); await fillGuestAddress(user);
+    mocks.getCheckoutMethods.mockReturnValueOnce(oldRead.promise);
+    await user.click(screen.getByRole("button", { name: "Change cart contents" }));
+    expect(screen.getByRole("button", { name: "Place order" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("textbox", { name: "Street and number" })).toHaveProperty("value", "1 Main Street");
+    const reads = mocks.getCheckoutMethods.mock.calls.length;
+    await user.click(screen.getByRole("button", { name: "Change store" }));
+    await waitFor(() => expect(mocks.getCheckoutMethods).toHaveBeenCalledTimes(reads + 1));
+    await act(async () => oldRead.resolve({ ...methods, destinationCountry: "IE", shippingMethods: [] }));
+    expect(screen.getByRole("textbox", { name: "E-mail" })).toHaveProperty("value", "");
+    expect(screen.getByRole("radio", { name: /Courier/ })).toBeTruthy();
+  });
+
+  it("clears listed pickup choices when the destination changes even if the same method and point remain", async () => {
+    const user = userEvent.setup();
+    offerMethods();
+    mocks.getPickupPoints.mockResolvedValue([{ code: "counter", name: "Counter", line1: "Street", city: "City", postalCode: "123", country: "CZ" }]);
+    renderCheckout(); await fillGuestAddress(user);
+    await user.click(screen.getByRole("radio", { name: /Pickup/ }));
+    await user.selectOptions(await screen.findByRole("combobox", { name: "Pickup point" }), "counter");
+    fireEvent.change(screen.getByRole("textbox", { name: /^Country/ }), { target: { value: "CZ" } });
+    await screen.findByText(/Choose your pickup point again/);
+    const select = await screen.findByRole("combobox", { name: "Pickup point" });
+    expect(select).toHaveProperty("value", "");
+    fireEvent.submit(document.querySelector("form.checkout")!);
+    expect(mocks.placeOrder).not.toHaveBeenCalled();
+    await user.selectOptions(select, "counter");
+    expect(screen.queryByText(/Choose your pickup point again/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Place order" }).getAttribute("aria-disabled")).toBeNull();
+  });
+
+  it("ignores a carrier callback from the old destination and requires a new point", async () => {
+    const user = userEvent.setup();
+    let callback!: (point: { id: string; name: string }) => void;
+    (window as { Packeta?: unknown }).Packeta = { Widget: { pick: (_key: string, answer: typeof callback) => { callback = answer; } } };
+    try {
+      offerMethods(); renderCheckout(); await fillGuestAddress(user);
+      await user.click(screen.getByRole("radio", { name: /Z-BOX/ }));
+      await user.click(screen.getByRole("button", { name: "Choose a pickup point" }));
+      const stale = callback;
+      fireEvent.change(screen.getByRole("textbox", { name: /^Country/ }), { target: { value: "CZ" } });
+      await screen.findByRole("button", { name: "Choose a pickup point" });
+      await act(async () => stale({ id: "old", name: "Old point" }));
+      expect(screen.queryByText("Old point")).toBeNull();
+      await user.click(screen.getByRole("button", { name: "Choose a pickup point" }));
+      await act(async () => callback({ id: "new", name: "Current point" }));
+      expect(screen.getAllByText("Current point")).toHaveLength(2);
+    } finally { delete (window as { Packeta?: unknown }).Packeta; }
+  });
+
+  it("keeps an uncertain checkout key when the destination is restored and requires explicit review for a changed destination", async () => {
+    const user = userEvent.setup();
+    offerMethods(); mocks.placeOrder.mockRejectedValue(new HttpError("network", null));
+    renderCheckout(); await fillGuestAddress(user);
+    await user.click(screen.getByRole("button", { name: "Place order" }));
+    await screen.findByText(/same request key/);
+    const key = mocks.placeOrder.mock.calls[0][1];
+    const country = screen.getByRole("textbox", { name: /^Country/ });
+    fireEvent.change(country, { target: { value: "CZ" } });
+    await screen.findByText("The previous order may have been placed");
+    fireEvent.submit(document.querySelector("form.checkout")!);
+    expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
+    fireEvent.change(country, { target: { value: "IE" } });
+    await waitFor(() => expect(screen.queryByText("The previous order may have been placed")).toBeNull());
+    await user.click(screen.getByRole("button", { name: "Place order" }));
+    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(2));
+    expect(mocks.placeOrder.mock.calls[1][1]).toBe(key);
+    fireEvent.change(country, { target: { value: "CZ" } });
+    const review = await screen.findByRole("button", { name: "Start a new attempt" });
+    await waitFor(() => expect(review).toHaveProperty("disabled", false));
+    await user.click(review);
+    await user.click(screen.getByRole("button", { name: "Place order" }));
+    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(3));
+    expect(mocks.placeOrder.mock.calls[2][1]).not.toBe(key);
+    expect(mocks.placeOrder.mock.calls[2][0].billingAddress.country).toBe("CZ");
+  });
+
 });
 
 function deferred<T>() {
@@ -682,4 +926,8 @@ function deferred<T>() {
     reject = fail;
   });
   return { promise, resolve, reject };
+}
+
+function offerMethods(value = methods) {
+  mocks.getCheckoutMethods.mockImplementation(async (country: string | null) => ({ ...value, destinationCountry: country }));
 }

@@ -37,6 +37,7 @@ export type RunSession = {
   setGatewayStatus: (id: string, status: "REVERSAL_PENDING" | "PAID") => Promise<void>;
   pushAgain: (id: string) => Promise<void>;
   refundOrder: (store: RunStore, number: string) => Promise<void>;
+  limitShippingToCzechia: (store: RunStore) => Promise<void>;
   advanceReturn: (store: RunStore, orderNumber: string, returnNumber: string, action: "accept" | "receive" | "retry") => Promise<MerchantReturn>;
 };
 
@@ -116,6 +117,28 @@ export const test = base.extend<{ runSession: RunSession; writeTransport: WriteT
         pushAgain: async id => {
           await ownTransaction(id);
           await json(request, `${root}/comgate/transactions/${encodeURIComponent(id)}/push`, 200, "POST", 10_000);
+        },
+        limitShippingToCzechia: async store => {
+          if (!run.stores.some(candidate => candidate.id === store.id && candidate.host === store.host)) throw new Error("Foreign shipping target.");
+          await withOwner(async admin => {
+            type Method = { code: string; name: string; price: number; vatRate: number; isActive: boolean; requiresPickupPoint: boolean;
+              maxWeightGrams: number | null; countries: string[]; taxClass: string | null };
+            const url = `${environment.apiOrigin}/api/admin/stores/${store.id}/shipping-methods`;
+            const methods = await json<Method[]>(admin, url);
+            expect(methods.length).toBeGreaterThan(0); expect(methods.length).toBeLessThanOrEqual(10);
+            expect(methods.some(method => method.code === "personal-pickup" && method.isActive)).toBe(true);
+            for (const method of methods) {
+              expect(method.code).toMatch(/^[a-z0-9-]+$/);
+              const { name, price, vatRate, isActive, requiresPickupPoint, maxWeightGrams, taxClass } = method;
+              const answer = await admin.put(`${url}/${encodeURIComponent(method.code)}`, {
+                data: { name, price, vatRate, isActive, requiresPickupPoint, maxWeightGrams, taxClass, countries: ["CZ"] },
+                maxRedirects: 0, maxRetries: 0,
+              });
+              expect(answer.status(), "Owned shipping-country fixture update").toBe(200);
+              expect(await answer.json()).toMatchObject({ code: method.code, countries: ["CZ"], name, price, vatRate, isActive, requiresPickupPoint, maxWeightGrams, taxClass });
+            }
+            expect((await json<Method[]>(admin, url)).every(method => method.countries.length === 1 && method.countries[0] === "CZ")).toBe(true);
+          });
         },
         refundOrder: async (store, number) => {
           if (!run.stores.some(candidate => candidate.id === store.id)) throw new Error("Foreign order target.");

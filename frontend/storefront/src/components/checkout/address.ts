@@ -18,13 +18,15 @@ export const emptyAddress = (): AddressDraft => ({
   country: "",
 });
 
+export const isCountryCode = (value: string) => /^[a-z]{2}$/i.test(value.trim());
+
 export function isAddressComplete(value: AddressDraft) {
   return (
     value.fullName.trim().length > 0 &&
     value.line1.trim().length > 0 &&
     value.city.trim().length > 0 &&
     value.postalCode.trim().length > 0 &&
-    value.country.trim().length === 2
+    isCountryCode(value.country)
   );
 }
 

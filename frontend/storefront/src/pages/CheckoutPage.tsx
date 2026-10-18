@@ -2,13 +2,13 @@ import { useRef, useState, type FormEvent } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router";
 import { statusOf } from "../api/errors";
+import { HttpError } from "../api/http";
 import {
   getCart,
   getCheckoutMethods,
   getPickupPoints,
   placeOrder,
   type Cart,
-  type CheckoutMethods,
   type CheckoutRequest,
 } from "../cart";
 import { useCart } from "../cartContext";
@@ -17,6 +17,7 @@ import { AddressFields } from "../components/checkout/AddressFields";
 import {
   emptyAddress,
   isAddressComplete,
+  isCountryCode,
   toAddress,
   type AddressDraft,
 } from "../components/checkout/address";
@@ -43,7 +44,7 @@ export function CheckoutPage() {
   const { t } = useTranslation(["checkout", "cart"]);
   const cartState = useCart();
   const customerState = useCustomer();
-  const methods = useRequest("checkout-methods", getCheckoutMethods);
+  const store = useStore();
 
   if (cartState.status === "error") {
     return (
@@ -98,47 +99,11 @@ export function CheckoutPage() {
     );
   }
 
-  if (methods.status === "loading") {
-    return (
-      <section className="checkout-load-state">
-        <h1>{t("checkout:title")}</h1>
-        <LoadingState label={t("checkout:loadingMethods")} lines={4} />
-      </section>
-    );
-  }
-
-  if (methods.status === "error" || methods.status === "not-found") {
-    return (
-      <section className="checkout-load-state">
-        <h1>{t("checkout:title")}</h1>
-        <RequestError
-          error={methods.error}
-          operation="read"
-          onRetry={methods.reload}
-        />
-      </section>
-    );
-  }
-
-  const { paymentMethods, shippingMethods } = methods.data;
-  if (paymentMethods.length === 0 || shippingMethods.length === 0) {
-    const reason =
-      paymentMethods.length === 0 && shippingMethods.length === 0
-        ? t("checkout:unavailableStore")
-        : paymentMethods.length === 0
-          ? t("checkout:noPaymentMethods")
-          : t("checkout:noShippingMethods");
-    return (
-      <Message title={t("checkout:unavailableTitle")} text={reason} />
-    );
-  }
-
   return (
     <CheckoutForm
+      key={store.id}
       cart={cartState.cart}
       cartPending={cartState.pending}
-      methods={methods.data}
-      methodsRequest={methods}
       customer={customerState.customer}
       adjusted={cartState.adjusted}
       applyCart={cartState.apply}
@@ -156,8 +121,6 @@ type CheckoutIssue = {
 function CheckoutForm({
   cart,
   cartPending,
-  methods,
-  methodsRequest,
   customer,
   adjusted,
   applyCart,
@@ -166,11 +129,6 @@ function CheckoutForm({
 }: {
   cart: Cart;
   cartPending: boolean;
-  methods: CheckoutMethods;
-  methodsRequest: Extract<
-    RequestState<CheckoutMethods>,
-    { status: "ready" }
-  >;
   customer: Customer | null;
   adjusted: boolean;
   applyCart: (cart: Cart) => void;
@@ -196,8 +154,8 @@ function CheckoutForm({
   const [shipElsewhere, setShipElsewhere] = useState(false);
   const [shippingAddress, setShippingAddress] =
     useState<AddressDraft>(emptyAddress);
-  const [shippingCode, setShippingCode] = useState("");
-  const [paymentCode, setPaymentCode] = useState("");
+  const [shippingCode, setShippingCode] = useState<string | null>(null);
+  const [paymentCode, setPaymentCode] = useState<string | null>(null);
   const [pickupPointCode, setPickupPointCode] = useState("");
   const [mapPoint, setMapPoint] = useState<ChosenPoint | null>(null);
   const [showValidation, setShowValidation] = useState(false);
@@ -211,22 +169,55 @@ function CheckoutForm({
   const validationSummary = useRef<HTMLDivElement>(null);
   const reviewNotice = useRef<HTMLDivElement>(null);
 
-  const chosenShipping =
-    methods.shippingMethods.find((method) => method.code === shippingCode) ??
-    methods.shippingMethods[0];
-  const chosenShippingCode = chosenShipping.code;
-  const chosenPayment =
-    methods.paymentMethods.find((method) => method.code === paymentCode) ??
-    methods.paymentMethods[0];
-  const chosenPaymentCode = chosenPayment.code;
-  // A method that delivers to the door says so itself, so neither branch has to ask twice.
-  const fromOurList = chosenShipping.pickupPointChoice === "list";
-  const inTheCarriersMap = chosenShipping.pickupPointChoice === "carrier-map";
+  const countryInput = (shipElsewhere ? shippingAddress : billing).country.trim();
+  const invalidCountry = countryInput !== "" && !isCountryCode(countryInput);
+  const country = countryInput.toUpperCase() || null;
+  // Weight and destination both affect the server's offer. A changed scope never borrows old availability.
+  const methodsScope = JSON.stringify([store.id, cart, country, invalidCountry]);
+  const methodsRequest = useRequest(methodsScope, async (signal) => {
+    if (invalidCountry) return null;
+    const answer = await getCheckoutMethods(country, signal);
+    if (answer.destinationCountry !== country) throw new HttpError("invalid-response", null);
+    return answer;
+  });
+  const methods = methodsRequest.status === "ready" ? methodsRequest.data : null;
+  const methodsRefreshing = methodsRequest.status === "loading" ||
+    (methodsRequest.status === "ready" && methodsRequest.refreshing);
+  const methodsError = methodsRequest.status === "error" || methodsRequest.status === "not-found"
+    ? methodsRequest.error : methodsRequest.status === "ready" ? methodsRequest.refreshError : null;
+  const methodsReady = methods !== null && !invalidCountry && !methodsRefreshing && methodsError === null;
+
+  const chosenShipping = methods?.shippingMethods.find(method => method.code === shippingCode);
+  const chosenPayment = methods?.paymentMethods.find(method => method.code === paymentCode);
+  const chosenShippingCode = chosenShipping?.code ?? "";
+  const chosenPaymentCode = chosenPayment?.code ?? "";
+  // Defaults are only for the first offer. A removed choice stays empty until the shopper chooses again.
+  if (methodsReady && shippingCode === null) setShippingCode(methods.shippingMethods[0]?.code ?? "");
+  else if (methodsReady && shippingCode && !chosenShipping) setShippingCode("");
+  if (methodsReady && paymentCode === null) setPaymentCode(methods.paymentMethods[0]?.code ?? "");
+  else if (methodsReady && paymentCode && !chosenPayment) setPaymentCode("");
+
+  const pickupScope = JSON.stringify([methodsScope, chosenShippingCode, chosenShipping?.requiresPickupPoint, chosenShipping?.pickupPointChoice]);
+  const [pointScope, setPointScope] = useState(pickupScope);
+  const [pointReset, setPointReset] = useState(false);
+  if (pointScope !== pickupScope) {
+    setPointScope(pickupScope);
+    if (pickupPointCode || mapPoint) setPointReset(true);
+    setPickupPointCode("");
+    setMapPoint(null);
+  }
+  const fromOurList = methodsReady && chosenShipping?.pickupPointChoice === "list";
+  const inTheCarriersMap = methodsReady && chosenShipping?.pickupPointChoice === "carrier-map";
   const pickupPoints = useRequest(
-    "checkout-pickup:" + (fromOurList ? chosenShipping.code : "none"),
-    (signal) =>
-      fromOurList ? getPickupPoints(chosenShipping.code, signal) : Promise.resolve([]),
+    "checkout-pickup:" + pickupScope + (fromOurList ? ":list" : ":none"),
+    (signal) => fromOurList ? getPickupPoints(chosenShippingCode, signal) : Promise.resolve([]),
   );
+  if (fromOurList && pickupPoints.status === "ready" && !pickupPoints.refreshing &&
+    pickupPoints.refreshError === null && pickupPointCode &&
+    !pickupPoints.data.some(point => point.code === pickupPointCode)) {
+    setPickupPointCode("");
+    setPointReset(true);
+  }
   const chosenPointCode = inTheCarriersMap ? (mapPoint?.id ?? "") : pickupPointCode;
   const listedPoint = fromOurList && pickupPoints.status === "ready"
     ? pickupPoints.data.find((point) => point.code === pickupPointCode)
@@ -247,7 +238,7 @@ function CheckoutForm({
     shippingAddress,
     shippingMethodCode: chosenShippingCode,
     paymentMethodCode: chosenPaymentCode,
-    pickupRequired: chosenShipping.requiresPickupPoint,
+    pickupRequired: chosenShipping?.requiresPickupPoint ?? false,
     // A point chosen in the carrier's map is not in any list of ours, so there is nothing to check it
     // against here; the server asks the carrier, which is the only one that can answer.
     pickupPointCode: chosenPointCode,
@@ -269,12 +260,11 @@ function CheckoutForm({
     shippingAddress: shipElsewhere ? toAddress(shippingAddress) : null,
     paymentMethodCode: chosenPaymentCode,
     shippingMethodCode: chosenShippingCode,
-    pickupPointCode: chosenShipping.requiresPickupPoint ? chosenPointCode : null,
+    pickupPointCode: chosenShipping?.requiresPickupPoint ? chosenPointCode : null,
   };
-  const changedAfterUncertain = failed !== null && uncertainWrite(failed) &&
+  const changedAfterUncertain = failed !== null && (uncertainWrite(failed) || inFlightWrite(failed)) &&
     changedSince(attempt, requestBody);
   const mustReview = reviewKind !== null || adjusted || changedAfterUncertain;
-  const methodsRefreshing = methodsRequest.refreshing;
   const pickupUnavailable = fromOurList && pickupPoints.status === "ready" &&
     (pickupPoints.refreshing || pickupPoints.refreshError !== null);
   const canSubmit =
@@ -284,14 +274,15 @@ function CheckoutForm({
     !cartPending &&
     !pickupUnavailable &&
     !refreshingCart &&
-    !methodsRefreshing &&
-    methodsRequest.refreshError === null &&
+    methodsReady &&
+    country !== null &&
     refreshFailure === null;
 
   function chooseShipping(code: string) {
     setShippingCode(code);
     setPickupPointCode("");
     setMapPoint(null);
+    setPointReset(false);
     setShowValidation(false);
   }
 
@@ -310,8 +301,8 @@ function CheckoutForm({
   }
 
   function reviewChanges() {
-    if (refreshingCart || methodsRefreshing || methodsRequest.refreshError !== null || refreshFailure !== null) return;
-    if (reviewKind !== "inFlight") setAttempt(null);
+    if (refreshingCart || !methodsReady || refreshFailure !== null) return;
+    if (reviewKind !== "inFlight" || changedAfterUncertain) setAttempt(null);
     acknowledgeAdjustment();
     setReviewKind(null);
     setFailed(null);
@@ -394,13 +385,6 @@ function CheckoutForm({
       >
         <fieldset className="checkout-fields" disabled={pending || cartPending}>
           <legend className="sr-only">{t("checkout:orderDetails")}</legend>
-          {methodsRequest.refreshError !== null && (
-            <RequestError
-              error={methodsRequest.refreshError}
-              operation="read"
-              onRetry={methodsRequest.reload}
-            />
-          )}
           {refreshFailure !== null && (
             <RequestError
               error={refreshFailure}
@@ -415,16 +399,16 @@ function CheckoutForm({
               role="alert"
               tabIndex={-1}
             >
-              <InlineMessage title={t(reviewKind === "inFlight" ? "checkout:inFlightTitle" : reviewKind === "mismatch" ? "checkout:keyMismatchTitle" : changedAfterUncertain ? "checkout:uncertainChangedTitle" : "checkout:reviewTitle")}>
-                <p>{t(reviewKind === "inFlight" ? "checkout:inFlightBody" : reviewKind === "mismatch" ? "checkout:keyMismatchBody" : changedAfterUncertain ? "checkout:uncertainChangedBody" : "checkout:reviewBody")}</p>
+              <InlineMessage title={t(changedAfterUncertain ? "checkout:uncertainChangedTitle" : reviewKind === "inFlight" ? "checkout:inFlightTitle" : reviewKind === "mismatch" ? "checkout:keyMismatchTitle" : "checkout:reviewTitle")}>
+                <p>{t(changedAfterUncertain ? "checkout:uncertainChangedBody" : reviewKind === "inFlight" ? "checkout:inFlightBody" : reviewKind === "mismatch" ? "checkout:keyMismatchBody" : "checkout:reviewBody")}</p>
                 <button
                   type="button"
-                  disabled={refreshingCart || methodsRefreshing || methodsRequest.refreshError !== null || refreshFailure !== null}
+                  disabled={refreshingCart || !methodsReady || refreshFailure !== null}
                   onClick={reviewChanges}
                 >
                   {refreshingCart || methodsRefreshing
                     ? t("checkout:refreshingOrder")
-                    : t(reviewKind === "inFlight" ? "checkout:retryReviewAction" : changedAfterUncertain || reviewKind === "mismatch" ? "checkout:newAttemptAction" : "checkout:reviewAction")}
+                    : t(changedAfterUncertain || reviewKind === "mismatch" ? "checkout:newAttemptAction" : reviewKind === "inFlight" ? "checkout:retryReviewAction" : "checkout:reviewAction")}
                 </button>
               </InlineMessage>
             </div>
@@ -545,11 +529,31 @@ function CheckoutForm({
             </fieldset>
           )}
 
+          <div className="checkout-method-status" aria-live="polite" aria-atomic="true">
+            {invalidCountry ? <p className="hint">{t("checkout:destinationCountryNeeded")}</p>
+              : methodsRefreshing ? <p role="status">{t("checkout:loadingMethods")}</p> : null}
+            {methodsError !== null && <RequestError error={methodsError} operation="read"
+              onRetry={methodsRequest.reload}
+              fieldTargets={{ country: shipElsewhere ? "shipping.country" : "billing.country" }} />}
+            {methodsReady && (methods.shippingMethods.length === 0 || methods.paymentMethods.length === 0) &&
+              <InlineMessage title={t("checkout:unavailableTitle")}>
+                <p>{t(methods.shippingMethods.length === 0 && methods.paymentMethods.length === 0
+                  ? "checkout:unavailableStore" : methods.shippingMethods.length === 0
+                    ? "checkout:noShippingMethods" : "checkout:noPaymentMethods")}</p>
+                <button type="button" onClick={methodsRequest.reload}>{t("checkout:refreshMethods")}</button>
+              </InlineMessage>}
+            {methodsReady && shippingCode === "" && methods.shippingMethods.length > 0 &&
+              <p>{t("checkout:shippingSelectionChanged")}</p>}
+            {methodsReady && paymentCode === "" && methods.paymentMethods.length > 0 &&
+              <p>{t("checkout:paymentSelectionChanged")}</p>}
+            {pointReset && <p>{t("checkout:pickupSelectionChanged")}</p>}
+          </div>
+
           <ShippingMethodSelection
-            methods={methods.shippingMethods}
+            methods={methods?.shippingMethods ?? []}
             selectedCode={chosenShippingCode}
             store={store}
-            disabled={pending}
+            disabled={pending || !methodsReady}
             onChange={chooseShipping}
           />
 
@@ -559,36 +563,36 @@ function CheckoutForm({
               value={pickupPointCode}
               disabled={pending}
               showError={showValidation}
-              onChange={setPickupPointCode}
+              onChange={(code) => { setPickupPointCode(code); setPointReset(false); }}
             />
           )}
 
           {inTheCarriersMap && (
             <CarrierMapPicker
-              key={chosenShippingCode}
+              key={pickupScope}
               apiKey={carrierKey}
               language={store.culture.split("-")[0]}
               chosen={mapPoint}
               disabled={pending}
               showError={showValidation}
-              onChoose={setMapPoint}
+              onChoose={(point) => { setMapPoint(point); setPointReset(false); }}
             />
           )}
 
           <PaymentMethodSelection
-            methods={methods.paymentMethods}
+            methods={methods?.paymentMethods ?? []}
             selectedCode={chosenPaymentCode}
-            disabled={pending}
+            disabled={pending || !methodsReady}
             onChange={setPaymentCode}
           />
-          <CheckoutReview request={requestBody} shippingName={chosenShipping.name} paymentName={chosenPayment.name}
-            complete={issues.length === 0}
+          <CheckoutReview request={requestBody} shippingName={chosenShipping?.name ?? ""} paymentName={chosenPayment?.name ?? ""}
+            complete={issues.length === 0 && methodsReady}
             pickupLabel={pickupLabel} />
         </fieldset>
 
         <CheckoutSummary
           cart={cart}
-          shipping={chosenShipping}
+          shipping={methodsReady ? chosenShipping : undefined}
           store={store}
           pending={pending}
         >

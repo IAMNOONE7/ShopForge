@@ -111,7 +111,14 @@ export async function expectPublicRefund(page: Page, number: string, state: "Set
 }
 
 export async function noOverflow(page: Page) {
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+  const layout = await page.evaluate(() => ({
+    viewport: document.documentElement.clientWidth, width: document.documentElement.scrollWidth,
+    overflow: [...document.querySelectorAll("body *")].filter(element => {
+      const box = element.getBoundingClientRect();
+      return box.width > 0 && box.right > document.documentElement.clientWidth + 1;
+    }).slice(-12).map(element => ({ tag: element.tagName, class: element.className, width: element.getBoundingClientRect().width })),
+  }));
+  expect(layout.width, JSON.stringify(layout)).toBeLessThanOrEqual(layout.viewport + 1);
 }
 
 export async function downloadOrderDocument(page: Page, number: string, testInfo: TestInfo) {

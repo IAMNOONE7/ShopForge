@@ -1,4 +1,4 @@
-import { requestJson } from "./api/http";
+import { HttpError, requestJson } from "./api/http";
 import { withOrderFacts, type CustomerRefund } from "./refundFacts";
 
 export type CartLine = {
@@ -62,6 +62,7 @@ export type PickupPoint = {
 };
 
 export type CheckoutMethods = {
+  destinationCountry: string | null;
   paymentMethods: PaymentMethod[];
   shippingMethods: ShippingMethod[];
 };
@@ -168,8 +169,26 @@ export const applyDiscount = (code: string) =>
 export const removeDiscount = () =>
   requestJson<Cart>("/api/storefront/cart/discount", { method: "DELETE" });
 
-export const getCheckoutMethods = (signal: AbortSignal) =>
-  requestJson<CheckoutMethods>("/api/storefront/checkout/methods", { signal });
+export async function getCheckoutMethods(country: string | null, signal?: AbortSignal) {
+  const destinationCountry = country?.trim().toUpperCase() || null;
+  const query = destinationCountry ? "?country=" + encodeURIComponent(destinationCountry) : "";
+  const result = await requestJson<CheckoutMethods>("/api/storefront/checkout/methods" + query, { signal });
+  if (!result || result.destinationCountry !== destinationCountry ||
+    !Array.isArray(result.paymentMethods) || !Array.isArray(result.shippingMethods) ||
+    !result.paymentMethods.every(validPaymentMethod) ||
+    !result.shippingMethods.every(method => validPaymentMethod(method) &&
+      Number.isFinite(method.price) && method.price >= 0 && typeof method.requiresPickupPoint === "boolean" &&
+      ["none", "list", "carrier-map"].includes(method.pickupPointChoice)) ||
+    new Set(result.paymentMethods.map(method => method.code)).size !== result.paymentMethods.length ||
+    new Set(result.shippingMethods.map(method => method.code)).size !== result.shippingMethods.length)
+    throw new HttpError("invalid-response", null);
+  return result;
+}
+
+function validPaymentMethod(method: PaymentMethod) {
+  return method && typeof method.code === "string" && method.code.trim().length > 0 &&
+    typeof method.name === "string" && method.name.trim().length > 0;
+}
 
 export const getPickupPoints = (methodCode: string, signal?: AbortSignal) =>
   requestJson<PickupPoint[]>(

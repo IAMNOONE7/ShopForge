@@ -317,11 +317,23 @@
 }
 
 fieldset.checkout-fields {
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
   margin: 0;
   padding: 0;
   border: 0;
   gap: var(--space-8);
+}
+
+.checkout-method-status {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.checkout-method-status button {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .checkout-section {

@@ -11,14 +11,16 @@ export function RequestError({
   error,
   operation,
   onRetry,
+  fieldTargets,
 }: {
   error: unknown;
   operation: ErrorOperation;
   onRetry?: () => void;
+  fieldTargets?: Record<string, string>;
 }) {
   const { t } = useTranslation(["errors", "validation", "common"]);
   const [copied, setCopied] = useState(false);
-  const issues = fieldIssues(error);
+  const issues = fieldIssues(error).map(issue => ({ ...issue, target: fieldTargets?.[issue.target] ?? issue.target }));
   const reference = traceId(error);
 
   useEffect(() => {
@@ -30,7 +32,7 @@ export function RequestError({
       for (const issue of issues)
         findField(issue.target)?.removeAttribute("aria-invalid");
     };
-  }, [error]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [error, fieldTargets]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function focusField(name: string) {
     const field = findField(name);

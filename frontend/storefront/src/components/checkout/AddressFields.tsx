@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import type { AddressDraft } from "./address";
+import { isCountryCode, type AddressDraft } from "./address";
 
 export function AddressFields({
   prefix,
@@ -28,7 +28,7 @@ export function AddressFields({
     const valid =
       options.optional ||
       (name === "country"
-        ? value.country.trim().length === 2
+        ? isCountryCode(value.country)
         : value[name].trim().length > 0);
     const hintId = options.hint ? id + "-hint" : undefined;
 
@@ -77,7 +77,6 @@ export function AddressFields({
       {field("city", t("checkout:city"), "address-level2")}
       {field("postalCode", t("checkout:postalCode"), "postal-code")}
       {field("country", t("checkout:country"), "country", {
-        maxLength: 2,
         hint: t("validation:countryCode", {
           example: t("checkout:countryExample"),
         }),
