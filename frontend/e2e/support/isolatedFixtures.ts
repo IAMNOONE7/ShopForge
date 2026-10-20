@@ -48,7 +48,7 @@ async function json<T>(client: APIRequestContext, url: string, status = 200, met
   return await response.json() as T;
 }
 
-export const test = base.extend<{ runSession: RunSession; writeTransport: WriteTransport; isolatedBrowser: void }>({
+export const runTest = base.extend<{ runSession: RunSession }>({
   runSession: async ({ request, playwright }, use, testInfo) => {
     const environment = loadStack();
     for (const path of ["/health/live", "/health/ready"]) expect((await request.get(environment.apiOrigin + path, { maxRedirects: 0, timeout: 5_000 })).status()).toBe(200);
@@ -180,6 +180,9 @@ export const test = base.extend<{ runSession: RunSession; writeTransport: WriteT
       expect((await request.get(root, { maxRedirects: 0 })).status()).toBe(404);
     }
   },
+});
+
+export const test = runTest.extend<{ writeTransport: WriteTransport; isolatedBrowser: void }>({
   writeTransport: async ({ runSession }, use) => {
     const origins = new Set(runSession.run.stores.map(store => runSession.origin(store)));
     const transport: WriteTransport = {

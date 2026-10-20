@@ -184,3 +184,61 @@ CI wiring and DNS remain separate work.
 These journeys do not advance the stack-wide clock or run scheduled passes. Public
 credited amounts remain distinct from provider settlement; settlement is asserted
 through the current oracle and stand-in rather than inferred from the shopper label.
+
+## Isolated merchant journeys
+
+The merchant matrix uses the same disposable stack, with separately owned admin and
+storefront previews. Start the stack as above, then run from this package:
+
+```bash
+npm run test:merchant
+npm run test:merchant:repeat
+```
+
+The admin preview defaults to `127.0.0.1:5176`; set `SHOPFORGE_E2E_ADMIN_PORT` to a
+distinct unprivileged port if necessary. The existing stack/storefront variables also
+apply. Both previews use `SHOPFORGE_API_TARGET`. The runner verifies that both apps
+reach the same E2E API/database marker before browser writes. It never starts or stops
+the API/rig, and refuses an existing frontend server. The normal matrix has eight
+cases across Czech/English and phone/desktop, one worker, zero retries and a ten-minute
+deadline. The repeat command runs each case twenty times and stops on the first
+failure; failed setup or development runs are not counted as repeat acceptance.
+
+Every test gets a new rig run. The owner signs in through the admin UI. The setup
+journey unpublishes one existing run host, creates and stocks a physical product,
+lists it hidden, edits its price using a decimal comma, makes it visible, configures
+Packeta address delivery and explicitly deactivates the saved manual shipping method.
+It saves Test account metadata through the UI, verifies publication stays blocked
+without a readable credential, saves a local-only credential separately, and publishes.
+A shopper then buys that exact variant at the edited price. Duplicate Comgate pushes
+must leave one paid attempt, one invoice and one stock deduction. The other store
+host remains published and never gains the new listing. A separate journey refunds
+a paid order through the merchant UI, then checks one credit note, one provider refund,
+restored stock and the shopper's settled refund, including a further duplicate payment
+notification and merchant reload.
+
+The owner performs these operations through forms and buttons. Helper API calls are
+reads, run setup/cleanup, or per-run provider controls; no helper API write stands in
+for a merchant task. Reads of the real admin/public contracts verify saved settings;
+the rig's database-backed stock and order readings verify inventory, exact variant and
+unit price, payment attempts, documents and refunds. A narrow merchant write boundary
+is separate from the unchanged shopper boundary. It allows only the run owner, its two
+stores, known listing/method IDs, and product/variant/order IDs learned from successful
+real responses. That forwarding records identities before delivering the original
+response, with no retries, replacement payloads or fake success. Operator actions,
+other runs, direct backend browser writes, Live account setup, Comgate secret replacement
+and other financial actions remain blocked.
+
+The Packeta reference/password in this matrix are deliberately local fixtures, used
+only for the E2E environment's in-memory credential/readiness path. They do not define
+Packeta's account-reference semantics, authenticate with Packeta, test its map, book
+parcels or prove a live carrier sandbox. The rig already supplies the Comgate account;
+its secret is never read or replaced by the journey. Merchant traces/video are disabled
+so login and credential forms do not enter network bodies or DOM recordings. Browser
+diagnostics record write paths and field names, not submitted values. Reports and
+failure screenshots remain private under ignored `artifacts/merchant/`.
+
+This tests merchandising/publication on the run's existing controlled `.localhost`
+hosts. Creating a new store and proving a domain still need controlled DNS and the
+backend-owned run/domain contracts. It does not certify deployment host restrictions,
+CSP/caching, live providers, CI integration, or the separate shopper repeat matrix.

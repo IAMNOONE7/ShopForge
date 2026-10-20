@@ -1,0 +1,158 @@
+import { currencyFormatter } from "../../admin/src/utils/format.ts";
+import { randomUUID } from "node:crypto";
+import type { Page, TestInfo } from "@playwright/test";
+import { test, expect, adminRead, type MerchantSession } from "../support/merchantFixtures.ts";
+import type { RunSession } from "../support/isolatedFixtures.ts";
+import type { RunProduct, RunStore } from "../support/isolatedEnvironment.ts";
+import { addVariant, checkout, downloadOrderDocument, expectPublicRefund, expectReceipt, labels, money, noOverflow, submitCheckout } from "../support/shopper.ts";
+
+type Method = { code: string; name: string; providerKey: string; price: number; vatRate: number; isActive: boolean; requiresPickupPoint: boolean; maxWeightGrams: number | null; countries: string[]; taxClass: string | null };
+const text = (value: string, key: string, replacement: string) => value.replace(`{{${key}}}`, replacement);
+async function write<T>(page: Page, method: string, path: string, status: number, action: () => Promise<unknown>): Promise<T> {
+  const answer = page.waitForResponse(response => new URL(response.url()).pathname === path && response.request().method() === method);
+  await action(); const response = await answer; expect(response.status(), `${method} ${path}`).toBe(status);
+  return response.status() === 204 ? undefined as T : await response.json() as T;
+}
+async function publication(page: Page, merchant: MerchantSession, store: RunStore, publish: boolean) {
+  const words = merchant.words.stores;
+  await page.goto(`${merchant.origin}/admin/stores/${store.id}/settings`);
+  await page.getByRole("button", { name: words[publish ? "reviewPublication" : "reviewUnpublish"], exact: true }).click();
+  const path = `/api/admin/stores/${store.id}/${publish ? "publish" : "unpublish"}`;
+  await write(page, "POST", path, 200, () => page.getByRole("button", { name: words[publish ? "confirmPublish" : "confirmUnpublish"], exact: true }).click());
+  await expect(page.locator(".publication-state")).toHaveText(words.status[publish ? "published" : "draft"]);
+  await noOverflow(page);
+}
+async function delivery(page: Page, session: RunSession, merchant: MerchantSession, store: RunStore) {
+  const base = `/api/admin/stores/${store.id}`, words = merchant.words;
+  await page.goto(`${merchant.origin}/admin/stores/${store.id}/methods`);
+  await page.getByRole("button", { name: words.methodSetup.newShipping, exact: true }).click();
+  const form = page.locator(".shipping-method-form");
+  await form.locator('[name="name"]').fill("Na adresu / Home"); await form.locator('[name="providerKey"]').selectOption("packeta");
+  await form.locator('[name="requiresPickupPoint"]').selectOption("address"); await form.locator('[name="price"]').fill("0,00");
+  await form.locator('[name="countries"]').fill("cz");
+  const method = await write<Method>(page, "POST", `${base}/shipping-methods`, 201, () => form.getByRole("button", { name: words.common.add, exact: true }).click());
+  expect(method).toMatchObject({ providerKey: "packeta", requiresPickupPoint: false, price: 0, isActive: true, countries: ["CZ"], taxClass: null });
+  await expect(page.getByText(words.methodSetup.acknowledged, { exact: true })).toBeVisible();
+  const old = (await adminRead<Method[]>(page, session, `${base}/shipping-methods`)).filter(item => item.providerKey !== "packeta" && item.isActive);
+  expect(old.map(item => item.code)).toEqual(["personal-pickup"]);
+  for (const item of old) {
+    await page.getByRole("button", { name: text(words.methodSetup.editShippingNamed, "name", item.name), exact: true }).click();
+    await form.locator('[name="isActive"]').uncheck();
+    const saved = await write<Method>(page, "PUT", `${base}/shipping-methods/${item.code}`, 200, () => form.getByRole("button", { name: words.common.save, exact: true }).click());
+    expect(saved).toEqual({ ...item, isActive: false }); await expect(form).toHaveCount(0);
+  }
+  await expect(page.getByText(words.methodSetup.packetaOnly, { exact: true })).toBeVisible(); await noOverflow(page);
+  await page.goto(`${merchant.origin}/admin/stores/${store.id}/provider-connections`);
+  const packeta = page.locator(".connection-card").filter({ has: page.getByRole("heading", { name: "Packeta", exact: true }) });
+  await packeta.getByRole("button", { name: text(words.connections.editNamed, "provider", "packeta"), exact: true }).click();
+  const connection = page.locator(".connection-editor");
+  await connection.locator('[name="merchantId"]').fill(`${session.run.id}-local-fixture`);
+  await connection.locator('[name="environment"]').selectOption("Test");
+  await write(page, "PUT", `${base}/provider-connections/packeta`, 200, () => connection.getByRole("button", { name: words.connections.save.metadata, exact: true }).click());
+  await expect(connection).toHaveCount(0);
+  await page.goto(`${merchant.origin}/admin/stores/${store.id}/settings`);
+  await expect(page.getByText(words.stores.readinessBlocked, { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: words.stores.reviewPublication, exact: true })).toBeDisabled();
+  const blocked = await adminRead<{ isReady: boolean; checks: { check: string; isReady: boolean }[] }>(page, session, `${base}/readiness`);
+  expect(blocked.isReady).toBe(false); expect(blocked.checks).toContainEqual(expect.objectContaining({ check: "orders.shipping-connected", isReady: false }));
+  await page.goto(`${merchant.origin}/admin/stores/${store.id}/provider-connections`);
+  await page.getByRole("button", { name: text(words.connections.secretNamed, "provider", "packeta"), exact: true }).click();
+  const secret = `${session.run.id}-local-only-${randomUUID()}`;
+  await connection.locator('[name="secret"]').fill(secret);
+  await write(page, "PUT", `${base}/provider-connections/packeta/secret`, 204, () => connection.getByRole("button", { name: words.connections.save.secret, exact: true }).click());
+  await expect(connection).toHaveCount(0); expect(await page.locator("body").innerText()).not.toContain(secret);
+  const saved = await adminRead<{ provider: string; environment: string; hasSecret: boolean; publishableKey: string | null }[]>(page, session, `${base}/provider-connections`);
+  expect(saved).toContainEqual(expect.objectContaining({ provider: "packeta", environment: "Test", hasSecret: true, publishableKey: null }));
+  return method.code;
+}
+async function pay(page: Page, session: RunSession, product: RunProduct, store: RunStore, code: string, testInfo: TestInfo) {
+  await addVariant(page, session, store, product, product.variants[0], testInfo);
+  await page.goto(`${session.origin(store)}/checkout`);
+  await page.locator('[name="email"]').fill(`buyer@${session.run.emailDomain}`); await page.locator('[name="phone"]').fill("+420 777 123 456");
+  for (const [field, value] of Object.entries({ fullName: "Eva Kupující", line1: "Testovací 1", city: "Brno", postalCode: "602 00", country: "CZ" })) await page.locator(`[name="billing.${field}"]`).fill(value);
+  await page.locator(`[name="shippingMethodCode"][value="${code}"]`).check(); await page.locator('[name="paymentMethodCode"][value="comgate"]').check();
+  await expect(page.locator('[name="pickupPointCode"]')).toHaveCount(0); await expect(page.locator(".checkout-total strong")).toHaveText(money(product.price));
+  const placed = await submitCheckout(page, session, store, product, testInfo);
+  await page.getByRole("button", { name: "Pay", exact: true }).click(); await expectReceipt(page, session.origin(store), placed.number);
+  await expect(page.locator(".order-status.paid")).toHaveText(labels(testInfo).orders.status.Paid);
+  return placed;
+}
+
+test("merchant creates, stocks, lists, prices and publishes a product, then its real shopper payment is recorded once", async ({ page, context, request, runSession: session, merchant }, testInfo) => {
+  const [a, b] = session.run.stores, words = merchant.words, sku = `${session.run.id.toUpperCase()}-MERCHANT`;
+  await merchant.signIn(page);
+  expect((await adminRead<{ id: string }[]>(page, session, "/api/admin/stores")).map(store => store.id).sort()).toEqual(session.run.stores.map(store => store.id).sort());
+  await publication(page, merchant, a, false);
+  for (const [store, expected] of [[a, 404], [b, 200]] as const) expect((await request.get(`${session.environment.frontendOrigin}/api/storefront/store`, { headers: { Host: `${store.host}:${session.environment.storefrontPort}` } })).status()).toBe(expected);
+  await page.goto(`${merchant.origin}/admin/products/new`); await page.locator('[name="sku"]').fill(sku); await page.locator('[name="weightGrams"]').fill("300");
+  const physical = await write<{ id: string; sku: string; variants: { id: string; sku: string }[] }>(page, "POST", "/api/admin/products", 201, () => page.getByRole("button", { name: words.products.addProduct, exact: true }).click());
+  expect(physical.sku).toBe(sku); expect(physical.variants).toHaveLength(1); const variant = physical.variants[0];
+  expect(await merchant.stock(sku)).toEqual({ sku, onHand: 0, reserved: 0, available: 0 });
+  await page.goto(`${merchant.origin}/admin/stock/${variant.id}`); await page.locator('[name="quantity"]').fill("3");
+  await write(page, "PUT", `/api/admin/stock/${variant.id}`, 200, () => page.getByRole("button", { name: words.stock.save, exact: true }).click());
+  expect(await merchant.stock(sku)).toEqual({ sku, onHand: 3, reserved: 0, available: 3 });
+  const slug = `${session.run.id}-merchant`, name = "Hrnek / Merchant mug";
+  await page.goto(`${merchant.origin}/admin/stores/${a.id}/products/new`);
+  await page.locator('[name="productId"]').selectOption(physical.id); await page.locator('#listing-name').fill(name); await page.locator('#listing-slug').fill(slug);
+  await page.locator('#listing-description').fill("Nový výrobek z obchodní administrace."); await page.locator('#listing-price').fill("259,50");
+  const listing = await write<{ id: string; price: number; isVisible: boolean }>(page, "POST", `/api/admin/stores/${a.id}/products`, 201, () => page.getByRole("button", { name: words.listings.listProduct, exact: true }).click());
+  expect(listing).toMatchObject({ price: 259.5, isVisible: false }); await expect(page).toHaveURL(`${merchant.origin}/admin/stores/${a.id}/products/${listing.id}`);
+  await page.getByRole("button", { name: words.listings.editDetails, exact: true }).click();
+  await page.locator('#listing-price').fill("289,50"); await page.locator('[name="isVisible"]').check();
+  await write(page, "PUT", `/api/admin/stores/${a.id}/products/${listing.id}`, 200, () => page.getByRole("button", { name: words.listings.saveDetails, exact: true }).click());
+  const saved = await adminRead<{ price: number; isVisible: boolean; productId: string }>(page, session, `/api/admin/stores/${a.id}/products/${listing.id}`);
+  expect(saved).toMatchObject({ price: 289.5, isVisible: true, productId: physical.id }); await noOverflow(page);
+  const code = await delivery(page, session, merchant, a);
+  await publication(page, merchant, a, true);
+  const product: RunProduct = { id: physical.id, name, slug, price: saved.price, variants: [{ ...variant, size: null, stock: 3 }], listings: { [a.id]: listing.id } };
+  const shopper = await context.newPage(); await shopper.goto(`${session.origin(b)}/`); await expect(shopper.locator(`main a[href$="/p/${session.run.products[0].slug}"]`).first()).toBeVisible(); await expect(shopper.locator('main a[href$="' + slug + '"]')).toHaveCount(0);
+  await session.configureGateway({ push: "twice", statusFails: false });
+  const placed = await pay(shopper, session, product, a, code, testInfo);
+  expect(merchant.registeredOrder(a.id, placed.number)).toBe(true);
+  await expect.poll(async () => (await session.gateway()).transactions[0]?.pushes.filter(push => push.answered === 200).length).toBe(2);
+  await expect.poll(async () => (await session.order(a, placed.number)).documents.filter(document => document.kind === "Invoice").length).toBe(1);
+  const order = await session.order(a, placed.number);
+  expect(order.order).toMatchObject({ status: "Paid", currency: "CZK", email: placed.email, refundedTotal: 0 });
+  expect(order.lines).toEqual([expect.objectContaining({ productName: name, variantId: variant.id, quantity: 1, unitPrice: 289.5 })]);
+  expect(order.attempts).toEqual([expect.objectContaining({ provider: "comgate", status: "Paid", amount: 289.5 })]); expect(order.kept).toEqual([]);
+  expect(order.documents.filter(document => document.kind === "Invoice")).toHaveLength(1);
+  expect(await merchant.stock(sku)).toEqual({ sku, onHand: 2, reserved: 0, available: 2 });
+  expect(order.answersRecorded).toBe(1); await shopper.reload();
+  await downloadOrderDocument(shopper, order.documents.find(document => document.kind === "Invoice")!.number, testInfo);
+  await page.goto(`${merchant.origin}/admin/stores/${a.id}/orders/${placed.number}`);
+  await expect(page.getByText(name, { exact: true })).toBeVisible(); await expect(page.locator('[aria-labelledby="order-payment-attempts"]')).toContainText(currencyFormatter("CZK", testInfo.project.name.split("-")[0]).format(289.5));
+  await noOverflow(page); await noOverflow(shopper);
+  await testInfo.attach("merchant-product-facts", { body: JSON.stringify({ run: session.run.id, store: a.id, physical, listing: saved, order, stock: await merchant.stock(sku) }), contentType: "application/json" });
+  await testInfo.attach("merchant-order-screen", { body: await page.screenshot({ caret: "initial" }), contentType: "image/png" });
+});
+
+test("merchant refunds a paid order through the UI and the shopper sees one settled credit and stock restoration", async ({ page, context, runSession: session, merchant }, testInfo) => {
+  const store = session.run.stores[0], product = session.run.products.find(product => product.variants.length === 1)!;
+  const variant = product.variants[0]; await merchant.signIn(page); const shopper = await context.newPage();
+  await session.configureGateway({ push: "twice", statusFails: false }); await addVariant(shopper, session, store, product, variant, testInfo);
+  const placed = await checkout(shopper, session, store, product, testInfo); await shopper.getByRole("button", { name: "Pay", exact: true }).click();
+  await expectReceipt(shopper, session.origin(store), placed.number); await expect(shopper.locator(".order-status.paid")).toHaveText(labels(testInfo).orders.status.Paid);
+  expect(merchant.registeredOrder(store.id, placed.number)).toBe(true); const words = merchant.words.refunds;
+  const refundRequests: string[] = []; page.on("request", request => { if (request.method() === "POST" && new URL(request.url()).pathname.endsWith(`/orders/${placed.number}/refund`)) refundRequests.push(request.headers()["idempotency-key"]); });
+  await page.goto(`${merchant.origin}/admin/stores/${store.id}/orders/${placed.number}`);
+  await page.getByRole("button", { name: words.actions["order-refund"], exact: true }).click(); await page.locator('#refund-verified').check();
+  const answer = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname.endsWith(`/orders/${placed.number}/refund`));
+  await page.getByRole("button", { name: words.confirmAction["order-refund"], exact: true }).click();
+  const response = await answer; expect(response.status()).toBe(200); expect(response.request().headers()["idempotency-key"]).toMatch(/^sf-[0-9a-f-]{36}$/i);
+  await expect(page.locator(".refund-outcome")).toBeVisible();
+  await session.pushAgain(placed.transactionId);
+  await expect.poll(async () => (await session.order(store, placed.number)).documents.filter(document => document.kind === "CreditNote").length).toBe(1);
+  const order = await session.order(store, placed.number);
+  expect(order.order).toMatchObject({ refundedTotal: product.price }); expect(order.returns).toEqual([expect.objectContaining({ status: "Received", refundStatus: "Refunded", refundedAmount: product.price })]);
+  expect(order.documents.filter(document => document.kind === "CreditNote")).toHaveLength(1); expect(order.documents.filter(document => document.kind === "Invoice")).toHaveLength(1);
+  expect((await session.gateway()).transactions).toEqual([expect.objectContaining({ refunded: product.price * 100 })]);
+  expect(await session.stock(variant.sku)).toEqual({ sku: variant.sku, onHand: variant.stock, reserved: 0, available: variant.stock });
+  await shopper.reload(); await expectPublicRefund(shopper, placed.number, "Settled", product.price, testInfo);
+  await expect(page.getByRole("button", { name: words.actions["order-refund"], exact: true })).toHaveCount(0); await page.reload();
+  await expect(page.getByRole("button", { name: words.actions["order-refund"], exact: true })).toHaveCount(0); await noOverflow(page); await noOverflow(shopper);
+  await expect(page.locator('[aria-labelledby="order-returns"] .order-record')).toHaveCount(1);
+  await expect(page.getByRole("button", { name: words.actions["order-refund"], exact: true })).toHaveCount(0); expect(refundRequests).toHaveLength(1);
+  expect(order.answersRecorded).toBe(1);
+  await testInfo.attach("merchant-refund-facts", { body: JSON.stringify({ run: session.run.id, store: store.id, order, stock: await session.stock(variant.sku) }), contentType: "application/json" });
+  await testInfo.attach("merchant-refund-screen", { body: await page.screenshot({ caret: "initial" }), contentType: "image/png" });
+});

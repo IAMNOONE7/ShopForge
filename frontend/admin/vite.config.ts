@@ -8,7 +8,7 @@ export default defineConfig(({ command, isPreview }) => ({
     port: 5174,
     strictPort: true,
     proxy: {
-      "/api": "http://localhost:5080",
+      "/api": { target: process.env.SHOPFORGE_API_TARGET ?? "http://localhost:5080", changeOrigin: false },
     },
   },
 }));
