@@ -4,7 +4,7 @@ import type { StoreReadinessCheck } from "../api";
 
 type Definition = {
   label: "logo" | "company" | "product" | "payment" | "shipping" | "domain" | "paymentConnected" | "shippingConnected" | "tax" | "email" | "emailSender";
-  destination?: "products" | "methods" | "domains";
+  destination?: "products" | "methods" | "domains" | "provider-connections";
   heading?: "store-logo-title" | "store-details-title";
 };
 const definitions = new Map<string, Definition>([
@@ -15,8 +15,8 @@ const definitions = new Map<string, Definition>([
   ["catalog.tax-classes", { label: "tax" }],
   ["orders.payment-method", { label: "payment", destination: "methods" }],
   ["orders.shipping-method", { label: "shipping", destination: "methods" }],
-  ["orders.payment-connected", { label: "paymentConnected", destination: "methods" }],
-  ["orders.shipping-connected", { label: "shippingConnected", destination: "methods" }],
+  ["orders.payment-connected", { label: "paymentConnected", destination: "provider-connections" }],
+  ["orders.shipping-connected", { label: "shippingConnected", destination: "provider-connections" }],
   ["platform.email", { label: "email" }],
   ["platform.email-sender", { label: "emailSender" }],
 ]);

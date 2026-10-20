@@ -2157,3 +2157,35 @@ input[readonly] {
   .shipping-method-row { grid-template-columns: minmax(0, 1fr); }
   .shipping-method-form > button, .shipping-method-form .tax-assignment-field > button { width: 100%; }
 }
+
+.connections-page { min-width: 0; container-type: inline-size; overflow-wrap: anywhere; }
+.connections-page .section-heading { flex-wrap: wrap; gap: var(--space-3); }
+.connections-page h1, .connections-page h2 { min-width: 0; overflow-wrap: anywhere; }
+.connection-guidance, .connection-readiness, .connection-editor, .connection-card { min-width: 0; padding: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-panel); background: var(--color-surface); }
+.connection-guidance { margin-block: var(--space-4); }
+.connection-guidance summary { cursor: pointer; font-weight: 650; }
+.connection-list { display: grid; gap: var(--space-4); grid-template-columns: repeat(2, minmax(0, 1fr)); list-style: none; margin-block: var(--space-6); padding: 0; }
+.connection-card { display: flex; flex-direction: column; gap: var(--space-3); }
+.connection-card h2, .connection-card p { margin: 0; }
+.connection-card > .cluster { margin-top: auto; }
+.connection-facts { display: grid; gap: var(--space-3); margin: 0; }
+.connection-facts > div { min-width: 0; }
+.connection-facts dt { color: var(--color-text-muted); font-size: var(--text-sm); }
+.connection-facts dd { margin: var(--space-1) 0 0; min-width: 0; }
+.connection-editor, .connection-fields, .connection-select { display: grid; gap: var(--space-3); }
+.connection-editor { margin-block: var(--space-6); }
+.connection-editor h2 { margin: 0; }
+.connection-fields { border: 0; margin: 0; padding: 0; min-width: 0; }
+.connection-fields input:not([type="checkbox"]), .connection-fields select { min-width: 0; width: 100%; max-width: 100%; }
+.connection-select > label { font-weight: 650; }
+.connection-select p { margin: 0; }
+.connection-select [aria-invalid="true"] { border-color: var(--color-danger, #b42318); }
+.connection-select .field-error { color: var(--color-danger, #b42318); }
+.connection-live-note { padding-inline-start: var(--space-3); border-inline-start: 3px solid var(--color-info); }
+.connection-outcome { margin-block: var(--space-4); min-width: 0; }
+.connections-page button { max-width: 100%; white-space: normal; }
+@container (max-width: 40rem) {
+  .connection-list { grid-template-columns: minmax(0, 1fr); }
+  .connections-page .section-heading { align-items: start; flex-direction: column; }
+  .connection-card > .cluster, .connection-editor > .cluster { display: grid; grid-template-columns: minmax(0, 1fr); }
+}

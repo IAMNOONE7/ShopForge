@@ -15,6 +15,7 @@ export function StoreOverviewPage() {
     ["categories", t("navigation:categories")],
     ["attributes", t("navigation:attributes")],
     ["import", t("navigation:import")],
+    ["provider-connections", t("navigation:providerConnections")],
     ["methods", t("navigation:methods")],
     ["discounts", t("navigation:discounts")],
     ["orders", t("navigation:orders")],

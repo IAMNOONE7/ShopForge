@@ -130,6 +130,7 @@ export function AdminNavigation({
           >
             {t("navigation:import")}
           </NavLink>
+          <NavLink to={`/stores/${selectedStore.id}/provider-connections`} onClick={onNavigate}>{t("navigation:providerConnections")}</NavLink>
           <NavLink
             to={`/stores/${selectedStore.id}/methods`}
             onClick={onNavigate}

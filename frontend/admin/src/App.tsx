@@ -43,6 +43,7 @@ const StoreReturnPage = lazy(() => import("./pages/ReturnPages").then((pages) =>
 const NewListingPage = lazy(() => import("./pages/ListingPages").then((pages) => ({ default: pages.NewListingPage })));
 const ListingDetailPage = lazy(() => import("./pages/ListingPages").then((pages) => ({ default: pages.ListingDetailPage })));
 const StoreOperationsPage = lazy(() => import("./pages/StoreOperationsPage").then((pages) => ({ default: pages.StoreOperationsPage })));
+const StoreConnectionsPage = lazy(() => import("./pages/StoreConnectionsPage").then(pages => ({ default: pages.StoreConnectionsPage })));
 const StoreTaxClassesPage = lazy(() => import("./pages/StoreTaxClassesPage").then((pages) => ({ default: pages.StoreTaxClassesPage })));
 
 type SessionState =
@@ -209,6 +210,7 @@ function App() {
                   <Route path="returns/:returnId" element={<DeferredPage><StoreReturnPage /></DeferredPage>} />
                   <Route path="reviews" element={<StoreReviewsPage />} />
                   <Route path="operations" element={<DeferredPage><StoreOperationsPage /></DeferredPage>} />
+                  <Route path="provider-connections" element={<DeferredPage><StoreConnectionsPage /></DeferredPage>} />
                   <Route path="tax-classes" element={<DeferredPage><StoreTaxClassesPage /></DeferredPage>} />
                   <Route path="*" element={<NotFoundPage />} />
                 </Route>

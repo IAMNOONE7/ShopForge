@@ -70,7 +70,7 @@ describe("server publication readiness", () => {
     expect(button).toHaveProperty("disabled", true); fireEvent.click(button);
     expect(publish).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Publish store" })).toBeNull();
-    expect([...document.querySelectorAll(".readiness-list a")].every((link) => link.getAttribute("href") === `/stores/store-a/${check === "store.primary-domain" ? "domains" : "methods"}`)).toBe(true);
+    expect([...document.querySelectorAll(".readiness-list a")].every((link) => link.getAttribute("href") === `/stores/store-a/${check === "store.primary-domain" ? "domains" : "provider-connections"}`)).toBe(true);
   });
 
   it("honors a false server verdict even if the individual checks are ready", async () => {

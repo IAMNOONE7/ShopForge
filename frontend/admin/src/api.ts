@@ -1,3 +1,4 @@
+import { disconnectProvider, getProviderChoices, getProviderConnections, saveProviderConnection, setProviderSecret } from "./api/providerConnections";
 import { HttpError, requestBlob, requestJson, saveDownload } from "./api/http";
 import { findStoreProduct, getStoreProducts, hasVisibleStoreProduct } from "./api/listings";
 import { changeCatalogLifecycle } from "./api/catalogLifecycle";
@@ -453,6 +454,11 @@ function request<T>(
 }
 
 export const api = {
+  providerConnections: getProviderConnections,
+  providerChoices: getProviderChoices,
+  saveProviderConnection,
+  setProviderSecret,
+  disconnectProvider,
   me: (signal?: AbortSignal) =>
     requestJson<CurrentUser>("/api/admin/auth/me", {
       signal,
