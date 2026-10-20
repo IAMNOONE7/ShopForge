@@ -7,6 +7,7 @@ it.each([
   { action: "visibility", isVisible: false }, { action: "visibility", isVisible: true },
   { action: "price", set: 0 }, { action: "price", byPercent: -10.5 },
   { action: "categories", addCategoryIds: ["sale"], removeCategoryIds: ["old"] },
+  { action: "tax-class", taxClass: "books" }, { action: "tax-class", taxClass: null },
   { action: "archive", archived: true }, { action: "archive", archived: false },
 ] satisfies BulkListingChange[])("sends only explicit deduplicated IDs and the $action contract", async change => {
   const fetch = vi.fn().mockResolvedValue(Response.json({ asked: 2, changed: 1 })); vi.stubGlobal("fetch", fetch);

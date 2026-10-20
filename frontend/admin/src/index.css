@@ -2136,3 +2136,24 @@ input[readonly] {
   .attribute-fields-row { grid-template-columns: minmax(0, 1fr); }
   .attribute-form > button, .attribute-option-form > button { width: 100%; }
 }
+
+.tax-assignment-field { display: grid; gap: var(--space-2); min-width: 0; overflow-wrap: anywhere; }
+.tax-assignment-field > label { font-weight: 650; }
+.tax-assignment-field > select { width: 100%; min-width: 0; max-width: 100%; }
+.tax-assignment-field > p { margin: 0; }
+.tax-assignment-field > button { width: fit-content; max-width: 100%; white-space: normal; }
+.tax-assignment-field [aria-invalid="true"] { border-color: var(--color-danger, #b42318); }
+.shipping-methods-section { min-width: 0; container-type: inline-size; overflow-wrap: anywhere; }
+.shipping-method-result { min-width: 0; margin-block: var(--space-4); }
+.shipping-method-list { display: grid; gap: var(--space-6); min-width: 0; }
+.shipping-method-form { display: grid; gap: var(--space-4); padding: var(--space-4); min-width: 0; border: 1px solid var(--color-border); border-radius: var(--radius-panel); overflow-wrap: anywhere; }
+.shipping-method-form h4 { margin: 0; }
+.shipping-method-fields { display: grid; gap: var(--space-4); min-width: 0; border: 0; padding: 0; margin: 0; }
+.shipping-method-fields input, .shipping-method-fields select { min-width: 0; max-width: 100%; width: 100%; }
+.shipping-method-fields input[type="checkbox"] { width: auto; }
+.shipping-method-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.shipping-method-form > button { width: fit-content; max-width: 100%; white-space: normal; }
+@container (max-width: 36rem) {
+  .shipping-method-row { grid-template-columns: minmax(0, 1fr); }
+  .shipping-method-form > button, .shipping-method-form .tax-assignment-field > button { width: 100%; }
+}

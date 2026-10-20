@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { api, type ShippingMethod } from "../api";
@@ -26,6 +26,7 @@ const money = new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR
 const run = (change: () => Promise<unknown>) => change().then(() => undefined);
 
 function mockReads(method: ShippingMethod) {
+  vi.spyOn(api, "taxClasses").mockResolvedValue([{ code: "standard", name: "Standard", rates: [] }]);
   vi.spyOn(api, "paymentProviders").mockResolvedValue(["manual"]);
   vi.spyOn(api, "shippingProviders").mockResolvedValue(["manual", "packeta"]);
   vi.spyOn(api, "paymentMethods").mockResolvedValue([]);
@@ -59,7 +60,7 @@ describe("MethodsSection", () => {
       .mockRejectedValueOnce(new HttpError("http", 400, { errors: { name: ["Invalid name"] } }))
       .mockResolvedValue(method);
     render(<EditableMethods />);
-    const form = (await screen.findByRole("spinbutton", { name: /Weight limit/ })).closest("form")!;
+    const form = (await screen.findByRole("form", { name: "Z-BOX" }));
     const name = form.querySelector<HTMLInputElement>('input[name="name"]')!;
     await user.clear(name); await user.type(name, "Parcel");
     await user.click(screen.getAllByRole("button", { name: "Save" })[0]);
@@ -80,9 +81,9 @@ describe("MethodsSection", () => {
 
     render(<MethodsSection storeId="store-a" money={money} run={run} />);
 
-    const weight = await screen.findByRole("spinbutton", { name: /Weight limit/ });
+    const weight = within(await screen.findByRole("form", { name: "Z-BOX" })).getByRole("spinbutton", { name: /Weight limit/ });
     await user.type(weight, "5000");
-    await user.type(screen.getByRole("textbox", { name: /Countries/ }), "cz sk");
+    await user.type(within(screen.getByRole("form", { name: "Z-BOX" })).getByRole("textbox", { name: /Countries/ }), "cz sk");
     await user.click(screen.getAllByRole("button", { name: "Save" })[0]);
 
     await waitFor(() => expect(saved).toHaveBeenCalledTimes(1));
@@ -100,8 +101,8 @@ describe("MethodsSection", () => {
 
     render(<MethodsSection storeId="store-a" money={money} run={run} />);
 
-    await user.clear(await screen.findByRole("spinbutton", { name: /Weight limit/ }));
-    await user.clear(screen.getByRole("textbox", { name: /Countries/ }));
+    await user.clear(within(await screen.findByRole("form", { name: "Z-BOX" })).getByRole("spinbutton", { name: /Weight limit/ }));
+    await user.clear(within(screen.getByRole("form", { name: "Z-BOX" })).getByRole("textbox", { name: /Countries/ }));
     await user.click(screen.getAllByRole("button", { name: "Save" })[0]);
 
     await waitFor(() => expect(saved).toHaveBeenCalledTimes(1));
@@ -117,8 +118,8 @@ describe("MethodsSection", () => {
 
     render(<MethodsSection storeId="store-a" money={money} run={run} />);
 
-    const weight = await screen.findByRole("spinbutton", { name: /Weight limit/ });
+    const weight = within(await screen.findByRole("form", { name: "Z-BOX" })).getByRole("spinbutton", { name: /Weight limit/ });
     expect(weight).toHaveProperty("value", "5000");
-    expect(screen.getByRole("textbox", { name: /Countries/ })).toHaveProperty("value", "CZ SK");
+    expect(within(screen.getByRole("form", { name: "Z-BOX" })).getByRole("textbox", { name: /Countries/ })).toHaveProperty("value", "CZ SK");
   });
 });

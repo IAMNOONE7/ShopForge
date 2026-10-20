@@ -6,7 +6,7 @@ import { useAction } from "./useAction";
 import type { BulkListingAction } from "./utils/bulkListings";
 
 export type SelectedListing = Pick<StoreProduct, "id" | "name" | "sku">;
-export type BulkListingIntent = { action: BulkListingAction; change: BulkListingChange; categoryNames: { add: string[]; remove: string[] } };
+export type BulkListingIntent = { action: BulkListingAction; change: BulkListingChange; categoryNames: { add: string[]; remove: string[] }; taxClassName?: string };
 type Confirmation = BulkListingIntent & { listings: SelectedListing[] };
 type Outcome = { intent: Confirmation } & ({ kind: "success"; result: BulkListingResult } | { kind: "refused" | "uncertain"; error: unknown });
 

@@ -29,7 +29,7 @@ export function ListingEditor({ storeId, currency, item, categories, definitions
   storeId: string; currency: string; item: StoreProduct; categories: RequestState<Category[]>; definitions: RequestState<AttributeDefinition[]>; values: RequestState<{ values: AttributeValues }>;
   reloadCategories: () => void; reloadDefinitions: () => void; reloadValues: () => void; reload: () => void; allowed: boolean; refreshing: boolean; refreshFailed: boolean; archived?: boolean;
 }) {
-  const { t, i18n } = useTranslation(["listings", "common"]);
+  const { t, i18n } = useTranslation(["listings", "common", "taxAssignments"]);
   const [editor, setEditor] = useState<Editor | null>(null);
   const [saved, setSaved] = useState(false);
   const [attempted, setAttempted] = useState(false);
@@ -65,6 +65,7 @@ export function ListingEditor({ storeId, currency, item, categories, definitions
     </div><dl className="listing-facts">
       <div><dt>{t("listings:slug")}</dt><dd><code>{item.slug}</code></dd></div><div><dt>{t("listings:price")}</dt><dd>{currencyFormatter(currency, i18n.resolvedLanguage).format(item.price)}</dd></div>
       <div><dt>{t("listings:vatRate")}</dt><dd>{new Intl.NumberFormat(uiLocale(i18n.resolvedLanguage)).format(item.vatRate)}%</dd></div><div><dt>{t("listings:sortOrder")}</dt><dd>{item.sortOrder}</dd></div><div><dt>{t(archived ? "listings:savedVisibility" : "listings:visibility")}</dt><dd>{t(item.isVisible ? "listings:visible" : "listings:hidden")}</dd></div>
+      <div><dt>{t("taxAssignments:label")}</dt><dd>{item.taxClass === null ? t("taxAssignments:fallback") : <code>{item.taxClass}</code>}</dd></div>
     </dl><p className="hint">{t("listings:priceHint")}</p>{item.description ? <div className="listing-description">{item.description.split(/\n\s*\n/).filter((part) => part.trim()).map((part, index) => <p key={index}>{part}</p>)}</div> : <p>{t("listings:noDescription")}</p>}</section>
     <section className="physical-panel" aria-labelledby="listing-categories-title"><div className="listing-section-heading"><h2 id="listing-categories-title">{t("listings:categories")}</h2>
       {allowed && !archived && <Button type="button" variant="secondary" disabled={disabled || !!editor || !categoriesReady} onClick={(event) => open("categories", event.currentTarget)}>{t("listings:editCategories")}</Button>}
@@ -84,7 +85,7 @@ export function ListingEditor({ storeId, currency, item, categories, definitions
     <CatalogRetirement storeId={storeId} kind="products" id={item.id} name={item.name} snapshot={JSON.stringify({ item, archived })}
       archived={archived} allowed={allowed} disabled={baseDisabled || !!editor} pending={pending} run={run} reload={reload} onOpenChange={setRetirementOpen} />
     {editor && <section className="physical-panel listing-editor" ref={root}>
-      {editor.kind === "details" ? <ListingForm item={editor.item} disabled={disabled} pending={pending} onCancel={close} onSave={(input) => save(() => api.updateStoreProduct(storeId, item.id, input))} />
+      {editor.kind === "details" ? <ListingForm storeId={storeId} item={editor.item} disabled={disabled} pending={pending} onCancel={close} onSave={(input) => save(() => api.updateStoreProduct(storeId, item.id, input))} />
         : editor.kind === "categories" ? <ListingCategoryForm item={editor.item} categories={editor.categories} disabled={disabled || !categoriesReady} pending={pending} onCancel={close} onSave={(ids) => save(() => api.assignCategories(storeId, item.id, ids))} />
           : <ListingAttributeForm attributes={editor.definitions} values={editor.values} disabled={disabled || !valuesReady} pending={pending} onCancel={close} onSave={(input) => save(() => api.setProductAttributes(storeId, item.id, input))} />}
       {attempted && error !== null && <RequestError error={error} operation="write" />}

@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import type { BulkListingIntent } from "../useBulkListings";
 import { useRequest } from "../useRequest";
+import { taxAssignmentValid, useTaxChoices } from "../useTaxChoices";
+import { TaxClassField } from "./TaxClassField";
 import { bulkChange, bulkPercent, bulkPrice, bulkPriceDecimals, type BulkListingAction } from "../utils/bulkListings";
 import { categoryPath } from "./categoryTree";
 import { ListingRead } from "./ListingEditor";
@@ -10,7 +12,7 @@ import { Button } from "./ui/Button";
 import { Field } from "./ui/Field";
 import { InlineMessage } from "./ui/InlineMessage";
 
-const activeActions: BulkListingAction[] = ["hide", "show", "setPrice", "changePrice", "categories", "archive"];
+const activeActions: BulkListingAction[] = ["hide", "show", "setPrice", "changePrice", "categories", "taxClass", "archive"];
 
 export function ListingBulkForm({ storeId, currency, archived, disabled, hidden, revision, onReview }: {
   storeId: string; currency: string; archived: boolean; disabled: boolean; hidden: boolean; revision: number; onReview: (intent: BulkListingIntent) => void;
@@ -20,6 +22,9 @@ export function ListingBulkForm({ storeId, currency, archived, disabled, hidden,
   const [value, setValue] = useState("");
   const [categoryActions, setCategoryActions] = useState<Record<string, "add" | "remove">>({});
   const [invalid, setInvalid] = useState(false);
+  const [taxClass, setTaxClass] = useState<string | null>();
+  const choices = useTaxChoices(storeId, revision, action === "taxClass");
+  const taxValid = taxAssignmentValid(taxClass, choices);
   const [categories, reloadCategories] = useRequest(`bulk-categories:${storeId}:${action === "categories"}:${revision}`, async signal => {
     if (action !== "categories") return { active: [], archived: [] };
     const [active, archivedCategories] = await Promise.all([api.categories(storeId, signal), api.categories(storeId, signal, true)]);
@@ -36,11 +41,12 @@ export function ListingBulkForm({ storeId, currency, archived, disabled, hidden,
     const remove = action === "categories" ? Object.keys(categoryActions).filter(id => categoryActions[id] === "remove") : [];
     const invalidCategories = action === "categories" && (!categoriesReady || !add.length && !remove.length || missingIds.length > 0
       || categories.status === "ready" && add.some(id => !categories.data.active.some(category => category.id === id)));
-    if (numeric === null || invalidCategories) {
-      setInvalid(true); document.getElementById(action === "categories" ? "bulk-categories" : "bulk-value")?.focus(); return;
+    if (numeric === null || invalidCategories || action === "taxClass" && !taxValid) {
+      setInvalid(true); document.getElementById(action === "taxClass" ? "bulk-taxClass" : action === "categories" ? "bulk-categories" : "bulk-value")?.focus(); return;
     }
     setInvalid(false);
-    onReview({ action, change: bulkChange(action, numeric, add, remove), categoryNames: {
+    onReview({ action, change: bulkChange(action, numeric, add, remove, taxClass ?? null),
+      taxClassName: choices.state.status === "ready" ? choices.state.data.items.find(item => item.code === taxClass)?.name : undefined, categoryNames: {
       add: add.map(id => allCategories.find(category => category.id === id)!.name), remove: remove.map(id => allCategories.find(category => category.id === id)!.name),
     } });
   }
@@ -54,6 +60,8 @@ export function ListingBulkForm({ storeId, currency, archived, disabled, hidden,
         inputMode={action === "setPrice" ? "decimal" : "text"} value={value} onChange={event => { setValue(event.target.value); setInvalid(false); }}
         hint={t(action === "setPrice" ? "priceHint" : "percentageHint", { decimals: bulkPriceDecimals(currency), currency })}
         error={invalid ? t(action === "setPrice" ? "invalidPrice" : "invalidPercentage", { decimals: bulkPriceDecimals(currency) }) : undefined} />}
+      {action === "taxClass" && <TaxClassField id="bulk-taxClass" choices={choices} value={taxClass} disabled={disabled}
+        invalid={invalid} onChange={value => { setTaxClass(value); setInvalid(false); }} />}
       {action === "categories" && <>
         <p className="hint">{t("categoriesHint")}</p><ListingRead state={categories} reload={reloadCategories} label={t("loadingCategories")} />
         {categories.status === "ready" && <fieldset className="bulk-fields" id="bulk-categories" tabIndex={-1} disabled={!categoriesReady}>
@@ -73,7 +81,7 @@ export function ListingBulkForm({ storeId, currency, archived, disabled, hidden,
         </fieldset>}
       </>}
       <p className="hint">{t(`hints.${action}`)}</p>
-      <Button type="submit" disabled={action === "categories" && !categoriesReady}>{t("review")}</Button>
+      <Button type="submit" disabled={action === "categories" && !categoriesReady || action === "taxClass" && !taxValid}>{t("review")}</Button>
     </fieldset>
   </form>;
 }

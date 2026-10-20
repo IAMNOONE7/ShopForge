@@ -40,8 +40,9 @@ export function ListingBulkPanel({ bulk, storeId, currency, archived, items }: {
     const selection = issue.field.toLowerCase().startsWith("storeproductids");
     const category = issue.field.toLowerCase().includes("category");
     const price = ["set", "bypercent", "price"].includes(issue.field.toLowerCase());
-    const field = outcome.kind === "uncertain" ? "bulk-outcome" : selection ? "bulk-selection" : category ? "bulk-categories" : price ? "bulk-value" : "bulk-action";
-    return [field, { field, message: t(selection ? "serverSelection" : category ? "serverCategories" : price ? "serverPrice" : "serverAction") }] as const;
+    const tax = issue.field.toLowerCase() === "taxclass";
+    const field = outcome.kind === "uncertain" ? "bulk-outcome" : selection ? "bulk-selection" : category ? "bulk-categories" : price ? "bulk-value" : tax ? "bulk-taxClass" : "bulk-action";
+    return [field, { field, message: t(selection ? "serverSelection" : category ? "serverCategories" : price ? "serverPrice" : tax ? "serverTaxClass" : "serverAction") }] as const;
   })).values()] : [];
   return <section className="physical-panel listing-bulk-panel" aria-labelledby="bulk-title">
     <div className="listing-section-heading"><h2 id="bulk-title">{t("title")}</h2><span role="status">{t("selectedCount", { count: bulk.selection.size, max: maxBulkListings })}</span></div>
@@ -68,6 +69,7 @@ export function ListingBulkPanel({ bulk, storeId, currency, archived, items }: {
       {intent.change.action === "price" && <p><strong>{"set" in intent.change && intent.change.set !== undefined ? new Intl.NumberFormat(uiLocale(i18n.resolvedLanguage), { style: "currency", currency, minimumFractionDigits: bulkPriceDecimals(currency), maximumFractionDigits: bulkPriceDecimals(currency) }).format(intent.change.set)
         : `${new Intl.NumberFormat(uiLocale(i18n.resolvedLanguage), { maximumFractionDigits: 6 }).format(intent.change.byPercent!)}%`}</strong></p>}
       {intent.change.action === "categories" && <dl className="bulk-category-summary"><div><dt>{t("addCategory")}</dt><dd>{intent.categoryNames.add.join(" · ") || t("none")}</dd></div><div><dt>{t("removeCategory")}</dt><dd>{intent.categoryNames.remove.join(" · ") || t("none")}</dd></div></dl>}
+      {intent.change.action === "tax-class" && <p><strong>{intent.change.taxClass === null ? t("clearTaxClass") : `${intent.taxClassName ?? intent.change.taxClass} (${intent.change.taxClass})`}</strong></p>}
       <p>{t("confirmHint")}</p><label className="bulk-verification"><input type="checkbox" checked={verified} disabled={bulk.pending || !bulk.ready} onChange={event => setVerifiedIntent(event.target.checked ? intent : null)} /><span>{t("verify", { count: intent.listings.length })}</span></label>
       <div className="catalog-action-row"><Button type="submit" variant={intent.action === "archive" ? "danger" : "primary"} disabled={!verified || !bulk.ready} busy={bulk.pending} busyLabel={t("working")}>{t("apply")}</Button>
         <Button type="button" variant="secondary" disabled={bulk.pending} onClick={cancel}>{t("cancel")}</Button></div>

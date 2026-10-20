@@ -17,6 +17,7 @@ const second = { ...item, id: "b", name: "Chair B", sku: "SKU-B" }, third = { ..
 const category: Category = { id: "old", name: "Furniture", slug: "furniture", parentId: null, sortOrder: 0, attributeIds: [], seoTitle: null, seoDescription: null, pageText: null };
 const sale = { ...category, id: "sale", name: "Sale" }, retiredCategory = { ...category, id: "retired", name: "Old category" };
 function reads() {
+  vi.spyOn(api, "taxClasses").mockResolvedValue([{ code: "books", name: "Books", rates: [{ country: "IE", rate: 0 }] }]);
   vi.spyOn(api, "storeProducts").mockImplementation(async (_s, _signal, query = {}) => ({ items: query.page === 2 ? [second, third] : [item, second], page: query.page ?? 1, pageSize: 25, totalCount: 26, hasMore: query.page !== 2 }));
   vi.spyOn(api, "categories").mockImplementation(async (_s, _signal, archived) => archived ? [retiredCategory] : [category, sale]);
   return vi.spyOn(api, "changeBulkListings").mockImplementation(async (_s, ids) => ({ asked: ids.length, changed: ids.length }));
@@ -146,4 +147,42 @@ it("preserves removed category choices after refusal and prevents a stale additi
 it("clears earlier result feedback when a new selection begins", async () => {
   const user = userEvent.setup(); reads(); route(); await selectPage(user); await apply(user); await screen.findByText("Asked: 2. Changed: 2.");
   await selectPage(user); expect(screen.queryByText("Asked: 2. Changed: 2.")).toBeNull(); expect(document.querySelectorAll('.bulk-selected')).toHaveLength(1); expect(screen.getByText("Selected: 2 / 500")).toBeTruthy();
+});
+
+
+it.each(["books", ""])("reviews and applies explicit bulk tax assignment %s with only selected IDs", async value => {
+  const user = userEvent.setup(), change = reads(); route("/stores/store-a/products", "CatalogManager"); await selectPage(user);
+  await user.selectOptions(screen.getByRole("combobox", { name: "Bulk action" }), "taxClass");
+  await screen.findByRole("option", { name: "Books (books)" });
+  expect(screen.getByRole("button", { name: "Review change" }).matches(":disabled")).toBe(true);
+  fireEvent.submit(screen.getByRole("form", { name: "Bulk change settings" })); expect(change).not.toHaveBeenCalled();
+  await user.selectOptions(screen.getByRole("combobox", { name: "Tax class" }), value);
+  const form = await review(user); expect(within(form).getByText(value ? "Books (books)" : "Clear class — keep each listing’s fallback VAT")).toBeTruthy();
+  expect(within(form).getByText(/gross price, fallback VAT rate/)).toBeTruthy();
+  await user.click(within(form).getByRole("checkbox")); await user.click(within(form).getByRole("button", { name: "Apply to selected listings" }));
+  await screen.findByText("Asked: 2. Changed: 2."); expect(change).toHaveBeenCalledExactlyOnceWith("store-a", ["a", "b"], { action: "tax-class", taxClass: value || null });
+});
+it("keeps a missing bulk class visible after refusal and requires replacement or explicit clearing", async () => {
+  const user = userEvent.setup(), change = reads(); change.mockRejectedValueOnce(new HttpError("http", 400, { errors: { taxClass: ["Unknown class"] } }));
+  route(); await selectPage(user); await user.selectOptions(screen.getByRole("combobox", { name: "Bulk action" }), "taxClass"); await screen.findByRole("option", { name: "Books (books)" });
+  await user.selectOptions(screen.getByRole("combobox", { name: "Tax class" }), "books"); vi.mocked(api.taxClasses).mockResolvedValue([]); await apply(user);
+  await screen.findByText(/Class books is no longer available/); expect(screen.getByRole("combobox", { name: "Tax class" })).toHaveProperty("value", "books");
+  expect(screen.getByRole("button", { name: "Review change" }).matches(":disabled")).toBe(true); expect(change).toHaveBeenCalledOnce();
+  await user.click(screen.getByRole("button", { name: "Review the tax-class choice." })); expect(document.activeElement).toBe(screen.getByRole("combobox", { name: "Tax class" }));
+  await user.selectOptions(screen.getByRole("combobox", { name: "Tax class" }), ""); await apply(user); await screen.findByText("Asked: 2. Changed: 2.");
+  expect(change).toHaveBeenLastCalledWith("store-a", ["a", "b"], { action: "tax-class", taxClass: null });
+});
+it("permits deliberate bulk clearing during a failed lookup without treating failure as an empty class list", async () => {
+  const user = userEvent.setup(), change = reads(); vi.mocked(api.taxClasses).mockRejectedValue(new HttpError("http", 503)); route(); await selectPage(user);
+  await user.selectOptions(screen.getByRole("combobox", { name: "Bulk action" }), "taxClass"); await screen.findByRole("alert");
+  expect(screen.getByRole("combobox", { name: "Tax class" })).toHaveProperty("value", "?"); expect(screen.getByRole("button", { name: "Review change" }).matches(":disabled")).toBe(true);
+  await user.selectOptions(screen.getByRole("combobox", { name: "Tax class" }), ""); await apply(user); await screen.findByText("Asked: 2. Changed: 2.");
+  expect(change).toHaveBeenCalledExactlyOnceWith("store-a", ["a", "b"], { action: "tax-class", taxClass: null });
+});
+it("never replays an uncertain bulk tax clear when listing reads recover", async () => {
+  const user = userEvent.setup(), change = reads(); change.mockRejectedValueOnce(new HttpError("network", null)); route(); await selectPage(user);
+  await user.selectOptions(screen.getByRole("combobox", { name: "Bulk action" }), "taxClass"); await user.selectOptions(screen.getByRole("combobox", { name: "Tax class" }), "");
+  vi.mocked(api.storeProducts).mockRejectedValueOnce(new HttpError("http", 503)); await apply(user); await screen.findByText(/The outcome is not confirmed/);
+  await user.click(screen.getByRole("button", { name: "Try again" })); await waitFor(() => expect(screen.getByRole("button", { name: "Finish review and clear selection" }).matches(":disabled")).toBe(false));
+  await user.click(screen.getByRole("button", { name: "Finish review and clear selection" })); expect(change).toHaveBeenCalledOnce(); expect(screen.getByText("Selected: 0 / 500")).toBeTruthy();
 });

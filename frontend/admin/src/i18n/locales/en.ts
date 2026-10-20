@@ -1497,8 +1497,11 @@ const resources = {
       "serverSelection": "Review the selected listings.",
       "serverCategories": "Review the category choices.",
       "serverPrice": "Review the price or percentage.",
+      "clearTaxClass": "Clear class — keep each listing’s fallback VAT",
+      "serverTaxClass": "Review the tax-class choice.",
       "serverAction": "Review the bulk action.",
       "actions": {
+          "taxClass": "Set or clear tax class",
           "hide": "Hide listings",
           "show": "Show listings",
           "setPrice": "Set one price",
@@ -1508,6 +1511,7 @@ const resources = {
           "restore": "Restore listings"
       },
       "hints": {
+          "taxClass": "Assign the chosen class to selected active listings, or explicitly clear their assignments. Each gross price, fallback VAT rate and other setting stays unchanged.",
           "hide": "Set saved visibility to hidden for selected active listings.",
           "show": "Set saved visibility to visible for selected active listings. Other publication rules still apply.",
           "setPrice": "Replace each selected active listing’s current price with the entered gross price. VAT and tax-class assignments stay unchanged.",
@@ -1562,6 +1566,32 @@ const resources = {
           "listings": "Listings are assigned to this category.",
           "feed": "A shopping engine category is mapped to this category."
       }
+  },
+  taxAssignments: {
+      "label": "Tax class",
+      "choose": "Choose a class or explicitly clear it",
+      "fallback": "No class — use fallback VAT",
+      "unavailableOption": "Unavailable class ({{code}})",
+      "hint": "A class uses its configured destination-country rate, then the store-country rate, then this saved VAT rate. Assigning or clearing a class leaves the gross price and fallback VAT unchanged.",
+      "loading": "Loading tax-class choices…",
+      "lookupFailed": "Class choices could not be refreshed. A saved assignment is kept; you can explicitly clear it or retry the lookup before choosing a replacement.",
+      "savedUnavailable": "Saved class {{code}} is not in the current choices. It stays assigned unless you explicitly clear or replace it. The server validates it again when you save.",
+      "choiceUnavailable": "Class {{code}} is no longer available. Choose a current class or explicitly clear the assignment before saving.",
+      "rates": "Configured country rates: {{rates}}. These are not a checkout quote.",
+      "noRates": "none; fallback rules apply",
+      "invalid": "Choose an available class or explicitly clear the assignment.",
+      "refresh": "Refresh class choices",
+      "methodName": "Method name",
+      "provider": "Shipping provider",
+      "chooseProvider": "Choose a provider",
+      "saving": "Saving…",
+      "loadingMethods": "Loading shipping methods…",
+      "storeStale": "Store details are not current. Refresh them before saving shipping methods.",
+      "readRequired": "Shipping changes are paused until the latest method read succeeds. A read retry never repeats a save.",
+      "saved": "The save was acknowledged. Review the refreshed shipping methods.",
+      "serverField": "Review this shipping-method field.",
+      "writeRefused": "The save was refused. The draft is kept. Review the refreshed methods and correct the fields before saving again.",
+      "writeFailed": "The save was not confirmed. It may have been applied. Review the refreshed methods before saving again; no request is repeated automatically."
   },
   tax: {
     title: "Tax classes and rates",

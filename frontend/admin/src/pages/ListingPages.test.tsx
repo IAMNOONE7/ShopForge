@@ -37,6 +37,7 @@ function route(path = "/stores/store-a/products/listing-a", role = "Owner", fres
 }
 function editor() { return document.querySelector<HTMLFormElement>(".listing-editor form")!; }
 function reads() {
+  vi.spyOn(api, "taxClasses").mockResolvedValue([{ code: "standard", name: "Standard", rates: [] }]);
   vi.spyOn(api, "findStoreProduct").mockResolvedValue(item);
   vi.spyOn(api, "categories").mockResolvedValue([parent, child]);
   vi.spyOn(api, "attributes").mockResolvedValue(definitions);

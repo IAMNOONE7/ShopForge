@@ -1,6 +1,6 @@
 import type { BulkListingChange } from "../api/bulkListings";
 
-export type BulkListingAction = "show" | "hide" | "setPrice" | "changePrice" | "categories" | "archive" | "restore";
+export type BulkListingAction = "show" | "hide" | "setPrice" | "changePrice" | "categories" | "taxClass" | "archive" | "restore";
 const zeroDecimals = new Set(["BIF", "CLP", "DJF", "GNF", "ISK", "JPY", "KMF", "KRW", "PYG", "RWF", "UGX", "VND", "VUV", "XAF", "XOF", "XPF"]);
 const threeDecimals = new Set(["BHD", "IQD", "JOD", "KWD", "LYD", "OMR", "TND"]);
 
@@ -27,13 +27,14 @@ export function bulkPercent(text: string): number | null {
   return value > -100 && value <= 1000 ? value : null;
 }
 
-export function bulkChange(action: BulkListingAction, value: number, addCategoryIds: string[], removeCategoryIds: string[]): BulkListingChange {
+export function bulkChange(action: BulkListingAction, value: number, addCategoryIds: string[], removeCategoryIds: string[], taxClass: string | null = null): BulkListingChange {
   switch (action) {
     case "show": return { action: "visibility", isVisible: true };
     case "hide": return { action: "visibility", isVisible: false };
     case "setPrice": return { action: "price", set: value };
     case "changePrice": return { action: "price", byPercent: value };
     case "categories": return { action: "categories", addCategoryIds, removeCategoryIds };
+    case "taxClass": return { action: "tax-class", taxClass };
     case "archive": return { action: "archive", archived: true };
     case "restore": return { action: "archive", archived: false };
   }

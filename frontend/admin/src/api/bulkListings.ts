@@ -6,6 +6,7 @@ export type BulkListingChange =
   | { action: "price"; set: number; byPercent?: never }
   | { action: "price"; byPercent: number; set?: never }
   | { action: "categories"; addCategoryIds: string[]; removeCategoryIds: string[] }
+  | { action: "tax-class"; taxClass: string | null }
   | { action: "archive"; archived: boolean };
 export type BulkListingResult = { asked: number; changed: number };
 

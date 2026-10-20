@@ -2,13 +2,15 @@ import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import type { Product, StoreProduct, StoreProductInput } from "../api";
+import { taxAssignmentValid, useTaxChoices } from "../useTaxChoices";
+import { TaxClassField } from "./TaxClassField";
 import { generatedCode } from "./attributeValidation";
 import { listingDraft, listingInput, validateListing, type ListingDraft, type ListingIssue } from "./listingValidation";
 import { Button } from "./ui/Button";
 import { Field } from "./ui/Field";
 
-export function ListingForm({ item, products, disabled, pending, onSave, onCancel }: {
-  item?: StoreProduct; products?: Product[]; disabled: boolean; pending: boolean;
+export function ListingForm({ storeId, item, products, disabled, pending, onSave, onCancel }: {
+  storeId: string; item?: StoreProduct; products?: Product[]; disabled: boolean; pending: boolean;
   onSave: (input: StoreProductInput, productId: string) => Promise<void>; onCancel?: () => void;
 }) {
   const { t } = useTranslation("listings");
@@ -16,6 +18,10 @@ export function ListingForm({ item, products, disabled, pending, onSave, onCance
   const [productId, setProductId] = useState("");
   const [productInvalid, setProductInvalid] = useState(false);
   const [issues, setIssues] = useState<ListingIssue[]>([]);
+  const [taxClass, setTaxClass] = useState(item?.taxClass ?? null);
+  const [taxInvalid, setTaxInvalid] = useState(false);
+  const choices = useTaxChoices(storeId);
+  const taxValid = taxAssignmentValid(taxClass, choices, item?.taxClass ?? null);
   function update<K extends keyof ListingDraft>(key: K, value: ListingDraft[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
     setIssues((current) => current.filter((issue) => issue.field !== key));
@@ -28,7 +34,8 @@ export function ListingForm({ item, products, disabled, pending, onSave, onCance
       setProductInvalid(true); document.getElementById("listing-productId")?.focus(); return;
     }
     if (next.length) { document.getElementById(`listing-${next[0].field}`)?.focus(); return; }
-    await onSave(listingInput(draft, item?.taxClass ?? null), item?.productId ?? productId);
+    if (!taxValid) { setTaxInvalid(true); document.getElementById("listing-taxClass")?.focus(); return; }
+    await onSave(listingInput(draft, taxClass), item?.productId ?? productId);
   }
   const selected = products?.find((candidate) => candidate.id === productId);
   return <form className="listing-form" noValidate onSubmit={submit}>
@@ -55,10 +62,12 @@ export function ListingForm({ item, products, disabled, pending, onSave, onCance
         <Field id="listing-price" name="price" label={t("price")} hint={t("priceHint")} inputMode="decimal" value={draft.price} error={error("price")} onChange={(event) => update("price", event.target.value)} />
         <Field id="listing-vatRate" name="vatRate" label={t("vatRate")} inputMode="decimal" value={draft.vatRate} error={error("vatRate")} onChange={(event) => update("vatRate", event.target.value)} />
       </div>
+      <TaxClassField id="listing-taxClass" choices={choices} value={taxClass} saved={item?.taxClass ?? null} disabled={disabled}
+        invalid={taxInvalid} onChange={value => { setTaxClass(value); setTaxInvalid(false); }} />
       <Field id="listing-sortOrder" name="sortOrder" label={t("sortOrder")} hint={t("sortHint")} value={draft.sortOrder} error={error("sortOrder")} onChange={(event) => update("sortOrder", event.target.value)} />
       <label className="listing-check"><input type="checkbox" name="isVisible" checked={draft.isVisible} onChange={(event) => update("isVisible", event.target.checked)} />{t("storefrontVisible")}</label>
     </fieldset>
-    <div className="cluster"><Button type="submit" disabled={disabled} busy={pending} busyLabel={t("saving")}>{t(item ? "saveDetails" : "listProduct")}</Button>
+    <div className="cluster"><Button type="submit" disabled={disabled || !taxValid} busy={pending} busyLabel={t("saving")}>{t(item ? "saveDetails" : "listProduct")}</Button>
       {onCancel && <Button type="button" variant="secondary" disabled={pending} onClick={onCancel}>{t("cancel")}</Button>}
     </div>
   </form>;

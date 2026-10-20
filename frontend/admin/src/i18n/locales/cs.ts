@@ -1499,8 +1499,11 @@ const resources = {
       "serverSelection": "Zkontrolujte vybrané nabídky.",
       "serverCategories": "Zkontrolujte volby kategorií.",
       "serverPrice": "Zkontrolujte cenu nebo procento.",
+      "clearTaxClass": "Odebrat třídu — zachovat vlastní sazbu DPH každé nabídky",
+      "serverTaxClass": "Zkontrolujte vybranou daňovou třídu.",
       "serverAction": "Zkontrolujte hromadnou akci.",
       "actions": {
+          "taxClass": "Přiřadit nebo odebrat daňovou třídu",
           "hide": "Skrýt nabídky",
           "show": "Zobrazit nabídky",
           "setPrice": "Nastavit stejnou cenu",
@@ -1510,6 +1513,7 @@ const resources = {
           "restore": "Obnovit nabídky"
       },
       "hints": {
+          "taxClass": "Přiřadit zvolenou třídu vybraným aktivním nabídkám nebo jejich přiřazení výslovně odebrat. Ceny s DPH, vlastní sazby DPH a ostatní nastavení zůstanou zachovány.",
           "hide": "Nastavit uloženou viditelnost vybraných aktivních nabídek na skrytou.",
           "show": "Nastavit uloženou viditelnost vybraných aktivních nabídek na viditelnou. Ostatní pravidla zveřejnění nadále platí.",
           "setPrice": "Nahradit aktuální cenu každé vybrané aktivní nabídky zadanou cenou s DPH. Sazba DPH a přiřazení daňové třídy zůstanou zachovány.",
@@ -1564,6 +1568,32 @@ const resources = {
           "listings": "Do této kategorie jsou přiřazené nabídky.",
           "feed": "K této kategorii je přiřazena kategorie zbožového vyhledávače."
       }
+  },
+  taxAssignments: {
+      "label": "Daňová třída",
+      "choose": "Zvolte třídu nebo ji výslovně odeberte",
+      "fallback": "Bez třídy — použít vlastní sazbu DPH",
+      "unavailableOption": "Nedostupná třída ({{code}})",
+      "hint": "Třída použije nastavenou sazbu pro zemi doručení, poté sazbu pro zemi obchodu a nakonec tuto uloženou sazbu DPH. Přiřazení ani odebrání třídy nemění cenu s DPH ani vlastní sazbu DPH.",
+      "loading": "Načítání daňových tříd…",
+      "lookupFailed": "Nabídku tříd se nepodařilo obnovit. Uložené přiřazení zůstává zachováno; můžete je výslovně odebrat nebo před výběrem jiné třídy načtení zopakovat.",
+      "savedUnavailable": "Uložená třída {{code}} není v aktuální nabídce. Zůstává přiřazena, dokud ji výslovně neodeberete nebo nenahradíte. Server ji při uložení znovu ověří.",
+      "choiceUnavailable": "Třída {{code}} již není dostupná. Před uložením zvolte dostupnou třídu nebo přiřazení výslovně odeberte.",
+      "rates": "Nastavené sazby pro země: {{rates}}. Nejde o výpočet pokladny.",
+      "noRates": "žádné; platí náhradní sazby",
+      "invalid": "Zvolte dostupnou třídu nebo přiřazení výslovně odeberte.",
+      "refresh": "Obnovit nabídku tříd",
+      "methodName": "Název způsobu dopravy",
+      "provider": "Poskytovatel dopravy",
+      "chooseProvider": "Zvolte poskytovatele",
+      "saving": "Ukládání…",
+      "loadingMethods": "Načítání způsobů dopravy…",
+      "storeStale": "Údaje obchodu nejsou aktuální. Před uložením dopravy je obnovte.",
+      "readRequired": "Změny dopravy jsou pozastaveny, dokud se nepodaří načíst aktuální údaje. Opakování načtení uložení neopakuje.",
+      "saved": "Server potvrdil uložení. Zkontrolujte znovu načtené způsoby dopravy.",
+      "serverField": "Zkontrolujte toto pole způsobu dopravy.",
+      "writeRefused": "Server uložení odmítl. Rozepsané údaje zůstávají zachovány. Před dalším uložením zkontrolujte načtené způsoby dopravy a opravte příslušná pole.",
+      "writeFailed": "Uložení nebylo potvrzeno. Změna mohla proběhnout. Před dalším uložením zkontrolujte znovu načtené způsoby dopravy; požadavek se automaticky neopakuje."
   },
   tax: {
     title: "Daňové třídy a sazby",

@@ -63,12 +63,15 @@ export function StoreSettingsPage() {
 export function StoreMethodsPage() {
   const { t, i18n } = useTranslation("methods");
   const { user } = useSession();
-  const { store } = useSelectedStore();
+  const { store, storeRefreshing, storeRefreshError } = useSelectedStore();
   const [, run] = useAction(() => undefined);
   return (
     <StoreRoute title={t("title")} allowed={canManageStore(user.role)}>
       <MethodsSection
+        key={`${user.tenantId}:${user.id}:${user.role}:${store.id}`}
         storeId={store.id}
+        canManage={canManageStore(user.role)}
+        storeStale={storeRefreshing || storeRefreshError !== null}
         money={currencyFormatter(store.currency, i18n.resolvedLanguage)}
         run={run}
       />

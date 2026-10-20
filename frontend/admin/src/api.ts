@@ -10,6 +10,7 @@ import { changeUnappliedPayment, getUnappliedPayments } from "./api/unappliedPay
 import { changeReturnMoney, decideReturn, getReturnDetails, getReturns } from "./api/returns";
 import { deleteProductImage, describeProductImage, getProductImages, reorderProductImages, uploadProductImage } from "./api/productMedia";
 import { allowSuppressedAddress, getFailedMessages, getSuppressedAddresses, requeueMessage } from "./api/operations";
+import { createShippingMethod, getShippingMethods, updateShippingMethod } from "./api/shippingMethods";
 import { createTaxClass, deleteTaxClass, getTaxClasses, removeTaxRate, renameTaxClass, setTaxRate } from "./api/taxClasses";
 
 export type SignInResponse = {
@@ -727,49 +728,9 @@ export const api = {
       undefined,
       signal,
     ),
-  shippingMethods: (storeId: string, signal?: AbortSignal) =>
-    request<ShippingMethod[]>(
-      "GET",
-      `/api/admin/stores/${storeId}/shipping-methods`,
-      undefined,
-      signal,
-    ),
-  createShippingMethod: (
-    storeId: string,
-    input: {
-      name: string;
-      providerKey: string;
-      price: number;
-      vatRate: number;
-      requiresPickupPoint: boolean;
-      maxWeightGrams: number | null;
-      countries: string[];
-    },
-  ) =>
-    request<ShippingMethod>(
-      "POST",
-      `/api/admin/stores/${storeId}/shipping-methods`,
-      { ...input, isActive: true },
-    ),
-  updateShippingMethod: (
-    storeId: string,
-    code: string,
-    input: {
-      name: string;
-      price: number;
-      vatRate: number;
-      isActive: boolean;
-      requiresPickupPoint: boolean;
-      maxWeightGrams: number | null;
-      countries: string[];
-      taxClass: string | null;
-    },
-  ) =>
-    request<ShippingMethod>(
-      "PUT",
-      `/api/admin/stores/${storeId}/shipping-methods/${code}`,
-      input,
-    ),
+  shippingMethods: getShippingMethods,
+  createShippingMethod,
+  updateShippingMethod,
 
   discounts: (storeId: string, signal?: AbortSignal) =>
     request<Discount[]>(
