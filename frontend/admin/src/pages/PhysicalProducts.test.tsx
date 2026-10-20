@@ -152,12 +152,13 @@ describe("physical products", () => {
     const createUrl = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:preview");
     const revokeUrl = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
     const upload = vi.spyOn(api, "uploadProductImage").mockResolvedValue({
-      id: "image-a", url: "/image-a", altText: "Front view", position: 0,
+      id: "11111111-1111-1111-1111-111111111111", url: "/api/admin/products/product-a/images/11111111-1111-1111-1111-111111111111", altText: "Front view", position: 0,
     });
     const remove = vi.spyOn(api, "deleteProductImage").mockResolvedValue(undefined);
+    vi.spyOn(api, "productImages").mockImplementation(async () => remove.mock.calls.length ? [] : [await upload.mock.results[0].value]);
     render(
       <ProductMediaSection productId="product-a" sku="PHYSICAL-1"
-        images={[]} reloadProducts={() => undefined} />,
+        images={[]} canManage refreshing={false} refreshFailed={false} reloadProducts={() => undefined} />,
     );
 
     expect(screen.getByText(/No images yet/)).toBeTruthy();
@@ -165,29 +166,31 @@ describe("physical products", () => {
       screen.getByLabelText("Image file"),
       new File(["gif"], "wrong.gif", { type: "image/gif" }),
     );
-    await user.type(screen.getByRole("textbox", { name: "Image description" }), "Front view");
-    await user.click(screen.getByRole("button", { name: "Upload image" }));
+    await user.click(screen.getByRole("button", { name: "Upload remaining files" }));
     expect(upload).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: /Choose a PNG, JPEG or WebP image/ })).toBeTruthy();
+    expect(screen.getByText(/Choose a PNG, JPEG or WebP image/)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Clear upload queue" }));
 
     const imageFile = new File(["png"], "front.png", { type: "image/png" });
     await user.upload(screen.getByLabelText("Image file"), imageFile);
     expect(createUrl).toHaveBeenCalledWith(imageFile);
-    expect(screen.getByRole("img", { name: "Selected image preview" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Preview of front.png" })).toBeTruthy();
+    await user.type(screen.getByRole("textbox", { name: "Description for front.png" }), "Front view");
     expect(upload).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Upload image" }));
+    await user.click(screen.getByRole("button", { name: "Upload remaining files" }));
     await waitFor(() => expect(upload).toHaveBeenCalledWith("product-a", imageFile, "Front view"));
     expect(await screen.findByRole("img", { name: "Front view" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Clear upload queue" }));
     expect(revokeUrl).toHaveBeenCalledWith("blob:preview");
 
     await user.click(screen.getByRole("button", { name: "Remove Front view" }));
-    expect(within(screen.getByRole("group")).getByText("Remove Front view?")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Remove Front view?" })).toBeTruthy();
     expect(remove).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(remove).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Remove Front view" }));
-    await user.click(within(screen.getByRole("group")).getByRole("button", { name: "Remove image" }));
-    await waitFor(() => expect(remove).toHaveBeenCalledWith("product-a", "image-a"));
+    await user.click(within(screen.getByRole("form", { name: "Remove Front view?" })).getByRole("button", { name: "Remove image" }));
+    await waitFor(() => expect(remove).toHaveBeenCalledWith("product-a", "11111111-1111-1111-1111-111111111111"));
     expect(await screen.findByText(/No images yet/)).toBeTruthy();
   });
 });

@@ -8,6 +8,7 @@ import { getOrders } from "./api/orders";
 import { changeOrder, getOrderDetails, refundOrder } from "./api/orderDetails";
 import { changeUnappliedPayment, getUnappliedPayments } from "./api/unappliedPayments";
 import { changeReturnMoney, decideReturn, getReturnDetails, getReturns } from "./api/returns";
+import { deleteProductImage, describeProductImage, getProductImages, reorderProductImages, uploadProductImage } from "./api/productMedia";
 
 export type SignInResponse = {
   twoFactorRequired: boolean;
@@ -516,17 +517,11 @@ export const api = {
     request<ProductVariant>("PUT", `/api/admin/products/${productId}/variants/${variantId}`, input),
   deleteVariant: (productId: string, variantId: string) =>
     request<void>("DELETE", `/api/admin/products/${productId}/variants/${variantId}`),
-  uploadProductImage: (productId: string, file: File, altText: string) =>
-    request<ProductImage>(
-      "POST",
-      `/api/admin/products/${productId}/images`,
-      formWith(file, { altText }),
-    ),
-  deleteProductImage: (productId: string, imageId: string) =>
-    request<void>(
-      "DELETE",
-      `/api/admin/products/${productId}/images/${imageId}`,
-    ),
+  productImages: getProductImages,
+  uploadProductImage,
+  deleteProductImage,
+  reorderProductImages,
+  describeProductImage,
 
   storeProducts: getStoreProducts,
   changeCatalogLifecycle,

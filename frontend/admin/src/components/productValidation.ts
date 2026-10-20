@@ -98,7 +98,7 @@ export function validateProductImage(
       issues.push({ field: "file", key: "fileSizeInvalid" });
     }
   }
-  if (!altText.trim() || altText.trim().length > 300) {
+  if (altText.trim().length > 200) {
     issues.push({ field: "altText", key: "altTextInvalid" });
   }
   return issues;

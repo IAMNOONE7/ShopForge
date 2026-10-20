@@ -15,7 +15,7 @@ export function PhysicalProductPage() {
   const { productId = "" } = useParams();
   const { user } = useSession();
   const [products, reloadProducts] = useRequest(
-    "physical-products",
+    `physical-products:${user.tenantId}:${user.id}:${user.role}`,
     api.products,
   );
 
@@ -69,10 +69,13 @@ export function PhysicalProductPage() {
             reloadProducts={reloadProducts}
           />
           <ProductMediaSection
-            key={`media:${product.id}`}
+            key={`media:${user.tenantId}:${user.id}:${user.role}:${product.id}`}
             productId={product.id}
             sku={product.sku}
             images={product.images}
+            canManage={canManageCatalog(user.role)}
+            refreshing={products.refreshing}
+            refreshFailed={products.refreshError !== null}
             reloadProducts={reloadProducts}
           />
 

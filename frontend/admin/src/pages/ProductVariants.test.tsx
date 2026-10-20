@@ -177,7 +177,7 @@ describe("product variant editor", () => {
     await user.type(screen.getByRole("textbox", { name: "Size" }), "M");
     await user.type(screen.getByRole("textbox", { name: "Colour" }), "Green");
     await user.click(screen.getByRole("button", { name: "Create variant" }));
-    expect(await screen.findByText(/confirmed save does not need to be repeated/)).toBeTruthy();
+    expect(await within(screen.getByRole("region", { name: "Variants and physical details" })).findByText(/confirmed save does not need to be repeated/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Create variant" })).toBeNull();
     expect((screen.getByRole("button", { name: "Add variant" }) as HTMLButtonElement).disabled).toBe(true);
     await user.click(screen.getByRole("button", { name: "Try again" }));
