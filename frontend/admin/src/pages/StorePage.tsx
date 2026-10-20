@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useSelectedStore } from "../adminContext";
 import { DiscountsSection } from "../components/DiscountsSection";
-import { FailedMessagesSection } from "../components/FailedMessagesSection";
 import { ImportSection } from "../components/ImportSection";
 import { MethodsSection } from "../components/MethodsSection";
 import { PermissionScope } from "../components/PermissionScope";
@@ -111,17 +110,6 @@ export function StoreReviewsPage() {
   return (
     <StoreRoute title={t("title")} allowed={canManageCatalog(user.role)}>
       <ReviewsSection storeId={store.id} />
-    </StoreRoute>
-  );
-}
-
-export function StoreOperationsPage() {
-  const { t } = useTranslation("operations");
-  const { user } = useSession();
-  const { store } = useSelectedStore();
-  return (
-    <StoreRoute title={t("title")} allowed={canManageStore(user.role)}>
-      <FailedMessagesSection storeId={store.id} />
     </StoreRoute>
   );
 }

@@ -9,6 +9,7 @@ import { changeOrder, getOrderDetails, refundOrder } from "./api/orderDetails";
 import { changeUnappliedPayment, getUnappliedPayments } from "./api/unappliedPayments";
 import { changeReturnMoney, decideReturn, getReturnDetails, getReturns } from "./api/returns";
 import { deleteProductImage, describeProductImage, getProductImages, reorderProductImages, uploadProductImage } from "./api/productMedia";
+import { allowSuppressedAddress, getFailedMessages, getSuppressedAddresses, requeueMessage } from "./api/operations";
 
 export type SignInResponse = {
   twoFactorRequired: boolean;
@@ -618,18 +619,10 @@ export const api = {
       { values },
     ),
 
-  failedMessages: (storeId: string, signal?: AbortSignal) =>
-    request<FailedMessage[]>(
-      "GET",
-      `/api/admin/stores/${storeId}/failed-messages`,
-      undefined,
-      signal,
-    ),
-  requeueMessage: (storeId: string, messageId: string) =>
-    request<void>(
-      "POST",
-      `/api/admin/stores/${storeId}/failed-messages/${messageId}/requeue`,
-    ),
+  failedMessages: getFailedMessages,
+  requeueMessage,
+  suppressedAddresses: getSuppressedAddresses,
+  allowSuppressedAddress,
 
   returns: getReturns,
   returnDetail: getReturnDetails,

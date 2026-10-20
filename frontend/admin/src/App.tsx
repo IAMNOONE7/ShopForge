@@ -24,7 +24,6 @@ import {
   StoreDiscountsPage,
   StoreImportPage,
   StoreMethodsPage,
-  StoreOperationsPage,
   StoreReviewsPage,
   StoreSettingsPage,
 } from "./pages/StorePage";
@@ -43,6 +42,7 @@ const StoreReturnsPage = lazy(() => import("./pages/ReturnPages").then((pages) =
 const StoreReturnPage = lazy(() => import("./pages/ReturnPages").then((pages) => ({ default: pages.StoreReturnPage })));
 const NewListingPage = lazy(() => import("./pages/ListingPages").then((pages) => ({ default: pages.NewListingPage })));
 const ListingDetailPage = lazy(() => import("./pages/ListingPages").then((pages) => ({ default: pages.ListingDetailPage })));
+const StoreOperationsPage = lazy(() => import("./pages/StoreOperationsPage").then((pages) => ({ default: pages.StoreOperationsPage })));
 
 type SessionState =
   | { status: "checking" }
@@ -207,7 +207,7 @@ function App() {
                   <Route path="returns" element={<DeferredPage><StoreReturnsPage /></DeferredPage>} />
                   <Route path="returns/:returnId" element={<DeferredPage><StoreReturnPage /></DeferredPage>} />
                   <Route path="reviews" element={<StoreReviewsPage />} />
-                  <Route path="operations" element={<StoreOperationsPage />} />
+                  <Route path="operations" element={<DeferredPage><StoreOperationsPage /></DeferredPage>} />
                   <Route path="*" element={<NotFoundPage />} />
                 </Route>
                 <Route path="*" element={<NotFoundPage />} />

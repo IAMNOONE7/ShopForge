@@ -1703,6 +1703,40 @@ input[readonly] {
   margin: 0;
 }
 
+.message-operations-page, .message-operations-panel, .operation-records, .operation-records > li, .operation-confirmation, .operation-result {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.message-operations-page { width: min(100%, 72rem); container-type: inline-size; }
+.message-operations-page h1, .message-operations-page h2, .message-operations-page h3, .message-operations-page p { margin-block: 0; }
+.message-operations-panel, .operation-records > li, .operation-confirmation {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+}
+.operation-records { list-style: none; margin: 0; padding: 0; }
+.operation-records > li { background: var(--color-surface-subtle); }
+.operation-facts { display: grid; grid-template-columns: 2fr 2fr 1fr; gap: var(--space-3); margin: 0; }
+.operation-facts > div { min-width: 0; }
+.operation-facts dt { color: var(--color-text-muted); font-size: var(--text-sm); }
+.operation-facts dd { margin: var(--space-1) 0 0; }
+.operation-diagnostic { min-width: 0; }
+.operation-diagnostic summary { cursor: pointer; padding-block: var(--space-2); }
+.operation-diagnostic p { white-space: pre-wrap; }
+.operation-confirmation { border-color: var(--color-border-strong); }
+.message-operations-page button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.operation-records > li > button { justify-self: start; }
+@container (max-width: 36rem) {
+  .message-operations-panel > .section-heading { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .operation-facts { grid-template-columns: minmax(0, 1fr); }
+  .message-operations-panel, .operation-records > li, .operation-confirmation { padding: var(--space-2); }
+  .message-operations-page button { padding-inline: var(--space-2); }
+}
+
 .product-media-workspace, .media-editor, .media-upload-queue, .media-order-list, .media-image-actions, .media-upload-review {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
