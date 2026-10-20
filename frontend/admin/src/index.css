@@ -1703,6 +1703,36 @@ input[readonly] {
   margin: 0;
 }
 
+.tax-page, .tax-classes, .tax-classes > li, .tax-editor, .tax-rates {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tax-page { width: min(100%, 72rem); container-type: inline-size; }
+.tax-page h1, .tax-page h2, .tax-page p { margin-block: 0; }
+.tax-page > button { justify-self: start; }
+.tax-classes, .tax-rates { list-style: none; margin: 0; padding: 0; }
+.tax-classes > li, .tax-editor {
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+}
+.tax-editor { border-color: var(--color-border-strong); }
+.tax-guidance summary, .tax-server-detail summary { cursor: pointer; padding-block: var(--space-2); }
+.tax-guidance p { margin-block-start: var(--space-3); }
+.tax-server-detail p { white-space: pre-wrap; }
+.tax-rates > li { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; justify-content: space-between; min-width: 0; padding-block: var(--space-3); border-top: 1px solid var(--color-border); }
+.tax-page button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+@container (max-width: 36rem) {
+  .tax-page > .section-heading { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .tax-classes > li, .tax-editor { padding: var(--space-2); }
+  .tax-page button { padding-inline: var(--space-2); }
+  .tax-rates > li { display: grid; grid-template-columns: minmax(0, 1fr); }
+}
+
 .message-operations-page, .message-operations-panel, .operation-records, .operation-records > li, .operation-confirmation, .operation-result {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

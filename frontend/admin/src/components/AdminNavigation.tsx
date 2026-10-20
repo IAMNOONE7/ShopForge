@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { NavLink, useNavigate } from "react-router";
 import type { AdminStore } from "../api";
 import type { AdminOutletContext } from "../adminContext";
-import { canManageStore } from "../session";
+import { canManageCatalog, canManageStore } from "../session";
 
 type NavigationProps = AdminOutletContext & {
   selectedStore: AdminStore | null;
@@ -105,6 +105,7 @@ export function AdminNavigation({
             {t("navigation:settings")}
           </NavLink>
           {canManageStore(role) && <NavLink to={`/stores/${selectedStore.id}/domains`} onClick={onNavigate}>{t("navigation:domains")}</NavLink>}
+          {canManageCatalog(role) && <NavLink to={`/stores/${selectedStore.id}/tax-classes`} onClick={onNavigate}>{t("navigation:taxClasses")}</NavLink>}
           <NavLink
             to={`/stores/${selectedStore.id}/products`}
             onClick={onNavigate}

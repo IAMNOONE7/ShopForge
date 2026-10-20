@@ -10,6 +10,7 @@ import { changeUnappliedPayment, getUnappliedPayments } from "./api/unappliedPay
 import { changeReturnMoney, decideReturn, getReturnDetails, getReturns } from "./api/returns";
 import { deleteProductImage, describeProductImage, getProductImages, reorderProductImages, uploadProductImage } from "./api/productMedia";
 import { allowSuppressedAddress, getFailedMessages, getSuppressedAddresses, requeueMessage } from "./api/operations";
+import { createTaxClass, deleteTaxClass, getTaxClasses, removeTaxRate, renameTaxClass, setTaxRate } from "./api/taxClasses";
 
 export type SignInResponse = {
   twoFactorRequired: boolean;
@@ -623,6 +624,12 @@ export const api = {
   requeueMessage,
   suppressedAddresses: getSuppressedAddresses,
   allowSuppressedAddress,
+  taxClasses: getTaxClasses,
+  createTaxClass,
+  renameTaxClass,
+  deleteTaxClass,
+  setTaxRate,
+  removeTaxRate,
 
   returns: getReturns,
   returnDetail: getReturnDetails,
