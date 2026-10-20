@@ -9,12 +9,18 @@ namespace ShopForge.IntegrationTests.Payments;
 internal sealed class InMemorySecrets : ISecretStore
 {
     private readonly ConcurrentDictionary<string, string> _kept = new(StringComparer.Ordinal);
+    private int _failingWrites;
 
     public Task<string?> FindAsync(string name, CancellationToken cancellationToken) =>
         Task.FromResult(_kept.GetValueOrDefault(SecretNames.Required(name)));
 
     public Task SetAsync(string name, string value, CancellationToken cancellationToken)
     {
+        if (Interlocked.Exchange(ref _failingWrites, 0) == 1)
+        {
+            throw new HttpRequestException("The vault did not answer.");
+        }
+
         _kept[SecretNames.Required(name)] = value;
 
         return Task.CompletedTask;
@@ -30,4 +36,7 @@ internal sealed class InMemorySecrets : ISecretStore
     // A vault losing what a connection still names: a key deleted, or a database moved to a deployment whose
     // secrets live somewhere else. The row says connected and the money cannot move (D-190).
     public void Clear() => _kept.Clear();
+
+    // A vault that is down for one write.
+    public void FailNextWrite() => Interlocked.Exchange(ref _failingWrites, 1);
 }

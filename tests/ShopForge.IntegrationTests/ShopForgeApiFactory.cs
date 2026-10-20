@@ -9,6 +9,7 @@ using ShopForge.Infrastructure.Files;
 using ShopForge.Infrastructure.Messaging;
 using ShopForge.Infrastructure.Persistence;
 using ShopForge.IntegrationTests;
+using ShopForge.IntegrationTests.Provisioning;
 using ShopForge.Shared.Dns;
 using ShopForge.Shared.Email;
 using Testcontainers.Azurite;
@@ -117,6 +118,9 @@ public sealed class ShopForgeApiFactory : WebApplicationFactory<Program>, IAsync
         // let an order go unasked mid-test. Each test runs the pass it needs itself (D-202).
         builder.UseSetting("Schedules:Enabled", "false");
 
+        // The same for operations: a test runs the steps it needs itself, with stand-ins of its own (D-210).
+        builder.UseSetting("Provisioning:Enabled", "false");
+
         // The test host speaks plain HTTP, so cookies cannot be marked Secure the way a deployment marks them.
         builder.UseSetting("Security:RequireSecureCookies", "false");
 
@@ -129,6 +133,10 @@ public sealed class ShopForgeApiFactory : WebApplicationFactory<Program>, IAsync
         {
             services.AddSingleton<IEmailDelivery>(EmailDelivery);
             services.AddSingleton<IDnsTxtRecords>(Dns);
+
+            // No real operation exists before V15 and V16, so the engine is proven with one of the tests' own.
+            services.AddSingleton<FakeProvider>();
+            services.AddTestOperation();
             services.ConfigureDbContext<ShopForgeDbContext>(options => options.AddInterceptors(Queries));
         });
     }

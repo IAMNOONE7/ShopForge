@@ -5,6 +5,7 @@ using ShopForge.Customers;
 using ShopForge.Infrastructure.Persistence;
 using ShopForge.Inventory;
 using ShopForge.Orders;
+using ShopForge.Platform;
 using ShopForge.Shared.Tenancy;
 using ShopForge.Stores;
 
@@ -21,6 +22,7 @@ public sealed class DependencyRulesTests
         CustomersModule.Assembly,
         InventoryModule.Assembly,
         OrdersModule.Assembly,
+        PlatformModule.Assembly,
     ];
 
     [Fact]

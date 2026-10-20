@@ -20,6 +20,7 @@ using ShopForge.Infrastructure.Messaging;
 using ShopForge.Infrastructure.Payments;
 using ShopForge.Infrastructure.Payments.Comgate;
 using ShopForge.Infrastructure.Persistence;
+using ShopForge.Infrastructure.Provisioning;
 using ShopForge.Infrastructure.Secrets;
 using ShopForge.Infrastructure.Shipping.Packeta;
 using ShopForge.Shared.Auditing;
@@ -33,6 +34,7 @@ using ShopForge.Shared.Http;
 using ShopForge.Shared.Maintenance;
 using ShopForge.Shared.Messaging;
 using ShopForge.Shared.Payments;
+using ShopForge.Shared.Provisioning;
 using ShopForge.Shared.Security;
 using ShopForge.Shared.Shipping;
 using ShopForge.Shared.Stores;
@@ -111,6 +113,8 @@ public static class DependencyInjection
         services.AddSingleton(new ScheduleOptions(configuration.GetValue("Schedules:Enabled", true)));
         services.AddHostedService<ScheduledPasses>();
 
+        AddProvisioning(services, configuration);
+
         AddSecretStore(services, configuration);
         AddComgate(services, configuration);
         AddPacketa(services, configuration);
@@ -166,6 +170,32 @@ public static class DependencyInjection
         services.AddHttpClient<IPacketaClient, PacketaHttpClient>(client => client.BaseAddress = new Uri(baseAddress))
             .RemoveAllLoggers();
         services.AddScoped<IShippingProvider, PacketaShippingProvider>();
+    }
+
+    // Operations that outlive a request, carried through by a worker on every replica, each step by one of them (D-210).
+    // Off where something else drives them: the integration tests, which run the steps they need themselves.
+    private static void AddProvisioning(IServiceCollection services, IConfiguration configuration)
+    {
+        var defaults = ProvisioningOptions.Default;
+        var options = defaults with
+        {
+            Enabled = configuration.GetValue("Provisioning:Enabled", defaults.Enabled),
+            Interval = TimeSpan.FromSeconds(configuration.GetValue("Provisioning:IntervalSeconds", defaults.Interval.TotalSeconds)),
+            Lease = TimeSpan.FromSeconds(configuration.GetValue("Provisioning:LeaseSeconds", defaults.Lease.TotalSeconds)),
+            StepTimeout = TimeSpan.FromSeconds(configuration.GetValue("Provisioning:StepTimeoutSeconds", defaults.StepTimeout.TotalSeconds)),
+        };
+
+        // A lease that ran out while its step was still running would let a second replica start the same step.
+        if (options.Lease <= options.StepTimeout)
+        {
+            throw new InvalidOperationException("Provisioning:LeaseSeconds must be longer than Provisioning:StepTimeoutSeconds.");
+        }
+
+        services.AddSingleton(options);
+        services.AddScoped<IProvisioning, Operations>();
+        services.AddScoped<OperationAdmin>();
+        services.AddSingleton<OperationRunner>();
+        services.AddHostedService<OperationWorker>();
     }
 
     private static void AddSecretStore(IServiceCollection services, IConfiguration configuration)

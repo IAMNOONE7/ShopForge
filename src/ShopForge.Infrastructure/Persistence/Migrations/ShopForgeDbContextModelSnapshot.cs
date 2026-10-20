@@ -1668,6 +1668,200 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                     b.ToTable("scheduled_runs", "messaging");
                 });
 
+            modelBuilder.Entity("ShopForge.Infrastructure.Provisioning.ProvisioningOperation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("CancelRequestedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("cancel_requested_at");
+
+                    b.Property<DateTimeOffset>("ChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("changed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("finished_at");
+
+                    b.Property<string>("Input")
+                        .HasColumnType("text")
+                        .HasColumnName("input");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("kind");
+
+                    b.Property<Guid?>("LeaseToken")
+                        .HasColumnType("uuid")
+                        .HasColumnName("lease_token");
+
+                    b.Property<DateTimeOffset?>("LeaseUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lease_until");
+
+                    b.Property<string>("LeasedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("leased_by");
+
+                    b.Property<DateTimeOffset?>("NextCheckAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_check_at");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("state");
+
+                    b.Property<Guid>("StoreId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("store_id");
+
+                    b.Property<string>("Subject")
+                        .HasMaxLength(253)
+                        .HasColumnType("character varying(253)")
+                        .HasColumnName("subject");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_operations");
+
+                    b.HasIndex("NextCheckAt")
+                        .HasDatabaseName("ix_operations_next_check_at")
+                        .HasFilter("finished_at IS NULL");
+
+                    b.HasIndex("StoreId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_operations_one_unfinished_per_store")
+                        .HasFilter("finished_at IS NULL");
+
+                    b.HasIndex("Subject")
+                        .IsUnique()
+                        .HasDatabaseName("ux_operations_one_unfinished_per_subject")
+                        .HasFilter("finished_at IS NULL AND subject IS NOT NULL");
+
+                    b.HasIndex("StoreId", "CreatedAt")
+                        .HasDatabaseName("ix_operations_store_id_created_at");
+
+                    b.ToTable("operations", "provisioning");
+                });
+
+            modelBuilder.Entity("ShopForge.Infrastructure.Provisioning.ProvisioningStep", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<int>("Checks")
+                        .HasColumnType("integer")
+                        .HasColumnName("checks");
+
+                    b.Property<bool>("Created")
+                        .HasColumnType("boolean")
+                        .HasColumnName("created");
+
+                    b.Property<string>("Data")
+                        .HasColumnType("text")
+                        .HasColumnName("data");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("finished_at");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("last_error");
+
+                    b.Property<DateTimeOffset?>("LastErrorAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_error_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("note");
+
+                    b.Property<Guid>("OperationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("operation_id");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer")
+                        .HasColumnName("position");
+
+                    b.Property<string>("RequestId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("request_id");
+
+                    b.Property<string>("ResourceId")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("resource_id");
+
+                    b.Property<string>("SecretFor")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("secret_for");
+
+                    b.Property<DateTimeOffset?>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("StoreId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("store_id");
+
+                    b.Property<DateTimeOffset?>("WaitingSince")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("waiting_since");
+
+                    b.HasKey("Id")
+                        .HasName("pk_operation_steps");
+
+                    b.HasIndex("OperationId", "Position")
+                        .IsUnique()
+                        .HasDatabaseName("ix_operation_steps_operation_id_position");
+
+                    b.ToTable("operation_steps", "provisioning");
+                });
+
             modelBuilder.Entity("ShopForge.Inventory.Domain.InventoryItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3815,6 +4009,16 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_wishlist_items_store_customers_store_customer_id");
                 });
 
+            modelBuilder.Entity("ShopForge.Infrastructure.Provisioning.ProvisioningStep", b =>
+                {
+                    b.HasOne("ShopForge.Infrastructure.Provisioning.ProvisioningOperation", null)
+                        .WithMany("Steps")
+                        .HasForeignKey("OperationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_operation_steps_operations_operation_id");
+                });
+
             modelBuilder.Entity("ShopForge.Inventory.Domain.InventoryItem", b =>
                 {
                     b.HasOne("ShopForge.Inventory.Domain.Warehouse", null)
@@ -4246,6 +4450,11 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                     b.Navigation("AttributeValues");
 
                     b.Navigation("Categories");
+                });
+
+            modelBuilder.Entity("ShopForge.Infrastructure.Provisioning.ProvisioningOperation", b =>
+                {
+                    b.Navigation("Steps");
                 });
 
             modelBuilder.Entity("ShopForge.Stores.Domain.Store", b =>

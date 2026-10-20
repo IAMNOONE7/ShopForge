@@ -7,8 +7,10 @@ using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Infrastructure.Payments.Comgate;
 using ShopForge.IntegrationTests.Catalog;
 using ShopForge.IntegrationTests.Orders;
+using ShopForge.IntegrationTests.Provisioning;
 using ShopForge.Orders.Domain;
 using ShopForge.Shared.Payments;
+using ShopForge.Shared.Provisioning;
 
 namespace ShopForge.IntegrationTests.Security;
 
@@ -63,6 +65,10 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
         ("DELETE", "categories/{category}", null),
         ("PUT", "pages/{page}", """{"slug":"taken","title":"Taken","body":"Taken.","isPublished":true}"""),
         ("DELETE", "pages/{page}", null),
+        ("GET", "operations/{operation}", null),
+        ("POST", "operations/{operation}/retry", null),
+        ("POST", "operations/{operation}/continue", null),
+        ("POST", "operations/{operation}/cancel", null),
     ];
 
     // Tenant-scoped routes, called by another company's owner with the first company's ids.
@@ -205,6 +211,7 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
         using var domain = await SendAsync(world.Owner, "DELETE", $"/api/admin/stores/{world.Store}/domains/{spare!.Id}", null);
         using var closed = await SendAsync(
             world.Owner, "POST", $"/api/admin/stores/{world.Store}/unapplied-payments/{world.Unapplied}/close", """{"note":"Ours."}""");
+        using var operation = await SendAsync(world.Owner, "GET", $"/api/admin/stores/{world.Store}/operations/{world.Operation}", null);
 
         Assert.Equal(HttpStatusCode.OK, listing.StatusCode);
         Assert.Equal(HttpStatusCode.OK, order.StatusCode);
@@ -212,6 +219,7 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
         Assert.Equal(HttpStatusCode.NoContent, review.StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, domain.StatusCode);
         Assert.Equal(HttpStatusCode.OK, closed.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, operation.StatusCode);
     }
 
     // The one swept route that takes a file rather than JSON; an empty body would be refused at binding, before
@@ -343,7 +351,18 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
             await InvitationIdAsync(furniture),
             await ContentPageIdAsync(furniture),
             WithOptions(attributes!).Options[0].Id,
-            await UnappliedPaymentIdAsync(furniture, orderNumber));
+            await UnappliedPaymentIdAsync(furniture, orderNumber),
+            await OperationIdAsync(furniture));
+    }
+
+    // An operation only the engine starts, through the tests' own kind; nothing here runs it (D-210).
+    private async Task<Guid> OperationIdAsync(FurnitureStore furniture)
+    {
+        await using var scope = TestStores.CreateScope(factory.Services, furniture.Store);
+        var started = await scope.ServiceProvider.GetRequiredService<IProvisioning>()
+            .StartAsync(TestOperation.Kind, subject: null, input: null, CancellationToken);
+
+        return started.OperationId;
     }
 
     // A payment kept against an order can only arrive from a gateway, which this host has none of, so the row is
@@ -491,7 +510,8 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
         Guid Invitation,
         Guid ContentPage,
         Guid AttributeOption,
-        Guid Unapplied)
+        Guid Unapplied,
+        Guid Operation)
     {
         public string Fill(string route) => route
             .Replace("{storeProduct}", StoreProduct.ToString(), StringComparison.Ordinal)
@@ -510,7 +530,8 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
             .Replace("{invitation}", Invitation.ToString(), StringComparison.Ordinal)
             .Replace("{option}", AttributeOption.ToString(), StringComparison.Ordinal)
             .Replace("{page}", ContentPage.ToString(), StringComparison.Ordinal)
-            .Replace("{unapplied}", Unapplied.ToString(), StringComparison.Ordinal);
+            .Replace("{unapplied}", Unapplied.ToString(), StringComparison.Ordinal)
+            .Replace("{operation}", Operation.ToString(), StringComparison.Ordinal);
     }
 
     private sealed record AttributeWithOptions(Guid Id, List<Named> Options);

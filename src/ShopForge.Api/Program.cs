@@ -15,6 +15,7 @@ using ShopForge.Api.Errors;
 using ShopForge.Api.Frontends;
 using ShopForge.Api.Health;
 using ShopForge.Api.Messaging;
+using ShopForge.Api.Provisioning;
 using ShopForge.Api.Security;
 using ShopForge.Catalog;
 using ShopForge.Catalog.Development;
@@ -276,6 +277,7 @@ storeAdmin.MapCatalogStoreAdminEndpoints();
 storeAdmin.MapOrdersStoreAdminEndpoints();
 storeAdmin.MapAdminOutboxEndpoints();
 storeAdmin.MapAdminSuppressionEndpoints();
+storeAdmin.MapAdminOperationEndpoints();
 
 // Outside Development the schema is migrated before a new revision starts, by the release's own job (D-074, D-205).
 if (app.Environment.IsDevelopment())
