@@ -25,10 +25,15 @@ it.each(["books", null])("updates the complete contract with explicit class %s a
 });
 it.each([null, "books"])("creates through the existing full POST with explicit class %s", async taxClass => {
   const { code: _code, isActive: _active, ...input } = { ...row, taxClass };
-  const fetch = vi.fn().mockResolvedValue(Response.json({ ...row, taxClass })); vi.stubGlobal("fetch", fetch); await api.createShippingMethod("a", input);
+  const fetch = vi.fn().mockResolvedValue(Response.json({ ...row, taxClass, isActive: true })); vi.stubGlobal("fetch", fetch); await api.createShippingMethod("a", input);
   expect(fetch.mock.calls[0][1].method).toBe("POST"); expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ ...input, isActive: true });
 });
 it.each([undefined, { ...row, code: "another" }, { ...row, taxClass: undefined }])("rejects a missing, foreign or incomplete update acknowledgment without retrying: %j", async result => {
   const fetch = vi.fn().mockResolvedValue(result === undefined ? new Response(null, { status: 204 }) : Response.json(result)); vi.stubGlobal("fetch", fetch);
   const { code: _code, providerKey: _provider, ...input } = row; await expect(api.updateShippingMethod("a", "parcel", input)).rejects.toMatchObject({ kind: "invalid-response" }); expect(fetch).toHaveBeenCalledOnce();
+});
+it.each(["price", "vatRate", "requiresPickupPoint", "maxWeightGrams", "countries", "taxClass"])("refuses an acknowledged change to unrelated shipping field %s", async field => {
+  const values = { price: 1, vatRate: 21, requiresPickupPoint: true, maxWeightGrams: 1, countries: ["CZ"], taxClass: "books" };
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ ...row, [field]: values[field as keyof typeof values] })));
+  const { code: _code, providerKey: _provider, ...input } = row; await expect(api.updateShippingMethod("a", row.code, input)).rejects.toMatchObject({ kind: "invalid-response" });
 });

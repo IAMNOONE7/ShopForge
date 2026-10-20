@@ -1,12 +1,11 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import userEvent from "@testing-library/user-event";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { api, type ShippingMethod } from "../api";
 import { HttpError } from "../api/http";
 import { i18n, initializeI18n } from "../i18n";
-import { useAction } from "../useAction";
-import { RequestError } from "./ui/RequestError";
 import { MethodsSection } from "./MethodsSection";
 
 const zbox: ShippingMethod = {
@@ -23,9 +22,10 @@ const zbox: ShippingMethod = {
 };
 
 const money = new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" });
-const run = (change: () => Promise<unknown>) => change().then(() => undefined);
 
 function mockReads(method: ShippingMethod) {
+  vi.spyOn(api, "providerConnections").mockResolvedValue([]);
+  vi.spyOn(api, "storeReadiness").mockResolvedValue({ isReady: false, checks: [] });
   vi.spyOn(api, "taxClasses").mockResolvedValue([{ code: "standard", name: "Standard", rates: [] }]);
   vi.spyOn(api, "paymentProviders").mockResolvedValue(["manual"]);
   vi.spyOn(api, "shippingProviders").mockResolvedValue(["manual", "packeta"]);
@@ -34,10 +34,8 @@ function mockReads(method: ShippingMethod) {
   vi.spyOn(api, "pickupPoints").mockResolvedValue([]);
 }
 
-function EditableMethods() {
-  const [error, run] = useAction(() => undefined);
-  return <><MethodsSection storeId="store-a" money={money} run={run} />{error !== null && <RequestError error={error} operation="write" />}</>;
-}
+function EditableMethods() { return <MemoryRouter><MethodsSection storeId="store-a" money={money} canManage storeStale={false} /></MemoryRouter>; }
+async function openShipping(user: ReturnType<typeof userEvent.setup>) { await user.click(await screen.findByRole("button", { name: "Edit shipping method Z-BOX" })); }
 
 beforeAll(async () => {
   await initializeI18n();
@@ -60,6 +58,7 @@ describe("MethodsSection", () => {
       .mockRejectedValueOnce(new HttpError("http", 400, { errors: { name: ["Invalid name"] } }))
       .mockResolvedValue(method);
     render(<EditableMethods />);
+    await openShipping(user);
     const form = (await screen.findByRole("form", { name: "Z-BOX" }));
     const name = form.querySelector<HTMLInputElement>('input[name="name"]')!;
     await user.clear(name); await user.type(name, "Parcel");
@@ -79,7 +78,8 @@ describe("MethodsSection", () => {
     mockReads(zbox);
     const saved = vi.spyOn(api, "updateShippingMethod").mockResolvedValue(zbox);
 
-    render(<MethodsSection storeId="store-a" money={money} run={run} />);
+    render(<EditableMethods />);
+    await openShipping(user);
 
     const weight = within(await screen.findByRole("form", { name: "Z-BOX" })).getByRole("spinbutton", { name: /Weight limit/ });
     await user.type(weight, "5000");
@@ -99,7 +99,8 @@ describe("MethodsSection", () => {
     mockReads({ ...zbox, maxWeightGrams: 5000, countries: ["CZ"] });
     const saved = vi.spyOn(api, "updateShippingMethod").mockResolvedValue(zbox);
 
-    render(<MethodsSection storeId="store-a" money={money} run={run} />);
+    render(<EditableMethods />);
+    await openShipping(user);
 
     await user.clear(within(await screen.findByRole("form", { name: "Z-BOX" })).getByRole("spinbutton", { name: /Weight limit/ }));
     await user.clear(within(screen.getByRole("form", { name: "Z-BOX" })).getByRole("textbox", { name: /Countries/ }));
@@ -114,9 +115,11 @@ describe("MethodsSection", () => {
   });
 
   it("shows what a method is limited to when it opens", async () => {
+    const user = userEvent.setup();
     mockReads({ ...zbox, maxWeightGrams: 5000, countries: ["CZ", "SK"] });
 
-    render(<MethodsSection storeId="store-a" money={money} run={run} />);
+    render(<EditableMethods />);
+    await openShipping(user);
 
     const weight = within(await screen.findByRole("form", { name: "Z-BOX" })).getByRole("spinbutton", { name: /Weight limit/ });
     expect(weight).toHaveProperty("value", "5000");

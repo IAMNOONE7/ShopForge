@@ -1,3 +1,4 @@
+import { createPaymentMethod, getMethodProviders, getPaymentMethods, updatePaymentMethod } from "./api/paymentMethods";
 import { disconnectProvider, getProviderChoices, getProviderConnections, saveProviderConnection, setProviderSecret } from "./api/providerConnections";
 import { HttpError, requestBlob, requestJson, saveDownload } from "./api/http";
 import { findStoreProduct, getStoreProducts, hasVisibleStoreProduct } from "./api/listings";
@@ -696,44 +697,11 @@ export const api = {
     saveDownload(download);
   },
 
-  paymentProviders: (storeId: string, signal?: AbortSignal) =>
-    request<string[]>(
-      "GET",
-      `/api/admin/stores/${storeId}/payment-providers`,
-      undefined,
-      signal,
-    ),
-  paymentMethods: (storeId: string, signal?: AbortSignal) =>
-    request<PaymentMethod[]>(
-      "GET",
-      `/api/admin/stores/${storeId}/payment-methods`,
-      undefined,
-      signal,
-    ),
-  createPaymentMethod: (storeId: string, name: string, providerKey: string) =>
-    request<PaymentMethod>(
-      "POST",
-      `/api/admin/stores/${storeId}/payment-methods`,
-      { name, providerKey, isActive: true },
-    ),
-  updatePaymentMethod: (
-    storeId: string,
-    code: string,
-    input: { name: string; isActive: boolean },
-  ) =>
-    request<PaymentMethod>(
-      "PUT",
-      `/api/admin/stores/${storeId}/payment-methods/${code}`,
-      input,
-    ),
-
-  shippingProviders: (storeId: string, signal?: AbortSignal) =>
-    request<string[]>(
-      "GET",
-      `/api/admin/stores/${storeId}/shipping-providers`,
-      undefined,
-      signal,
-    ),
+  paymentProviders: (storeId: string, signal?: AbortSignal) => getMethodProviders(storeId, "payment", signal),
+  paymentMethods: getPaymentMethods,
+  createPaymentMethod,
+  updatePaymentMethod,
+  shippingProviders: (storeId: string, signal?: AbortSignal) => getMethodProviders(storeId, "shipping", signal),
   shippingMethods: getShippingMethods,
   createShippingMethod,
   updateShippingMethod,

@@ -18,6 +18,12 @@ function checked(value: unknown): ShippingMethod {
   return value as ShippingMethod;
 }
 const path = (storeId: string) => `/api/admin/stores/${encodeURIComponent(storeId)}/shipping-methods`;
+function matches(item: ShippingMethod, input: Omit<ShippingMethodInput, "isActive">) {
+  const countries = [...new Set(input.countries.map(country => country.trim().toUpperCase()))].sort();
+  return item.name === input.name.trim() && item.price === input.price && item.vatRate === input.vatRate
+    && item.requiresPickupPoint === input.requiresPickupPoint && item.maxWeightGrams === input.maxWeightGrams
+    && item.taxClass === (input.taxClass?.trim() || null) && JSON.stringify([...item.countries].sort()) === JSON.stringify(countries);
+}
 
 export async function getShippingMethods(storeId: string, signal?: AbortSignal) {
   const result = await requestJson<unknown>(path(storeId), { signal });
@@ -29,11 +35,13 @@ export async function getShippingMethods(storeId: string, signal?: AbortSignal) 
 }
 
 export async function createShippingMethod(storeId: string, input: NewShippingMethodInput) {
-  return checked(await requestJson<unknown>(path(storeId), { method: "POST", body: { ...input, isActive: true } }));
+  const item = checked(await requestJson<unknown>(path(storeId), { method: "POST", body: { ...input, isActive: true } }));
+  if (!matches(item, input) || item.providerKey !== input.providerKey || !item.isActive) throw new HttpError("invalid-response", null);
+  return item;
 }
 
 export async function updateShippingMethod(storeId: string, code: string, input: ShippingMethodInput) {
   const item = checked(await requestJson<unknown>(`${path(storeId)}/${encodeURIComponent(code)}`, { method: "PUT", body: input }));
-  if (item.code !== code) throw new HttpError("invalid-response", null);
+  if (item.code !== code || item.isActive !== input.isActive || !matches(item, input)) throw new HttpError("invalid-response", null);
   return item;
 }

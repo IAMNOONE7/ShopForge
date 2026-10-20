@@ -1,184 +1,39 @@
+import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, type PaymentMethod } from "../api";
+import { Link } from "react-router";
+import { api } from "../api";
+import { connectionFailure } from "../api/providerConnections";
 import { useRequest } from "../useRequest";
-import { RequestError } from "./ui/RequestError";
+import { LegacyPickupPoints } from "./LegacyPickupPoints";
+import { PaymentMethodsSection } from "./PaymentMethodsSection";
 import { ShippingMethodsSection } from "./ShippingMethodsSection";
-type Props = {
-  storeId: string;
-  canManage?: boolean;
-  storeStale?: boolean;
-  money: Intl.NumberFormat;
-  run: (change: () => Promise<unknown>) => Promise<void>;
-};
-export function MethodsSection({ storeId, money, run, canManage = true, storeStale = false }: Props) {
-  const { t } = useTranslation(["methods", "pickupPoints", "stores", "common"]);
-  const [providers, reloadProviders] = useRequest(
-    `payment-providers:${storeId}`,
-    (signal) => api.paymentProviders(storeId, signal),
-  );
-  const [payment, reloadPayment] = useRequest(
-    `payment-methods:${storeId}`,
-    (signal) => api.paymentMethods(storeId, signal),
-  );
-  const [pickupPoints, reloadPickupPoints] = useRequest(
-    `pickup-points:${storeId}`,
-    (signal) => api.pickupPoints(storeId, signal),
-  );
-  const paymentMethods: PaymentMethod[] =
-    payment.status === "ready" ? payment.data : [];
-  const providerKeys = providers.status === "ready" ? providers.data : [];
-  const points = pickupPoints.status === "ready" ? pickupPoints.data : [];
-  return (
-    <section>
-      <h2>{t("methods:title")}</h2>
-      <p className="hint">{t("methods:hint")}</p>
-      {providers.status === "error" && (
-        <RequestError
-          error={providers.error}
-          operation="read"
-          onRetry={reloadProviders}
-        />
-      )}
-      {payment.status === "error" && (
-        <RequestError
-          error={payment.error}
-          operation="read"
-          onRetry={reloadPayment}
-        />
-      )}
-      {pickupPoints.status === "error" && (
-        <RequestError
-          error={pickupPoints.error}
-          operation="read"
-          onRetry={reloadPickupPoints}
-        />
-      )}
-      <h3>{t("methods:payment")}</h3>
-      <p className="hint">{t("methods:paymentHint")}</p>
-      {paymentMethods.map((method) => (
-        <form
-          key={method.code}
-          className="inline-form"
-          action={(form) =>
-            run(async () => {
-              await api.updatePaymentMethod(storeId, method.code, {
-                name: String(form.get("name")),
-                isActive: form.get("isActive") === "on",
-              });
-              reloadPayment();
-            })
-          }
-        >
-          <input name="name" defaultValue={method.name} required />
-          <span className="chip">{method.providerKey}</span>
-          <label>
-            <input
-              name="isActive"
-              type="checkbox"
-              defaultChecked={method.isActive}
-            />{" "}
-            {t("methods:offered")}
-          </label>
-          <button type="submit">{t("common:save")}</button>
-        </form>
-      ))}
-      <form
-        className="inline-form"
-        action={(form) =>
-          run(async () => {
-            await api.createPaymentMethod(
-              storeId,
-              String(form.get("name")),
-              String(form.get("providerKey")),
-            );
-            reloadPayment();
-          })
-        }
-      >
-        <input name="name" placeholder={t("methods:newPayment")} required />
-        <select name="providerKey" defaultValue="manual">
-          {providerKeys.map((key) => (
-            <option key={key} value={key}>
-              {key}
-            </option>
-          ))}
-        </select>
-        <button type="submit">{t("common:add")}</button>
-      </form>
-      <ShippingMethodsSection storeId={storeId} money={money} allowed={canManage} storeStale={storeStale} />
-      <h3>{t("pickupPoints:title")}</h3>
-      <p className="hint">{t("pickupPoints:hint")}</p>
-      {points.map((point) => (
-        <form
-          key={point.code}
-          className="inline-form"
-          action={(form) =>
-            run(async () => {
-              await api.updatePickupPoint(storeId, point.code, {
-                name: String(form.get("name")),
-                line1: String(form.get("line1")),
-                city: String(form.get("city")),
-                postalCode: String(form.get("postalCode")),
-                country: String(form.get("country")).toUpperCase(),
-                isActive: form.get("isActive") === "on",
-              });
-              reloadPickupPoints();
-            })
-          }
-        >
-          <input name="name" defaultValue={point.name} required />
-          <input name="line1" defaultValue={point.line1} required />
-          <input name="city" defaultValue={point.city} required />
-          <input name="postalCode" defaultValue={point.postalCode} required />
-          <input
-            name="country"
-            defaultValue={point.country}
-            maxLength={2}
-            required
-          />
-          <label>
-            <input
-              name="isActive"
-              type="checkbox"
-              defaultChecked={point.isActive}
-            />{" "}
-            {t("pickupPoints:open")}
-          </label>
-          <button type="submit">{t("common:save")}</button>
-        </form>
-      ))}
-      <form
-        className="inline-form"
-        action={(form) =>
-          run(async () => {
-            await api.createPickupPoint(storeId, {
-              name: String(form.get("name")),
-              line1: String(form.get("line1")),
-              city: String(form.get("city")),
-              postalCode: String(form.get("postalCode")),
-              country: String(form.get("country")).toUpperCase(),
-              isActive: true,
-            });
-            reloadPickupPoints();
-          })
-        }
-      >
-        <input name="name" placeholder={t("pickupPoints:newPoint")} required />
-        <input name="line1" placeholder={t("pickupPoints:street")} required />
-        <input name="city" placeholder={t("pickupPoints:city")} required />
-        <input
-          name="postalCode"
-          placeholder={t("pickupPoints:postalCode")}
-          required
-        />
-        <input
-          name="country"
-          placeholder={t("pickupPoints:countryExample")}
-          maxLength={2}
-          required
-        />
-        <button type="submit">{t("common:add")}</button>
-      </form>
+import { StoreReadinessList } from "./StoreReadinessList";
+import { Button } from "./ui/Button";
+import { InlineMessage } from "./ui/InlineMessage";
+import { RequestError } from "./ui/RequestError";
+
+type Props = { storeId: string; canManage: boolean; storeStale: boolean; money: Intl.NumberFormat };
+export function MethodsSection({ storeId, money, canManage, storeStale }: Props) {
+  const { t } = useTranslation("methodSetup");
+  const [refreshToken, setRefreshToken] = useState(0);
+  const [connections, reloadConnections] = useRequest(`method-connections:${storeId}`, signal => api.providerConnections(storeId, signal));
+  const [readiness, reloadReadiness] = useRequest(`method-readiness:${storeId}`, signal => api.storeReadiness(storeId, signal));
+  const afterAttempt = useCallback(() => { reloadConnections(); reloadReadiness(); }, [reloadConnections, reloadReadiness]);
+  const refresh = () => { setRefreshToken(current => current + 1); reloadConnections(); reloadReadiness(); };
+  const connectionError = connections.status === "error" || connections.status === "not-found" ? connections.error : connections.status === "ready" ? connections.refreshError : null;
+  const readinessError = readiness.status === "error" || readiness.status === "not-found" ? readiness.error : readiness.status === "ready" ? readiness.refreshError : null;
+  const readinessStale = readiness.status !== "ready" || readiness.refreshing || readiness.refreshError !== null;
+  return <div className="methods-workspace"><div className="section-heading"><p>{t("intro")}</p><Button type="button" variant="secondary" data-read-action onClick={refresh}>{t("refresh")}</Button></div>
+    {storeStale && <InlineMessage>{t("storeStale")}</InlineMessage>}
+    <div className="cluster"><Link to={`/stores/${storeId}/provider-connections`}>{t("connections")}</Link><Link to={`/stores/${storeId}/settings`}>{t("publication")}</Link></div>
+    {connectionError !== null && <div className="method-connection-error"><RequestError error={connectionFailure(connectionError)} operation="read" onRetry={reloadConnections} /><p>{t("accountUnknown")}</p></div>}
+    <PaymentMethodsSection storeId={storeId} allowed={canManage} storeStale={storeStale} refreshToken={refreshToken} connections={connections} onAttempt={afterAttempt} />
+    <ShippingMethodsSection storeId={storeId} money={money} allowed={canManage} storeStale={storeStale} refreshToken={refreshToken} connections={connections} onAttempt={afterAttempt} />
+    <section className="method-readiness" aria-labelledby="method-readiness-title"><h2 id="method-readiness-title">{t("readiness")}</h2><p className="hint">{t("readinessHint")}</p>
+      {readinessStale && <InlineMessage>{t("readinessUnknown")}</InlineMessage>}
+      {readinessError !== null && <RequestError error={connectionFailure(readinessError)} operation="read" onRetry={reloadReadiness} />}
+      {readiness.status === "ready" && <StoreReadinessList storeId={storeId} checks={readiness.data.checks.filter(check => check.check.startsWith("orders."))} stale={readinessStale} />}
     </section>
-  );
+    <LegacyPickupPoints storeId={storeId} allowed={canManage} storeStale={storeStale} />
+  </div>;
 }

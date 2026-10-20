@@ -210,11 +210,13 @@ describe("server publication readiness", () => {
     const read = vi.spyOn(api, "storeReadiness").mockResolvedValueOnce(ready).mockResolvedValue(failed("orders.shipping-connected", "Packeta account requires attention."));
     vi.spyOn(api, "paymentProviders").mockResolvedValue(["manual"]); vi.spyOn(api, "shippingProviders").mockResolvedValue(["packeta"]);
     vi.spyOn(api, "paymentMethods").mockResolvedValue([]); vi.spyOn(api, "shippingMethods").mockResolvedValue([]); vi.spyOn(api, "pickupPoints").mockResolvedValue([]);
+    vi.spyOn(api, "providerConnections").mockResolvedValue([]); vi.spyOn(api, "taxClasses").mockResolvedValue([]);
     render(<App />); await screen.findByText("The server reports that all publication requirements are met.");
     await act(async () => { window.history.pushState(null, "", "/stores/store-a/methods"); window.dispatchEvent(new PopStateEvent("popstate")); });
     await screen.findByRole("heading", { name: i18n.t("methods:title"), level: 1 });
-    await act(async () => { window.history.pushState(null, "", "/stores/store-a/settings"); window.dispatchEvent(new PopStateEvent("popstate")); });
     await screen.findByText("Packeta account requires attention."); expect(read).toHaveBeenCalledTimes(2);
+    await act(async () => { window.history.pushState(null, "", "/stores/store-a/settings"); window.dispatchEvent(new PopStateEvent("popstate")); });
+    await screen.findByText("Packeta account requires attention."); expect(read).toHaveBeenCalledTimes(3);
   });
 
   it("retains a confirmed publication while a failed store refresh blocks another change", async () => {
