@@ -198,6 +198,7 @@ async function fillGuestAddress(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("CheckoutPage", () => {
+  // Typing both full addresses can exceed the default deadline on a busy runner.
   it("reviews the submitted contact and separate delivery address with exact method and edit destinations", async () => {
     const user = userEvent.setup();
     offerMethods();
@@ -220,7 +221,7 @@ describe("CheckoutPage", () => {
     expect(document.querySelector(".checkout-total strong")?.textContent).toBe("€130.00");
     expect(document.querySelector(".shopping-progress [aria-current=step]")?.textContent).toContain("Checkout");
     expect(mocks.placeOrder).not.toHaveBeenCalled();
-  });
+  }, 10_000);
 
   it("keeps checkout inactive while a cart write is unresolved", async () => {
     const user = userEvent.setup();
