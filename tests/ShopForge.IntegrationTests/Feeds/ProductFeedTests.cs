@@ -147,9 +147,12 @@ public sealed class ProductFeedTests : IDisposable
 
         using var collected = await engine.GetAsync(PathOf(run.Url!));
 
+        // The request's span and its log line are written as the server finishes, which can be after the client has the
+        // answer: read at once, a busy run found no span yet.
+        await UntilAsync(() => spans.Any(span => span.Contains("/feeds/stub.xml", StringComparison.Ordinal)), "The feed's request left no span.");
+        await UntilAsync(() => logs.Messages.Any(message => message.Contains("/feeds/stub.xml", StringComparison.Ordinal)), "The feed's request left no log line.");
+
         Assert.Equal(HttpStatusCode.OK, collected.StatusCode);
-        Assert.Contains(spans, span => span.Contains("/feeds/stub.xml", StringComparison.Ordinal));
-        Assert.Contains(logs.Messages, message => message.Contains("/feeds/stub.xml", StringComparison.Ordinal));
         Assert.DoesNotContain(spans, span => span.Contains(token, StringComparison.Ordinal));
         Assert.DoesNotContain(logs.Messages, message => message.Contains(token, StringComparison.Ordinal));
     }
@@ -293,6 +296,16 @@ public sealed class ProductFeedTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         return (await response.Content.ReadFromJsonAsync<FeedView>(CancellationToken))!;
+    }
+
+    private static async Task UntilAsync(Func<bool> done, string failure)
+    {
+        for (var attempt = 0; attempt < 500 && !done(); attempt++)
+        {
+            await Task.Delay(20, CancellationToken);
+        }
+
+        Assert.True(done(), failure);
     }
 
     private async Task<byte[]> CollectAsync(FeedWorld world, string url)
