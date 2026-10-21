@@ -82,6 +82,50 @@ Treat reports as private: browser snapshots/network records can contain store da
 CI should install this package/browser, supply targets and running services, run the
 checks above and upload `artifacts/` even on failure. No CI workflow is changed here.
 
+## API-hosted production smoke
+
+`npm run test:hosted` checks the actual API serving a packaged storefront at `/` and
+admin at `/admin/`. It starts no Vite server or proxy and never replaces responses.
+Use a disposable E2E API and its matching rig, with the normal published API package
+containing `frontends/storefront/` and `frontends/admin/` (each including its built
+`index.html` and `assets/`). Build the apps with their existing `npm run build`
+commands and package the resulting `dist` directories unchanged. The backend's
+`Frontends:Root` can select that directory when rehearsing outside the package.
+
+Configure `Frontends:AdminHost=admin.localhost` and
+`Frontends:EdgeHost=edge.localhost` on that API before starting it. The runner uses
+the same port as the descriptor's API for every hostname. For different configured
+`.localhost` names, set `SHOPFORGE_E2E_HOSTED_ADMIN_HOST` and
+`SHOPFORGE_E2E_HOSTED_EDGE_HOST` to match. Both must be distinct; public targets are
+refused. Supply the matching API/rig descriptor and the absolute packaged frontend
+directory, from `frontend/e2e`:
+
+```bash
+SHOPFORGE_E2E_STACK=/absolute/path/to/.e2e/stack.json \
+SHOPFORGE_E2E_HOSTED_ROOT=/absolute/path/to/package/frontends \
+PLAYWRIGHT_BROWSERS_PATH=/tmp/shopforge-playwright npm run test:hosted
+```
+
+The suite verifies the E2E/database marker, admin-host root redirects and package
+entry bytes before creating run data. Each case then owns a fresh rig run and cleans
+it up. Checks cover host restrictions, extensionless deep links, fallback exclusions,
+crawler responses, exact CSP/referrer/cache headers, MIME types, asset revalidation,
+and entry/lazy JS/CSS bytes against the package. Browser cases use CS/EN at 320/1280px,
+reload product and authenticated order/domain routes, load the operator entry, and
+check same-context cart and admin-cookie host isolation. The only browser writes
+allowed are adding one exact run-owned variant to a cart and that run owner's login.
+No checkout, payment, DNS, global clock, provisioning or merchant-data edit is allowed.
+
+One worker, zero retries and a ten-minute deadline apply. Results, asset hashes,
+policy/error observations, cleanup facts and selected product/cart/admin screenshots
+are under ignored `artifacts/hosted/`. HTML reporting, tracing, video and automatic
+failure screenshots stay off; owner sign-in failures omit credential-bearing errors.
+Request routing enforces the browser write boundary and disables browser HTTP
+caching; server cache headers and conditional 304 responses are checked separately.
+The runner never starts/stops the API, rig or dependencies. Local HTTP E2E acceptance
+does not certify deployment TLS/secure cookies, edge caching, real DNS/redirects,
+multi-replica behavior or the live Packeta widget; those need a deployed check.
+
 ## Isolated shopper journeys
 
 Use the backend-owned [end-to-end stack](../../README.md#the-end-to-end-stack), which
