@@ -14,7 +14,9 @@
     "test:isolated": "playwright test --config playwright.isolated.config.ts",
     "test:isolated:repeat": "playwright test --config playwright.isolated.config.ts --repeat-each=20 --global-timeout=12000000 --max-failures=1",
     "test:merchant": "playwright test --config playwright.merchant.config.ts",
-    "test:merchant:repeat": "playwright test --config playwright.merchant.config.ts --repeat-each=20 --global-timeout=12000000 --max-failures=1"
+    "test:merchant:repeat": "playwright test --config playwright.merchant.config.ts --repeat-each=20 --global-timeout=12000000 --max-failures=1",
+    "test:operator": "playwright test --config playwright.operator.config.ts",
+    "test:operator:repeat": "playwright test --config playwright.operator.config.ts --repeat-each=20 --global-timeout=12000000 --max-failures=1"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",

@@ -97,7 +97,8 @@ npm run test:isolated
 The runner reads API/rig origins from ignored `.e2e/stack.json` at the repository root.
 `SHOPFORGE_E2E_STACK` can select another descriptor (relative to `frontend/e2e` or absolute).
 Only plain HTTP loopback origins are accepted. Do not publish the descriptor: it also
-contains operator credentials. The runner uses only its API/rig addresses.
+contains operator credentials. The shopper and merchant runners use only its API/rig addresses;
+the operator suite below also reads the disposable operator sign-in.
 
 Playwright builds and owns a separate storefront preview on port 5175, setting
 `SHOPFORGE_API_TARGET` to the descriptor's API address and preserving the Host header.
@@ -178,7 +179,7 @@ videos and screenshots are retained. Reports remain private because network reco
 can contain guest receipt tokens. Save reports before another invocation replaces them.
 
 When finished, run `tests/e2e/stack.sh down` from the repository root to stop only the
-disposable stack and discard its data. Merchant/operator browser flows, refund
+disposable stack and discard its data. The separate merchant/operator suites, refund
 uncertainty, scheduled recovery, complete repeat acceptance,
 CI wiring and DNS remain separate work.
 These journeys do not advance the stack-wide clock or run scheduled passes. Public
@@ -242,3 +243,57 @@ This tests merchandising/publication on the run's existing controlled `.localhos
 hosts. Creating a new store and proving a domain still need controlled DNS and the
 backend-owned run/domain contracts. It does not certify deployment host restrictions,
 CSP/caching, live providers, CI integration, or the separate shopper repeat matrix.
+
+## Isolated operator journeys
+
+With the same disposable stack running, use:
+
+```bash
+npm run test:operator
+npm run test:operator:repeat
+```
+
+The operator suite owns both production previews, using the same stack descriptor and
+admin/storefront port settings as the merchant suite. It verifies the E2E database/API
+marker through both proxies before sign-in. Only this suite reads the descriptor's
+stack-generated `operator@e2e.test` password; a deployment or development operator is
+never accepted. Do not publish that descriptor. Keep the stack alive until the runner
+has exited; the runner never starts or stops it.
+
+Four CS/EN phone/desktop projects drive the real operator and merchant forms. Each
+case owns a fresh rig run. The suspension case also creates a control run, whose
+stores must keep serving throughout. Both target stores are warmed before the operator
+confirms suspension. The next requests must return 404 on both hosts, the already-open
+merchant shell must expire on its next protected read, and an authenticated customer's
+profile must be denied. Resuming through the operator UI restores both hosts; the
+merchant must sign in again, the customer's same profile becomes readable, and stock
+and all other tenant statuses must remain unchanged. A separate case signs in/out of
+both admin schemes on the same browser origin, proving their cookies cannot authorize
+or sign out the other session. Confirmation/Escape, refreshed usage, direct reload,
+mobile navigation and page reflow are checked. Two-factor enrollment/challenge tests
+remain separate from this stack's password-only seeded operator.
+
+Only UI forms/buttons perform operator and merchant auth and tenant status changes.
+Helper requests are reads, rig run setup/cleanup and captured verification mail. A
+separate operator boundary permits only the exact run tenant's bodyless suspend/resume,
+its owner's sign-in/out, the isolated operator's sign-in/out, and customer registration/
+verification on the run's first host. Other tenant/operator/plan/provisioning/financial
+writes, direct backend browser requests and external origins are blocked. Responses
+are never fabricated or retried. The operator list is global, so the test searches for
+the checked run ID before opening its named confirmation; no other tenant can be changed.
+
+Traces, video and automatic screenshots are disabled. The suite uses list/JUnit reports
+because HTML report step titles retain filled passwords even without tracing. Failed
+sign-in/verification closes that page before reporting a generic error, keeping credentials
+and token-bearing page snapshots out of failure details. Explicit screenshots are taken
+only after sign-in on tenant views. Diagnostics contain paths, field names and run facts,
+never submitted values or cookie contents. Results stay private under `artifacts/operator/`.
+The normal matrix has one worker, no retries and a ten-minute deadline; the repeat
+command runs each case twenty times with fresh runs and stops on the first failure.
+Each successful case cleans up only its own runs and verifies they were forgotten.
+A failed run left suspended can also make rig cleanup refuse; keep the failure evidence
+and discard the owned stack afterward, without an automatic status-change retry.
+
+This proves local browser/API/database behavior on one API process. It does not certify
+multi-replica invalidation timing, deployment host/CSP/cache rules, custom DNS/TLS, CI,
+real providers or the independent shopper stability gate.
