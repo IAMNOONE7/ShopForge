@@ -45,18 +45,19 @@ type RequestOptions = {
   body?: unknown;
   signal?: AbortSignal;
   notifyUnauthorized?: boolean;
+  unauthorizedScope?: "admin" | "platform";
   idempotencyKey?: string;
 };
 
 export type Download = { blob: Blob; filename: string };
 
 type UnauthorizedListener = () => void;
-const unauthorizedListeners = new Set<UnauthorizedListener>();
+const unauthorizedListeners = { admin: new Set<UnauthorizedListener>(), platform: new Set<UnauthorizedListener>() };
 
-export function onUnauthorized(listener: UnauthorizedListener) {
-  unauthorizedListeners.add(listener);
+export function onUnauthorized(listener: UnauthorizedListener, scope: "admin" | "platform" = "admin") {
+  unauthorizedListeners[scope].add(listener);
   return () => {
-    unauthorizedListeners.delete(listener);
+    unauthorizedListeners[scope].delete(listener);
   };
 }
 
@@ -151,8 +152,9 @@ async function send(url: string, options: RequestOptions) {
 
   if (!response.ok) {
     const error = await responseError(response);
+    options.signal?.throwIfAborted();
     if (response.status === 401 && options.notifyUnauthorized !== false) {
-      for (const listener of unauthorizedListeners) listener();
+      for (const listener of unauthorizedListeners[options.unauthorizedScope ?? "admin"]) listener();
     }
     throw error;
   }

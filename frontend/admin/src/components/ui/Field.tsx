@@ -1,4 +1,4 @@
-import { useId, type InputHTMLAttributes, type ReactNode } from "react";
+import { useId, type InputHTMLAttributes, type ReactNode, type Ref } from "react";
 import styles from "./ui.module.css";
 
 type FieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, "id"> & {
@@ -6,6 +6,7 @@ type FieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, "id"> & {
   label: ReactNode;
   hint?: ReactNode;
   error?: ReactNode;
+  ref?: Ref<HTMLInputElement>;
 };
 
 export function Field({

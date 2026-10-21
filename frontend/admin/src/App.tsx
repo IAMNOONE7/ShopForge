@@ -29,7 +29,9 @@ import {
 } from "./pages/StorePage";
 import { adminHomePath, safeAdminReturnPath } from "./routing";
 import { canManageCatalog, canManageStore, SessionContext } from "./session";
+import { isOperatorPath } from "./platform/routing";
 
+const PlatformApp = lazy(() => import("./platform/PlatformApp"));
 const CategoriesPage = lazy(() => import("./pages/CategoryPages").then((pages) => ({ default: pages.CategoriesPage })));
 const NewCategoryPage = lazy(() => import("./pages/CategoryPages").then((pages) => ({ default: pages.NewCategoryPage })));
 const CategoryDetailPage = lazy(() => import("./pages/CategoryPages").then((pages) => ({ default: pages.CategoryDetailPage })));
@@ -59,6 +61,13 @@ function currentReturnPath() {
 }
 
 function App() {
+  if (isOperatorPath(window.location.pathname)) return <BrowserRouter basename={import.meta.env.BASE_URL}>
+    <Routes><Route path="platform/*" element={<DeferredPage><PlatformApp /></DeferredPage>} /></Routes>
+  </BrowserRouter>;
+  return <MerchantApp />;
+}
+
+function MerchantApp() {
   const { t, i18n } = useTranslation(["auth", "errors"]);
   const [session, setSession] = useState<SessionState>({ status: "checking" });
   const [version, setVersion] = useState(0);

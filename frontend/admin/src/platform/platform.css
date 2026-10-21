@@ -1,0 +1,32 @@
+.operator-frame { display: flex; flex-direction: column; min-height: calc(100vh - 2.75rem); }
+.operator-main, .operator-workspace, .operator-login { min-width: 0; overflow-wrap: anywhere; }
+.operator-login { margin-inline: auto; width: min(100% - 2rem, 32rem); padding: clamp(0.5rem, 4vw, 1.5rem); }
+.operator-login h1 { font-size: var(--text-xl); text-align: left; }
+.operator-login form, .operator-fields { display: grid; gap: var(--space-4); min-width: 0; }
+.operator-fields { padding: 0; margin: 0 0 var(--space-4); border: 0; }
+.operator-workspace > .section-heading { flex-wrap: wrap; gap: var(--space-4); align-items: start; }
+.operator-workspace h1 { margin: 0; }
+.operator-filters { display: flex; gap: var(--space-4); align-items: end; flex-wrap: wrap; margin-block: var(--space-6); }
+.operator-filters > div { flex: 1 1 15rem; min-width: 0; }
+.operator-filters input, .operator-filters select { min-width: 0; max-width: 100%; width: 100%; }
+.operator-tenants { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); list-style: none; padding: 0; }
+.operator-tenants > li, .operator-confirmation, .operator-result, .operator-session-error { min-width: 0; padding: clamp(0.5rem, 3vw, 1.5rem); border: 1px solid var(--color-border); border-radius: var(--radius-panel); background: var(--color-surface); }
+.operator-tenants > li { display: grid; gap: var(--space-4); align-content: start; }
+.operator-tenants .section-heading { flex-wrap: wrap; gap: var(--space-2); }
+.operator-tenants h2 { margin: 0; min-width: 0; flex: 1 1 12rem; }
+.operator-tenants > li > button { justify-self: start; }
+.operator-facts, .operator-usage { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); margin: 0; }
+.operator-facts > div, .operator-usage > div { min-width: 0; }
+.operator-facts dt, .operator-usage dt { color: var(--color-text-muted); font-size: var(--text-sm); }
+.operator-facts dd, .operator-usage dd { margin: var(--space-1) 0 0; }
+.operator-usage { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: var(--space-4); }
+.operator-tenants summary { cursor: pointer; font-weight: 650; }
+.operator-confirmation, .operator-result { margin-block: var(--space-4); }
+.operator-confirmation h2 { margin-top: 0; }
+.operator-paging { display: flex; gap: var(--space-4); flex-wrap: wrap; align-items: center; }
+.operator-workspace button, .operator-login button, .operator-footer a { max-width: 100%; white-space: normal; }
+.operator-footer { margin-top: auto; padding-block: var(--space-6); color: var(--color-text-muted); overflow-wrap: anywhere; }
+@media (max-width: 48rem) {
+  .operator-tenants, .operator-usage { grid-template-columns: minmax(0, 1fr); }
+  .operator-filters, .operator-confirmation .cluster, .operator-login .cluster { display: grid; grid-template-columns: minmax(0, 1fr); }
+}
