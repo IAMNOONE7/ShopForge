@@ -147,12 +147,14 @@ internal sealed class ProvisioningHost : IAsyncDisposable
     }
 }
 
-// The machine's time and however far the test has moved it on. Timers keep the machine's own time.
+// The time the test began, moved on only when the test moves it, so a busy machine's slow seconds never count against
+// a lease or a backoff. Timers, and a step's timeout, keep the machine's own time.
 internal sealed class TestClock : TimeProvider
 {
+    private readonly DateTimeOffset _start = DateTimeOffset.UtcNow;
     private long _ticks;
 
-    public override DateTimeOffset GetUtcNow() => base.GetUtcNow() + TimeSpan.FromTicks(Interlocked.Read(ref _ticks));
+    public override DateTimeOffset GetUtcNow() => _start + TimeSpan.FromTicks(Interlocked.Read(ref _ticks));
 
     public void Advance(TimeSpan by) => Interlocked.Add(ref _ticks, by.Ticks);
 }
