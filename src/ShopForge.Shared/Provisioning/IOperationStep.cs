@@ -63,5 +63,8 @@ public interface IStepContext
     // Keeps a credential's secret before anything else happens to it, and records whose secret it is.
     Task KeepSecretAsync(string resourceId, string secret, CancellationToken cancellationToken);
 
+    // Where that secret is kept, for whatever reads it once the operation is over. Never the secret.
+    string SecretName { get; }
+
     Task<string?> SecretAsync(CancellationToken cancellationToken);
 }

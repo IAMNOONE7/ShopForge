@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Shared.Caching;
+using ShopForge.Shared.Dns;
 using ShopForge.Stores.Domain;
 
 namespace ShopForge.Stores.Resolution;

@@ -223,6 +223,23 @@ public static class DependencyInjection
         // than from a module that cannot see the configuration (D-190).
         services.AddScoped<IStorePublishCheck, EmailPublishCheck>();
 
+        // A store's own sending domain, connected and removed as operations (D-211). Registered whatever carries the
+        // mail, because the engine asks for every step it knows; connecting one refuses unless Mailgun does.
+        services.AddScoped<IMailSenders, StoreSenders>();
+        services.AddScoped<SendingDomainAdmin>();
+        services.AddHttpClient<MailgunApi>(client => MailgunApi.Configure(client, email));
+        services.AddSingleton<IOperationKind, ConnectSendingDomain>();
+        services.AddSingleton<IOperationKind, RemoveSendingDomain>();
+        services.AddScoped<IOperationStep, RegisterSendingDomain>();
+        services.AddScoped<IOperationStep, MailgunSendingDomain>();
+        services.AddScoped<IOperationStep, MailgunSendingKey>();
+        services.AddScoped<IOperationStep, MailgunVerification>();
+        services.AddScoped<IOperationStep, ActivateSendingDomain>();
+        services.AddScoped<IOperationStep, DeactivateSendingDomain>();
+        services.AddScoped<IOperationStep, RevokeSendingKey>();
+        services.AddScoped<IOperationStep, DeleteMailgunDomain>();
+        services.AddScoped<IOperationStep, ForgetSendingDomain>();
+
         if (string.Equals(email.Provider, EmailOptions.LogProvider, StringComparison.OrdinalIgnoreCase))
         {
             services.AddSingleton<IEmailDelivery, LoggingEmailDelivery>();

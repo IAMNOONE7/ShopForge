@@ -72,4 +72,38 @@ internal static class EmailEndpoints
 
         return storeAdmin;
     }
+
+    // What the store's mail goes out through, and a domain of its own to send it from (D-211). Connecting and removing
+    // are operations: the answer is the operation, at once, and its steps are under /operations.
+    public static IEndpointRouteBuilder MapAdminSendingDomainEndpoints(this IEndpointRouteBuilder storeAdmin)
+    {
+        var email = storeAdmin.MapGroup("/email");
+
+        email.MapGet("/", async (SendingDomainAdmin admin, CancellationToken cancellationToken) =>
+            TypedResults.Ok(await admin.ViewAsync(cancellationToken)));
+
+        email.MapPost("/domain", async (ConnectSendingDomainRequest request, SendingDomainAdmin admin, CancellationToken cancellationToken) =>
+                Answer(await admin.ConnectAsync(request, cancellationToken)))
+            .RequireAuthorization(AdminPolicies.StoreManagement);
+
+        email.MapDelete("/domain", async (SendingDomainAdmin admin, CancellationToken cancellationToken) =>
+                Answer(await admin.RemoveAsync(cancellationToken)))
+            .RequireAuthorization(AdminPolicies.StoreManagement);
+
+        return storeAdmin;
+    }
+
+    private static IResult Answer(SendingDomainChange change) => change switch
+    {
+        { Found: false } => Results.NotFound(),
+        { Errors: { } errors } => errors.ToProblem(),
+        { Refusal: { } refusal, OperationId: { } running } => Results.Problem(
+            statusCode: StatusCodes.Status409Conflict,
+            title: "Not now",
+            detail: refusal,
+            extensions: new Dictionary<string, object?> { ["operationId"] = running }),
+        { Refusal: { } refusal } => Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "Not now", detail: refusal),
+        { OperationId: { } started } => Results.Accepted($"operations/{started}", new { operationId = started }),
+        _ => Results.NotFound(),
+    };
 }

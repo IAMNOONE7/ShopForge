@@ -149,7 +149,8 @@ public sealed class RigContractTests : IDisposable
         };
         using var http = _rig.CreateClient();
         MailgunEmailDelivery.Configure(http, options);
-        var delivery = new MailgunEmailDelivery(http, options, new StoreContext(), new NoStore(), NullLogger<MailgunEmailDelivery>.Instance);
+        var delivery = new MailgunEmailDelivery(
+            http, new PlatformSender(options), options, new StoreContext(), new NoStore(), NullLogger<MailgunEmailDelivery>.Instance);
 
         await delivery.DeliverAsync(
             new EmailMessage("owner@rcontract.e2e.test", "You are invited", "Choose a password to accept: http://localhost/invitations/accept?token=a%2Bb. It expires."),
@@ -231,6 +232,13 @@ public sealed class RigContractTests : IDisposable
             PendingUrl: "http://shop.test/order/2026-00001?token=abc");
 
     // Mail with no store in scope reads nothing about one.
+    // The platform's own domain and key, as every message with no store of its own goes out (D-211).
+    private sealed class PlatformSender(EmailOptions options) : IMailSenders
+    {
+        public Task<MailSender> CurrentAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(new MailSender(options.Mailgun.Domain, options.Mailgun.ApiKey, options.SenderAddress, ReplyTo: null));
+    }
+
     private sealed class NoStore : ICurrentStoreSettings
     {
         public Task<StoreSettings> GetAsync(CancellationToken cancellationToken) =>

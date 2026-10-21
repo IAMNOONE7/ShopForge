@@ -66,6 +66,22 @@ public sealed class MailgunEmailDeliveryTests
         Assert.Equal("\"The Best Shop <evil@example.test>\" <no-reply@mg.shopforge.test>", calls.Form["from"]);
     }
 
+    // A store with a domain of its own sends through it, with its own key, from its own address (D-211).
+    [Fact]
+    public async Task A_shop_with_its_own_domain_sends_through_it_with_its_own_key()
+    {
+        var calls = new RecordingHandler(HttpStatusCode.OK);
+        var own = new MailSender("mail.wooden.test", "own-key-456", "obchod@wooden.test", "pomoc@wooden.test");
+        var delivery = DeliveryFor(calls, storeId: Guid.CreateVersion7(), storeName: "Wooden Home", own);
+
+        await delivery.DeliverAsync(new EmailMessage("buyer@example.test", "Your order", "Thank you."), [], CancellationToken);
+
+        Assert.Equal("https://api.eu.mailgun.net/v3/mail.wooden.test/messages", calls.Url);
+        Assert.Equal("Basic YXBpOm93bi1rZXktNDU2", calls.Authorization);
+        Assert.Equal("\"Wooden Home\" <obchod@wooden.test>", calls.Form["from"]);
+        Assert.Equal("pomoc@wooden.test", calls.Form["h:Reply-To"]);
+    }
+
     [Fact]
     public async Task A_document_travels_as_a_file_beside_the_message()
     {
@@ -81,7 +97,7 @@ public sealed class MailgunEmailDeliveryTests
         Assert.Equal("INV-2026-00010.pdf:application/pdf:5", calls.Files.Single());
     }
 
-    private static MailgunEmailDelivery DeliveryFor(RecordingHandler handler, Guid? storeId, string storeName)
+    private static MailgunEmailDelivery DeliveryFor(RecordingHandler handler, Guid? storeId, string storeName, MailSender? sender = null)
     {
         var options = new EmailOptions
         {
@@ -95,6 +111,7 @@ public sealed class MailgunEmailDeliveryTests
 
         return new MailgunEmailDelivery(
             httpClient,
+            new FixedSenders(sender ?? new MailSender(options.Mailgun.Domain, options.Mailgun.ApiKey, options.SenderAddress, ReplyTo: null)),
             options,
             new FixedStoreContext(storeId),
             new FixedStoreSettings(storeName),
@@ -133,6 +150,11 @@ public sealed class MailgunEmailDeliveryTests
 
             return new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8) };
         }
+    }
+
+    private sealed class FixedSenders(MailSender sender) : IMailSenders
+    {
+        public Task<MailSender> CurrentAsync(CancellationToken cancellationToken) => Task.FromResult(sender);
     }
 
     private sealed class FixedStoreContext(Guid? storeId) : IStoreContext

@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using ShopForge.Shared.Dns;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Stores.Domain;

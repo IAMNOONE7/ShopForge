@@ -54,6 +54,8 @@ internal sealed class StepRun(ProvisioningOperation operation, ProvisioningStep 
 
     public bool HoldsSecretFor(string resourceId) => step.SecretFor == resourceId;
 
+    public string SecretName => step.SecretName;
+
     // The vault first, then the row that says whose secret it is. A crash between the two leaves a secret nobody
     // claims, which the next run's replacement writes over; never a row claiming a secret that is not there.
     public async Task KeepSecretAsync(string resourceId, string secret, CancellationToken cancellationToken)

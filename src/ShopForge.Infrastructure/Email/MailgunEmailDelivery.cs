@@ -1,5 +1,4 @@
 using System.Net.Http.Headers;
-using System.Text;
 using Microsoft.Extensions.Logging;
 using ShopForge.Shared.Email;
 using ShopForge.Shared.Stores;
@@ -12,6 +11,7 @@ namespace ShopForge.Infrastructure.Email;
 // back off and eventually put the message where somebody can see it (D-120).
 internal sealed class MailgunEmailDelivery(
     HttpClient httpClient,
+    IMailSenders senders,
     EmailOptions options,
     IStoreContext storeContext,
     ICurrentStoreSettings storeSettings,
@@ -19,14 +19,22 @@ internal sealed class MailgunEmailDelivery(
 {
     public async Task DeliverAsync(EmailMessage message, IReadOnlyList<EmailAttachment> attachments, CancellationToken cancellationToken)
     {
+        // The store's own domain and key once it has them, the platform's until then (D-211).
+        var sender = await senders.CurrentAsync(cancellationToken);
+
         // Multipart either way: a form that sometimes changes shape is a form with two ways to be wrong.
         using var content = new MultipartFormDataContent
         {
-            { new StringContent(await FromAsync(cancellationToken)), "from" },
+            { new StringContent(await FromAsync(sender, cancellationToken)), "from" },
             { new StringContent(message.To), "to" },
             { new StringContent(message.Subject), "subject" },
             { new StringContent(message.Body), "text" },
         };
+
+        if (sender.ReplyTo is { Length: > 0 } replyTo)
+        {
+            content.Add(new StringContent(replyTo), "h:Reply-To");
+        }
 
         // The store rides along so a bounce arriving hours later can be filed against the right shop (D-123);
         // an address alone does not say whose customer it is.
@@ -48,7 +56,9 @@ internal sealed class MailgunEmailDelivery(
             content.Add(file, "attachment", attachment.FileName);
         }
 
-        using var response = await httpClient.PostAsync($"v3/{options.Mailgun.Domain}/messages", content, cancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"v3/{sender.Domain}/messages") { Content = content };
+        request.Headers.Authorization = MailgunApi.Basic(sender.Key);
+        using var response = await httpClient.SendAsync(request, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -62,23 +72,19 @@ internal sealed class MailgunEmailDelivery(
     }
 
     // Mail about a shop comes from the shop, by name; mail about the company or the platform comes from the
-    // platform. The address is the same either way until a store can verify a domain of its own (Stage 20).
-    private async Task<string> FromAsync(CancellationToken cancellationToken)
+    // platform. The address is the store's own once it sends from a domain of its own, the platform's until then.
+    private async Task<string> FromAsync(MailSender sender, CancellationToken cancellationToken)
     {
         var name = storeContext.StoreId is null
             ? options.SenderName
             : (await storeSettings.GetAsync(cancellationToken)).Name;
 
-        return $"\"{name.Replace("\"", string.Empty, StringComparison.Ordinal)}\" <{options.SenderAddress}>";
+        return $"\"{name.Replace("\"", string.Empty, StringComparison.Ordinal)}\" <{sender.Address}>";
     }
 
     private static string Shorten(string problem) => problem.Length > 200 ? problem[..200] : problem;
 
-    public static void Configure(HttpClient httpClient, EmailOptions options)
-    {
+    // Each message carries the key of the domain it goes out through.
+    public static void Configure(HttpClient httpClient, EmailOptions options) =>
         httpClient.BaseAddress = new Uri(options.Mailgun.BaseUrl.TrimEnd('/') + "/");
-        httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
-            "Basic",
-            Convert.ToBase64String(Encoding.UTF8.GetBytes($"api:{options.Mailgun.ApiKey}")));
-    }
 }

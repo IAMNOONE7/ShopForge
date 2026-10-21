@@ -1,9 +1,11 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Http;
 
-namespace ShopForge.Stores.Domain;
+namespace ShopForge.Shared.Dns;
 
-internal static class HostNames
+// One rule for what a host name is, shared by store resolution, the domains a merchant proves and the domains a
+// store sends mail from (D-124, D-211).
+public static class HostNames
 {
     // Stored domains and incoming Host headers share this normalization, so resolution is an exact match:
     // no port, no trailing dot, lower case, internationalized names in their ASCII (punycode) form.

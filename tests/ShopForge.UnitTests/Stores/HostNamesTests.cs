@@ -1,3 +1,4 @@
+using ShopForge.Shared.Dns;
 using ShopForge.Stores.Domain;
 
 namespace ShopForge.UnitTests.Stores;

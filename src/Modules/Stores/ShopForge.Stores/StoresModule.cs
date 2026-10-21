@@ -38,6 +38,7 @@ public static class StoresModule
         services.AddScoped<IStoreUrls, StoreUrls>();
         services.AddScoped<IStoreContentPages, StoreContentPages>();
         services.AddScoped<IStoreDirectory, StoreDirectory>();
+        services.AddScoped<IStoreDomains, ProvedStoreDomains>();
         services.AddScoped<ITaxRates, StoreTaxRates>();
         services.AddScoped<IStoreMaintenance, ExpiredDomainClaims>();
         services.AddScoped<ITenantDirectory, TenantDirectory>();

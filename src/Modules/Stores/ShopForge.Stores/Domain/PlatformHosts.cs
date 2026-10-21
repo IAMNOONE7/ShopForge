@@ -1,3 +1,4 @@
+using ShopForge.Shared.Dns;
 using ShopForge.Shared.Stores;
 
 namespace ShopForge.Stores.Domain;

@@ -277,6 +277,7 @@ storeAdmin.MapCatalogStoreAdminEndpoints();
 storeAdmin.MapOrdersStoreAdminEndpoints();
 storeAdmin.MapAdminOutboxEndpoints();
 storeAdmin.MapAdminSuppressionEndpoints();
+storeAdmin.MapAdminSendingDomainEndpoints();
 storeAdmin.MapAdminOperationEndpoints();
 
 // Outside Development the schema is migrated before a new revision starts, by the release's own job (D-074, D-205).
