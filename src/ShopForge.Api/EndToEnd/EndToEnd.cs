@@ -92,7 +92,7 @@ internal static class EndToEnd
         }
 
         OnThisMachine(configuration, "Payments:Comgate:BaseAddress");
-        OnThisMachine(configuration, "Shipping:Packeta:BaseAddress");
+        OnThisMachine(configuration, "Shipping:Packeta:WidgetAddress");
 
         if (!string.Equals(configuration["Email:Provider"], "log", StringComparison.OrdinalIgnoreCase))
         {

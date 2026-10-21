@@ -166,14 +166,11 @@ public static class DependencyInjection
     // is always registered and a store that has connected none is simply not offered its methods (D-138, D-155).
     private static void AddPacketa(IServiceCollection services, IConfiguration configuration)
     {
-        var baseAddress = configuration["Shipping:Packeta:BaseAddress"] ?? "https://www.zasilkovna.cz/api/";
+        // The point check is the widget's own endpoint, under the widget's address (D-213). Booking, which is V8's, is
+        // Packeta's REST API on another host and will have an address of its own.
+        var widgetAddress = configuration["Shipping:Packeta:WidgetAddress"] ?? "https://widget.packeta.com/v6/";
 
-        // Packeta takes the API password in the path of the URL, and the default HTTP logging writes every
-        // request URI at Information. That put the password in the log the first time this ran (D-139 forbids
-        // exactly that), so this client does no request logging at all. Anything added back here must redact
-        // the path, not the headers.
-        services.AddHttpClient<IPacketaClient, PacketaHttpClient>(client => client.BaseAddress = new Uri(baseAddress))
-            .RemoveAllLoggers();
+        services.AddHttpClient<IPacketaClient, PacketaHttpClient>(client => client.BaseAddress = new Uri(widgetAddress));
         services.AddScoped<IShippingProvider, PacketaShippingProvider>();
     }
 

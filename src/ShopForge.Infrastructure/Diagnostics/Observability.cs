@@ -41,7 +41,7 @@ internal static class Observability
             .WithTracing(tracing => tracing
                 .AddSource(ShopForgeMetrics.ActivitySourceName)
                 .AddAspNetCoreInstrumentation(options => options.Filter = context => !context.Request.Path.StartsWithSegments("/health"))
-                .AddHttpClientInstrumentation(options => options.EnrichWithHttpRequestMessage = TelemetryRedaction.Redact)
+                .AddHttpClientInstrumentation()
                 .AddNpgsql())
             .WithMetrics(metrics => metrics
                 .AddMeter(ShopForgeMetrics.MeterName)

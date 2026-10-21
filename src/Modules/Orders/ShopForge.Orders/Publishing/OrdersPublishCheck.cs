@@ -35,7 +35,7 @@ internal sealed class OrdersPublishCheck(
         var shipping = await dbContext.Set<ShippingMethod>()
             .AsNoTracking()
             .Where(method => method.IsActive)
-            .Select(method => new { method.Name, method.ProviderKey })
+            .Select(method => new { method.Name, method.ProviderKey, method.RequiresPickupPoint })
             .ToListAsync(cancellationToken);
 
         var needsConnection = paymentProviders
@@ -52,6 +52,13 @@ internal sealed class OrdersPublishCheck(
             .Concat(shippingProviders.Where(provider => provider.IsOfferedToStores).Select(provider => provider.Key))
             .ToHashSet(StringComparer.Ordinal);
 
+        // A point chosen in the carrier's own map needs the key the map opens with, and the carrier is asked about the
+        // point with that key too (D-213). Without it the method is offered and every order through it is refused.
+        var mapped = shippingProviders
+            .Where(provider => provider.PickupPoints == PickupPointChoice.InTheCarriersMap)
+            .Select(provider => provider.Key)
+            .ToHashSet(StringComparer.Ordinal);
+
         return
         [
             payment.Count > 0
@@ -60,8 +67,14 @@ internal sealed class OrdersPublishCheck(
             shipping.Count > 0
                 ? StoreReadiness.Ready("orders.shipping-method")
                 : StoreReadiness.NotReady("orders.shipping-method", "The store has no active shipping method."),
-            await ConnectedAsync("orders.payment-connected", [.. payment.Select(method => (method.Name, method.ProviderKey))], needsConnection, offered, cancellationToken),
-            await ConnectedAsync("orders.shipping-connected", [.. shipping.Select(method => (method.Name, method.ProviderKey))], needsConnection, offered, cancellationToken),
+            await ConnectedAsync("orders.payment-connected", [.. payment.Select(method => (method.Name, method.ProviderKey))], needsConnection, offered, [], cancellationToken),
+            await ConnectedAsync(
+                "orders.shipping-connected",
+                [.. shipping.Select(method => (method.Name, method.ProviderKey))],
+                needsConnection,
+                offered,
+                [.. shipping.Where(method => method.RequiresPickupPoint && mapped.Contains(method.ProviderKey)).Select(method => (method.Name, method.ProviderKey))],
+                cancellationToken),
         ];
     }
 
@@ -70,6 +83,7 @@ internal sealed class OrdersPublishCheck(
         IReadOnlyList<(string Name, string ProviderKey)> methods,
         HashSet<string> needsConnection,
         HashSet<string> offered,
+        IReadOnlyList<(string Name, string ProviderKey)> chosenInAMap,
         CancellationToken cancellationToken)
     {
         var unoffered = methods.Where(method => !offered.Contains(method.ProviderKey)).Select(Named).ToList();
@@ -85,11 +99,27 @@ internal sealed class OrdersPublishCheck(
             unusable.Add(Named(method));
         }
 
+        // Only where there is a connection at all: one with none is already named above.
+        var keyless = new List<string>();
+
+        foreach (var method in chosenInAMap)
+        {
+            if (await connections.FindAsync(method.ProviderKey, cancellationToken) is { IsUsable: true, PublishableKey: null or "" })
+            {
+                keyless.Add(Named(method));
+            }
+        }
+
         var problems = new List<string>();
 
         if (unusable.Count > 0)
         {
             problems.Add($"{string.Join(", ", unusable)} {(unusable.Count == 1 ? "is" : "are")} switched on but not connected to an account, so {(unusable.Count == 1 ? "it" : "they")} would not be offered at the checkout. Connect {(unusable.Count == 1 ? "it" : "them")} or switch {(unusable.Count == 1 ? "it" : "them")} off.");
+        }
+
+        if (keyless.Count > 0)
+        {
+            problems.Add($"{string.Join(", ", keyless)} {(keyless.Count == 1 ? "has its" : "have their")} pickup point chosen in the carrier's map, which needs the map key on the connection. Add the key, or switch {(keyless.Count == 1 ? "it" : "them")} off.");
         }
 
         if (unoffered.Count > 0)

@@ -16,7 +16,7 @@ public sealed class EndToEndEnvironmentTests(ShopForgeApiFactory factory)
 
     [Theory]
     [InlineData("Payments:Comgate:BaseAddress", "https://payments.comgate.cz/")]
-    [InlineData("Shipping:Packeta:BaseAddress", "https://www.zasilkovna.cz/api/")]
+    [InlineData("Shipping:Packeta:WidgetAddress", "https://widget.packeta.com/v6/")]
     [InlineData("Email:Mailgun:BaseUrl", "https://api.eu.mailgun.net")]
     [InlineData("ProviderSecrets:VaultUri", "https://shopforge-kv-prov.vault.azure.net/")]
     [InlineData("Payments:Stripe:SecretKey", "sk_live_made_up_for_this_test")]

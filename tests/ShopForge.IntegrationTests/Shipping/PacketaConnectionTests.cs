@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using System.Net.Sockets;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -112,10 +113,10 @@ public sealed class PacketaConnectionTests : IDisposable
         Assert.Contains(answers, answer => answer.Contains(WidgetKey, StringComparison.Ordinal));
     }
 
-    // Only the carrier knows its own boxes, and it is asked with the password the store kept — never with
-    // anything the browser sent.
+    // Only the carrier knows its own boxes, and it is asked with the store's own map key, which is what Packeta's
+    // validator takes — never with anything the browser sent, and never with the password (D-213).
     [Fact]
-    public async Task The_carrier_is_asked_about_the_point_with_the_stores_own_password()
+    public async Task The_carrier_is_asked_about_the_point_with_the_stores_own_map_key()
     {
         var world = await PacketaStoreAsync(connect: true);
 
@@ -123,7 +124,43 @@ public sealed class PacketaConnectionTests : IDisposable
 
         Assert.Equal(HttpStatusCode.Created, placed.StatusCode);
         Assert.Equal("99", _packeta.LastChoice?.PointId);
-        Assert.Equal(ApiPassword, _packeta.LastAccount?.ApiPassword);
+        Assert.Equal(WidgetKey, _packeta.LastKey);
+    }
+
+    // Packeta's points are numbered, and a parcel can only ever be addressed to a number. Anything else is refused as a
+    // point nobody chose, and Packeta is not asked about it.
+    [Fact]
+    public async Task A_code_that_cannot_name_a_packeta_point_is_refused_without_asking()
+    {
+        var world = await PacketaStoreAsync(connect: true);
+
+        using var refused = await world.Shopper.PostAsync("/api/storefront/checkout", PacketaCheckout(pickupPointCode: "Z-BOX-99"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Null(_packeta.LastChoice);
+    }
+
+    // The map key opens the map and is what the point is checked with, so a store connected without it has a method
+    // no order can get through: readiness says so before the store publishes, and the checkout asks nobody (D-213).
+    [Fact]
+    public async Task A_store_without_the_map_key_takes_no_box_order_and_is_told_before_it_publishes()
+    {
+        var world = await PacketaStoreAsync(connect: true, withMapKey: false);
+        var keyed = await PacketaStoreAsync(connect: true);
+
+        using var refused = await world.Shopper.PostAsync("/api/storefront/checkout", PacketaCheckout());
+        var readiness = await world.Admin.GetFromJsonAsync<ReadinessView>(
+            $"/api/admin/stores/{world.Furniture.Store.StoreId}/readiness", CancellationToken);
+        var ready = await keyed.Admin.GetFromJsonAsync<ReadinessView>(
+            $"/api/admin/stores/{keyed.Furniture.Store.StoreId}/readiness", CancellationToken);
+        var shipping = Assert.Single(readiness!.Checks, check => check.Check == "orders.shipping-connected");
+
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Null(_packeta.LastChoice);
+        Assert.False(shipping.IsReady);
+        Assert.Contains("\"Z-BOX\" (packeta) has its pickup point chosen in the carrier's map", shipping.Problem!, StringComparison.Ordinal);
+        Assert.DoesNotContain("Home delivery", shipping.Problem!, StringComparison.Ordinal);
+        Assert.True(Assert.Single(ready!.Checks, check => check.Check == "orders.shipping-connected").IsReady);
     }
 
     // Nothing about the point comes from the browser except which one it is: the validator is asked, and what
@@ -137,7 +174,7 @@ public sealed class PacketaConnectionTests : IDisposable
         var order = await world.Shopper.ReadAsync<PlacedOrder>(placed, HttpStatusCode.Created);
         var stored = await StoredAsync(world, order.Number);
 
-        Assert.Equal(("cz", "zbox"), (_packeta.LastChoice?.Country, _packeta.LastChoice?.Vendor));
+        Assert.Equal(("cz", "zbox"), (_packeta.LastChoice?.Country, _packeta.LastChoice?.Group));
         Assert.Equal("99", stored.PickupPointCode);
         Assert.Equal("Z-BOX Hlavní nádraží", stored.PickupPointName);
         Assert.Equal("Wilsonova 8", stored.PickupPointAddress!.Line1);
@@ -147,7 +184,7 @@ public sealed class PacketaConnectionTests : IDisposable
     public async Task A_point_the_validator_refuses_stops_the_order()
     {
         var world = await PacketaStoreAsync(connect: true);
-        _packeta.Says = null;
+        _packeta.Says = new PacketaPointCheck(null, ["PickupPointIsFull"]);
 
         using var refused = await world.Shopper.PostAsync("/api/storefront/checkout", PacketaCheckout());
 
@@ -210,9 +247,9 @@ public sealed class PacketaConnectionTests : IDisposable
         Assert.Equal(59m, stored.ShippingPrice);
     }
 
-    // Packeta puts the API password in the path of the URL, so the URL is itself a credential and the ordinary
-    // HTTP request logging published it the first time this ran against the real client. The recording fake
-    // cannot catch that, so this one drives the real client over a stubbed socket and reads the log.
+    // The client this replaced put the API password in the path of the URL, and the ordinary request logging published
+    // it the first time it ran (D-159). The documented check never sends the password at all (D-213); the recording
+    // fake cannot see below itself, so this drives the real client over a stubbed socket and reads the log.
     [Fact]
     public async Task The_api_password_is_in_no_log_either()
     {
@@ -234,17 +271,21 @@ public sealed class PacketaConnectionTests : IDisposable
         Assert.DoesNotContain(logs.Messages, message => message.Contains(ApiPassword, StringComparison.Ordinal));
     }
 
-    // The same URL is a trace attribute too: the HTTP client's span records the address it called, and an exporter
-    // sends it on to Application Insights. Only a real socket makes that span, so this one calls a listener on this
-    // machine standing in for Packeta, and reads every span the host finished (D-199).
+    // The whole way through the real client and a real socket: a listener on this machine stands in for Packeta and
+    // answers with the example in Packeta's own reference. The question arrives as the reference describes it, with the
+    // map key, and the order keeps the point as the answer describes it. The HTTP client's span records the address it
+    // called, which an exporter sends on to Application Insights, so every finished span is read for the password too
+    // (D-199, D-213).
     [Fact]
-    public async Task The_api_password_is_in_no_trace_either()
+    public async Task The_point_check_goes_out_as_documented_and_the_password_is_in_no_trace()
     {
-        using var packeta = new PacketaOnThisMachine();
+        using var packeta = new PacketaOnThisMachine(HttpStatusCode.OK, """
+            {"isValid":true,"point":{"name":"Z-BOX","address":{"street":"Českomoravská 2408","city":"Praha ","zip":"190 00","country":"cz"},"group":"zbox"},"errors":[]}
+            """);
         var spans = new ConcurrentQueue<string>();
         using var withTheRealClient = _factory.WithWebHostBuilder(builder =>
         {
-            builder.UseSetting("Shipping:Packeta:BaseAddress", packeta.Address);
+            builder.UseSetting("Shipping:Packeta:WidgetAddress", packeta.Address);
             builder.ConfigureTestServices(services =>
             {
                 services.AddSingleton<ISecretStore>(new InMemorySecrets());
@@ -253,14 +294,42 @@ public sealed class PacketaConnectionTests : IDisposable
         });
 
         var world = await PacketaStoreAsync(connect: true, host: withTheRealClient);
-        using var attempted = await world.Shopper.PostAsync("/api/storefront/checkout", PacketaCheckout());
+        using var placed = await world.Shopper.PostAsync("/api/storefront/checkout", PacketaCheckout());
+        var order = await world.Shopper.ReadAsync<PlacedOrder>(placed, HttpStatusCode.Created);
+        var stored = await StoredAsync(world, order.Number);
+        var question = JsonNode.Parse(packeta.LastBody!)!;
 
-        // The listener answers nothing useful, so the carrier counts as unreachable — but the call went out, and its
-        // span was finished and handed to the exporter's side of the pipeline.
-        Assert.Equal(HttpStatusCode.ServiceUnavailable, attempted.StatusCode);
-        Assert.True(packeta.Asked > 0);
+        Assert.Equal(("POST", "/v6/pps/api/widget/v1/validate"), (packeta.LastMethod, packeta.LastPath));
+        Assert.Equal(System.Text.Encoding.UTF8.GetByteCount(packeta.LastBody!), packeta.LastLength);
+        Assert.Equal(
+            """{"apiKey":"widget-key-abc123","point":{"id":"99"},"options":{"country":"cz","vendors":[{"country":"cz","group":"zbox"}]}}""",
+            question.ToJsonString());
+        Assert.Equal(("99", "Z-BOX"), (stored.PickupPointCode, stored.PickupPointName));
+        Assert.Equal(("Českomoravská 2408", "Praha", "190 00", "CZ"), (stored.PickupPointAddress!.Line1, stored.PickupPointAddress.City, stored.PickupPointAddress.PostalCode, stored.PickupPointAddress.Country));
+        Assert.DoesNotContain(ApiPassword, packeta.LastBody!, StringComparison.Ordinal);
         Assert.Contains(spans, span => span.Contains(packeta.Authority, StringComparison.Ordinal));
         Assert.DoesNotContain(spans, span => span.Contains(ApiPassword, StringComparison.Ordinal));
+    }
+
+    // A parcel booked in Packeta's portal is recorded by the number the portal shows, and the shopper is given Packeta's
+    // own tracking page for it, in the store's language. A number that is not a Packeta packet's gets no link.
+    [Theory]
+    [InlineData("Z 123 4567 890", "https://tracking.packeta.com/en/?id=1234567890")]
+    [InlineData("PKG-1", null)]
+    public async Task A_packeta_shipment_links_to_packetas_tracking_page(string trackingNumber, string? link)
+    {
+        var world = await PacketaStoreAsync(connect: true);
+        var storeId = world.Furniture.Store.StoreId;
+        using var placed = await world.Shopper.PostAsync("/api/storefront/checkout", PacketaCheckout());
+        var order = await world.Shopper.ReadAsync<PlacedOrder>(placed, HttpStatusCode.Created);
+
+        using var paid = await world.Admin.PostAsync($"/api/admin/stores/{storeId}/orders/{order.Number}/payment", null, CancellationToken);
+        using var shipped = await world.Admin.PostAsJsonAsync(
+            $"/api/admin/stores/{storeId}/orders/{order.Number}/shipment", new { TrackingNumber = trackingNumber }, CancellationToken);
+        var stored = await StoredAsync(world, order.Number);
+
+        Assert.Equal((HttpStatusCode.OK, HttpStatusCode.OK), (paid.StatusCode, shipped.StatusCode));
+        Assert.Equal(("Packeta", trackingNumber, link), (stored.Shipment!.Carrier, stored.Shipment.TrackingNumber, stored.Shipment.TrackingUrl));
     }
 
     // The same carrier, no map, nowhere to choose. Everything Packeta asks for about the recipient — a name,
@@ -366,7 +435,7 @@ public sealed class PacketaConnectionTests : IDisposable
         PickupPointCode = pickupPointCode,
     };
 
-    private static object PacketaCheckout() => new
+    private static object PacketaCheckout(string pickupPointCode = "99") => new
     {
         Email = "buyer@example.test",
         Phone = "+420 123 456 789",
@@ -374,12 +443,13 @@ public sealed class PacketaConnectionTests : IDisposable
         ShippingAddress = (object?)null,
         PaymentMethodCode = "bank-transfer",
         ShippingMethodCode = "z-box",
-        PickupPointCode = "99",
+        PickupPointCode = pickupPointCode,
     };
 
     private async Task<PacketaWorld> PacketaStoreAsync(
         bool connect,
         bool withPassword = true,
+        bool withMapKey = true,
         WebApplicationFactory<Program>? host = null)
     {
         var app = host ?? _withPacketa;
@@ -391,7 +461,7 @@ public sealed class PacketaConnectionTests : IDisposable
         {
             using var saved = await admin.PutAsJsonAsync(
                 $"/api/admin/stores/{storeId}/provider-connections/{PacketaShippingProvider.ProviderKey}",
-                new { MerchantId = "sender-identification", Environment = "Test", IsActive = true, PublishableKey = WidgetKey },
+                new { MerchantId = "sender-identification", Environment = "Test", IsActive = true, PublishableKey = withMapKey ? WidgetKey : null },
                 CancellationToken);
             Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
 
@@ -466,27 +536,31 @@ public sealed class PacketaConnectionTests : IDisposable
     private sealed record StoreView(string Name, List<ProviderKeyView> ProviderKeys);
 
     private sealed record ProviderKeyView(string Provider, string Key);
+
+    private sealed record ReadinessView(bool IsReady, List<ReadinessCheckView> Checks);
+
+    private sealed record ReadinessCheckView(string Check, bool IsReady, string? Problem);
 }
 
 // Records what would have gone to Packeta, so every later slice is testable without the network. It can also
 // refuse a point, and fail to answer at all, which are two different things the checkout must tell apart.
 internal sealed class RecordingPacketa : IPacketaClient
 {
-    public PacketaAccount? LastAccount { get; private set; }
+    public string? LastKey { get; private set; }
 
     public PacketaPointChoice? LastChoice { get; private set; }
 
-    public PacketaPoint? Says { get; set; } = new("99", "Z-BOX Hlavní nádraží", "Wilsonova 8", "Praha", "110 00", "CZ");
+    public PacketaPointCheck Says { get; set; } = new(new PacketaPoint("99", "Z-BOX Hlavní nádraží", "Wilsonova 8", "Praha", "110 00", "CZ"), []);
 
     public bool Unreachable { get; set; }
 
-    public Task<PacketaPoint?> ValidatePointAsync(PacketaAccount account, PacketaPointChoice choice, CancellationToken cancellationToken)
+    public Task<PacketaPointCheck> ValidatePointAsync(string apiKey, PacketaPointChoice choice, CancellationToken cancellationToken)
     {
-        LastAccount = account;
+        LastKey = apiKey;
         LastChoice = choice;
 
         return Unreachable
-            ? Task.FromException<PacketaPoint?>(new HttpRequestException("Packeta is unreachable."))
+            ? Task.FromException<PacketaPointCheck>(new HttpRequestException("Packeta is unreachable."))
             : Task.FromResult(Says);
     }
 }
@@ -499,15 +573,19 @@ internal sealed class FinishedSpans(ConcurrentQueue<string> spans) : BaseProcess
         spans.Enqueue($"{data.DisplayName} {string.Join(' ', data.TagObjects.Select(tag => $"{tag.Key}={tag.Value}"))}");
 }
 
-// Packeta on a port of this machine, answering every request with a 404, so that a real socket — and with it the HTTP
-// client's own span — is involved.
+// Packeta on a port of this machine, answering every request the same way and keeping the last one, so that a real
+// socket — and with it the HTTP client's own span — is involved.
 internal sealed class PacketaOnThisMachine : IDisposable
 {
     private readonly HttpListener _listener = new();
-    private int _asked;
+    private readonly HttpStatusCode _status;
+    private readonly string _answer;
 
-    public PacketaOnThisMachine()
+    public PacketaOnThisMachine(HttpStatusCode status, string answer)
     {
+        _status = status;
+        _answer = answer;
+
         var free = new TcpListener(IPAddress.Loopback, 0);
         free.Start();
         var port = ((IPEndPoint)free.LocalEndpoint).Port;
@@ -521,9 +599,17 @@ internal sealed class PacketaOnThisMachine : IDisposable
 
     public string Authority { get; }
 
-    public string Address => $"http://{Authority}/api/";
+    // Where the widget's own address would be.
+    public string Address => $"http://{Authority}/v6/";
 
-    public int Asked => Volatile.Read(ref _asked);
+    public string? LastMethod { get; private set; }
+
+    public string? LastPath { get; private set; }
+
+    public string? LastBody { get; private set; }
+
+    // What the request said its length was, or -1 for a body sent in chunks.
+    public long LastLength { get; private set; }
 
     public void Dispose() => _listener.Close();
 
@@ -534,8 +620,18 @@ internal sealed class PacketaOnThisMachine : IDisposable
             try
             {
                 var context = await _listener.GetContextAsync();
-                Interlocked.Increment(ref _asked);
-                context.Response.StatusCode = (int)HttpStatusCode.NotFound;
+                using (var reader = new StreamReader(context.Request.InputStream, context.Request.ContentEncoding))
+                {
+                    LastBody = await reader.ReadToEndAsync();
+                }
+
+                LastMethod = context.Request.HttpMethod;
+                LastLength = context.Request.ContentLength64;
+                LastPath = context.Request.Url?.AbsolutePath;
+                context.Response.StatusCode = (int)_status;
+                context.Response.ContentType = "application/json";
+                var answer = System.Text.Encoding.UTF8.GetBytes(_answer);
+                await context.Response.OutputStream.WriteAsync(answer);
                 context.Response.Close();
             }
             catch (Exception exception) when (exception is HttpListenerException or ObjectDisposedException or InvalidOperationException)

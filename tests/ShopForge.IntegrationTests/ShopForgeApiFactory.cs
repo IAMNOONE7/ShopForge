@@ -128,6 +128,11 @@ public sealed class ShopForgeApiFactory : WebApplicationFactory<Program>, IAsync
         // API gets a name the platform can give out (D-189).
         builder.UseSetting("StoreHosts:Suffix", TestStores.PlatformSuffix);
         builder.UseSetting("Email:Mailgun:WebhookSigningKey", MailgunSigningKey);
+
+        // Nothing in the suite may reach Packeta, which has no sandbox. A test that drives the real client gives it a
+        // listener of its own; any other call finds a closed port on this machine.
+        builder.UseSetting("Shipping:Packeta:WidgetAddress", "http://127.0.0.1:9/v6/");
+
         // Only the last hop is faked: registration still writes an outbox message, which the dispatcher delivers.
         builder.ConfigureTestServices(services =>
         {
