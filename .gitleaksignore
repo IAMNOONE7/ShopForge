@@ -10,3 +10,7 @@ a9bfb56c5d202038d3f7187bc1107de4257b7392:frontend/storefront/src/pages/OrderPage
 
 # A made-up Comgate secret the telemetry test looks for in every log line, span, metric tag and audit entry.
 d9394ef1b3ca44fb6add7e767a26ffc703fd12f7:tests/ShopForge.IntegrationTests/Payments/PaymentTelemetryTests.cs:generic-api-key:28
+
+# A made-up Packeta API key in the point check's wire tests: the constant and the question that carries it.
+bc81b04749b83377397e346f6af5b7026724cbc0:tests/ShopForge.UnitTests/Shipping/PacketaHttpClientTests.cs:generic-api-key:13
+bc81b04749b83377397e346f6af5b7026724cbc0:tests/ShopForge.UnitTests/Shipping/PacketaHttpClientTests.cs:generic-api-key:25
