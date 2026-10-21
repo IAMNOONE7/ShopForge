@@ -19,14 +19,18 @@ param environments array = ['staging', 'production']
 // Contributor: an environment's resource group and everything in it.
 var contributor = 'b24988ac-6180-42a0-ab88-20f7382dd24c'
 
-// Role Based Access Control Administrator, held to the three roles a release grants its app's identity.
+// Role Based Access Control Administrator, held to the four roles a release grants its app's identity.
 var rbacAdministrator = 'f58310d9-a9f6-439a-9e8d-f62e7b41a168'
 
-// AcrPull, Key Vault Secrets User, Key Vault Secrets Officer.
+// The edge domains role below, the same id in this subscription for every release that grants it (D-212).
+var edgeDomains = guid(subscription().id, 'shopforge-edge-domains')
+
+// AcrPull, Key Vault Secrets User, Key Vault Secrets Officer, and the edge domains role.
 var grantable = [
   '7f951dda-4ed3-4680-a7ca-43fe172d538d'
   '4633458b-17de-408a-b874-0445c86b69e6'
   'b86a8fe4-44ce-4948-aee7-eccb2c155cd7'
+  edgeDomains
 ]
 
 resource shared 'Microsoft.Resources/resourceGroups@2024-03-01' = {
@@ -61,6 +65,49 @@ resource deployerContributes 'Microsoft.Authorization/roleAssignments@2022-04-01
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', contributor)
     principalId: deployer.outputs.principalId
     principalType: 'ServicePrincipal'
+  }
+}
+
+// What a release's app may do at the edge, and no more (D-212): merchants' custom domains and their validation tokens,
+// the route and the security policy that carry them, reading what those refer to, and joining the template's firewall
+// policy to that security policy. The profile itself, its platform route's origin and the firewall policy's rules are
+// out of its reach. No built-in role is this narrow: CDN Profile Contributor may delete the profile, and Network
+// Contributor rewrite the firewall. Whether a security policy needs the join action at all is UNVERIFIED until V19.
+resource edgeDomainsRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {
+  name: edgeDomains
+  properties: {
+    roleName: '${namePrefix} edge domains (${subscription().subscriptionId})'
+    description: 'Binds merchants\' domains at Front Door: custom domains, the runtime\'s route and security policy, and joining the firewall policy.'
+    type: 'CustomRole'
+    permissions: [
+      {
+        actions: [
+          'Microsoft.Cdn/profiles/read'
+          'Microsoft.Cdn/profiles/afdendpoints/read'
+          'Microsoft.Cdn/profiles/afdendpoints/routes/read'
+          'Microsoft.Cdn/profiles/afdendpoints/routes/write'
+          'Microsoft.Cdn/profiles/afdendpoints/routes/delete'
+          'Microsoft.Cdn/profiles/origingroups/read'
+          'Microsoft.Cdn/profiles/rulesets/read'
+          'Microsoft.Cdn/profiles/customdomains/read'
+          'Microsoft.Cdn/profiles/customdomains/write'
+          'Microsoft.Cdn/profiles/customdomains/delete'
+          'Microsoft.Cdn/profiles/customdomains/RefreshValidationToken/action'
+          'Microsoft.Cdn/profiles/securitypolicies/read'
+          'Microsoft.Cdn/profiles/securitypolicies/write'
+          'Microsoft.Cdn/profiles/securitypolicies/delete'
+          'Microsoft.Cdn/operationresults/profileresults/afdendpointresults/routeresults/read'
+          'Microsoft.Cdn/operationresults/profileresults/customdomainresults/read'
+          'Microsoft.Cdn/operationresults/profileresults/securitypolicyresults/read'
+          'Microsoft.Network/frontDoorWebApplicationFirewallPolicies/read'
+          'Microsoft.Network/frontDoorWebApplicationFirewallPolicies/join/action'
+        ]
+        notActions: []
+      }
+    ]
+    assignableScopes: [
+      subscription().id
+    ]
   }
 }
 

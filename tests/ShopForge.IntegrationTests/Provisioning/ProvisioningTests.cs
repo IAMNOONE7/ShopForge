@@ -366,22 +366,28 @@ public sealed class ProvisioningTests(ShopForgeApiFactory factory)
         Assert.Empty(host.Provider.Effects);
     }
 
-    // The friendly answer reads first; the unique index is what holds when the reading is too slow.
+    // A subject is worked on by one operation across the platform, and a store runs one operation without a subject at a
+    // time; work on another subject of the same store goes ahead beside it (D-212). The friendly answer reads first; the
+    // unique indexes are what hold when the reading is too slow.
     [Fact]
-    public async Task A_store_runs_one_operation_at_a_time_and_a_subject_is_worked_on_by_one()
+    public async Task A_subject_is_worked_on_by_one_operation_and_a_store_by_one_without_a_subject()
     {
         var (store, sibling) = await TestStores.CreateTwoStoresOfOneTenantAsync(factory.Services);
         await using var host = ProvisioningHost.Create(factory);
         var subject = TestStores.UniqueHostName();
         var id = await host.StartAsync(store, subject);
 
-        var again = await host.TryStartAsync(store);
         var elsewhere = await host.TryStartAsync(sibling, subject);
+        var beside = await host.TryStartAsync(store, TestStores.UniqueHostName());
+        var unnamed = await host.TryStartAsync(store);
+        var secondUnnamed = await host.TryStartAsync(store);
         await host.RunToRestAsync(store, id);
         var afterwards = await host.TryStartAsync(sibling, subject);
 
-        Assert.Equal(new OperationStart(id, Started: false), again);
         Assert.Equal(new OperationStart(id, Started: false), elsewhere);
+        Assert.True(beside.Started);
+        Assert.True(unnamed.Started);
+        Assert.Equal(new OperationStart(unnamed.OperationId, Started: false), secondUnnamed);
         Assert.True(afterwards.Started);
     }
 

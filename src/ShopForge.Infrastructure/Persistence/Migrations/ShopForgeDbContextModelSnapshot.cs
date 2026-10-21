@@ -1845,7 +1845,7 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                     b.HasIndex("StoreId")
                         .IsUnique()
                         .HasDatabaseName("ux_operations_one_unfinished_per_store")
-                        .HasFilter("finished_at IS NULL");
+                        .HasFilter("finished_at IS NULL AND subject IS NULL");
 
                     b.HasIndex("Subject")
                         .IsUnique()
@@ -3573,6 +3573,89 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                     b.ToTable("content_pages", "stores");
                 });
 
+            modelBuilder.Entity("ShopForge.Stores.Domain.DomainBinding", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("BoundAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("bound_at");
+
+                    b.Property<DateTimeOffset>("ChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("changed_at");
+
+                    b.Property<DateTimeOffset?>("CheckedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("checked_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("HostName")
+                        .IsRequired()
+                        .HasMaxLength(253)
+                        .HasColumnType("character varying(253)")
+                        .HasColumnName("host_name");
+
+                    b.Property<Guid?>("OperationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("operation_id");
+
+                    b.Property<string>("ResourceName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("resource_name");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("state");
+
+                    b.Property<Guid>("StoreId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("store_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Validation")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("validation");
+
+                    b.Property<string>("ValidationToken")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("validation_token");
+
+                    b.Property<DateTimeOffset?>("ValidationTokenExpires")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("validation_token_expires");
+
+                    b.Property<string>("ZoneId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("zone_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_domain_bindings");
+
+                    b.HasIndex("HostName")
+                        .IsUnique()
+                        .HasDatabaseName("ix_domain_bindings_host_name");
+
+                    b.HasIndex("StoreId")
+                        .HasDatabaseName("ix_domain_bindings_store_id");
+
+                    b.ToTable("domain_bindings", "stores");
+                });
+
             modelBuilder.Entity("ShopForge.Stores.Domain.Plan", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3771,6 +3854,71 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("ck_store_domains_host_name_normalized", "host_name = lower(host_name) AND host_name !~ '[:/\\s]'");
                         });
+                });
+
+            modelBuilder.Entity("ShopForge.Stores.Domain.StoreZone", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ActivatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("activated_at");
+
+                    b.Property<DateTimeOffset>("ChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("changed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(253)
+                        .HasColumnType("character varying(253)")
+                        .HasColumnName("name");
+
+                    b.PrimitiveCollection<string[]>("NameServers")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("name_servers");
+
+                    b.Property<Guid?>("OperationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("operation_id");
+
+                    b.Property<string>("ProviderZoneId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("provider_zone_id");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("state");
+
+                    b.Property<Guid>("StoreId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("store_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_store_zones");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_store_zones_name");
+
+                    b.HasIndex("StoreId")
+                        .HasDatabaseName("ix_store_zones_store_id");
+
+                    b.ToTable("store_zones", "stores");
                 });
 
             modelBuilder.Entity("ShopForge.Stores.Domain.TaxClass", b =>

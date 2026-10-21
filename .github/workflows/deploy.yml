@@ -38,6 +38,7 @@ jobs:
       EMAIL_PROVIDER: ${{ vars.EMAIL_PROVIDER }}
       EMAIL_SENDER_ADDRESS: ${{ vars.EMAIL_SENDER_ADDRESS }}
       MAILGUN_DOMAIN: ${{ vars.MAILGUN_DOMAIN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       IMAGE: ${{ vars.REGISTRY_SERVER }}/shopforge-api:${{ github.sha }}
     steps:
       - uses: actions/checkout@v7
@@ -48,6 +49,7 @@ jobs:
           DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
           MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
           MAILGUN_WEBHOOK_SIGNING_KEY: ${{ secrets.MAILGUN_WEBHOOK_SIGNING_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: scripts/release-inputs.sh
 
       - uses: azure/login@v2
@@ -72,6 +74,7 @@ jobs:
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
           MAILGUN_WEBHOOK_SIGNING_KEY: ${{ secrets.MAILGUN_WEBHOOK_SIGNING_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: scripts/provision.sh "$ENVIRONMENT" without-app
 
       # The release's own image migrates the schema from inside the environment, never by the app as it starts (D-074).
@@ -86,6 +89,7 @@ jobs:
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
           MAILGUN_WEBHOOK_SIGNING_KEY: ${{ secrets.MAILGUN_WEBHOOK_SIGNING_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: scripts/provision.sh "$ENVIRONMENT" with-app
 
       # Nobody is told a deployment succeeded until the thing it deployed answers through the edge (D-125), as the

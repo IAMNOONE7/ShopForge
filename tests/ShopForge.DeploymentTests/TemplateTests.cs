@@ -115,7 +115,8 @@ public sealed partial class TemplateTests
     }
 
     // The bootstrap's deployer may assign and remove exactly the roles a release assigns, and no other: a stolen
-    // workflow token cannot make itself Owner of the subscription (D-208).
+    // workflow token cannot make itself Owner of the subscription (D-208). The edge domains role is the bootstrap's own,
+    // its id derived the same way in both templates (D-212).
     [Fact]
     public async Task The_deployer_may_grant_exactly_what_a_release_grants()
     {
@@ -123,17 +124,74 @@ public sealed partial class TemplateTests
         var main = await CompiledAsync();
         var assignments = Resources(bootstrap).Where(resource => (string?)resource["type"] == "Microsoft.Authorization/roleAssignments").ToList();
         var granting = assignments.Single(assignment => assignment["properties"]!["condition"] is not null)["properties"]!;
-        var grantable = RoleIds().Matches(Evaluated((string)granting["condition"]!, bootstrap)).Select(match => match.Value).ToHashSet();
-        var granted = Everywhere(main)
-            .Where(resource => (string?)resource["type"] == "Microsoft.Authorization/roleAssignments")
-            .Select(resource => RoleIds().Match((string)resource["properties"]!["roleDefinitionId"]!).Value)
-            .ToHashSet();
+        var grantable = RoleKeys().Matches(Evaluated((string)granting["condition"]!, bootstrap)).Select(match => match.Value).ToHashSet();
+        var granted = Granted(main).ToHashSet();
 
         Assert.Equal("2.0", (string?)granting["conditionVersion"]);
         Assert.Equal("f58310d9-a9f6-439a-9e8d-f62e7b41a168", RoleOf(granting, bootstrap));
         Assert.Equal(granted.Order(), grantable.Order());
+        Assert.Contains(EdgeDomainsRole, granted);
         Assert.Contains(assignments, assignment => RoleOf(assignment["properties"]!, bootstrap) == "b24988ac-6180-42a0-ab88-20f7382dd24c");
     }
+
+    // What the app may do at the edge: merchants' domains, the runtime's route and policy, reading what they refer to, and
+    // joining the firewall policy. It may not change or delete the profile, nor the firewall policy's rules, and it is
+    // granted over the environment's resource group alone (D-212).
+    [Fact]
+    public async Task The_edge_domains_role_reaches_merchants_domains_and_nothing_it_could_break()
+    {
+        var bootstrap = await BootstrapAsync();
+        var main = await CompiledAsync();
+        var role = Resources(bootstrap).Single(resource => (string?)resource["type"] == "Microsoft.Authorization/roleDefinitions");
+        var actions = role["properties"]!["permissions"]![0]!["actions"]!.AsArray().Select(action => (string)action!).ToList();
+        var access = Deployment(main, "edge-access");
+        var assignment = Resources(access["properties"]!["template"]!).Single();
+
+        Assert.Equal("[variables('edgeDomains')]", (string?)role["name"]);
+        Assert.Equal($"[{EdgeDomainsRole}]", (string?)bootstrap["variables"]!["edgeDomains"]);
+        Assert.Equal("CustomRole", (string?)role["properties"]!["type"]);
+        Assert.Equal(["[subscription().id]"], role["properties"]!["assignableScopes"]!.AsArray().Select(scope => (string?)scope));
+        Assert.All(actions, action => Assert.True(
+            action.StartsWith("Microsoft.Cdn/profiles/", StringComparison.Ordinal)
+                || action.StartsWith("Microsoft.Cdn/operationresults/", StringComparison.Ordinal)
+                || action.StartsWith("Microsoft.Network/frontDoorWebApplicationFirewallPolicies/", StringComparison.Ordinal),
+            action));
+        Assert.DoesNotContain(actions, action => action.EndsWith('*'));
+        Assert.DoesNotContain(actions, action => action is "Microsoft.Cdn/profiles/write" or "Microsoft.Cdn/profiles/delete");
+        Assert.DoesNotContain(actions, action => action.StartsWith("Microsoft.Network/", StringComparison.Ordinal) && !action.EndsWith("/read", StringComparison.Ordinal) && !action.EndsWith("/join/action", StringComparison.Ordinal));
+        Assert.Contains("Microsoft.Network/frontDoorWebApplicationFirewallPolicies/join/action", actions);
+        Assert.Null(assignment["scope"]);
+        Assert.Equal("[format('{0}-rg', parameters('namePrefix'))]", (string?)access["resourceGroup"]);
+        Assert.Matches(OutputOf("identity", "principalId"), Parameter(access, "principalId"));
+    }
+
+    // The roles a release assigns, however deep: a built-in role's id, or the expression a role of the bootstrap's is
+    // derived from, read through the module parameter that carries it.
+    private static IEnumerable<string> Granted(JsonNode template)
+    {
+        foreach (var resource in Resources(template))
+        {
+            if ((string?)resource["type"] == "Microsoft.Authorization/roleAssignments")
+            {
+                yield return RoleKeys().Match((string)resource["properties"]!["roleDefinitionId"]!).Value;
+            }
+            else if ((string?)resource["type"] == "Microsoft.Resources/deployments" && resource["properties"]?["template"] is { } nested)
+            {
+                foreach (var role in Granted(nested))
+                {
+                    yield return role.Length > 0 ? role : ModuleRole(resource);
+                }
+            }
+        }
+    }
+
+    // A module handed its role as a parameter, as edge-access is.
+    private static string ModuleRole(JsonNode deployment) =>
+        RoleKeys().Match((string?)deployment["properties"]!["parameters"]!["roleId"]?["value"] ?? string.Empty).Value;
+
+    private static JsonNode Domain(JsonNode template, string name) =>
+        Resources(template).Single(resource =>
+            (string?)resource["type"] == "Microsoft.Cdn/profiles/customDomains" && OwnName().Match((string)resource["name"]!).Groups["name"].Value == name);
 
     // A role assignment's role, written as an id or as one of the template's variables.
     private static string RoleOf(JsonNode properties, JsonNode template)
@@ -302,7 +360,52 @@ public sealed partial class TemplateTests
 
         Assert.Equal(["platform"], OwnNames(everything, "Microsoft.Cdn/profiles/afdEndpoints/routes"));
         Assert.Equal(["platform"], OwnNames(everything, "Microsoft.Cdn/profiles/securityPolicies"));
-        Assert.Equal(["admin"], OwnNames(everything, "Microsoft.Cdn/profiles/customDomains"));
+        Assert.Equal(["admin", "stores"], OwnNames(everything, "Microsoft.Cdn/profiles/customDomains").Order(StringComparer.Ordinal));
+    }
+
+    // Every store's own subdomain arrives through one wildcard domain of the template's with a managed certificate, on the
+    // platform's route and under its policy, its token handed out as the admin's is (D-212).
+    [Fact]
+    public async Task Store_subdomains_are_served_through_one_wildcard_domain_of_the_template_s()
+    {
+        var template = await CompiledAsync();
+        var profile = Deployment(template, "edge-profile");
+        var stores = Domain(profile["properties"]!["template"]!, "stores");
+        var platformDomains = (string)profile["properties"]!["template"]!["outputs"]!["platformDomainIds"]!["value"]!;
+
+        Assert.Null(stores["condition"]);
+        Assert.Equal("[format('*.{0}', parameters('storeHostSuffix'))]", (string?)stores["properties"]!["hostName"]);
+        Assert.Equal(("ManagedCertificate", "TLS12"), ((string?)stores["properties"]!["tlsSettings"]!["certificateType"], (string?)stores["properties"]!["tlsSettings"]!["minimumTlsVersion"]));
+        Assert.Contains("'stores')", platformDomains, StringComparison.Ordinal);
+        Assert.Equal("[parameters('storeHostSuffix')]", Parameter(profile, "storeHostSuffix"));
+        Assert.NotNull(template["outputs"]!["storesValidationToken"]);
+    }
+
+    // The app is told where merchants' domains are bound: the profile, its endpoint and the firewall policy the runtime's
+    // security policy applies; and, only where the platform runs DNS, the Cloudflare account and a token kept in the vault
+    // (D-212). The origin group and rule set the runtime's route reuses are edge-routes' own names, which are the app's
+    // defaults.
+    [Fact]
+    public async Task The_app_is_told_where_to_bind_merchants_domains()
+    {
+        var template = await CompiledAsync();
+        var settings = Deployment(template, "api")["properties"]!["parameters"]!["settings"]!["value"]!.AsArray();
+        var vault = Resources(Deployment(template, "vault")["properties"]!["template"]!);
+        var routes = Resources(Deployment(template, "edge-routes")["properties"]!["template"]!).ToList();
+        var token = template["parameters"]!["cloudflareApiToken"]!;
+
+        Assert.Equal("[subscription().subscriptionId]", Setting(settings, "Edge__Domains__SubscriptionId"));
+        Assert.Matches(OutputOf("edge-profile", "profileName"), Setting(settings, "Edge__Domains__Profile"));
+        Assert.Matches(OutputOf("edge-profile", "endpointName"), Setting(settings, "Edge__Domains__Endpoint"));
+        Assert.Matches(OutputOf("edge-profile", "endpointHostName"), Setting(settings, "Edge__Domains__EndpointHost"));
+        Assert.Matches(OutputOf("edge-security", "wafPolicyId"), Setting(settings, "Edge__Domains__WafPolicyId"));
+        Assert.Equal("[parameters('cloudflareAccountId')]", Setting(settings, "Dns__Cloudflare__AccountId"));
+        Assert.Equal(("securestring", ""), ((string?)token["type"], (string?)token["defaultValue"]));
+        Assert.Contains(vault, resource =>
+            ((string?)resource["name"])?.Contains("'Dns--Cloudflare--ApiToken'", StringComparison.Ordinal) == true
+            && (string?)resource["condition"] == "[not(empty(parameters('cloudflareApiToken')))]");
+        Assert.Equal(["app"], OwnNames(routes, "Microsoft.Cdn/profiles/originGroups"));
+        Assert.Equal(["caching"], OwnNames(routes, "Microsoft.Cdn/profiles/ruleSets"));
     }
 
     // A platform domain with a managed certificate, which Front Door issues once _dnsauth.<host> carries the token the
@@ -312,7 +415,7 @@ public sealed partial class TemplateTests
     {
         var template = await CompiledAsync();
         var profile = Deployment(template, "edge-profile")["properties"]!["template"]!;
-        var domain = Resources(profile).Single(resource => (string?)resource["type"] == "Microsoft.Cdn/profiles/customDomains");
+        var domain = Domain(profile, "admin");
         var settings = Deployment(template, "api")["properties"]!["parameters"]!["settings"]!["value"]!.AsArray();
 
         Assert.Equal("[not(empty(parameters('adminHost')))]", (string?)domain["condition"]);
@@ -413,13 +516,23 @@ public sealed partial class TemplateTests
     private static Task<JsonNode> BootstrapAsync() => CompiledBootstrap.Value;
 
     // A condition is a `format()` the deployment evaluates; this evaluates it the same way, its arguments being the
-    // `join()` of a variable that ARM would compute.
+    // `join()` of a variable that ARM would compute. An item that is itself a variable stands for that variable's value.
     private static string Evaluated(string expression, JsonNode template)
     {
         var variables = template["variables"]!.AsObject();
         var call = Format().Match(expression);
+
+        if (!call.Success)
+        {
+            return expression;
+        }
+
         var arguments = Join().Matches(call.Groups["arguments"].Value)
-            .Select(match => string.Join(match.Groups["separator"].Value, variables[match.Groups["variable"].Value]!.AsArray().Select(value => (string?)value)))
+            .Select(match => string.Join(
+                match.Groups["separator"].Value,
+                variables[match.Groups["variable"].Value]!.AsArray().Select(value => Variable().Match((string)value!) is { Success: true } reference
+                    ? (string?)variables[reference.Groups["name"].Value]
+                    : (string?)value)))
             .ToArray();
 
         return string.Format(System.Globalization.CultureInfo.InvariantCulture, call.Groups["format"].Value.Replace("''", "'", StringComparison.Ordinal), arguments);
@@ -486,6 +599,12 @@ public sealed partial class TemplateTests
 
     [GeneratedRegex(@"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")]
     private static partial Regex RoleIds();
+
+    // A built-in role's id, or a role of the bootstrap's own written as the expression its id is derived from.
+    [GeneratedRegex(@"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|guid\(subscription\(\)\.id, '[a-z-]+'\)")]
+    private static partial Regex RoleKeys();
+
+    private const string EdgeDomainsRole = "guid(subscription().id, 'shopforge-edge-domains')";
 
     [GeneratedRegex(@"^\[format\('(?<format>(?:[^']|'')*)', (?<arguments>.*)\)\]$")]
     private static partial Regex Format();

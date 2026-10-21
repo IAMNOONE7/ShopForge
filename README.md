@@ -9,6 +9,7 @@ A multi-store e-commerce platform. One ASP.NET Core backend and one React storef
 - **Shared products, per-store listings.** A physical product belongs to the company (tenant); each store lists it with its own name, price and visibility.
 - **Metadata-driven product attributes.** Stores define typed attributes (numbers, dates, yes/no, options) stored as typed EAV rows. The storefront gets filters, ranges and counts computed from the data, so a furniture store and an electronics store run the same code with different filters.
 - **A merchant brings their own domain.** A store answers on the subdomain the platform gave it and on any name the merchant has proved they own, by publishing a TXT record the admin shows them. Nothing is served until that proof is in DNS, so no shop can answer on a name belonging to somebody else, and a name is taken across the whole platform the moment it is asked for. One domain is the primary — what mail and documents link to — and it cannot be an unproved one, or removed while it holds the job.
+- **A proved domain is put on the edge by itself.** Proving a domain starts binding it at Front Door: a custom domain with a certificate Front Door issues and renews, on a route and a security policy that only the app edits, so a redeploy never unbinds a shop. The merchant publishes the two records the admin shows (Front Door's token and a CNAME), or points the domain's nameservers at the platform once and lets it run the DNS at Cloudflare, publishing the proof, the token and, last, the traffic record itself. Front Door wants some domains proved again before each renewal, an apex among them; the app republishes the token by itself where it runs the zone. Removing a domain takes it off the edge again.
 - **Stores are created as data.** A tenant admin provisions a store with its address, currency, language and theme. It starts as a draft and goes live only once every module reports it ready (branding, products), with no deployment involved.
 - **Guest checkout.** A server-side cart identified by a cookie, gross prices with a per-product VAT rate, and orders that snapshot the product name, price, VAT and the chosen payment and shipping method, numbered per store.
 - **Shipping with pickup points and tracking.** Shipping methods name a provider the same way payment methods do. A method can require a pickup point, which the order then keeps; a paid order is shipped once and carries its tracking number to the shopper. The provider shipped today is the store itself — a carrier implements the same interface.
@@ -35,7 +36,7 @@ A multi-store e-commerce platform. One ASP.NET Core backend and one React storef
 - **Mail that looks like the store that sent it.** Every message goes out in the store's colour with its logo and name, in HTML with the plain text alongside, and money written the way that store's customers read it. The look is applied once on the way out, so a handler writes words and nothing else; mail that belongs to no store goes out as the platform.
 - **Mail through a provider, or none at all.** Transactional mail is handed to a provider (Mailgun today) behind one interface, chosen by configuration; with nothing configured it goes to the log, which is how development runs. A shop's mail is sent under the shop's name and the platform's verified address until the shop connects a domain of its own: a name under a domain it has proved, such as `mail.shop.cz`, with a key that sends for that domain alone and the DNS records Mailgun asks for shown exactly as Mailgun returned them. A provider that is down or refuses a message fails loudly, so the outbox in front of it backs off, retries, and eventually puts the message where somebody can see it.
 - **Events through a transactional outbox.** What happens to an order is written with the change that caused it and delivered by a background worker: confirmations, payment receipts and shipment notices are handlers, not inline calls. Delivery is leased, retried with backoff, and anything that gives up lands in a failed-message list the store can requeue.
-- **Work that outlives a request is an operation of steps.** Setting up what a shop needs outside ShopForge is kept in the database step by step. A worker on every replica claims an operation, runs its current step under a timeout and writes down what happened, so a restart resumes it and two replicas never run one step. A step asks the provider before it makes anything, so a retry finds what an earlier try made instead of making a second. Waiting for a certificate is not failing, a new credential's secret is kept before anything else, and a cancelled operation takes away only what it made. The store's admin sees every step and can retry, continue or cancel one that stopped. Connecting a shop's own sending domain is the first operation; its own domains come next.
+- **Work that outlives a request is an operation of steps.** Setting up what a shop needs outside ShopForge is kept in the database step by step. A worker on every replica claims an operation, runs its current step under a timeout and writes down what happened, so a restart resumes it and two replicas never run one step. A step asks the provider before it makes anything, so a retry finds what an earlier try made instead of making a second. Waiting for a certificate is not failing, a new credential's secret is kept before anything else, and a cancelled operation takes away only what it made. The store's admin sees every step and can retry, continue or cancel one that stopped. Operations on different domains of one shop run side by side; one domain is worked on by one operation at a time. A shop's own sending domain, its domains at the edge, and the DNS zones the platform runs for it are all operations.
 - **Limits nothing can slip past.** Three windows — signing in, changing something, and work that costs real time — applied to whole route groups, with a ceiling under all of them so an endpoint nobody remembered to limit is limited anyway. Counting is per account where somebody is signed in and per address otherwise. Request bodies are refused by the server rather than read and then judged, and every response carries headers telling a browser to do nothing with it: this API answers JSON and files, never a page.
 - **Telemetry that follows the work.** OpenTelemetry traces cover a request, its database calls and the background work it causes — an order and the confirmation e-mail sent seconds later share one trace — plus business counters (orders, payments, refused reservations) and outbox gauges. Nothing is exported unless an OTLP endpoint is configured.
 - **Replaceable infrastructure behind small interfaces.** File storage (`IFileStorage`, Azure Blob Storage adapter, Azurite locally) and payments (`IPaymentProvider`, with methods the store settles itself today and a hosted provider later).
@@ -68,7 +69,7 @@ In development the API applies database migrations on startup and seeds two demo
 - http://shop-b.localhost:5173 — Volt Electronics
 
 The admin app (http://localhost:5174) signs in with the development account `owner@demo.local` / `ShopForge-demo-1`.
-Administering the platform itself has no UI yet; its API signs in at `/api/platform/auth/login` with
+Administering the platform itself is at http://localhost:5174/platform, signing in with
 `platform@demo.local` / `ShopForge-platform-1`.
 
 Telemetry is off unless an OTLP endpoint is configured. Compose brings a collector that prints what it receives:
@@ -92,6 +93,16 @@ export Email__Mailgun__WebhookSigningKey=...            # without it, bounce eve
 
 Asking for a provider without its settings stops the application at startup rather than losing mail quietly. For shops to send from domains of their own, the key has to be an account key allowed to manage domains and keys, and the deployment needs a vault to keep each shop's sending key in. Mailgun's webhook for permanent failures and complaints is set once for the account, at `/api/email/mailgun`; it covers every domain.
 
+Merchants' domains are bound at the edge only where the app is told which Front Door profile it is in, and the platform runs DNS zones only with a Cloudflare account and a token that may edit its zones and their DNS. Development runs without either, and every record is the merchant's to publish:
+
+```bash
+export Edge__Domains__SubscriptionId=... Edge__Domains__ResourceGroup=... Edge__Domains__Profile=...
+export Edge__Domains__Endpoint=... Edge__Domains__EndpointHost=....azurefd.net Edge__Domains__WafPolicyId=/subscriptions/...
+export Dns__Cloudflare__AccountId=... Dns__Cloudflare__ApiToken=...
+```
+
+Naming only part of either stops the application at startup.
+
 Stripe is the deployment's own account, not a store's: payments through it go to whoever holds the keys. The keys register it, and stores may choose it only where every store on the deployment is the key holder's:
 
 ```bash
@@ -104,9 +115,9 @@ The API exposes `/health/live` and `/health/ready`.
 
 ## Deployment
 
-`infra/` describes the whole Azure environment in Bicep: Log Analytics and Application Insights, the app's managed identity and its roles, Key Vault, Storage (product media), PostgreSQL Flexible Server, the Container Apps environment with the app and its migration job, and Front Door with its route, caching rule, WAF policy and the admin's own domain. The vaults, the database and Front Door send their logs to the environment's workspace.
+`infra/` describes the whole Azure environment in Bicep: Log Analytics and Application Insights, the app's managed identity and its roles, Key Vault, Storage (product media), PostgreSQL Flexible Server, the Container Apps environment with the app and its migration job, and Front Door with its route, caching rule, WAF policy, the admin's own domain and one wildcard domain for every store's subdomain. The vaults, the database and Front Door send their logs to the environment's workspace.
 
-Each environment is `infra/main.bicep` with its own parameter file in `infra/environments/`. The file holds only the environment's name and sizes. Host names, mail, the image and every secret come from the GitHub environment of the same name when a release runs. `infra/bootstrap.bicep` creates what the environments share: the container registry, and the identity the `Deploy` workflow signs in as. `tests/ShopForge.DeploymentTests` compiles and lints all of it on every build, with the Bicep compiler as a package.
+Each environment is `infra/main.bicep` with its own parameter file in `infra/environments/`. The file holds only the environment's name and sizes. Host names, mail, the image and every secret come from the GitHub environment of the same name when a release runs. `infra/bootstrap.bicep` creates what the environments share: the container registry, the identity the `Deploy` workflow signs in as, and the role the app binds merchants' domains with. `tests/ShopForge.DeploymentTests` compiles and lints all of it on every build, with the Bicep compiler as a package.
 
 The GitHub Actions `Deploy` workflow runs a release in this order:
 
@@ -130,17 +141,17 @@ Every address the smoke tests use comes from the release's own deployment, so a 
      --parameters registryName=<registry name> repository=<owner>/<repository>
    ```
 
-   The identity it creates signs in from this repository's `staging` and `production` GitHub environments only, with no secret. It can manage resources, and it can grant only the three roles a release grants its app: AcrPull and the two Key Vault secrets roles.
+   The identity it creates signs in from this repository's `staging` and `production` GitHub environments only, with no secret. It can manage resources, and it can grant only the four roles a release grants its app: AcrPull, the two Key Vault secrets roles, and the bootstrap's own edge domains role. That one lets the app add merchants' domains to Front Door, put them on its own route and security policy, and nothing else: it cannot change the profile or the firewall's rules. Deploy the bootstrap again whenever it changes; it only adds.
 
 2. Create the GitHub environment (`staging` or `production`). Limit its deployment branches to `main`, and give production a required reviewer: a job in that environment is what the deployer trusts.
-   - **Secrets:** `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` and `AZURE_SUBSCRIPTION_ID` from the bootstrap's outputs; `DATABASE_PASSWORD`, `MAILGUN_API_KEY` and `MAILGUN_WEBHOOK_SIGNING_KEY`; and `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` if the deployment takes cards through Stripe.
-   - **Variables:** `LOCATION`, plus `REGISTRY_NAME`, `REGISTRY_SERVER` and `REGISTRY_RESOURCE_GROUP` from the bootstrap's outputs; `STORE_HOST_SUFFIX`; `EMAIL_PROVIDER` (`mailgun`), `EMAIL_SENDER_ADDRESS` and `MAILGUN_DOMAIN`; and `FIRST_OPERATOR_EMAIL`, the person who will run the platform.
+   - **Secrets:** `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` and `AZURE_SUBSCRIPTION_ID` from the bootstrap's outputs; `DATABASE_PASSWORD`, `MAILGUN_API_KEY` and `MAILGUN_WEBHOOK_SIGNING_KEY`; `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` if the deployment takes cards through Stripe; and `CLOUDFLARE_API_TOKEN` if the platform runs DNS zones.
+   - **Variables:** `LOCATION`, plus `REGISTRY_NAME`, `REGISTRY_SERVER` and `REGISTRY_RESOURCE_GROUP` from the bootstrap's outputs; `STORE_HOST_SUFFIX`; `EMAIL_PROVIDER` (`mailgun`), `EMAIL_SENDER_ADDRESS` and `MAILGUN_DOMAIN`; `FIRST_OPERATOR_EMAIL`, the person who will run the platform; and `CLOUDFLARE_ACCOUNT_ID` with the token, or neither.
 
 3. Run `Deploy` for that environment. The admin is served on Front Door's own host name (the deployment's `publicHostName` output), at `/admin/`, and the smoke tests check everything there.
 
 4. The release's migration job has invited `FIRST_OPERATOR_EMAIL`, and the invitation arrives by mail. Until the admin has a page for it, accept it with the token from the link and a password of your own: `POST https://<publicHostName>/api/platform/invitations/accept` with `{ "token": "…", "password": "…" }`. Until somebody accepts, every release sends a fresh invitation in place of the last, and so does starting the migration job again: `az containerapp job start --name <migrationJob> --resource-group <resourceGroup>`, both deployment outputs. Once the platform has an operator, the variable does nothing; operators invite each other.
 
-5. To give the admin its own domain, set `ADMIN_HOST` and run `Deploy`. Then add a CNAME from the admin host to the `publicHostName` output, and a TXT record at `_dnsauth.<admin host>` holding the `adminValidationToken` output. Front Door validates the domain and issues its certificate. The admin stays on Front Door's own host name too, so nothing waits for the records.
+5. To give the admin its own domain, set `ADMIN_HOST` and run `Deploy`. Then add a CNAME from the admin host to the `publicHostName` output, and a TXT record at `_dnsauth.<admin host>` holding the `adminValidationToken` output. Front Door validates the domain and issues its certificate. The admin stays on Front Door's own host name too, so nothing waits for the records. Store subdomains need the same once: a CNAME from `*.<STORE_HOST_SUFFIX>` to `publicHostName`, and a TXT record at `_dnsauth.<STORE_HOST_SUFFIX>` holding the `storesValidationToken` output. Where the platform's own zone is in its Cloudflare account, the app publishes all four records itself, and every token Front Door asks for again before a renewal.
 
 6. Once a store is published, set `SMOKE_STORE_HOST` to its host, and the smoke tests check it too.
 
@@ -151,7 +162,7 @@ A few things are worth knowing:
 - Secrets (database, storage, Mailgun, Stripe, Application Insights) live in Key Vault, read by the app's own managed identity; the app is given only the vault's URI.
 - The app serves both built frontends: the storefront's page for every storefront route, and the admin's under `/admin`, on the platform's own hosts only: the admin's domain and Front Door's own host name. Each page has its own content security policy. Hashed assets are cached for a year, pages not at all, and nothing under `/api` turns into a page. `robots.txt` and the sitemap answer at each shop's root.
 - Outside development the app answers only Front Door: a request without the configured profile's `X-Azure-FDID` is refused, health probes apart. The original host arrives as a forwarded header, trusted only on a request that carries the profile id.
-- The template owns only the platform's own route, security policy and domains. Merchants' domains belong to a route and a security policy of their own, which a redeploy never touches.
+- The template owns only the platform's own route, security policy and domains. Merchants' domains belong to a route and a security policy of their own, which a redeploy never touches. The app makes both with the first merchant's domain and deletes them with the last, and writes them one replica at a time, since neither carries an ETag.
 
 `tests/release/rehearse.sh` rehearses a release on this machine. It runs the previous build and the working tree's across a real migration, the rollback included, against a throwaway PostgreSQL and Azurite.
 
@@ -208,7 +219,7 @@ src/
   ShopForge.Infrastructure    persistence (single DbContext, migrations, tenancy filters), blob storage
   ShopForge.Shared            cross-cutting abstractions (store context, file storage, claims)
   Modules/
-    Stores                    tenants, stores, domains, store resolution, provisioning, logos
+    Stores                    tenants, stores, domains and their binding at the edge, DNS zones, store resolution, provisioning, logos
     Access                    tenant users, sign-in, admin roles, invitations, passwords
     Catalog                   products, store listings, categories, images, attributes, import
     Customers                 customer identities, store customers, sign-in, verification, password reset, address changes
@@ -228,7 +239,7 @@ frontend/
   storefront                  customer-facing store
   admin                       store administration
 infra/
-  bootstrap.bicep             what every environment shares: the registry and the identity releases deploy as
+  bootstrap.bicep             what every environment shares: the registry, the identity releases deploy as, the app's edge role
   main.bicep, modules/        one environment
   environments/               staging and production, a name and sizes each
 scripts/                      a release's steps and its smoke tests

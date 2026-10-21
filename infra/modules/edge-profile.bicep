@@ -3,6 +3,8 @@ param namePrefix string
 param workspaceId string
 @description('The platform\'s own host for the admin, e.g. admin.example.cz. Empty serves the admin on the endpoint\'s own host name (D-206).')
 param adminHost string = ''
+@description('The zone store subdomains are composed under, e.g. shops.example.cz, served by one wildcard domain (D-189, D-212).')
+param storeHostSuffix string
 
 resource profile 'Microsoft.Cdn/profiles@2024-02-01' = {
   name: '${namePrefix}-fd'
@@ -49,6 +51,22 @@ resource adminDomain 'Microsoft.Cdn/profiles/customDomains@2024-02-01' = if (!em
   }
 }
 
+// Every store's own subdomain, through one domain of the template's with a managed certificate of its own: one of the
+// profile's hundred domains rather than one per store, and nothing to do at the edge when a store is made (D-212).
+// Front Door does not renew a wildcard's certificate by itself, so the runtime publishes its token again before each
+// renewal, in a zone the platform runs.
+resource storesDomain 'Microsoft.Cdn/profiles/customDomains@2024-02-01' = {
+  parent: profile
+  name: 'stores'
+  properties: {
+    hostName: '*.${storeHostSuffix}'
+    tlsSettings: {
+      certificateType: 'ManagedCertificate'
+      minimumTlsVersion: 'TLS12'
+    }
+  }
+}
+
 output profileName string = profile.name
 output endpointName string = endpoint.name
 // The app trusts forwarded headers only from this profile, and answers nothing else (D-075, D-207).
@@ -56,5 +74,6 @@ output frontDoorId string = profile.properties.frontDoorId
 output endpointHostName string = endpoint.properties.hostName
 output endpointId string = endpoint.id
 output adminHost string = empty(adminHost) ? endpoint.properties.hostName : adminHost
-output platformDomainIds array = empty(adminHost) ? [] : [adminDomain.id]
+output platformDomainIds array = empty(adminHost) ? [storesDomain.id] : [storesDomain.id, adminDomain.id]
 output adminValidationToken string = empty(adminHost) ? '' : adminDomain!.properties.validationProperties.validationToken
+output storesValidationToken string = storesDomain.properties.validationProperties.validationToken

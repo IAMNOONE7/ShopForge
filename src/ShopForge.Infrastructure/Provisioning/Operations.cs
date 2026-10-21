@@ -7,13 +7,14 @@ using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Infrastructure.Provisioning;
 
-// Starts an operation and returns at once; the worker does the rest (D-210). The friendly answer to a store that is
-// already running one is here, and the unique indexes are what catch two starts arriving together.
+// Starts an operation and returns at once; the worker does the rest (D-210). The friendly answer to a subject, or a
+// store, that is already being worked on is here, and the unique indexes are what catch two starts arriving together.
 internal sealed class Operations(
     DbContext dbContext,
     IStoreContext storeContext,
     IEnumerable<IOperationKind> kinds,
     IServiceProvider services,
+    OperationAdmin admin,
     IAuditLog audit,
     TimeProvider clock) : IProvisioning
 {
@@ -35,7 +36,8 @@ internal sealed class Operations(
 
         var unfinished = await dbContext.Set<ProvisioningOperation>()
             .IgnoreQueryFilters()
-            .Where(operation => operation.FinishedAt == null && (operation.StoreId == storeId || (subject != null && operation.Subject == subject)))
+            .Where(operation => operation.FinishedAt == null
+                && (subject == null ? operation.StoreId == storeId && operation.Subject == null : operation.Subject == subject))
             .Select(operation => (Guid?)operation.Id)
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -59,6 +61,14 @@ internal sealed class Operations(
 
         return new OperationStart(operation.Id, Started: true);
     }
+
+    public Task CancelAsync(Guid operationId, CancellationToken cancellationToken) => admin.CancelAsync(operationId, cancellationToken);
+
+    public Task<RunningOperation?> UnfinishedAsync(string subject, CancellationToken cancellationToken) =>
+        dbContext.Set<ProvisioningOperation>()
+            .Where(operation => operation.FinishedAt == null && operation.Subject == subject)
+            .Select(operation => new RunningOperation(operation.Id, operation.Kind))
+            .FirstOrDefaultAsync(cancellationToken);
 
     public static string Describe(ProvisioningOperation operation) =>
         operation.Subject is null ? operation.Kind : $"{operation.Kind} {operation.Subject}";

@@ -34,4 +34,14 @@ if [ "$provider" != "mailgun" ]; then
   exit 1
 fi
 
+# The platform runs DNS zones with both of Cloudflare's inputs, or runs none with neither (D-212). One alone would stop
+# the release's migration job, an hour in.
+account=${CLOUDFLARE_ACCOUNT_ID:-}
+token=${CLOUDFLARE_API_TOKEN:-}
+
+if { [ -n "$account" ] && [ -z "$token" ]; } || { [ -z "$account" ] && [ -n "$token" ]; }; then
+  echo "CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN go together: both for the platform to run DNS zones, neither for it to run none."
+  exit 1
+fi
+
 echo "The release has everything it needs."

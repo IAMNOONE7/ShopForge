@@ -24,11 +24,12 @@ internal sealed class ProvisioningOperationEntityConfiguration : IEntityTypeConf
             .OnDelete(DeleteBehavior.Cascade);
         builder.Navigation(operation => operation.Steps).UsePropertyAccessMode(PropertyAccessMode.Field).HasField("_steps");
 
-        // One unfinished operation per store, and per subject across the platform: held by the database, so two
-        // requests arriving together cannot both start one (D-210).
+        // One unfinished operation per subject across the platform, and per store for work with no subject: held by the
+        // database, so two requests arriving together cannot both start one (D-210). Work on different subjects of one
+        // store runs side by side, or a domain waiting a week for its DNS would hold up every other (D-212).
         builder.HasIndex(operation => operation.StoreId)
             .IsUnique()
-            .HasFilter("finished_at IS NULL")
+            .HasFilter("finished_at IS NULL AND subject IS NULL")
             .HasDatabaseName("ux_operations_one_unfinished_per_store");
         builder.HasIndex(operation => operation.Subject)
             .IsUnique()

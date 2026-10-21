@@ -56,6 +56,7 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
         ("POST", "unapplied-payments/{unapplied}/close", """{"note":"Taken."}"""),
         ("POST", "domains/{domain}/verify", null),
         ("POST", "domains/{domain}/primary", null),
+        ("POST", "domains/{domain}/zone", """{"zone":null}"""),
         ("DELETE", "domains/{domain}", null),
         ("POST", "products/{storeProduct}/archive", null),
         ("POST", "products/{storeProduct}/restore", null),

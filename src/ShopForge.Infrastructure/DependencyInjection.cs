@@ -1,4 +1,5 @@
 using System.Reflection;
+using Azure.Core;
 using Azure.Identity;
 using Azure.Security.KeyVault.Secrets;
 using Azure.Storage.Blobs;
@@ -13,6 +14,7 @@ using ShopForge.Infrastructure.Connections;
 using ShopForge.Infrastructure.Diagnostics;
 using ShopForge.Infrastructure.Dns;
 using ShopForge.Infrastructure.Documents;
+using ShopForge.Infrastructure.Edge;
 using ShopForge.Infrastructure.Email;
 using ShopForge.Infrastructure.Files;
 using ShopForge.Infrastructure.Idempotency;
@@ -28,6 +30,7 @@ using ShopForge.Shared.Caching;
 using ShopForge.Shared.Connections;
 using ShopForge.Shared.Dns;
 using ShopForge.Shared.Documents;
+using ShopForge.Shared.Edge;
 using ShopForge.Shared.Email;
 using ShopForge.Shared.Files;
 using ShopForge.Shared.Http;
@@ -114,6 +117,8 @@ public static class DependencyInjection
         services.AddHostedService<ScheduledPasses>();
 
         AddProvisioning(services, configuration);
+        AddEdgeDomains(services, configuration, connectionString);
+        AddDnsZones(services, configuration);
 
         AddSecretStore(services, configuration);
         AddComgate(services, configuration);
@@ -196,6 +201,56 @@ public static class DependencyInjection
         services.AddScoped<OperationAdmin>();
         services.AddSingleton<OperationRunner>();
         services.AddHostedService<OperationWorker>();
+    }
+
+    // Merchants' domains at the edge, written as the app's own identity (D-212). A deployment without the profile's
+    // names binds nothing there, which is how development and most tests run.
+    private static void AddEdgeDomains(IServiceCollection services, IConfiguration configuration, string connectionString)
+    {
+        var edge = configuration.GetSection(EdgeDomainOptions.Section).Get<EdgeDomainOptions>() ?? new EdgeDomainOptions();
+
+        if (edge.IsPartlyConfigured)
+        {
+            throw new InvalidOperationException(
+                "Edge:Domains names some of the profile and not all: SubscriptionId, ResourceGroup, Profile, Endpoint, EndpointHost and WafPolicyId go together.");
+        }
+
+        if (!edge.IsConfigured)
+        {
+            services.AddSingleton<IEdgeDomains, NoEdgeDomains>();
+
+            return;
+        }
+
+        services.AddSingleton(edge);
+        services.AddSingleton<TokenCredential>(new DefaultAzureCredential());
+        services.AddSingleton(new EdgeRouteLock(connectionString));
+        services.AddTransient<ArmTokenHandler>();
+        services.AddHttpClient<ArmApi>(client => client.BaseAddress = new Uri(edge.ManagementUrl.TrimEnd('/') + "/"))
+            .AddHttpMessageHandler<ArmTokenHandler>();
+        services.AddScoped<IEdgeDomains, FrontDoorDomains>();
+    }
+
+    // The zones the platform runs, at Cloudflare (D-212). Without a token and an account, every record is the
+    // merchant's to publish.
+    private static void AddDnsZones(IServiceCollection services, IConfiguration configuration)
+    {
+        var cloudflare = configuration.GetSection(CloudflareOptions.Section).Get<CloudflareOptions>() ?? new CloudflareOptions();
+
+        if (cloudflare.IsPartlyConfigured)
+        {
+            throw new InvalidOperationException("Dns:Cloudflare needs both its ApiToken and its AccountId, or neither.");
+        }
+
+        if (!cloudflare.IsConfigured)
+        {
+            services.AddSingleton<IDnsZones, NoDnsZones>();
+
+            return;
+        }
+
+        services.AddSingleton(cloudflare);
+        services.AddHttpClient<IDnsZones, CloudflareZones>(client => CloudflareZones.Configure(client, cloudflare));
     }
 
     private static void AddSecretStore(IServiceCollection services, IConfiguration configuration)

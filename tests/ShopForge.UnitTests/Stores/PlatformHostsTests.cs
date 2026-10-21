@@ -78,6 +78,21 @@ public sealed class PlatformHostsTests
         Assert.Throws<ArgumentException>(() => unconfigured.Compose("wooden-home"));
     }
 
+    // A zone the platform would run for a merchant must not touch its own: the suffix itself, a zone under it, or one
+    // that holds it, which would put the platform's names in a merchant's hands (D-212).
+    [Theory]
+    [InlineData("shops.example.cz", true)]
+    [InlineData("deep.shops.example.cz", true)]
+    [InlineData("example.cz", true)]
+    [InlineData("wooden-home.cz", false)]
+    [InlineData("myshops.example.cz", false)]
+    [InlineData("example.com", false)]
+    public void A_zone_that_touches_the_platform_s_own_overlaps_it(string zone, bool overlaps)
+    {
+        Assert.Equal(overlaps, Hosts.Overlaps(zone));
+        Assert.False(new PlatformHosts().Overlaps(zone));
+    }
+
     // On this machine the suffix is a single label, which the composition has to handle as readily as a zone.
     [Fact]
     public void A_one_label_suffix_works_the_same_way()

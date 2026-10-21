@@ -5,11 +5,13 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Shared.Maintenance;
 using ShopForge.Shared.Platform;
+using ShopForge.Shared.Provisioning;
 using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tax;
 using ShopForge.Stores.Admin;
 using ShopForge.Stores.Content;
 using ShopForge.Stores.Domain;
+using ShopForge.Stores.Edge;
 using ShopForge.Stores.Logos;
 using ShopForge.Stores.Platform;
 using ShopForge.Stores.Provisioning;
@@ -45,8 +47,46 @@ public static class StoresModule
         services.AddScoped<ITenantUsage, StoreUsage>();
         services.AddScoped<TenantPlans>();
         services.AddScoped<ITenantLimits>(provider => provider.GetRequiredService<TenantPlans>());
+        AddEdge(services);
 
         return services;
+    }
+
+    // Proved domains at the edge, and the zones the platform runs for them, as operations (D-212).
+    private static void AddEdge(IServiceCollection services)
+    {
+        services.AddScoped<DomainBinder>();
+
+        services.AddSingleton<IOperationKind, BindDomain>();
+        services.AddScoped<IOperationStep, RegisterBinding>();
+        services.AddScoped<IOperationStep, BindEdgeDomain>();
+        services.AddScoped<IOperationStep, BindValidationRecord>();
+        services.AddScoped<IOperationStep, BindValidation>();
+        services.AddScoped<IOperationStep, BindRouting>();
+        services.AddScoped<IOperationStep, BindCertificate>();
+        services.AddScoped<IOperationStep, BindTraffic>();
+        services.AddScoped<IOperationStep, ActivateBinding>();
+
+        services.AddSingleton<IOperationKind, UnbindDomain>();
+        services.AddScoped<IOperationStep, UnbindTraffic>();
+        services.AddScoped<IOperationStep, UnbindRouting>();
+        services.AddScoped<IOperationStep, UnbindEdgeDomain>();
+        services.AddScoped<IOperationStep, UnbindValidationRecord>();
+        services.AddScoped<IOperationStep, ForgetBinding>();
+
+        services.AddSingleton<IOperationKind, RevalidateDomain>();
+        services.AddScoped<IOperationStep, RevalidateValidation>();
+
+        services.AddSingleton<IOperationKind, RunZone>();
+        services.AddScoped<IOperationStep, RegisterZone>();
+        services.AddScoped<IOperationStep, MakeZone>();
+        services.AddScoped<IOperationStep, WaitForDelegation>();
+        services.AddScoped<IOperationStep, ProveClaims>();
+
+        services.AddSingleton<DomainBindingsPass>();
+        services.AddSingleton<IScheduledPass>(provider => provider.GetRequiredService<DomainBindingsPass>());
+        services.AddSingleton<EdgeValidationsPass>();
+        services.AddSingleton<IScheduledPass>(provider => provider.GetRequiredService<EdgeValidationsPass>());
     }
 
     public static IApplicationBuilder UseStoreResolution(this IApplicationBuilder app) =>

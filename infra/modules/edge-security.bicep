@@ -68,3 +68,5 @@ resource platform 'Microsoft.Cdn/profiles/securityPolicies@2024-02-01' = {
 }
 
 output wafPolicyName string = policy.name
+// The runtime's security policy applies the same firewall policy to merchants' domains (D-207, D-212).
+output wafPolicyId string = policy.id

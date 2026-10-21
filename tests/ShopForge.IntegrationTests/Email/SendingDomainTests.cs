@@ -170,21 +170,28 @@ public sealed class SendingDomainTests(ShopForgeApiFactory factory)
         Assert.Single(host.Mailgun.Domains);
     }
 
-    // A store runs one operation at a time; connecting while another runs is refused, naming the one that runs.
+    // The store's other work goes on beside a connection; work on the same domain is waited for, and the refusal names
+    // the operation that has it (D-212).
     [Fact]
-    public async Task Connecting_while_another_operation_runs_is_refused_with_that_operation()
+    public async Task Connecting_goes_ahead_beside_other_work_and_is_refused_while_the_domain_is_worked_on()
     {
         await using var host = await MailHost.StartAsync(factory);
         var wood = await host.StoreWithProvedDomainAsync(factory);
         await using var scope = TestStores.CreateScope(host.Host.Services, wood.Store);
-        var running = await scope.ServiceProvider.GetRequiredService<IProvisioning>().StartAsync(TestOperation.Kind, null, null, CancellationToken);
+        var provisioning = scope.ServiceProvider.GetRequiredService<IProvisioning>();
+        await provisioning.StartAsync(TestOperation.Kind, null, null, CancellationToken);
+        var holding = await provisioning.StartAsync(TestOperation.Kind, $"mail.{wood.Domain}", null, CancellationToken);
 
         using var refused = await MailHost.ConnectAsync(wood, $"mail.{wood.Domain}", $"obchod@{wood.Domain}");
         var problem = JsonDocument.Parse(await refused.Content.ReadAsStringAsync(CancellationToken)).RootElement;
+        var untouched = (await MailHost.ViewAsync(wood)).GetProperty("domain").ValueKind;
+        using var beside = await MailHost.ConnectAsync(wood, $"post.{wood.Domain}", $"obchod@{wood.Domain}");
 
         Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
-        Assert.Equal(running.OperationId, problem.GetProperty("operationId").GetGuid());
-        Assert.Equal(JsonValueKind.Null, (await MailHost.ViewAsync(wood)).GetProperty("domain").ValueKind);
+        Assert.Equal(holding.OperationId, problem.GetProperty("operationId").GetGuid());
+        Assert.Equal(JsonValueKind.Null, untouched);
+        Assert.Equal(HttpStatusCode.Accepted, beside.StatusCode);
+        Assert.Equal($"post.{wood.Domain}", (await MailHost.ViewAsync(wood)).GetProperty("domain").GetProperty("domain").GetString());
     }
 
     [Fact]

@@ -39,6 +39,14 @@ internal sealed class PlatformHosts
             && normalized.EndsWith($".{suffix}", StringComparison.Ordinal);
     }
 
+    // Whether a zone touches the platform's own: the suffix itself, a zone under it, or one that holds it. None of
+    // those is a merchant's to have the platform run (D-212).
+    public bool Overlaps(string zoneName) =>
+        Normalized is { } suffix
+        && (zoneName == suffix
+            || zoneName.EndsWith($".{suffix}", StringComparison.Ordinal)
+            || suffix.EndsWith($".{zoneName}", StringComparison.Ordinal));
+
     // The label out of whatever a caller gave: a bare `wooden-home`, or `wooden-home.shops.example.cz` with the
     // suffix the platform already knows. Anything else is null, which the caller turns into a refusal naming the
     // challenge route.

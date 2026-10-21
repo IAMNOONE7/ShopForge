@@ -17,6 +17,8 @@ param stripeWebhookSecret string
 param mailgunApiKey string
 @secure()
 param mailgunWebhookSigningKey string
+@secure()
+param cloudflareApiToken string = ''
 @description('Where each vault\'s audit log goes: who read or changed which secret (D-208).')
 param workspaceId string
 
@@ -88,6 +90,15 @@ resource stripeKeySecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = if (!e
   name: 'Payments--Stripe--SecretKey'
   properties: {
     value: stripeSecretKey
+  }
+}
+
+// The platform's Cloudflare token, only where the platform runs DNS zones (D-212).
+resource cloudflareTokenSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = if (!empty(cloudflareApiToken)) {
+  parent: vault
+  name: 'Dns--Cloudflare--ApiToken'
+  properties: {
+    value: cloudflareApiToken
   }
 }
 

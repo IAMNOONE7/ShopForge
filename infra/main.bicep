@@ -53,6 +53,11 @@ param mailgunApiKey string
 @secure()
 @minLength(1)
 param mailgunWebhookSigningKey string
+@description('The Cloudflare account the platform runs DNS zones in. Empty runs none, and every record is published by hand (D-212).')
+param cloudflareAccountId string = ''
+@description('A Cloudflare API token that may edit zones and their DNS in that account alone.')
+@secure()
+param cloudflareApiToken string = ''
 
 resource group 'Microsoft.Resources/resourceGroups@2024-03-01' = {
   name: '${namePrefix}-rg'
@@ -92,6 +97,7 @@ module edgeProfile 'modules/edge-profile.bicep' = {
   params: {
     namePrefix: namePrefix
     adminHost: adminHost
+    storeHostSuffix: storeHostSuffix
     workspaceId: observability.outputs.workspaceId
   }
 }
@@ -126,6 +132,17 @@ module registryAccess 'modules/registry-access.bicep' = {
   }
 }
 
+// What the app may change at the edge: merchants' domains and the route and policy that carry them, through the
+// bootstrap's own role (D-212).
+module edgeAccess 'modules/edge-access.bicep' = {
+  scope: group
+  name: 'edge-access'
+  params: {
+    principalId: identity.outputs.principalId
+    roleId: guid(subscription().id, 'shopforge-edge-domains')
+  }
+}
+
 module vault 'modules/vault.bicep' = {
   scope: group
   name: 'vault'
@@ -143,6 +160,7 @@ module vault 'modules/vault.bicep' = {
     stripeWebhookSecret: stripeWebhookSecret
     mailgunApiKey: mailgunApiKey
     mailgunWebhookSigningKey: mailgunWebhookSigningKey
+    cloudflareApiToken: cloudflareApiToken
     workspaceId: observability.outputs.workspaceId
   }
 }
@@ -172,6 +190,15 @@ var settings = [
   { name: 'Frontends__AdminHost', value: edgeProfile.outputs.adminHost }
   { name: 'Frontends__EdgeHost', value: edgeProfile.outputs.endpointHostName }
   { name: 'Platform__FirstOperator', value: firstOperatorEmail }
+  // Where merchants' domains are bound: the profile, its endpoint and the firewall policy the runtime's security policy
+  // applies (D-212). The origin group and rule set are edge-routes' own names, which the app's defaults are.
+  { name: 'Edge__Domains__SubscriptionId', value: subscription().subscriptionId }
+  { name: 'Edge__Domains__ResourceGroup', value: group.name }
+  { name: 'Edge__Domains__Profile', value: edgeProfile.outputs.profileName }
+  { name: 'Edge__Domains__Endpoint', value: edgeProfile.outputs.endpointName }
+  { name: 'Edge__Domains__EndpointHost', value: edgeProfile.outputs.endpointHostName }
+  { name: 'Edge__Domains__WafPolicyId', value: edgeSecurity.outputs.wafPolicyId }
+  { name: 'Dns__Cloudflare__AccountId', value: cloudflareAccountId }
 ]
 
 module migrations 'modules/migrations.bicep' = {
@@ -221,5 +248,8 @@ output publicHostName string = edgeProfile.outputs.endpointHostName
 output adminHost string = edgeProfile.outputs.adminHost
 // The value of the TXT record at _dnsauth.<adminHost>, for whoever publishes it; empty when there is no admin domain.
 output adminValidationToken string = edgeProfile.outputs.adminValidationToken
+// The same for the stores' wildcard, at _dnsauth.<storeHostSuffix>. In a zone the platform runs, the app publishes both
+// itself, and again before each renewal (D-212).
+output storesValidationToken string = edgeProfile.outputs.storesValidationToken
 output vaultUri string = vault.outputs.vaultUri
 output migrationJob string = migrations.outputs.name

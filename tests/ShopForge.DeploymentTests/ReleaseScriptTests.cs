@@ -25,6 +25,8 @@ public sealed class ReleaseScriptTests : IDisposable
         ["MAILGUN_DOMAIN"] = "mail.example.cz",
         ["MAILGUN_API_KEY"] = "mailgun-key-made-up",
         ["MAILGUN_WEBHOOK_SIGNING_KEY"] = "signing-key-made-up",
+        ["CLOUDFLARE_ACCOUNT_ID"] = "0123456789abcdef0123456789abcdef",
+        ["CLOUDFLARE_API_TOKEN"] = "cloudflare-token-made-up",
     };
 
     // What the stand-in says production's deployments made. Production's names start shopforge-prod, not with the
@@ -72,6 +74,8 @@ public sealed class ReleaseScriptTests : IDisposable
         Assert.Equal(1, Occurrences(workflow, "with-app"));
         Assert.Contains("ENVIRONMENT: ${{ inputs.environment }}", workflow, StringComparison.Ordinal);
         Assert.Contains("FIRST_OPERATOR_EMAIL: ${{ vars.FIRST_OPERATOR_EMAIL }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}", workflow, StringComparison.Ordinal);
+        Assert.Equal(3, Occurrences(workflow, "CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}"));
         Assert.DoesNotContain("az deployment", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("containerapp update", workflow, StringComparison.Ordinal);
 
@@ -110,6 +114,23 @@ public sealed class ReleaseScriptTests : IDisposable
         Assert.DoesNotContain(Inputs["MAILGUN_API_KEY"]!, checkedInputs.Output, StringComparison.Ordinal);
     }
 
+    // The platform runs DNS zones with both of Cloudflare's inputs or with neither; one alone stops the release before
+    // anything is built, naming both and printing neither (D-212).
+    [Theory]
+    [InlineData("CLOUDFLARE_API_TOKEN", "")]
+    [InlineData("CLOUDFLARE_ACCOUNT_ID", "")]
+    [InlineData("CLOUDFLARE_ACCOUNT_ID", null)]
+    public async Task Cloudflare_s_inputs_go_together(string name, string? value)
+    {
+        var checkedInputs = await RunAsync("scripts/release-inputs.sh", [], (name, value));
+        var neither = await RunAsync("scripts/release-inputs.sh", [], ("CLOUDFLARE_ACCOUNT_ID", ""), ("CLOUDFLARE_API_TOKEN", ""));
+
+        Assert.Equal(1, checkedInputs.ExitCode);
+        Assert.Contains("CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN go together", checkedInputs.Output, StringComparison.Ordinal);
+        Assert.DoesNotContain(Inputs["CLOUDFLARE_API_TOKEN"]!, checkedInputs.Output, StringComparison.Ordinal);
+        Assert.True(neither.ExitCode == 0, neither.Output);
+    }
+
     [Fact]
     public async Task An_environment_without_a_parameter_file_is_no_environment()
     {
@@ -144,6 +165,8 @@ public sealed class ReleaseScriptTests : IDisposable
         Assert.Equal(Inputs["EMAIL_SENDER_ADDRESS"], (string?)parameters["emailSenderAddress"]!["value"]);
         Assert.Equal(Inputs["DATABASE_PASSWORD"], (string?)parameters["databasePassword"]!["value"]);
         Assert.Equal(Inputs["MAILGUN_WEBHOOK_SIGNING_KEY"], (string?)parameters["mailgunWebhookSigningKey"]!["value"]);
+        Assert.Equal(Inputs["CLOUDFLARE_ACCOUNT_ID"], (string?)parameters["cloudflareAccountId"]!["value"]);
+        Assert.Equal(Inputs["CLOUDFLARE_API_TOKEN"], (string?)parameters["cloudflareApiToken"]!["value"]);
     }
 
     [Fact]
@@ -154,7 +177,7 @@ public sealed class ReleaseScriptTests : IDisposable
 
         Assert.True(provisioned.ExitCode == 0, provisioned.Output);
         Assert.All(
-            new[] { "DATABASE_PASSWORD", "MAILGUN_API_KEY", "MAILGUN_WEBHOOK_SIGNING_KEY" },
+            new[] { "DATABASE_PASSWORD", "MAILGUN_API_KEY", "MAILGUN_WEBHOOK_SIGNING_KEY", "CLOUDFLARE_API_TOKEN" },
             secret => Assert.DoesNotContain(Inputs[secret]!, asked, StringComparison.Ordinal));
     }
 
