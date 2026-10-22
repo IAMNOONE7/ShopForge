@@ -45,6 +45,8 @@ const StoreReturnPage = lazy(() => import("./pages/ReturnPages").then((pages) =>
 const NewListingPage = lazy(() => import("./pages/ListingPages").then((pages) => ({ default: pages.NewListingPage })));
 const ListingDetailPage = lazy(() => import("./pages/ListingPages").then((pages) => ({ default: pages.ListingDetailPage })));
 const StoreOperationsPage = lazy(() => import("./pages/StoreOperationsPage").then((pages) => ({ default: pages.StoreOperationsPage })));
+const StoreSetupPage = lazy(() => import("./pages/StoreSetupPage").then(pages => ({ default: pages.StoreSetupPage })));
+const StoreSetupDetailPage = lazy(() => import("./pages/StoreSetupPage").then(pages => ({ default: pages.StoreSetupDetailPage })));
 const StoreConnectionsPage = lazy(() => import("./pages/StoreConnectionsPage").then(pages => ({ default: pages.StoreConnectionsPage })));
 const StoreTaxClassesPage = lazy(() => import("./pages/StoreTaxClassesPage").then((pages) => ({ default: pages.StoreTaxClassesPage })));
 
@@ -219,6 +221,8 @@ function MerchantApp() {
                   <Route path="returns/:returnId" element={<DeferredPage><StoreReturnPage /></DeferredPage>} />
                   <Route path="reviews" element={<StoreReviewsPage />} />
                   <Route path="operations" element={<DeferredPage><StoreOperationsPage /></DeferredPage>} />
+                  <Route path="setup" element={<DeferredPage><StoreSetupPage /></DeferredPage>} />
+                  <Route path="setup/:operationId" element={<DeferredPage><StoreSetupDetailPage /></DeferredPage>} />
                   <Route path="provider-connections" element={<DeferredPage><StoreConnectionsPage /></DeferredPage>} />
                   <Route path="tax-classes" element={<DeferredPage><StoreTaxClassesPage /></DeferredPage>} />
                   <Route path="*" element={<NotFoundPage />} />

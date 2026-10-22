@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router";
 import { useSelectedStore } from "../adminContext";
 import { api, type FailedMessage } from "../api";
 import type { SuppressedAddress } from "../api/operations";
@@ -33,7 +34,7 @@ function AddressFacts({ row }: { row: SuppressedAddress }) {
 }
 
 export function StoreOperationsPage() {
-  const { t } = useTranslation(["operations", "auth"]);
+  const { t } = useTranslation(["operations", "auth", "navigation"]);
   const { user } = useSession();
   const { store, storeRefreshing, storeRefreshError } = useSelectedStore();
   const canManage = canManageStore(user.role);
@@ -42,6 +43,7 @@ export function StoreOperationsPage() {
   return <div className="message-operations-page">
     <h1>{t("operations:title")}</h1>
     <p className="hint">{t("operations:storeScope", { store: store.name })}</p>
+    <Link to={`/stores/${store.id}/setup`}>{t("navigation:setupProgress")}</Link>
     {!canManage && <InlineMessage>{t("auth:readOnly")}</InlineMessage>}
     {!storeFresh && <InlineMessage>{t("operations:storeStale")}</InlineMessage>}
     <MessageOperationsPanel key={`${scope}:messages`} kind="messages" scope={scope} canManage={canManage} storeFresh={storeFresh}

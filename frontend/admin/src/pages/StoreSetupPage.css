@@ -1,0 +1,32 @@
+.setup-page, .setup-list, .setup-steps, .setup-overview, .setup-list > li, .setup-steps > li, .setup-refresh {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.setup-page { width: min(100%, 72rem); container-type: inline-size; }
+.setup-page :is(h1, h2, h3, h4, p, dl) { margin: 0; }
+.setup-page :is(button, a) { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.setup-card-heading { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: var(--space-3); min-width: 0; }
+.setup-card-heading > :is(h2, h3) { flex: 1 1 18rem; min-width: 0; }
+.setup-status { border: 1px solid var(--color-border-strong); border-radius: var(--radius); padding: var(--space-1) var(--space-2); font-weight: 650; }
+.setup-status-success { background: var(--color-success-surface); color: var(--color-success); }
+.setup-status-error { background: var(--color-danger-surface); color: var(--color-danger); }
+.setup-list, .setup-steps { padding: 0; list-style: none; }
+.setup-list > li, .setup-steps > li, .setup-overview { padding: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-panel); background: var(--color-surface); }
+.setup-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); gap: var(--space-3); }
+.setup-facts > div { min-width: 0; }
+.setup-facts dt { color: var(--color-text-muted); font-size: var(--text-sm); }
+.setup-facts dd { margin: var(--space-1) 0 0; }
+.setup-note, .setup-error { display: grid; gap: var(--space-2); padding: var(--space-3); border-left: 3px solid var(--color-info); background: var(--color-info-surface); }
+.setup-error { border-color: var(--color-danger); background: var(--color-danger-surface); }
+.setup-note p, .setup-error p { white-space: pre-wrap; }
+.setup-stale { color: var(--color-danger); }
+.setup-technical summary { cursor: pointer; padding-block: var(--space-2); }
+.setup-technical[open] .setup-facts { margin-top: var(--space-3); }
+@container (max-width: 36rem) {
+  .setup-page h1 { font-size: 1.5rem; }
+  .setup-list > li, .setup-steps > li, .setup-overview { padding: var(--space-3); }
+  .setup-page button { padding-inline: var(--space-2); }
+}
