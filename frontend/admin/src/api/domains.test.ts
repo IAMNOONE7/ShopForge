@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { addStoreDomain, getStoreDomains, makeStoreDomainPrimary, removeStoreDomain, verifyStoreDomain } from "./domains";
+import { addStoreDomain, domainNeedsRefresh, getStoreDomains, makeStoreDomainPrimary, removeStoreDomain, verifyStoreDomain, type StoreDomain } from "./domains";
 import { normalizedDomain, domainProblem } from "../components/domainValidation";
 import { HttpError } from "./http";
 
-const pending = { id: "domain-a", hostName: "shop.example.cz", isPrimary: false, isVerified: false,
+const pending = { edge: null, zone: null, id: "domain-a", hostName: "shop.example.cz", isPrimary: false, isVerified: false,
   verifiedAt: null, challengeName: "_shopforge-challenge.shop.example.cz", challengeValue: "proof", claimExpiresAt: "2030-01-01T00:00:00Z" };
 const verified = { ...pending, isVerified: true, verifiedAt: "2026-10-15T00:00:00Z", challengeName: null, challengeValue: null, claimExpiresAt: null };
+const id = "11111111-1111-1111-1111-111111111111";
+const edge = { state: "binding", operationId: id, recordsByPlatform: false, validation: "pendingRevalidation", records: [{ type: "TXT", name: "_dnsauth.shop.example.cz", value: '<script>literal</script>\nexact value', purpose: "validation" }, { type: "CNAME", name: "shop.example.cz", value: "edge.example.test", purpose: "traffic" }] };
+const zone = { name: "example.cz", state: "waiting", nameServers: ["one.example.test", "two.example.test"], operationId: id };
 function response(value: unknown) { return new Response(JSON.stringify(value), { headers: { "Content-Type": "application/json" } }); }
 afterEach(() => { vi.unstubAllGlobals(); });
 
@@ -67,5 +70,41 @@ describe("domain contracts", () => {
     expect(domainProblem(new HttpError("http", 409, { title: "The record is not there yet" }), "add")).toBeNull();
     expect(domainProblem(new HttpError("http", 409, { title: "Other conflict" }), "add")).toBeNull();
     expect(domainProblem(new HttpError("http", 400, { errors: { hostName: ["A name under localhost belongs to the platform. Your store already has one."] } }), "add")).toBe("platformAddress");
+  });
+
+  it("checks nullable edge/zone contracts on list and every returned domain without leaking undeclared fields", async () => {
+    const item = { ...verified, edge, zone }, raw = { ...item, input: "private", edge: { ...edge, secret: "private", records: edge.records.map(record => ({ ...record, extra: "private" })) }, zone: { ...zone, extra: "private" } };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(response([raw])).mockResolvedValueOnce(response(raw)).mockResolvedValueOnce(response(raw)).mockResolvedValueOnce(response({ ...raw, isPrimary: true })));
+    expect(await getStoreDomains("store")).toEqual([item]); expect(await addStoreDomain("store", item.hostName)).toEqual(item);
+    expect(await verifyStoreDomain("store", item.id)).toEqual(item); expect(await makeStoreDomainPrimary("store", item.id)).toEqual({ ...item, isPrimary: true });
+  });
+  it("preserves unknown states/purposes/provider validation and empty DNS strings without coercion", async () => {
+    const item = { ...verified, edge: { ...edge, state: "future", validation: "", operationId: null, records: [{ type: "", name: "", value: "", purpose: "future" }] }, zone: { ...zone, state: "future", nameServers: [], operationId: null } };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response([item]))); expect(await getStoreDomains("store")).toEqual([item]);
+  });
+  it.each([
+    { edge: undefined }, { zone: undefined }, { edge: {} }, { zone: [] },
+    { edge: { ...edge, state: null } }, { edge: { ...edge, recordsByPlatform: "false" } }, { edge: { ...edge, validation: false } }, { edge: { ...edge, operationId: "wrong" } },
+    { edge: { ...edge, records: null } }, { edge: { ...edge, records: [{ ...edge.records[0], name: null }] } },
+    { edge: { ...edge, records: [{ ...edge.records[0], value: 0 }] } }, { edge: { ...edge, records: [{ ...edge.records[0], purpose: "" }] } },
+    { zone: { ...zone, name: "" } }, { zone: { ...zone, state: false } }, { zone: { ...zone, nameServers: null } }, { zone: { ...zone, nameServers: [false] } }, { zone: { ...zone, operationId: "wrong" } },
+  ])("refuses malformed edge or zone facts (%j) before they can authorize changes", async change => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response([{ ...verified, ...change }]))); await expect(getStoreDomains("store")).rejects.toMatchObject({ kind: "invalid-response" });
+  });
+  it("passes cancellation to every existing mutation without adding endpoints, bodies or automatic retries", async () => {
+    const signal = new AbortController().signal, fetch = vi.fn().mockResolvedValueOnce(response(pending)).mockResolvedValueOnce(response(verified)).mockResolvedValueOnce(response({ ...verified, isPrimary: true })).mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetch); await addStoreDomain("store", pending.hostName, signal); await verifyStoreDomain("store", pending.id, signal); await makeStoreDomainPrimary("store", verified.id, signal); await removeStoreDomain("store", pending.id, signal);
+    expect(fetch).toHaveBeenCalledTimes(4); expect(fetch.mock.calls.every(call => call[1].signal === signal)).toBe(true); expect(fetch.mock.calls.slice(1).every(call => call[1].body === undefined && call[1].headers === undefined)).toBe(true);
+  });
+  it("refuses an aborted read or mutation even if transport answers", async () => {
+    const controller = new AbortController(); controller.abort(); const fetch = vi.fn().mockResolvedValueOnce(response([pending])).mockResolvedValueOnce(response(verified)); vi.stubGlobal("fetch", fetch);
+    await expect(getStoreDomains("store", controller.signal)).rejects.toMatchObject({ name: "AbortError" });
+    await expect(verifyStoreDomain("store", pending.id, controller.signal)).rejects.toMatchObject({ name: "AbortError" }); expect(fetch).toHaveBeenCalledTimes(2);
+  });
+  it("polls known unfinished edge/delegation facts without treating validation as live readiness", () => {
+    for (const state of ["waiting", "binding", "unbinding"]) expect(domainNeedsRefresh({ ...verified, edge: { ...edge, state } })).toBe(true);
+    expect(domainNeedsRefresh({ ...verified, edge: { ...edge, state: "bound", validation: "pendingRevalidation" } })).toBe(true);
+    expect(domainNeedsRefresh({ ...verified, zone })).toBe(true);
+    for (const item of [verified, { ...verified, edge: { ...edge, state: "future" } }, { ...verified, edge: { ...edge, state: "bound", validation: "approved" } }, { ...verified, zone: { ...zone, state: "active" } }]) expect(domainNeedsRefresh(item as StoreDomain)).toBe(false);
   });
 });

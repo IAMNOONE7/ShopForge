@@ -3,9 +3,11 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import { useSelectedStore, type StoreOutletContext } from "../adminContext";
 import { api } from "../api";
-import type { StoreDomain } from "../api/domains";
+import { domainNeedsRefresh, type StoreDomain } from "../api/domains";
 import { isHttpError } from "../api/http";
+import { statusOf } from "../api/errors";
 import { domainProblem, normalizedDomain } from "../components/domainValidation";
+import { DomainEdgeProgress } from "../components/DomainEdgeProgress";
 import { Button } from "../components/ui/Button";
 import { Field } from "../components/ui/Field";
 import { InlineMessage } from "../components/ui/InlineMessage";
@@ -13,84 +15,93 @@ import { LoadingState } from "../components/ui/LoadingState";
 import { RequestError } from "../components/ui/RequestError";
 import { canManageStore, useSession } from "../session";
 import { useAction } from "../useAction";
-import { useRequest } from "../useRequest";
+import { useSetupProgress } from "../useSetupProgress";
 import { formatDateTime } from "../utils/format";
 import { ForbiddenPage } from "./RouteStatePage";
+import "./StoreDomainsPage.css";
 
 type Operation = "add" | "verify" | "primary" | "remove";
-type Confirmation = { kind: "primary" | "remove"; domain: StoreDomain };
+type Confirmation = { kind: "primary" | "remove"; domain: StoreDomain; storeName: string };
 
 export function StoreDomainsPage() {
   const { user } = useSession();
   const context = useSelectedStore();
   if (!canManageStore(user.role)) return <ForbiddenPage />;
-  return <DomainsWorkspace key={context.store.id} {...context} />;
+  return <DomainsWorkspace key={`${user.tenantId}:${user.id}:${user.role}:${context.store.id}`} {...context} />;
 }
 
 function DomainsWorkspace({ store, reloadStores, storeRefreshing, storeRefreshError }: StoreOutletContext) {
   const { t, i18n } = useTranslation("domains");
-  const [domains, reloadDomains] = useRequest(`domains:${store.id}`, async (signal) => ({ items: await api.storeDomains(store.id, signal) }));
+  const { t: edge } = useTranslation("domainEdge"), { t: setup } = useTranslation("setup");
+  const read = useSetupProgress(`domains:${store.id}`, async signal => ({ items: await api.storeDomains(store.id, signal) }), data => data.items.some(domainNeedsRefresh));
+  const domains = read.state, reloadDomains = read.refresh;
   const [host, setHost] = useState("");
   const [invalid, setInvalid] = useState(false);
   const [showError, setShowError] = useState(false);
   const [operation, setOperation] = useState<Operation>("add");
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [success, setSuccess] = useState<Operation | null>(null);
-  const [staleSnapshot, setStaleSnapshot] = useState<{ items: StoreDomain[] } | null>(null);
+  const [uncertain, setUncertain] = useState(false);
   const [now, setNow] = useState(Date.now);
   const [error, run, pending] = useAction(() => undefined, { manageControls: false });
   const heading = useRef<HTMLHeadingElement>(null);
   const confirmButton = useRef<HTMLButtonElement>(null);
   const opener = useRef<HTMLButtonElement | null>(null);
   const mounted = useRef(false);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const request = useRef<AbortController | null>(null);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; request.current?.abort(); }; }, []);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
   useEffect(() => { if (confirmation) confirmButton.current?.focus(); }, [confirmation]);
-  const needsRead = domains.status === "ready" && domains.data === staleSnapshot;
-  const data = domains.status === "ready" ? domains.data.items : [];
   const readError = domains.status === "ready" ? domains.refreshError : domains.status === "loading" ? null : domains.error;
+  const visible = domains.status === "ready" && ![401, 403, 404].includes(statusOf(readError) ?? 0);
+  const data = visible && domains.status === "ready" ? domains.data.items : [];
   const refreshing = domains.status === "loading" || (domains.status === "ready" && domains.refreshing);
-  const stale = refreshing || readError !== null || needsRead || storeRefreshing || storeRefreshError !== null;
-  const disabled = pending || stale;
-  const confirmationChanged = confirmation !== null && !data.some((domain) => JSON.stringify(domain) === JSON.stringify(confirmation.domain));
+  const fresh = domains.status === "ready" && !refreshing && readError === null && !read.suspended;
+  const stale = !fresh || storeRefreshing || storeRefreshError !== null;
+  const disabled = pending || stale || uncertain;
+  const confirmationChanged = confirmation !== null && (confirmation.storeName !== store.name || !data.some(domain => JSON.stringify(domain) === JSON.stringify(confirmation.domain)));
   const knownProblem = showError ? domainProblem(error, operation) : null;
   const fieldError = invalid ? t("hostInvalid") : showError && operation === "add" && isHttpError(error) && error.problem?.errors?.hostName
     ? t(knownProblem === "platformAddress" ? "platformAddress" : "hostInvalid") : undefined;
 
   function closeConfirmation() {
+    if (pending) return;
     setConfirmation(null);
     window.requestAnimationFrame(() => {
       if (opener.current?.isConnected && !opener.current.disabled) opener.current.focus();
       else heading.current?.focus();
     });
   }
-  function reconcile() { if (domains.status === "ready") setStaleSnapshot(domains.data); reloadDomains(); reloadStores(); }
-
   async function change(kind: Operation, domain?: StoreDomain) {
-    if (disabled || (confirmation && kind !== confirmation.kind)) return;
+    if (disabled || domains.status !== "ready" || !read.isCurrent(domains.data) || (confirmation && (kind !== confirmation.kind || confirmationChanged))) return;
     if (kind !== "add" && (!domain || !data.some((item) => JSON.stringify(item) === JSON.stringify(domain)))) return;
     if (kind === "primary" && (!domain?.isVerified || domain.isPrimary)) return;
     if (kind === "remove" && domain?.isPrimary) return;
     const normalized = normalizedDomain(host);
     if (kind === "add" && !normalized) { setInvalid(true); document.getElementById("domain-host-name")?.focus(); return; }
-    setOperation(kind); setShowError(true); setSuccess(null);
     await run(async () => {
+      setOperation(kind); setShowError(true); setSuccess(null); read.suspend();
+      const controller = new AbortController(); request.current = controller;
       try {
-        if (kind === "add") await api.addStoreDomain(store.id, normalized!);
-        else if (kind === "verify") await api.verifyStoreDomain(store.id, domain!.id);
-        else if (kind === "primary") await api.makeStoreDomainPrimary(store.id, domain!.id);
-        else await api.removeStoreDomain(store.id, domain!.id);
+        if (kind === "add") await api.addStoreDomain(store.id, normalized!, controller.signal);
+        else if (kind === "verify") await api.verifyStoreDomain(store.id, domain!.id, controller.signal);
+        else if (kind === "primary") await api.makeStoreDomainPrimary(store.id, domain!.id, controller.signal);
+        else await api.removeStoreDomain(store.id, domain!.id, controller.signal);
         if (!mounted.current) return;
         if (kind === "add") setHost("");
         setConfirmation(null); setSuccess(kind);
-        reconcile();
         heading.current?.focus();
       } catch (exception) {
-        if (mounted.current) { setConfirmation(null); reconcile(); heading.current?.focus(); }
+        if (!mounted.current) return;
+        const refused = isHttpError(exception) && exception.kind === "http" && [400, 401, 403, 404, 409, 429].includes(exception.status ?? 0);
+        setUncertain(!refused); setConfirmation(null); heading.current?.focus();
         throw exception;
+      } finally {
+        request.current = null;
+        if (mounted.current) { read.resume(); reloadStores(); }
       }
     });
   }
@@ -104,23 +115,30 @@ function DomainsWorkspace({ store, reloadStores, storeRefreshing, storeRefreshEr
     <InlineMessage>{t("edgeHint")}</InlineMessage>
     <div className="section-heading">
       <h2>{t("addresses")}</h2>
-      <Button type="button" variant="secondary" disabled={pending || refreshing || storeRefreshing} onClick={() => { setConfirmation(null); reloadDomains(); reloadStores(); }}>{t("refresh")}</Button>
+      <div className="cluster"><Button type="button" variant="secondary" disabled={pending || refreshing || storeRefreshing} onClick={() => { setConfirmation(null); reloadDomains(); reloadStores(); }}>{t("refresh")}</Button>
+        {read.canPause && <Button type="button" variant="quiet" onClick={read.toggle}>{setup(read.paused ? "resume" : "pause")}</Button>}</div>
     </div>
+    <p className="hint">{setup(`updates.${read.mode}`)}</p>
     {refreshing && <LoadingState label={t("loading")} lines={2} />}
     {pending && <p role="status">{t(operation === "verify" ? "checkingDns" : "saving")}</p>}
     {readError !== null && <RequestError error={readError} operation="read" onRetry={reloadDomains} />}
-    {stale && domains.status === "ready" && <p className="hint" role="status">{t("stale")}</p>}
+    {stale && visible && <p className="hint" role="status">{t("stale")}</p>}
     {(storeRefreshing || storeRefreshError !== null) && <div className="domain-metadata-status">
       <p className="hint">{t("metadataStale")}</p>
       <Button type="button" variant="secondary" disabled={pending || storeRefreshing} onClick={reloadStores}>{t("refreshStore")}</Button>
     </div>}
     {success && <InlineMessage tone="success">{t(`success.${success}`)}</InlineMessage>}
+    {success === "remove" && <div className="domain-removal-note"><p>{edge("removalPending")}</p><Link to={`/stores/${store.id}/setup`}>{edge("allSetup")}</Link></div>}
     {showError && error !== null && <div>
       {knownProblem && <InlineMessage tone="error">{t(knownProblem)}</InlineMessage>}
       <RequestError error={error} operation="write" fieldErrors={operation === "add" && fieldError ? [{ field: "hostName", message: fieldError }] : []} />
       <p className="hint">{t("failureHint")}</p>
     </div>}
-    {domains.status === "ready" && data.length === 0 && <p>{t("empty")}</p>}
+    {uncertain && <div className="domain-removal-note"><p role="status">{edge("uncertain")}</p><Link to={`/stores/${store.id}/setup`}>{edge("allSetup")}</Link>
+      <Button type="button" variant="secondary" disabled={!fresh || pending || storeRefreshing || storeRefreshError !== null} onClick={() => {
+        if (domains.status === "ready" && read.isCurrent(domains.data) && !storeRefreshing && storeRefreshError === null && !pending) { setUncertain(false); setShowError(false); heading.current?.focus(); }
+      }}>{edge("finishReview")}</Button></div>}
+    {fresh && data.length === 0 && <p>{t("empty")}</p>}
     <ul className="domain-list">
       {data.map((domain) => <li key={domain.id} className="store-settings-panel domain-card">
         <div className="domain-card-heading">
@@ -142,17 +160,19 @@ function DomainsWorkspace({ store, reloadStores, storeRefreshing, storeRefreshEr
           </p> : <p className="hint">{t("expiryUnknown")}</p>}
           <p className="hint">{t("cleanupHint")}</p>
         </>}
+        <DomainEdgeProgress domain={domain} storeId={store.id} />
         <div className="cluster domain-actions">
           {!domain.isVerified && <Button type="button" disabled={disabled || confirmation !== null} onClick={() => void change("verify", domain)}>{t("verify", { host: domain.hostName })}</Button>}
           {!domain.isPrimary && <>
             <Button type="button" variant="secondary" disabled={disabled || !domain.isVerified || confirmation !== null}
-              onClick={(event) => { opener.current = event.currentTarget; setSuccess(null); setConfirmation({ kind: "primary", domain }); }}>{t("makePrimary", { host: domain.hostName })}</Button>
+              onClick={(event) => { if (domains.status !== "ready" || !read.isCurrent(domains.data)) return; opener.current = event.currentTarget; setSuccess(null); setConfirmation({ kind: "primary", domain: structuredClone(domain), storeName: store.name }); }}>{t("makePrimary", { host: domain.hostName })}</Button>
             <Button type="button" variant="quiet" disabled={disabled || confirmation !== null}
-              onClick={(event) => { opener.current = event.currentTarget; setSuccess(null); setConfirmation({ kind: "remove", domain }); }}>{t("remove", { host: domain.hostName })}</Button>
+              onClick={(event) => { if (domains.status !== "ready" || !read.isCurrent(domains.data)) return; opener.current = event.currentTarget; setSuccess(null); setConfirmation({ kind: "remove", domain: structuredClone(domain), storeName: store.name }); }}>{t("remove", { host: domain.hostName })}</Button>
           </>}
         </div>
-        {confirmation?.domain.id === domain.id && <div className="domain-confirmation" role="group" aria-label={t(confirmation.kind === "primary" ? "confirmPrimary" : "confirmRemove", { host: domain.hostName })}>
+        {confirmation?.domain.id === domain.id && <div className="domain-confirmation" role="group" aria-label={t(confirmation.kind === "primary" ? "confirmPrimary" : "confirmRemove", { host: domain.hostName })} onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); closeConfirmation(); } }}>
           <h4>{t(confirmation.kind === "primary" ? "confirmPrimary" : "confirmRemove", { host: domain.hostName })}</h4>
+          <p>{edge("storeTarget", { store: confirmation.storeName })}</p>
           <p>{t(confirmation.kind === "primary" ? "primaryWarning" : "removeWarning")}</p>
           {confirmationChanged && <p role="status">{t("stale")}</p>}
           <div className="cluster">
@@ -171,6 +191,7 @@ function DomainsWorkspace({ store, reloadStores, storeRefreshing, storeRefreshEr
         <Button type="submit" busy={pending && operation === "add"} busyLabel={t("saving")} disabled={disabled || confirmation !== null}>{t("add")}</Button>
       </form>
     </section>
+    <Link to={`/stores/${store.id}/setup`}>{edge("allSetup")}</Link>
   </div>;
 }
 

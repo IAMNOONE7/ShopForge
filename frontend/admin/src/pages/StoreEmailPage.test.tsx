@@ -17,7 +17,7 @@ import { StoreSetupDetailPage } from "./StoreSetupPage";
 
 const id = "11111111-1111-1111-1111-111111111111";
 const store: AdminStore = { id: "store-a", name: "Workshop", currency: "CZK", culture: "cs-CZ", status: "published", logoUrl: null, company: null, primaryHostName: "shop.localhost", returnWindowDays: 14, theme: { primaryColor: "#123456", secondaryColor: "#eef4ff", borderRadius: 6 } };
-const address: domains.StoreDomain = { id: "own", hostName: "shop.cz", isPrimary: true, isVerified: true, verifiedAt: "2026-10-24T07:00:00Z", challengeName: null, challengeValue: null, claimExpiresAt: null };
+const address: domains.StoreDomain = { edge: null, zone: null, id: "own", hostName: "shop.cz", isPrimary: true, isVerified: true, verifiedAt: "2026-10-24T07:00:00Z", challengeName: null, challengeValue: null, claimExpiresAt: null };
 const fallback: StoreEmail = { sendsFromOwnDomain: false, platformAddress: "platform@example.test", domain: null };
 const domain: SendingDomain = { domain: "mail.shop.cz", state: "awaitingDns", senderAddress: "orders@shop.cz", replyTo: null, region: "eu", operationId: id, verifiedAt: null,
   records: [{ purpose: "sending", type: "TXT", name: "mail.shop.cz", value: '<script>alert(1)</script>\nexact TXT', priority: null, valid: "unknown" }, { purpose: "receiving", type: "MX", name: null, value: "mxa.example.test", priority: "0", valid: "valid" }],

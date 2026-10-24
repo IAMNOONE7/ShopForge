@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import type { StoreDomain } from "../api/domains";
 import { emailDomainDraft } from "./emailDomainValidation";
-const addresses: StoreDomain[] = [{ id: "own", hostName: "shop.cz", isVerified: true, isPrimary: false, verifiedAt: "2026-10-24T07:00:00Z", challengeName: null, challengeValue: null, claimExpiresAt: null }];
+const addresses: StoreDomain[] = [{ edge: null, zone: null, id: "own", hostName: "shop.cz", isVerified: true, isPrimary: false, verifiedAt: "2026-10-24T07:00:00Z", challengeName: null, challengeValue: null, claimExpiresAt: null }];
 const draft = { domain: "mail.shop.cz", senderAddress: "orders@shop.cz", replyTo: "" };
 it("normalizes the host and sender, trims optional reply-to and omits an empty reply-to", () => {
   expect(emailDomainDraft({ domain: " Mail.Shop.CZ. ", senderAddress: " Orders@Shop.CZ ", replyTo: " " }, addresses)).toEqual({ errors: {}, body: draftBody() });
