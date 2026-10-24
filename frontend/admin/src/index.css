@@ -1538,6 +1538,7 @@ input[readonly] {
 .variant-facts dd { margin: .25rem 0 0; }
 .variant-editor {
   max-width: 52rem;
+  grid-template-columns: minmax(0, 1fr);
   container-type: inline-size;
   padding-top: var(--space-5);
   border-top: 2px solid var(--color-border);
@@ -1574,8 +1575,20 @@ input[readonly] {
 
 .physical-form {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   width: min(100%, 48rem);
   gap: var(--space-4);
+}
+
+.physical-form .validation-summary,
+.variant-editor .validation-summary {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.physical-form .validation-summary .link-button,
+.variant-editor .validation-summary .link-button {
+  max-width: 100%;
+  white-space: normal;
 }
 
 .physical-form button[type="submit"],
@@ -1589,6 +1602,28 @@ input[readonly] {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-4);
 }
+
+.package-fields {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow-wrap: anywhere;
+}
+.package-fields legend { max-width: 100%; padding: 0; margin-bottom: var(--space-2); font-weight: 650; }
+.package-fields > .hint { margin-top: 0; }
+.package-fields input:not([type="checkbox"]) { min-width: 0; max-width: 100%; }
+.package-alone { margin-top: var(--space-4); }
+.package-alone label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--control-height);
+  cursor: pointer;
+}
+.package-alone input { flex-shrink: 0; }
+.package-alone span { min-width: 0; }
+.package-alone .hint { margin-block: var(--space-1) 0; }
 
 .physical-image-grid {
   display: grid;

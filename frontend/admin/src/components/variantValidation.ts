@@ -8,6 +8,10 @@ export function variantDraft(variant?: ProductVariant): VariantDraft {
   return {
     sku: variant?.sku ?? "", ean: variant?.ean ?? "",
     weightGrams: variant?.weightGrams?.toString() ?? "", brand: "",
+    lengthMm: variant?.lengthMm?.toString() ?? "",
+    widthMm: variant?.widthMm?.toString() ?? "",
+    heightMm: variant?.heightMm?.toString() ?? "",
+    shipsAlone: variant?.shipsAlone ?? false,
     partNumber: variant?.partNumber ?? "", condition: variant?.condition ?? "",
     optionValues: [...(variant?.optionValues ?? [])],
   };

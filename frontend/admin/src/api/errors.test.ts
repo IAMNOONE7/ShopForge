@@ -3,6 +3,11 @@ import { errorMessageKey, fieldIssues } from "./errors";
 import { HttpError } from "./http";
 
 describe("localized error mapping", () => {
+  it.each(["lengthMm", "widthMm", "heightMm"])("maps %s validation to its numeric input", (field) => {
+    expect(fieldIssues(new HttpError("http", 400, { errors: { [field]: ["Invalid size"] } })))
+      .toEqual([{ field, target: field, key: "numberInvalid" }]);
+  });
+
   it("maps status and operation without matching server sentences", () => {
     expect(errorMessageKey(new HttpError("http", 403), "write")).toBe(
       "permissionDenied",

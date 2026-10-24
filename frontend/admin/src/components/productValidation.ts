@@ -2,6 +2,9 @@ export type ProductField =
   | "sku"
   | "ean"
   | "weightGrams"
+  | "lengthMm"
+  | "widthMm"
+  | "heightMm"
   | "brand"
   | "partNumber"
   | "condition"
@@ -11,6 +14,7 @@ export type ProductIssueKey =
   | "skuInvalid"
   | "eanInvalid"
   | "weightInvalid"
+  | "sizeInvalid"
   | "brandInvalid"
   | "partNumberInvalid"
   | "fileRequired"
@@ -18,10 +22,18 @@ export type ProductIssueKey =
   | "fileSizeInvalid"
   | "altTextInvalid";
 export type ProductIssue = { field: ProductField; key: ProductIssueKey };
-export type ProductDraft = {
+export type PackageDraft = {
+  weightGrams: string;
+  lengthMm: string;
+  widthMm: string;
+  heightMm: string;
+  shipsAlone: boolean;
+};
+export const measurementFields = ["weightGrams", "lengthMm", "widthMm", "heightMm"] as const;
+
+export type ProductDraft = PackageDraft & {
   sku: string;
   ean: string;
-  weightGrams: string;
   brand: string;
   partNumber: string;
   condition: string;
@@ -61,12 +73,12 @@ export function validateProduct(
   if (draft.partNumber.trim().length > 70) {
     issues.push({ field: "partNumber", key: "partNumberInvalid" });
   }
-  const weight = draft.weightGrams.trim();
-  if (
-    weight &&
-    (!/^[0-9]+$/.test(weight) || Number(weight) > 2147483647)
-  ) {
-    issues.push({ field: "weightGrams", key: "weightInvalid" });
+  for (const field of measurementFields) {
+    const value = draft[field].trim();
+    const maximum = field === "weightGrams" ? 2147483647 : 10000;
+    if (!/^[0-9]+$/.test(value) || Number(value) < 1 || Number(value) > maximum) {
+      issues.push({ field, key: field === "weightGrams" ? "weightInvalid" : "sizeInvalid" });
+    }
   }
   return issues;
 }
@@ -77,6 +89,10 @@ export function physicalInput(draft: ProductDraft) {
     weightGrams: draft.weightGrams.trim()
       ? Number(draft.weightGrams.trim())
       : null,
+    lengthMm: draft.lengthMm.trim() ? Number(draft.lengthMm.trim()) : null,
+    widthMm: draft.widthMm.trim() ? Number(draft.widthMm.trim()) : null,
+    heightMm: draft.heightMm.trim() ? Number(draft.heightMm.trim()) : null,
+    shipsAlone: draft.shipsAlone,
     brand: draft.brand.trim() || null,
     partNumber: draft.partNumber.trim() || null,
     condition: draft.condition || null,

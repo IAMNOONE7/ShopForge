@@ -91,6 +91,10 @@ export type Product = {
   sku: string;
   ean: string | null;
   weightGrams: number | null;
+  lengthMm: number | null;
+  widthMm: number | null;
+  heightMm: number | null;
+  shipsAlone: boolean;
   // What a shopping feed asks for and refuses a product without. Null until somebody says.
   brand: string | null;
   optionNames: string[];
@@ -103,6 +107,10 @@ export type ProductVariant = {
   sku: string;
   ean: string | null;
   weightGrams: number | null;
+  lengthMm: number | null;
+  widthMm: number | null;
+  heightMm: number | null;
+  shipsAlone: boolean;
   partNumber: string | null;
   condition: string | null;
   optionValues: string[];
@@ -110,7 +118,7 @@ export type ProductVariant = {
 };
 
 export type VariantInput = Pick<ProductVariant,
-  "sku" | "ean" | "weightGrams" | "partNumber" | "condition" | "optionValues">;
+  "sku" | "ean" | "weightGrams" | "lengthMm" | "widthMm" | "heightMm" | "shipsAlone" | "partNumber" | "condition" | "optionValues">;
 
 export type ProductOptionsInput = {
   names: string[];
@@ -500,23 +508,11 @@ export const api = {
 
   products: (signal?: AbortSignal) =>
     request<Product[]>("GET", "/api/admin/products", undefined, signal),
-  createProduct: (input: {
-    sku: string;
-    ean: string | null;
-    weightGrams: number | null;
-    brand: string | null;
-    partNumber: string | null;
-    condition: string | null;
-  }) => request<Product>("POST", "/api/admin/products", input),
+  createProduct: (input: Omit<VariantInput, "optionValues"> & Pick<Product, "brand">) =>
+    request<Product>("POST", "/api/admin/products", input),
   updateProduct: (
     productId: string,
-    input: {
-      ean: string | null;
-      weightGrams: number | null;
-      brand: string | null;
-      partNumber: string | null;
-      condition: string | null;
-    },
+    input: Pick<Product, "brand"> & Partial<Omit<VariantInput, "sku" | "optionValues">>,
   ) =>
     request<Product>("PUT", `/api/admin/products/${productId}`, input),
   setProductOptions: (productId: string, input: ProductOptionsInput) =>

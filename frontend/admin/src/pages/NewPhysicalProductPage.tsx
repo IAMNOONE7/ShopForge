@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router";
 import { api } from "../api";
 import { ProductIssueSummary } from "../components/ProductIssueSummary";
+import { PackageFields } from "../components/PackageFields";
 import {
   physicalInput,
   validateProduct,
@@ -21,6 +22,10 @@ export function NewPhysicalProductPage() {
     sku: "",
     ean: "",
     weightGrams: "",
+    lengthMm: "",
+    widthMm: "",
+    heightMm: "",
+    shipsAlone: false,
     brand: "",
     partNumber: "",
     condition: "",
@@ -28,7 +33,7 @@ export function NewPhysicalProductPage() {
   const [issues, setIssues] = useState<ProductIssue[]>([]);
   const [error, run, pending] = useAction(() => undefined);
 
-  function update(field: keyof ProductDraft, value: string) {
+  function update<K extends keyof ProductDraft>(field: K, value: ProductDraft[K]) {
     setDraft((current) => ({ ...current, [field]: value }));
     setIssues((current) =>
       current.filter((issue) => issue.field !== field),
@@ -37,6 +42,7 @@ export function NewPhysicalProductPage() {
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (pending) return;
     const nextIssues = validateProduct(draft, true);
     setIssues(nextIssues);
     if (nextIssues.length) {
@@ -74,28 +80,17 @@ export function NewPhysicalProductPage() {
           aria-invalid={issues.some((issue) => issue.field === "sku") || undefined}
           onChange={(event) => update("sku", event.target.value)}
         />
-        <div className="physical-fields-row">
-          <Field
-            id="ean"
-            name="ean"
-            label={t("eanOptional")}
-            hint={t("eanHint")}
-            inputMode="numeric"
-            value={draft.ean}
-            aria-invalid={issues.some((issue) => issue.field === "ean") || undefined}
-            onChange={(event) => update("ean", event.target.value)}
-          />
-          <Field
-            id="weightGrams"
-            name="weightGrams"
-            label={t("weightGrams")}
-            hint={t("weightHint")}
-            inputMode="numeric"
-            value={draft.weightGrams}
-            aria-invalid={issues.some((issue) => issue.field === "weightGrams") || undefined}
-            onChange={(event) => update("weightGrams", event.target.value)}
-          />
-        </div>
+        <Field
+          id="ean"
+          name="ean"
+          label={t("eanOptional")}
+          hint={t("eanHint")}
+          inputMode="numeric"
+          value={draft.ean}
+          aria-invalid={issues.some((issue) => issue.field === "ean") || undefined}
+          onChange={(event) => update("ean", event.target.value)}
+        />
+        <PackageFields draft={draft} issues={issues} onChange={update} />
         <Button
           type="submit"
           busy={pending}

@@ -6,7 +6,7 @@ afterEach(() => vi.unstubAllGlobals());
 it("uses the product and variant contracts without sending a listing price or changing stock", async () => {
   const fetch = vi.fn().mockImplementation(() => Promise.resolve(new Response(null, { status: 204 })));
   vi.stubGlobal("fetch", fetch);
-  const input: VariantInput = { sku: "EXACT-S", ean: null, weightGrams: 0,
+  const input: VariantInput = { sku: "EXACT-S", ean: null, weightGrams: 1, lengthMm: 10000, widthMm: 100, heightMm: 1, shipsAlone: true,
     partNumber: "P-1", condition: "Used", optionValues: ["S"] };
   await api.setProductOptions("product-a", { names: ["Size"], values: { "variant-a": ["S"] } });
   await api.addVariant("product-a", input);

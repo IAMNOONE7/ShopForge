@@ -3,8 +3,8 @@ import { Link } from "react-router";
 import type { StoreReadinessCheck } from "../api";
 
 type Definition = {
-  label: "logo" | "company" | "product" | "payment" | "shipping" | "domain" | "paymentConnected" | "shippingConnected" | "tax" | "email" | "emailSender";
-  destination?: "products" | "methods" | "domains" | "provider-connections";
+  label: "logo" | "company" | "product" | "shippingData" | "payment" | "shipping" | "domain" | "paymentConnected" | "shippingConnected" | "tax" | "email" | "emailSender";
+  destination?: "products" | "methods" | "domains" | "provider-connections" | "/products";
   heading?: "store-logo-title" | "store-details-title";
 };
 const definitions = new Map<string, Definition>([
@@ -12,6 +12,7 @@ const definitions = new Map<string, Definition>([
   ["store.company", { label: "company", heading: "store-details-title" }],
   ["store.primary-domain", { label: "domain", destination: "domains" }],
   ["catalog.visible-products", { label: "product", destination: "products" }],
+  ["catalog.shipping-data", { label: "shippingData", destination: "/products" }],
   ["catalog.tax-classes", { label: "tax" }],
   ["orders.payment-method", { label: "payment", destination: "methods" }],
   ["orders.shipping-method", { label: "shipping", destination: "methods" }],
@@ -48,7 +49,7 @@ export function StoreReadinessList({ storeId, checks, stale }: { storeId: string
                 {!check.isReady && definition && <p className="hint">{t(`readinessHelp.${definition.label}`)}</p>}
                 {check.problem && <details className="readiness-problem"><summary>{t("readinessServerDetail")}</summary><p>{check.problem}</p></details>}
                 {!check.isReady && !definition && !check.problem && <p className="hint">{t("readinessProblemUnavailable")}</p>}
-                {!check.isReady && definition?.destination && <Link to={`/stores/${storeId}/${definition.destination}`}>{t("fixCheck")}</Link>}
+                {!check.isReady && definition?.destination && <Link to={definition.destination === "/products" ? "/products" : `/stores/${storeId}/${definition.destination}`}>{t("fixCheck")}</Link>}
                 {!check.isReady && definition?.heading && <button type="button" className="link-button" data-read-action onClick={() => focusHeading(definition.heading!)}>{t("fixCheck")}</button>}
               </div>
             </li>;

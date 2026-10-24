@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import type { Product, ProductOptionsInput, ProductVariant, VariantInput } from "../api";
-import { conditions } from "./productValidation";
+import { PackageFields } from "./PackageFields";
+import { conditions, type ProductDraft } from "./productValidation";
 import { Button } from "./ui/Button";
 import { Field } from "./ui/Field";
 import {
@@ -40,9 +41,10 @@ export function VariantForm({ product, variant, disabled, pending, onSave, onCan
     optionValues: product.optionNames.map((_, index) => variant?.optionValues[index] ?? ""),
   }));
   const [issues, setIssues] = useState<VariantIssue[]>([]);
-  const labels = { sku: t("sku"), ean: t("ean"), weightGrams: t("weight"), partNumber: t("partNumber"),
+  const labels = { sku: t("sku"), ean: t("ean"), weightGrams: t("weight"),
+    lengthMm: t("lengthMm"), widthMm: t("widthMm"), heightMm: t("heightMm"), partNumber: t("partNumber"),
     ...Object.fromEntries(product.optionNames.map((name, index) => [`optionValues.${index}`, name])) };
-  function update(field: "sku" | "ean" | "weightGrams" | "partNumber" | "condition", value: string) {
+  function update<K extends keyof ProductDraft>(field: K, value: ProductDraft[K]) {
     setDraft((current) => ({ ...current, [field]: value }));
     setIssues((current) => current.filter((issue) => issue.field !== field));
   }
@@ -62,14 +64,10 @@ export function VariantForm({ product, variant, disabled, pending, onSave, onCan
         <Field name="sku" label={t("sku")} hint={t("variantSkuHint")} value={draft.sku}
           error={issues.find((issue) => issue.field === "sku") && t("validation.skuInvalid")}
           onChange={(event) => update("sku", event.target.value)} />
-        <div className="physical-fields-row">
-          <Field name="ean" label={t("eanOptional")} hint={t("eanHint")} inputMode="numeric"
-            value={draft.ean} error={issues.find((issue) => issue.field === "ean") && t("validation.eanInvalid")}
-            onChange={(event) => update("ean", event.target.value)} />
-          <Field name="weightGrams" label={t("weightGrams")} hint={t("weightHint")} inputMode="numeric"
-            value={draft.weightGrams} error={issues.find((issue) => issue.field === "weightGrams") && t("validation.weightInvalid")}
-            onChange={(event) => update("weightGrams", event.target.value)} />
-        </div>
+        <Field name="ean" label={t("eanOptional")} hint={t("eanHint")} inputMode="numeric"
+          value={draft.ean} error={issues.find((issue) => issue.field === "ean") && t("validation.eanInvalid")}
+          onChange={(event) => update("ean", event.target.value)} />
+        <PackageFields draft={draft} issues={issues} onChange={update} />
         <div className="physical-fields-row">
           <Field name="partNumber" label={t("partNumber")} hint={t("partNumberHint")}
             value={draft.partNumber} error={issues.find((issue) => issue.field === "partNumber") && t("validation.partNumberInvalid")}

@@ -78,6 +78,9 @@ export function ProductVariantsSection({ product, canManage, refreshing, refresh
           <dl className="variant-facts">
             <div><dt>{t("ean")}</dt><dd>{variant.ean || "—"}</dd></div>
             <div><dt>{t("weight")}</dt><dd>{variant.weightGrams === null ? "—" : t("grams", { count: variant.weightGrams })}</dd></div>
+            {(["lengthMm", "widthMm", "heightMm"] as const).map((field) =>
+              <div key={field}><dt>{t(field)}</dt><dd>{variant[field] ?? "—"}</dd></div>)}
+            <div><dt>{t("shipsAlone")}</dt><dd>{t(variant.shipsAlone ? "shipsAloneYes" : "shipsAloneNo")}</dd></div>
             <div><dt>{t("partNumber")}</dt><dd>{variant.partNumber || "—"}</dd></div>
             <div><dt>{t("condition")}</dt><dd>{conditionsLabel(variant.condition)}</dd></div>
           </dl>
@@ -102,8 +105,9 @@ export function ProductVariantsSection({ product, canManage, refreshing, refresh
           onSave={(brand) => save(() => {
             const only = editor.product.variants.length === 1 ? editor.product.variants[0] : null;
             // The compatibility endpoint replaces physical fields for a single variant, even for a brand edit.
-            return api.updateProduct(product.id, { brand, ean: only?.ean ?? null, weightGrams: only?.weightGrams ?? null,
-              partNumber: only?.partNumber ?? null, condition: only?.condition ?? null });
+            return api.updateProduct(product.id, only ? { brand, ean: only.ean, weightGrams: only.weightGrams,
+              lengthMm: only.lengthMm, widthMm: only.widthMm, heightMm: only.heightMm, shipsAlone: only.shipsAlone,
+              partNumber: only.partNumber, condition: only.condition } : { brand });
           })} />}
         {editor.kind === "delete" && editor.variant && <div className="variant-editor" role="group" aria-labelledby="variant-delete-title">
           <h3 id="variant-delete-title" tabIndex={-1}>{t("confirmVariantDelete", { sku: editor.variant.sku })}</h3>

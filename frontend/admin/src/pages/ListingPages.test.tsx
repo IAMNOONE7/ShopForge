@@ -18,8 +18,8 @@ const item: StoreProduct = { id: "listing-a", productId: "physical-a", sku: "CHA
   price: 100, vatRate: 21, isVisible: true, sortOrder: 0, categoryIds: ["child"], archivedAt: null, taxClass: "standard", seoTitle: "Saved SEO title", seoDescription: "Saved SEO text", seoSocialImageUrl: "https://example.test/social.png", seoNoIndex: true };
 const parent: Category = { id: "root", name: "Furniture", slug: "furniture", parentId: null, sortOrder: 0, attributeIds: [], seoTitle: null, seoDescription: null, pageText: null };
 const child: Category = { ...parent, id: "child", name: "Chairs", slug: "chairs", parentId: "root" };
-const product: Product = { id: item.productId, sku: "CHAIR", ean: null, weightGrams: null, brand: null, optionNames: ["Colour"], images: [],
-  variants: [{ id: "variant-red", sku: "CHAIR-RED", ean: null, weightGrams: null, partNumber: null, condition: null, optionValues: ["Red"], position: 0 }] };
+const product: Product = { id: item.productId, sku: "CHAIR", ean: null, weightGrams: null, lengthMm: null, widthMm: null, heightMm: null, shipsAlone: false, brand: null, optionNames: ["Colour"], images: [],
+  variants: [{ id: "variant-red", sku: "CHAIR-RED", ean: null, weightGrams: null, lengthMm: null, widthMm: null, heightMm: null, shipsAlone: false, partNumber: null, condition: null, optionValues: ["Red"], position: 0 }] };
 function definition(code: string, type: AttributeType): AttributeDefinition {
   return { id: code, code, name: code, type, unit: null, sortOrder: 0, isFilterable: true, isVisibleOnProductPage: true, isInFeeds: false, isSearchable: false,
     options: ["red", "blue"].map((code, sortOrder) => ({ id: code, code, name: code.toUpperCase(), sortOrder })) };

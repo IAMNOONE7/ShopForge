@@ -14,7 +14,7 @@ const books: TaxClass = { code: "books", name: "Printed books", rates: [{ countr
 const standard: TaxClass = { code: "standard", name: "Standard", rates: [] };
 const listing: StoreProduct = { id: "listing", productId: "product", sku: "BOOK", name: "Book", slug: "book", description: "Saved description", price: 0, vatRate: 21,
   isVisible: false, sortOrder: -2, categoryIds: ["saved"], archivedAt: null, taxClass: "standard", seoTitle: null, seoDescription: null, seoSocialImageUrl: null, seoNoIndex: false };
-const product: Product = { id: "product", sku: "BOOK", ean: null, brand: null, weightGrams: null, images: [], optionNames: [], variants: [] };
+const product: Product = { id: "product", sku: "BOOK", ean: null, brand: null, weightGrams: null, lengthMm: null, widthMm: null, heightMm: null, shipsAlone: false, images: [], optionNames: [], variants: [] };
 const shipping: ShippingMethod = { code: "parcel", name: "Parcel", providerKey: "packeta", price: 0, vatRate: 0, isActive: false, requiresPickupPoint: false,
   maxWeightGrams: 5000, countries: ["CZ", "SK"], taxClass: "standard" };
 let classes: TaxClass[], methods: ShippingMethod[];

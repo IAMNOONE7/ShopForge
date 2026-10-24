@@ -41,6 +41,30 @@ beforeEach(async () => { await i18n.changeLanguage("en"); vi.stubGlobal("CSS", {
 afterEach(async () => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); window.history.replaceState(null, "", "/"); await i18n.changeLanguage("en"); });
 
 describe("server publication readiness", () => {
+  it.each(["en", "cs"])("labels shipping data and links to company products, respecting the server weight in %s", async (language) => {
+    await i18n.changeLanguage(language);
+    const shipping = { check: "catalog.shipping-data", isReady: false, problem: "One visible variant is unmeasured.", weight: "advised" as const };
+    const read = vi.spyOn(api, "storeReadiness")
+      .mockResolvedValueOnce({ isReady: true, checks: [shipping] })
+      .mockResolvedValueOnce({ isReady: false, checks: [{ ...shipping, weight: "required" }] });
+    const publish = vi.spyOn(api, "publishStore");
+    const user = userEvent.setup();
+    render(view());
+    const label = await screen.findByText(i18n.t("stores:checks.shippingData"));
+    expect(within(label.closest("li")!).getByRole("link", { name: i18n.t("stores:fixCheck") }).getAttribute("href"))
+      .toBe("/products");
+    expect(within(screen.getByRole("region", { name: i18n.t("stores:readinessWeight.advised") }))
+      .getByText(i18n.t("stores:readinessHelp.shippingData"))).toBeTruthy();
+    const reviewButton = screen.getByRole("button", { name: i18n.t("stores:reviewPublication") });
+    expect(reviewButton).toHaveProperty("disabled", false);
+    await user.click(screen.getByRole("button", { name: i18n.t("stores:retryChecks") }));
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    expect(within(screen.getByRole("region", { name: i18n.t("stores:readinessWeight.required") }))
+      .getByText(i18n.t("stores:checks.shippingData"))).toBeTruthy();
+    expect(reviewButton).toHaveProperty("disabled", true);
+    expect(publish).not.toHaveBeenCalled();
+  });
+
   it.each(["en", "cs"])("separates required checks from non-blocking tax/email advice in %s", async (language) => {
     await i18n.changeLanguage(language);
     const body = { ...ready, checks: ready.checks.map((check) => check.weight === "advised" ? { ...check, isReady: false, problem: "Deployment advisory" } : check) };

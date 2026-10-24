@@ -11,10 +11,10 @@ import { ProductStockPage } from "./ProductStockPage";
 import { StockPage } from "./StockPage";
 
 const product: Product = {
-  id: "product-a", sku: "SHARED-1", ean: null, weightGrams: null,
+  id: "product-a", sku: "SHARED-1", ean: null, weightGrams: null, lengthMm: null, widthMm: null, heightMm: null, shipsAlone: false,
   brand: null,
   optionNames: [],
-  variants: [{ id: "variant-a", sku: "SHARED-1", ean: null, weightGrams: null, partNumber: null, condition: null, optionValues: [], position: 0 }],
+  variants: [{ id: "variant-a", sku: "SHARED-1", ean: null, weightGrams: null, lengthMm: null, widthMm: null, heightMm: null, shipsAlone: false, partNumber: null, condition: null, optionValues: [], position: 0 }],
   images: [],
 };
 const reserved: Stock = {
@@ -163,7 +163,7 @@ describe("shared stock", () => {
       optionNames: ["Size"],
       variants: [
         { ...product.variants[0], sku: "SHARED-S", optionValues: ["Small"] },
-        { id: "variant-b", sku: "SHARED-L", ean: null, weightGrams: null, partNumber: null, condition: null, optionValues: ["Large"], position: 1 },
+        { id: "variant-b", sku: "SHARED-L", ean: null, weightGrams: null, lengthMm: null, widthMm: null, heightMm: null, shipsAlone: false, partNumber: null, condition: null, optionValues: ["Large"], position: 1 },
       ],
     };
     vi.spyOn(api, "products").mockResolvedValue([multi]);

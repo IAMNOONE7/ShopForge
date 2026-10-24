@@ -2,8 +2,9 @@
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, type Product } from "../api";
+import { HttpError } from "../api/http";
 import { ProductMediaSection } from "../components/ProductMediaSection";
 import { validateProduct, validateProductImage } from "../components/productValidation";
 import { i18n, initializeI18n } from "../i18n";
@@ -16,6 +17,7 @@ const product: Product = {
   sku: "PHYSICAL-1",
   ean: "00012345600012",
   weightGrams: 250,
+  lengthMm: 200, widthMm: 150, heightMm: 100, shipsAlone: false,
   brand: null,
   optionNames: [],
   variants: [{
@@ -23,6 +25,7 @@ const product: Product = {
     sku: "PHYSICAL-1",
     ean: "00012345600012",
     weightGrams: 250,
+    lengthMm: 200, widthMm: 150, heightMm: 100, shipsAlone: false,
     partNumber: null,
     condition: null,
     optionValues: [],
@@ -48,18 +51,61 @@ beforeAll(async () => {
   await initializeI18n();
   await i18n.changeLanguage("en");
 });
-afterEach(() => {
+beforeEach(() => {
+  vi.stubGlobal("CSS", { escape: (value: string) => value });
+  HTMLElement.prototype.scrollIntoView = vi.fn();
+});
+afterEach(async () => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  await i18n.changeLanguage("en");
 });
 afterAll(() => i18n.changeLanguage("en"));
 
 describe("physical products", () => {
+  it.each(["en", "cs"])("requires measurements, focuses errors and retains the package after a server refusal in %s", async (language) => {
+    await i18n.changeLanguage(language);
+    const user = userEvent.setup();
+    const create = vi.spyOn(api, "createProduct").mockRejectedValue(new HttpError("http", 400, {
+      errors: { lengthMm: ["Invalid length"], widthMm: ["Invalid width"], heightMm: ["Invalid height"] },
+    }));
+    render(<MemoryRouter><NewPhysicalProductPage /></MemoryRouter>);
+    await user.type(screen.getByRole("textbox", { name: "SKU" }), "MEASURED");
+    await user.click(screen.getByRole("button", { name: i18n.t("products:addProduct") }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("alert")));
+    expect(create).not.toHaveBeenCalled();
+    const fields = ["weightGrams", "lengthMm", "widthMm", "heightMm"] as const;
+    for (const field of fields) {
+      const input = screen.getByRole("textbox", { name: i18n.t(`products:${field}`) });
+      expect(input).toHaveProperty("required", true);
+      expect(input.getAttribute("aria-invalid")).toBe("true");
+      await user.click(within(screen.getByRole("alert")).getByRole("button", {
+        name: `${i18n.t(`products:fields.${field}`)}: ${i18n.t(field === "weightGrams" ? "products:validation.weightInvalid" : "products:validation.sizeInvalid")}`,
+      }));
+      expect(document.activeElement).toBe(input);
+      await user.type(input, field === "weightGrams" ? "1" : "10000");
+    }
+    await user.click(screen.getByRole("button", { name: i18n.t("products:addProduct") }));
+    const alert = await screen.findByRole("alert");
+    const errors = within(alert).getAllByRole("button", { name: i18n.t("validation:numberInvalid") });
+    expect(errors).toHaveLength(3);
+    for (const [index, field] of ["lengthMm", "widthMm", "heightMm"].entries()) {
+      await user.click(errors[index]);
+      const input = document.querySelector(`[name="${field}"]`);
+      expect(document.activeElement).toBe(input);
+      expect(input).toHaveProperty("value", "10000");
+    }
+    expect(create).toHaveBeenCalledOnce();
+    expect(create.mock.calls[0][0]).toMatchObject({ weightGrams: 1, lengthMm: 10000, widthMm: 10000, heightMm: 10000, shipsAlone: false });
+  });
+
   it("validates SKU, EAN, integer grams, image type, and size", () => {
     expect(validateProduct({
       sku: "",
       ean: "1234567",
       weightGrams: "2.5",
+      lengthMm: "200", widthMm: "150", heightMm: "100", shipsAlone: false,
       brand: "",
       partNumber: "",
       condition: "",
@@ -67,7 +113,8 @@ describe("physical products", () => {
     expect(validateProduct({
       sku: "P",
       ean: "00012345600012",
-      weightGrams: "0",
+      weightGrams: "1",
+      lengthMm: "200", widthMm: "150", heightMm: "100", shipsAlone: false,
       brand: "Thonet",
       partNumber: "No-14",
       condition: "New",
@@ -76,7 +123,8 @@ describe("physical products", () => {
     expect(validateProduct({
       sku: "P",
       ean: "00012345600011",
-      weightGrams: "0",
+      weightGrams: "1",
+      lengthMm: "200", widthMm: "150", heightMm: "100", shipsAlone: false,
       brand: "",
       partNumber: "",
       condition: "",
@@ -129,11 +177,19 @@ describe("physical products", () => {
     expect(create).not.toHaveBeenCalled();
     await user.type(screen.getByRole("textbox", { name: "SKU" }), "PHYSICAL-1");
     await user.type(screen.getByRole("textbox", { name: "EAN (optional)" }), "00012345600012");
-    await user.type(screen.getByRole("textbox", { name: "Weight in grams (optional)" }), "250");
+    await user.type(screen.getByRole("textbox", { name: "Weight in grams" }), "250");
+    await user.type(screen.getByRole("textbox", { name: "Length (mm)" }), "200");
+    await user.type(screen.getByRole("textbox", { name: "Width (mm)" }), "150");
+    await user.type(screen.getByRole("textbox", { name: "Height (mm)" }), "100");
+    await user.click(screen.getByRole("checkbox", { name: "Ships alone" }));
     await user.click(screen.getByRole("button", { name: "Create product" }));
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect((screen.getByRole("textbox", { name: "EAN (optional)" }) as HTMLInputElement).value)
       .toBe("00012345600012");
+    expect(screen.getByRole("textbox", { name: "Length (mm)" })).toHaveProperty("value", "200");
+    expect(screen.getByRole("textbox", { name: "Width (mm)" })).toHaveProperty("value", "150");
+    expect(screen.getByRole("textbox", { name: "Height (mm)" })).toHaveProperty("value", "100");
+    expect(screen.getByRole("checkbox", { name: "Ships alone" })).toHaveProperty("checked", true);
     await user.click(screen.getByRole("button", { name: "Create product" }));
     expect(await screen.findByRole("heading", { name: "Created product detail" })).toBeTruthy();
     expect(create).toHaveBeenCalledTimes(2);
@@ -141,6 +197,7 @@ describe("physical products", () => {
       sku: "PHYSICAL-1",
       ean: "00012345600012",
       weightGrams: 250,
+      lengthMm: 200, widthMm: 150, heightMm: 100, shipsAlone: true,
       brand: null,
       partNumber: null,
       condition: null,

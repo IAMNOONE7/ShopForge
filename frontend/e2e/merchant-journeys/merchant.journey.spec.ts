@@ -85,8 +85,10 @@ test("merchant creates, stocks, lists, prices and publishes a product, then its 
   await publication(page, merchant, a, false);
   for (const [store, expected] of [[a, 404], [b, 200]] as const) expect((await request.get(`${session.environment.frontendOrigin}/api/storefront/store`, { headers: { Host: `${store.host}:${session.environment.storefrontPort}` } })).status()).toBe(expected);
   await page.goto(`${merchant.origin}/admin/products/new`); await page.locator('[name="sku"]').fill(sku); await page.locator('[name="weightGrams"]').fill("300");
+  await page.locator('[name="lengthMm"]').fill("200"); await page.locator('[name="widthMm"]').fill("150"); await page.locator('[name="heightMm"]').fill("100");
   const physical = await write<{ id: string; sku: string; variants: { id: string; sku: string }[] }>(page, "POST", "/api/admin/products", 201, () => page.getByRole("button", { name: words.products.addProduct, exact: true }).click());
   expect(physical.sku).toBe(sku); expect(physical.variants).toHaveLength(1); const variant = physical.variants[0];
+  expect(variant).toMatchObject({ weightGrams: 300, lengthMm: 200, widthMm: 150, heightMm: 100, shipsAlone: false });
   expect(await merchant.stock(sku)).toEqual({ sku, onHand: 0, reserved: 0, available: 0 });
   await page.goto(`${merchant.origin}/admin/stock/${variant.id}`); await page.locator('[name="quantity"]').fill("3");
   await write(page, "PUT", `/api/admin/stock/${variant.id}`, 200, () => page.getByRole("button", { name: words.stock.save, exact: true }).click());

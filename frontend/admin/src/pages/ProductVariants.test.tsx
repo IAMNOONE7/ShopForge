@@ -12,9 +12,9 @@ import { SessionContext } from "../session";
 import { PhysicalProductPage } from "./PhysicalProductPage";
 
 const only: Product = {
-  id: "product-a", sku: "SHIRT-S", ean: "5901234123457", weightGrams: 250, brand: "Maker",
+  id: "product-a", sku: "SHIRT-S", ean: "5901234123457", weightGrams: 250, lengthMm: 200, widthMm: 150, heightMm: 100, shipsAlone: true, brand: "Maker",
   optionNames: [], images: [], variants: [{
-    id: "variant-a", sku: "SHIRT-S", ean: "5901234123457", weightGrams: 250,
+    id: "variant-a", sku: "SHIRT-S", ean: "5901234123457", weightGrams: 250, lengthMm: 200, widthMm: 150, heightMm: 100, shipsAlone: true,
     partNumber: "M-1", condition: "Used", optionValues: [], position: 0,
   }],
 };
@@ -40,10 +40,38 @@ beforeAll(async () => { await initializeI18n(); await i18n.changeLanguage("en");
 afterEach(async () => { cleanup(); vi.restoreAllMocks(); await i18n.changeLanguage("en"); });
 
 describe("product variant editor", () => {
+  it("requires a legacy variant's missing measurements before saving and writes only that variant", async () => {
+    const user = userEvent.setup();
+    const legacy = { ...multi, variants: [multi.variants[0], { ...multi.variants[1], weightGrams: 0,
+      lengthMm: null, widthMm: null, heightMm: null }] };
+    const update = vi.spyOn(api, "updateVariant").mockResolvedValue(multi.variants[1]);
+    const compatibility = vi.spyOn(api, "updateProduct");
+    render(section(legacy));
+    await user.click(screen.getByRole("button", { name: "Edit SHIRT-L" }));
+    expect(screen.getByRole("textbox", { name: "Length (mm)" })).toHaveProperty("value", "");
+    expect(screen.getByRole("textbox", { name: "Weight in grams" })).toHaveProperty("value", "0");
+    await user.click(screen.getByRole("button", { name: "Save variant" }));
+    expect(update).not.toHaveBeenCalled();
+    const alert = screen.getByRole("alert");
+    expect(within(alert).getAllByRole("button")).toHaveLength(4);
+    await user.click(within(alert).getByRole("button", { name: /^Width \(mm\):/ }));
+    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Width (mm)" }));
+    await user.clear(screen.getByRole("textbox", { name: "Weight in grams" }));
+    for (const [field, value] of [["Weight in grams", "250"], ["Length (mm)", "200"], ["Width (mm)", "150"], ["Height (mm)", "100"]]) {
+      await user.type(screen.getByRole("textbox", { name: field }), value);
+    }
+    await user.click(screen.getByRole("button", { name: "Save variant" }));
+    expect(update).toHaveBeenCalledWith("product-a", "variant-b", {
+      sku: "SHIRT-L", ean: "5901234123457", weightGrams: 250, lengthMm: 200, widthMm: 150, heightMm: 100,
+      shipsAlone: true, partNumber: "M-1", condition: "Used", optionValues: ["L", "Blue"],
+    });
+    expect(compatibility).not.toHaveBeenCalled();
+  });
+
   it("renames a single default through its variant ID, retains a conflict draft and reconciles the summary", async () => {
     const user = userEvent.setup();
-    const updated = { ...only, sku: "RENAMED", ean: null, weightGrams: 0,
-      variants: [{ ...only.variants[0], sku: "RENAMED", ean: null, weightGrams: 0 }] };
+    const updated = { ...only, sku: "RENAMED", ean: null, weightGrams: 1, lengthMm: 300, shipsAlone: false,
+      variants: [{ ...only.variants[0], sku: "RENAMED", ean: null, weightGrams: 1, lengthMm: 300, shipsAlone: false }] };
     const products = vi.spyOn(api, "products").mockResolvedValueOnce([only]).mockResolvedValue([updated]);
     const update = vi.spyOn(api, "updateVariant").mockRejectedValueOnce(new HttpError("http", 409))
       .mockResolvedValue(updated.variants[0]);
@@ -54,16 +82,23 @@ describe("product variant editor", () => {
     expect(sku.readOnly).toBe(false);
     await user.clear(sku); await user.type(sku, " renamed ");
     await user.clear(screen.getByRole("textbox", { name: "EAN (optional)" }));
-    await user.clear(screen.getByRole("textbox", { name: "Weight in grams (optional)" }));
-    await user.type(screen.getByRole("textbox", { name: "Weight in grams (optional)" }), "0");
+    await user.clear(screen.getByRole("textbox", { name: "Weight in grams" }));
+    await user.type(screen.getByRole("textbox", { name: "Weight in grams" }), "1");
+    expect(screen.getByRole("textbox", { name: "Length (mm)" })).toHaveProperty("value", "200");
+    expect(screen.getByRole("checkbox", { name: "Ships alone" })).toHaveProperty("checked", true);
+    await user.clear(screen.getByRole("textbox", { name: "Length (mm)" }));
+    await user.type(screen.getByRole("textbox", { name: "Length (mm)" }), "300");
+    await user.click(screen.getByRole("checkbox", { name: "Ships alone" }));
     await user.click(screen.getByRole("button", { name: "Save variant" }));
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(sku.value).toBe(" renamed ");
+    expect(screen.getByRole("textbox", { name: "Length (mm)" })).toHaveProperty("value", "300");
+    expect(screen.getByRole("checkbox", { name: "Ships alone" })).toHaveProperty("checked", false);
     expect(products).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("button", { name: "Save variant" }));
     expect(await screen.findByRole("heading", { name: "Product RENAMED" })).toBeTruthy();
     expect(update).toHaveBeenLastCalledWith("product-a", "variant-a", {
-      sku: "renamed", ean: null, weightGrams: 0, partNumber: "M-1", condition: "Used", optionValues: [],
+      sku: "renamed", ean: null, weightGrams: 1, lengthMm: 300, widthMm: 150, heightMm: 100, shipsAlone: false, partNumber: "M-1", condition: "Used", optionValues: [],
     });
     expect(compatibility).not.toHaveBeenCalled();
     expect(screen.getByRole("link", { name: "RENAMED Open shared stock" }).getAttribute("href")).toBe("/stock/variant-a");
@@ -122,6 +157,10 @@ describe("product variant editor", () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("alert")));
     await user.type(screen.getByRole("textbox", { name: "Size" }), "M");
     await user.type(screen.getByRole("textbox", { name: "Colour" }), "Green");
+    await user.type(screen.getByRole("textbox", { name: "Weight in grams" }), "1");
+    await user.type(screen.getByRole("textbox", { name: "Length (mm)" }), "200");
+    await user.type(screen.getByRole("textbox", { name: "Width (mm)" }), "150");
+    await user.type(screen.getByRole("textbox", { name: "Height (mm)" }), "100");
     expect((screen.getByRole("textbox", { name: "Size" }) as HTMLInputElement).value).toBe("M");
     expect((screen.getByRole("textbox", { name: "Colour" }) as HTMLInputElement).value).toBe("Green");
     await user.click(screen.getByRole("button", { name: "Create variant" }));
@@ -138,7 +177,7 @@ describe("product variant editor", () => {
     view.rerender(section(multi));
     expect((screen.getByRole("button", { name: "Add variant" }) as HTMLButtonElement).disabled).toBe(false);
     expect(add).toHaveBeenCalledWith("product-a", {
-      sku: "SHIRT-M", ean: null, weightGrams: null, partNumber: null, condition: null, optionValues: ["M", "Green"],
+      sku: "SHIRT-M", ean: null, weightGrams: 1, lengthMm: 200, widthMm: 150, heightMm: 100, shipsAlone: false, partNumber: null, condition: null, optionValues: ["M", "Green"],
     });
   });
 
@@ -176,6 +215,10 @@ describe("product variant editor", () => {
     await user.type(screen.getByRole("textbox", { name: "SKU" }), "SHIRT-M");
     await user.type(screen.getByRole("textbox", { name: "Size" }), "M");
     await user.type(screen.getByRole("textbox", { name: "Colour" }), "Green");
+    await user.type(screen.getByRole("textbox", { name: "Weight in grams" }), "1");
+    await user.type(screen.getByRole("textbox", { name: "Length (mm)" }), "200");
+    await user.type(screen.getByRole("textbox", { name: "Width (mm)" }), "150");
+    await user.type(screen.getByRole("textbox", { name: "Height (mm)" }), "100");
     await user.click(screen.getByRole("button", { name: "Create variant" }));
     expect(await within(screen.getByRole("region", { name: "Variants and physical details" })).findByText(/confirmed save does not need to be repeated/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Create variant" })).toBeNull();
@@ -203,8 +246,10 @@ describe("product variant editor", () => {
     await user.clear(screen.getByRole("textbox", { name: "Brand" }));
     await user.click(screen.getByRole("button", { name: "Save brand" }));
     const physical = product.variants.length === 1 ? product.variants[0] : null;
-    expect(update).toHaveBeenCalledWith("product-a", { brand: null, ean: physical?.ean ?? null,
-      weightGrams: physical?.weightGrams ?? null, partNumber: physical?.partNumber ?? null, condition: physical?.condition ?? null });
+    expect(update).toHaveBeenCalledWith("product-a", physical ? { brand: null, ean: physical.ean,
+      weightGrams: physical.weightGrams, lengthMm: physical.lengthMm, widthMm: physical.widthMm,
+      heightMm: physical.heightMm, shipsAlone: physical.shipsAlone,
+      partNumber: physical.partNumber, condition: physical.condition } : { brand: null });
   });
 
   it("retains the original draft when an external product change makes it unsafe to save", async () => {
@@ -235,9 +280,9 @@ describe("product variant editor", () => {
   });
 
   it("matches SKU, GTIN and int32 weight boundaries without rejecting server-supported option combinations", () => {
-    expect(validateVariant({ ...variantDraft(), sku: "X".repeat(65), ean: "5901234123458", weightGrams: "2147483648" }, [])
+    expect(validateVariant({ ...variantDraft(only.variants[0]), sku: "X".repeat(65), ean: "5901234123458", weightGrams: "2147483648" }, [])
       .map((issue) => issue.field)).toEqual(["sku", "ean", "weightGrams"]);
-    expect(validateVariant({ ...variantDraft(), sku: "X", ean: "5901234123457", weightGrams: "0", optionValues: ["S", "Red"] }, multi.optionNames)).toEqual([]);
+    expect(validateVariant({ ...variantDraft(only.variants[0]), sku: "X", ean: "5901234123457", weightGrams: "1", optionValues: ["S", "Red"] }, multi.optionNames)).toEqual([]);
     expect(validateOptions({ names: ["Size"], values: { "variant-a": ["Same"], "variant-b": ["Same"] } }, multi)).toEqual([]);
   });
 });
