@@ -16,6 +16,26 @@
 .domain-edge-records, .domain-nameservers { list-style: none; padding: 0; margin: 0; }
 .domain-edge-records > li { padding-top: var(--space-3); border-top: 1px solid var(--color-border); }
 .domain-removal-note { display: grid; gap: var(--space-2); }
+.domain-zone-editor, .domain-zone-editor form, .domain-zone-outcome {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.domain-zone-editor { margin-block: var(--space-4); }
+.domain-zone-editor :is(h2, h3, p, dl), .domain-zone-outcome p { margin: 0; }
+.domain-zone-editor .domain-zone-ack {
+  display: flex;
+  gap: var(--space-3);
+  align-items: start;
+  min-height: var(--control-height);
+  cursor: pointer;
+}
+.domain-zone-ack input { flex: 0 0 auto; margin-top: .3em; }
+.domain-zone-ack span { min-width: 0; }
+.domain-workspace .domain-zone-review h3 { font-size: var(--text-lg); }
+.domain-zone-editor button { max-width: 100%; white-space: normal; }
 @container (max-width: 36rem) {
   .domain-workspace h1 { font-size: 1.5rem; }
   .domain-workspace h2 { font-size: 1.25rem; }

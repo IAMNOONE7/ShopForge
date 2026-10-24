@@ -5,7 +5,7 @@ import { findStoreProduct, getStoreProducts, hasVisibleStoreProduct } from "./ap
 import { changeCatalogLifecycle } from "./api/catalogLifecycle";
 import { changeBulkListings } from "./api/bulkListings";
 import { getStoreReadiness } from "./api/readiness";
-import { getStoreDomains, addStoreDomain, verifyStoreDomain, makeStoreDomainPrimary, removeStoreDomain } from "./api/domains";
+import { getStoreDomains, addStoreDomain, verifyStoreDomain, makeStoreDomainPrimary, removeStoreDomain, startStoreDomainZone } from "./api/domains";
 import { getOrders } from "./api/orders";
 import { changeOrder, getOrderDetails, refundOrder } from "./api/orderDetails";
 import { changeUnappliedPayment, getUnappliedPayments } from "./api/unappliedPayments";
@@ -499,6 +499,7 @@ export const api = {
   verifyStoreDomain,
   makeStoreDomainPrimary,
   removeStoreDomain,
+  startStoreDomainZone,
   publishStore: (storeId: string) =>
     request<AdminStore>("POST", `/api/admin/stores/${storeId}/publish`),
   unpublishStore: (storeId: string) =>

@@ -6,8 +6,11 @@ import { api } from "../api";
 import { domainNeedsRefresh, type StoreDomain } from "../api/domains";
 import { isHttpError } from "../api/http";
 import { statusOf } from "../api/errors";
+import { isSetupId } from "../api/setupProgress";
 import { domainProblem, normalizedDomain } from "../components/domainValidation";
 import { DomainEdgeProgress } from "../components/DomainEdgeProgress";
+import { DomainZoneForm } from "../components/DomainZoneForm";
+import { domainZoneInput, domainZoneProblem, type DomainZoneInput } from "../components/domainZoneValidation";
 import { Button } from "../components/ui/Button";
 import { Field } from "../components/ui/Field";
 import { InlineMessage } from "../components/ui/InlineMessage";
@@ -22,6 +25,7 @@ import "./StoreDomainsPage.css";
 
 type Operation = "add" | "verify" | "primary" | "remove";
 type Confirmation = { kind: "primary" | "remove"; domain: StoreDomain; storeName: string };
+type ZoneOutcome = { kind: "accepted" | "refused" | "uncertain"; operationId: string | null; error: unknown | null };
 
 export function StoreDomainsPage() {
   const { user } = useSession();
@@ -33,15 +37,18 @@ export function StoreDomainsPage() {
 function DomainsWorkspace({ store, reloadStores, storeRefreshing, storeRefreshError }: StoreOutletContext) {
   const { t, i18n } = useTranslation("domains");
   const { t: edge } = useTranslation("domainEdge"), { t: setup } = useTranslation("setup");
+  const { t: dns } = useTranslation("managedDns");
   const read = useSetupProgress(`domains:${store.id}`, async signal => ({ items: await api.storeDomains(store.id, signal) }), data => data.items.some(domainNeedsRefresh));
   const domains = read.state, reloadDomains = read.refresh;
   const [host, setHost] = useState("");
   const [invalid, setInvalid] = useState(false);
   const [showError, setShowError] = useState(false);
-  const [operation, setOperation] = useState<Operation>("add");
+  const [operation, setOperation] = useState<Operation | "zone">("add");
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [success, setSuccess] = useState<Operation | null>(null);
   const [uncertain, setUncertain] = useState(false);
+  const [zoneEditor, setZoneEditor] = useState<{ domain: StoreDomain; storeName: string } | null>(null);
+  const [zoneOutcome, setZoneOutcome] = useState<ZoneOutcome | null>(null);
   const [now, setNow] = useState(Date.now);
   const [error, run, pending] = useAction(() => undefined, { manageControls: false });
   const heading = useRef<HTMLHeadingElement>(null);
@@ -49,21 +56,27 @@ function DomainsWorkspace({ store, reloadStores, storeRefreshing, storeRefreshEr
   const opener = useRef<HTMLButtonElement | null>(null);
   const mounted = useRef(false);
   const request = useRef<AbortController | null>(null);
+  const zoneResult = useRef<HTMLDivElement>(null);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; request.current?.abort(); }; }, []);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
   useEffect(() => { if (confirmation) confirmButton.current?.focus(); }, [confirmation]);
+  useEffect(() => { if (zoneOutcome) zoneResult.current?.focus(); }, [zoneOutcome]);
   const readError = domains.status === "ready" ? domains.refreshError : domains.status === "loading" ? null : domains.error;
   const visible = domains.status === "ready" && ![401, 403, 404].includes(statusOf(readError) ?? 0);
   const data = visible && domains.status === "ready" ? domains.data.items : [];
   const refreshing = domains.status === "loading" || (domains.status === "ready" && domains.refreshing);
   const fresh = domains.status === "ready" && !refreshing && readError === null && !read.suspended;
   const stale = !fresh || storeRefreshing || storeRefreshError !== null;
-  const disabled = pending || stale || uncertain;
+  const zoneDisabled = pending || stale || uncertain;
+  const disabled = zoneDisabled || zoneEditor !== null;
   const confirmationChanged = confirmation !== null && (confirmation.storeName !== store.name || !data.some(domain => JSON.stringify(domain) === JSON.stringify(confirmation.domain)));
-  const knownProblem = showError ? domainProblem(error, operation) : null;
+  const zoneChanged = zoneEditor !== null && (zoneEditor.storeName !== store.name || !data.some(domain => JSON.stringify(domain) === JSON.stringify(zoneEditor.domain)));
+  const zoneProblem = zoneOutcome ? domainZoneProblem(zoneOutcome.error) : null;
+  const zoneFields = zoneOutcome?.kind === "refused" && isHttpError(zoneOutcome.error) && zoneOutcome.error.status === 400 ? zoneOutcome.error.problem?.errors : undefined;
+  const knownProblem = showError && operation !== "zone" ? domainProblem(error, operation) : null;
   const fieldError = invalid ? t("hostInvalid") : showError && operation === "add" && isHttpError(error) && error.problem?.errors?.hostName
     ? t(knownProblem === "platformAddress" ? "platformAddress" : "hostInvalid") : undefined;
 
@@ -73,6 +86,38 @@ function DomainsWorkspace({ store, reloadStores, storeRefreshing, storeRefreshEr
     window.requestAnimationFrame(() => {
       if (opener.current?.isConnected && !opener.current.disabled) opener.current.focus();
       else heading.current?.focus();
+    });
+  }
+  function closeZone() {
+    if (pending) return;
+    setZoneEditor(null);
+    window.requestAnimationFrame(() => {
+      if (!mounted.current) return;
+      if (opener.current?.isConnected && !opener.current.disabled) opener.current.focus(); else heading.current?.focus();
+    });
+  }
+  async function startZone(input: DomainZoneInput) {
+    if (zoneDisabled || !zoneEditor || confirmation || zoneChanged || domains.status !== "ready" || !read.isCurrent(domains.data)
+      || zoneEditor.domain.isVerified || zoneEditor.domain.zone !== null) return;
+    const checked = domainZoneInput(zoneEditor.domain.hostName, input.zone ?? "");
+    if (!checked || checked.name !== input.name) return;
+    const target = zoneEditor.domain;
+    await run(async () => {
+      setOperation("zone"); setShowError(false); setSuccess(null); setZoneOutcome(null); read.suspend();
+      const controller = new AbortController(); request.current = controller;
+      try {
+        const reply = await api.startStoreDomainZone(store.id, target.id, checked.zone, controller.signal);
+        if (!mounted.current) return;
+        setZoneOutcome({ kind: "accepted", operationId: reply.operationId, error: null }); setZoneEditor(null);
+      } catch (error) {
+        if (!mounted.current) return;
+        const refused = isHttpError(error) && error.kind === "http" && [400, 401, 403, 404, 409, 429].includes(error.status ?? 0);
+        const operationId = refused && isHttpError(error) && error.status === 409 && typeof error.problem?.operationId === "string" && isSetupId(error.problem.operationId) ? error.problem.operationId : null;
+        setUncertain(!refused); setZoneOutcome({ kind: refused ? "refused" : "uncertain", operationId, error });
+      } finally {
+        request.current = null;
+        if (mounted.current) { read.resume(); reloadStores(); }
+      }
     });
   }
   async function change(kind: Operation, domain?: StoreDomain) {
@@ -120,7 +165,7 @@ function DomainsWorkspace({ store, reloadStores, storeRefreshing, storeRefreshEr
     </div>
     <p className="hint">{setup(`updates.${read.mode}`)}</p>
     {refreshing && <LoadingState label={t("loading")} lines={2} />}
-    {pending && <p role="status">{t(operation === "verify" ? "checkingDns" : "saving")}</p>}
+    {pending && <p role="status">{operation === "zone" ? dns("starting") : t(operation === "verify" ? "checkingDns" : "saving")}</p>}
     {readError !== null && <RequestError error={readError} operation="read" onRetry={reloadDomains} />}
     {stale && visible && <p className="hint" role="status">{t("stale")}</p>}
     {(storeRefreshing || storeRefreshError !== null) && <div className="domain-metadata-status">
@@ -134,11 +179,24 @@ function DomainsWorkspace({ store, reloadStores, storeRefreshing, storeRefreshEr
       <RequestError error={error} operation="write" fieldErrors={operation === "add" && fieldError ? [{ field: "hostName", message: fieldError }] : []} />
       <p className="hint">{t("failureHint")}</p>
     </div>}
+    {zoneOutcome && visible && <div className="domain-zone-outcome" ref={zoneResult} tabIndex={-1}>
+      <p role="status">{dns(zoneOutcome.kind)}</p>
+      {zoneProblem && <p>{dns(zoneProblem)}</p>}
+      {zoneOutcome.error !== null && <RequestError error={zoneOutcome.error} operation="write" fieldErrors={zoneEditor && visible && zoneFields
+        ? [...(Object.hasOwn(zoneFields, "zone") ? [{ field: "zone-name", message: dns("zoneInvalid") }] : []),
+          ...(Object.hasOwn(zoneFields, "domainId") ? [{ field: "zone-domain", message: dns("domainProved") }] : [])] : []} />}
+      {isHttpError(zoneOutcome.error) && zoneOutcome.error.status === 409 && typeof zoneOutcome.error.problem?.detail === "string" && <details>
+        <summary>{dns("serverDetail")}</summary><p>{zoneOutcome.error.problem.detail}</p></details>}
+      {zoneOutcome.operationId && <Link to={`/stores/${store.id}/setup/${zoneOutcome.operationId}`}>{dns("operation")} <code>{zoneOutcome.operationId}</code></Link>}
+      {zoneOutcome.kind === "accepted" && <p className="hint">{dns("acceptedHint")}</p>}
+    </div>}
     {uncertain && <div className="domain-removal-note"><p role="status">{edge("uncertain")}</p><Link to={`/stores/${store.id}/setup`}>{edge("allSetup")}</Link>
       <Button type="button" variant="secondary" disabled={!fresh || pending || storeRefreshing || storeRefreshError !== null} onClick={() => {
-        if (domains.status === "ready" && read.isCurrent(domains.data) && !storeRefreshing && storeRefreshError === null && !pending) { setUncertain(false); setShowError(false); heading.current?.focus(); }
+        if (domains.status === "ready" && read.isCurrent(domains.data) && !storeRefreshing && storeRefreshError === null && !pending) { setUncertain(false); setShowError(false); if (zoneOutcome?.kind === "uncertain") setZoneOutcome(null); heading.current?.focus(); }
       }}>{edge("finishReview")}</Button></div>}
     {fresh && data.length === 0 && <p>{t("empty")}</p>}
+    {zoneEditor && visible && <DomainZoneForm domain={zoneEditor.domain} storeName={zoneEditor.storeName} disabled={zoneDisabled}
+      changed={zoneChanged} pending={pending} error={zoneOutcome?.error} onStart={startZone} onClose={closeZone} onEdit={() => setZoneOutcome(null)} />}
     <ul className="domain-list">
       {data.map((domain) => <li key={domain.id} className="store-settings-panel domain-card">
         <div className="domain-card-heading">
@@ -161,6 +219,13 @@ function DomainsWorkspace({ store, reloadStores, storeRefreshing, storeRefreshEr
           <p className="hint">{t("cleanupHint")}</p>
         </>}
         <DomainEdgeProgress domain={domain} storeId={store.id} />
+        {!domain.isVerified && domain.zone === null && <div className="domain-zone-option">
+          <p className="hint">{dns("optionHint")}</p><Button type="button" variant="secondary" disabled={disabled || confirmation !== null} onClick={event => {
+            if (disabled || confirmation || domains.status !== "ready" || !read.isCurrent(domains.data)) return;
+            opener.current = event.currentTarget; setZoneOutcome(null); setSuccess(null); setShowError(false);
+            setZoneEditor({ domain: structuredClone(domain), storeName: store.name });
+          }}>{dns("open", { host: domain.hostName })}</Button>
+        </div>}
         <div className="cluster domain-actions">
           {!domain.isVerified && <Button type="button" disabled={disabled || confirmation !== null} onClick={() => void change("verify", domain)}>{t("verify", { host: domain.hostName })}</Button>}
           {!domain.isPrimary && <>

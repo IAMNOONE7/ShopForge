@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { addStoreDomain, domainNeedsRefresh, getStoreDomains, makeStoreDomainPrimary, removeStoreDomain, verifyStoreDomain, type StoreDomain } from "./domains";
+import { addStoreDomain, domainNeedsRefresh, getStoreDomains, makeStoreDomainPrimary, removeStoreDomain, startStoreDomainZone, verifyStoreDomain, type StoreDomain } from "./domains";
 import { normalizedDomain, domainProblem } from "../components/domainValidation";
 import { HttpError } from "./http";
 
@@ -14,6 +14,26 @@ function response(value: unknown) { return new Response(JSON.stringify(value), {
 afterEach(() => { vi.unstubAllGlobals(); });
 
 describe("domain contracts", () => {
+  it.each([null, "example.cz"])("starts the scoped zone operation with zone=%s and a checked ID", async zone => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ operationId: id, extra: "not public" }), { status: 202, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetch); const signal = new AbortController().signal;
+    await expect(startStoreDomainZone("store/a", "domain/b", zone, signal)).resolves.toEqual({ operationId: id });
+    expect(fetch).toHaveBeenCalledExactlyOnceWith("/api/admin/stores/store%2Fa/domains/domain%2Fb/zone", expect.objectContaining({ method: "POST", body: JSON.stringify({ zone }), signal }));
+    expect(fetch.mock.calls[0][1].headers["Idempotency-Key"]).toBeUndefined();
+  });
+  it.each([null, [], {}, { operationId: null }, { operationId: "" }, { operationId: "wrong" }, { operationId: 1 }])("refuses an unconfirmed zone operation ID: %j", async value => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response(value)));
+    await expect(startStoreDomainZone("store", "domain", null)).rejects.toMatchObject({ kind: "invalid-response", status: 202 });
+  });
+  it("preserves a zone refusal without retrying and rejects a late aborted acceptance", async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ title: "Not now", detail: "Zone work is running." }), { status: 409, headers: { "Content-Type": "application/problem+json" } }))
+      .mockResolvedValueOnce(response({ operationId: id }));
+    vi.stubGlobal("fetch", fetch);
+    await expect(startStoreDomainZone("store", "domain", "example.cz")).rejects.toMatchObject({ status: 409, problem: { title: "Not now" } });
+    const controller = new AbortController(); controller.abort();
+    await expect(startStoreDomainZone("store", "domain", null, controller.signal)).rejects.toMatchObject({ name: "AbortError" });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
   it("uses the real scoped list/add/verify/primary/delete contracts with empty action bodies", async () => {
     const fetch = vi.fn().mockResolvedValueOnce(response([pending]))
       .mockResolvedValueOnce(response(pending)).mockResolvedValueOnce(response(verified))

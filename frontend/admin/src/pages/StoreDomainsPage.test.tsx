@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { useState } from "react";
-import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Outlet, Route, Routes, useNavigate } from "react-router";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,7 +8,7 @@ import App from "../App";
 import { api, type AdminStore } from "../api";
 import type { StoreDomain } from "../api/domains";
 import { HttpError } from "../api/http";
-import { setupProgressApi } from "../api/setupProgress";
+import { setupProgressApi, type SetupDetail } from "../api/setupProgress";
 import { initializeI18n, i18n } from "../i18n";
 import { SessionContext } from "../session";
 import { StoreDomainsPage } from "./StoreDomainsPage";
@@ -54,6 +54,7 @@ function row(host = pending.hostName) { return within(screen.getByRole("heading"
 beforeAll(initializeI18n);
 beforeEach(async () => {
   vi.restoreAllMocks(); reload.mockReset(); rows = [primary, pending];
+  vi.stubGlobal("CSS", { escape: (value: string) => value }); HTMLElement.prototype.scrollIntoView = vi.fn();
   await i18n.changeLanguage("en");
   vi.spyOn(api, "storeDomains").mockImplementation(async () => [...rows]);
   vi.spyOn(api, "addStoreDomain").mockResolvedValue(pending);
@@ -62,9 +63,12 @@ beforeEach(async () => {
     rows = [{ ...primary, isPrimary: false }, { ...verified, isPrimary: true }]; return rows[1];
   });
   vi.spyOn(api, "removeStoreDomain").mockImplementation(async () => { rows = [primary]; });
+  vi.spyOn(api, "startStoreDomainZone").mockImplementation(async (_store, _domain, name) => {
+    rows = [primary, { ...pending, zone: { ...zone, name: name ?? "example.cz" } }]; return { operationId: zoneId };
+  });
   vi.spyOn(api, "storeReadiness").mockResolvedValue({ isReady: false, checks: [{ check: "store.primary-domain", isReady: false, problem: "No proof", weight: "required" }] });
 });
-afterEach(async () => { cleanup(); vi.restoreAllMocks(); window.history.replaceState(null, "", "/"); await i18n.changeLanguage("en"); });
+afterEach(async () => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); window.history.replaceState(null, "", "/"); await i18n.changeLanguage("en"); });
 
 describe("domain onboarding", () => {
   it("shows exact DNS proof, ownership-only wording and primary protection", async () => {
@@ -316,9 +320,193 @@ describe("domain edge progress", () => {
     expect(vi.mocked(api.verifyStoreDomain).mock.calls[0][2]?.aborted).toBe(true); const reads = vi.mocked(api.storeDomains).mock.calls.length;
     await act(async () => held.resolve({ ...verified, edge })); expect(screen.queryByText(/Ownership verified. Live HTTPS/)).toBeNull(); expect(api.storeDomains).toHaveBeenCalledTimes(reads); expect(reload).not.toHaveBeenCalled();
   });
-  it.each(["en", "cs"])("renders %s edge/delegation controls without adding a managed-DNS start action", async language => {
+  it.each(["en", "cs"])("renders %s delegation controls without offering another start for an existing zone", async language => {
     await i18n.changeLanguage(language); rows = [primary, { ...pending, edge, zone }]; route(); await ready();
     expect(row().getByRole("region", { name: i18n.t("domainEdge:edgeTitle") })).toBeTruthy(); expect(row().getByText(i18n.t("domainEdge:delegationHint"))).toBeTruthy();
-    expect(row().queryByRole("button", { name: /Start DNS|Spustit DNS/ })).toBeNull();
+    expect(row().queryByRole("button", { name: i18n.t("managedDns:open", { host: pending.hostName }) })).toBeNull();
+  });
+});
+
+async function zoneReview(user: ReturnType<typeof userEvent.setup>, value = "") {
+  await user.click(row().getByRole("button", { name: i18n.t("managedDns:open", { host: pending.hostName }) }));
+  if (value) await user.type(screen.getByRole("textbox", { name: i18n.t("managedDns:zoneLabel") }), value);
+  await user.click(screen.getByRole("button", { name: i18n.t("managedDns:review") }));
+  return screen.getByRole("form", { name: i18n.t("managedDns:reviewTitle") });
+}
+async function acknowledgeZone(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("checkbox", { name: i18n.t("managedDns:acknowledge") }));
+  return screen.getByRole("button", { name: i18n.t("managedDns:start") });
+}
+
+describe("managed DNS delegation", () => {
+  it.each(["retry", "cancel"] as const)("opens the returned zone operation and reuses guarded %s recovery", async action => {
+    const user = userEvent.setup(), at = "2026-10-24T19:00:00Z";
+    const detail: SetupDetail = { id: zoneId, kind: "domain.zone", subject: "zone:example.cz", state: action === "retry" ? "failed" : "running",
+      createdAt: at, finishedAt: null, changedAt: at, nextCheckAt: null, stepRunning: false, actions: [action],
+      steps: [{ name: "delegation", status: action === "retry" ? "failed" : "waiting", resourceId: null, created: false, requestId: null, keepsSecret: false,
+        attempts: 1, checks: 1, waitingSince: at, note: "Point the nameservers at one.example.test and two.example.test.", lastError: null,
+        lastErrorAt: null, startedAt: at, finishedAt: null }] };
+    const next = { ...detail, state: action === "retry" ? "running" : "cancelling", actions: [] };
+    const read = vi.spyOn(setupProgressApi, "detail").mockResolvedValueOnce(detail).mockResolvedValue(next);
+    const act = vi.spyOn(setupProgressApi, "act").mockResolvedValue(next);
+    route(); await ready(); await zoneReview(user); await user.click(await acknowledgeZone(user));
+    await user.click(await screen.findByRole("link", { name: /Open DNS setup process/ }));
+    await screen.findByRole("heading", { name: "Setup details" });
+    expect(await screen.findByText(detail.steps[0].note!)).toBeTruthy();
+    expect(read).toHaveBeenCalledExactlyOnceWith("store-a", zoneId, expect.any(AbortSignal));
+    await user.click(screen.getByRole("button", { name: i18n.t(`setup:recovery.actions.${action}.label`) }));
+    expect(act).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: i18n.t(`setup:recovery.actions.${action}.confirm`) }));
+    await screen.findByText(i18n.t("setup:recovery.accepted"));
+    expect(act).toHaveBeenCalledExactlyOnceWith("store-a", zoneId, action, expect.any(AbortSignal));
+    expect(api.startStoreDomainZone).toHaveBeenCalledOnce();
+  });
+
+  it.each(["en", "cs"])("reviews the default zone, requires acknowledgment and shows accepted progress in %s", async language => {
+    await i18n.changeLanguage(language); const user = userEvent.setup(); route(); await ready();
+    const form = await zoneReview(user);
+    expect(within(form).getByText("example.cz", { exact: true })).toBeTruthy();
+    expect(within(form).getByText(pending.hostName, { exact: true })).toBeTruthy();
+    expect(within(form).getByText(i18n.t("managedDns:noMigration"))).toBeTruthy();
+    expect(document.activeElement).toBe(within(form).getByRole("heading"));
+    fireEvent.submit(form); expect(api.startStoreDomainZone).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: i18n.t("managedDns:start") })).toHaveProperty("disabled", true);
+    await user.click(await acknowledgeZone(user));
+    const link = await screen.findByRole("link", { name: new RegExp(i18n.t("managedDns:operation")) });
+    expect(link.getAttribute("href")).toBe(`/stores/store-a/setup/${zoneId}`);
+    expect(api.startStoreDomainZone).toHaveBeenCalledExactlyOnceWith("store-a", pending.id, null, expect.any(AbortSignal));
+    expect(await screen.findByText(zone.nameServers[0])).toBeTruthy();
+    expect(row().getByText(i18n.t("domains:unverified"))).toBeTruthy();
+    expect(screen.getByText(i18n.t("managedDns:acceptedHint"))).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: i18n.t("managedDns:zoneLabel") })).toBeNull();
+    expect(reload).toHaveBeenCalledOnce();
+  });
+
+  it("validates a containing zone, normalizes an explicit zone and serializes the command with ownership writes", async () => {
+    const user = userEvent.setup(); route(); await ready();
+    await user.click(row().getByRole("button", { name: "Set up DNS for shop.example.cz" }));
+    const input = screen.getByRole("textbox", { name: "DNS zone (optional)" });
+    expect(document.activeElement).toBe(input);
+    await user.type(input, "other.cz"); await user.click(screen.getByRole("button", { name: "Review DNS setup" }));
+    expect(input.getAttribute("aria-invalid")).toBe("true"); expect(document.activeElement).toBe(input);
+    expect(api.startStoreDomainZone).not.toHaveBeenCalled();
+    await user.clear(input); await user.type(input, " SHOP.Example.CZ. ");
+    await user.click(screen.getByRole("button", { name: "Review DNS setup" }));
+    const form = screen.getByRole("form", { name: "Review the domain and DNS zone" });
+    expect(within(form).getAllByText(pending.hostName, { exact: true })).toHaveLength(2);
+    await acknowledgeZone(user);
+    const held = deferred<{ operationId: string }>(); vi.mocked(api.startStoreDomainZone).mockReturnValueOnce(held.promise);
+    act(() => { fireEvent.submit(form); fireEvent.submit(form); });
+    expect(api.startStoreDomainZone).toHaveBeenCalledExactlyOnceWith("store-a", pending.id, "shop.example.cz", expect.any(AbortSignal));
+    expect(row().getByRole("button", { name: /Check ownership/ })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Close DNS setup" })).toHaveProperty("disabled", true);
+    await user.keyboard("{Escape}"); expect(screen.getByRole("form", { name: "Review the domain and DNS zone" })).toBeTruthy();
+    rows = [primary, { ...pending, zone }]; await act(async () => held.resolve({ operationId: zoneId }));
+    await screen.findByText(i18n.t("managedDns:accepted")); expect(api.verifyStoreDomain).not.toHaveBeenCalled();
+  });
+
+  it("retains the zone draft through editing, Escape and cancellation without issuing a command", async () => {
+    const user = userEvent.setup(); route(); await ready(); await zoneReview(user, "shop.example.cz");
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("form", { name: "Review the domain and DNS zone" })).toBeNull();
+    expect(screen.getByRole("textbox", { name: "DNS zone (optional)" })).toHaveProperty("value", "shop.example.cz");
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Review DNS setup" })));
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(document.activeElement).toBe(row().getByRole("button", { name: "Set up DNS for shop.example.cz" })));
+    expect(screen.queryByRole("textbox", { name: "DNS zone (optional)" })).toBeNull(); expect(api.startStoreDomainZone).not.toHaveBeenCalled();
+    expect(row().getByRole("textbox", { name: "TXT record value" })).toHaveProperty("value", pending.challengeValue);
+  });
+
+  it.each(["zone", "domainId"])("retains a refused draft and focuses the mapped %s error", async field => {
+    const user = userEvent.setup(); route(); await ready(); await zoneReview(user, " SHOP.Example.CZ. ");
+    vi.mocked(api.startStoreDomainZone).mockRejectedValueOnce(new HttpError("http", 400, { errors: { [field]: ["Backend validation"] } }));
+    await user.click(await acknowledgeZone(user)); await screen.findByRole("alert");
+    const input = screen.getByRole("textbox", { name: "DNS zone (optional)" });
+    expect(input).toHaveProperty("value", " SHOP.Example.CZ. ");
+    expect(screen.queryByRole("form", { name: "Review the domain and DNS zone" })).toBeNull();
+    await user.click(within(screen.getByRole("alert")).getByRole("button"));
+    expect(document.activeElement).toBe(document.getElementById(field === "zone" ? "zone-name" : "zone-domain"));
+    await user.click(screen.getByRole("button", { name: "Review DNS setup" }));
+    expect(screen.getByRole("checkbox", { name: i18n.t("managedDns:acknowledge") })).toHaveProperty("checked", false);
+    expect(api.startStoreDomainZone).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    [404, "Not Found", "domainMissing"], [409, "That zone is already taken", "taken"],
+    [409, "Not here", "unavailable"], [409, "Not now", "busy"], [409, "Unknown conflict", null],
+  ] as const)("shows the %i / %s refusal and never replays it on refresh", async (status, title, key) => {
+    const user = userEvent.setup(); route(); await ready(); await zoneReview(user, "example.cz");
+    vi.mocked(api.startStoreDomainZone).mockRejectedValueOnce(new HttpError("http", status, { title, detail: '<script>literal detail</script>' }));
+    await user.click(await acknowledgeZone(user)); await screen.findByRole("alert");
+    if (key) expect(screen.getByText(i18n.t(`managedDns:${key}`))).toBeTruthy();
+    if (status === 409) expect(screen.getByText('<script>literal detail</script>').textContent).toBe('<script>literal detail</script>');
+    expect(document.querySelector(".domain-zone-outcome script")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Refresh addresses" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Review DNS setup" })).toHaveProperty("disabled", false));
+    expect(screen.getByRole("textbox", { name: "DNS zone (optional)" })).toHaveProperty("value", "example.cz");
+    expect(api.startStoreDomainZone).toHaveBeenCalledOnce();
+  });
+
+  it.each([zoneId, "wrong"])("links only an actual checked conflict operation ID: %s", async operationId => {
+    const user = userEvent.setup(); route(); await ready(); await zoneReview(user);
+    vi.mocked(api.startStoreDomainZone).mockRejectedValueOnce(new HttpError("http", 409, { title: "Not now", operationId }));
+    await user.click(await acknowledgeZone(user)); await screen.findByRole("alert");
+    const link = screen.queryByRole("link", { name: /Open DNS setup process/ });
+    expect(link !== null).toBe(operationId === zoneId);
+    if (link) expect(link.getAttribute("href")).toBe(`/stores/store-a/setup/${zoneId}`);
+  });
+
+  it.each([new HttpError("network", null), new HttpError("invalid-response", 202), new HttpError("http", 503)])("requires GET recovery and another explicit review after an uncertain start: %j", async error => {
+    const user = userEvent.setup(); route(); await ready(); await zoneReview(user, "example.cz");
+    vi.mocked(api.startStoreDomainZone).mockRejectedValueOnce(error); vi.mocked(api.storeDomains).mockRejectedValueOnce(new HttpError("http", 503));
+    await user.click(await acknowledgeZone(user)); await screen.findByText(i18n.t("managedDns:uncertain"));
+    expect(screen.getByRole("button", { name: "Finish review of current addresses" })).toHaveProperty("disabled", true);
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Finish review of current addresses" })).toHaveProperty("disabled", false));
+    expect(screen.getByRole("button", { name: "Review DNS setup" })).toHaveProperty("disabled", true);
+    await user.click(screen.getByRole("button", { name: "Finish review of current addresses" }));
+    await user.click(screen.getByRole("button", { name: "Review DNS setup" }));
+    expect(screen.getByRole("button", { name: "Start DNS setup" })).toHaveProperty("disabled", true);
+    expect(api.startStoreDomainZone).toHaveBeenCalledOnce();
+  });
+
+  it.each(["proved", "zone", "removed", "store-name"])("requires a fresh review when %s changes during confirmation", async change => {
+    const user = userEvent.setup(); route(); await ready(); await zoneReview(user, "example.cz"); await acknowledgeZone(user);
+    if (change === "store-name") await user.click(screen.getByRole("button", { name: "Rename store" }));
+    else {
+      rows = change === "removed" ? [primary] : [primary, change === "proved" ? verified : { ...pending, zone }];
+      await user.click(screen.getByRole("button", { name: "Refresh addresses" }));
+    }
+    await screen.findByText(i18n.t("managedDns:changed"));
+    expect(screen.getByRole("button", { name: "Start DNS setup" })).toHaveProperty("disabled", true);
+    fireEvent.submit(screen.getByRole("form", { name: "Review the domain and DNS zone" })); expect(api.startStoreDomainZone).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "DNS zone (optional)" })).toHaveProperty("value", "example.cz");
+    await user.click(screen.getByRole("button", { name: "Close DNS setup" }));
+    expect(screen.queryByRole("textbox", { name: "DNS zone (optional)" })).toBeNull();
+  });
+
+  it("rejects a submit racing a new read before the pending state can repaint", async () => {
+    const user = userEvent.setup(); route(); await ready(); await zoneReview(user); await acknowledgeZone(user);
+    const held = deferred<StoreDomain[]>(); vi.mocked(api.storeDomains).mockReturnValueOnce(held.promise);
+    act(() => { fireEvent.click(screen.getByRole("button", { name: "Refresh addresses" })); fireEvent.submit(screen.getByRole("form", { name: "Review the domain and DNS zone" })); });
+    expect(api.startStoreDomainZone).not.toHaveBeenCalled(); await act(async () => held.resolve(rows));
+  });
+
+  it.each(["store", "role", "session", "unmount"])("aborts zone setup and ignores its late reply after %s departure", async departure => {
+    const user = userEvent.setup(), held = deferred<{ operationId: string }>(); const view = route(); await ready(); await zoneReview(user);
+    vi.mocked(api.startStoreDomainZone).mockReturnValueOnce(held.promise); await user.click(await acknowledgeZone(user));
+    if (departure === "unmount") view.unmount(); else await user.click(screen.getByRole("button", { name: departure === "store" ? "Other store" : departure === "role" ? "New role" : "New session" }));
+    expect(vi.mocked(api.startStoreDomainZone).mock.calls[0][3]?.aborted).toBe(true);
+    const count = vi.mocked(api.storeDomains).mock.calls.length;
+    await act(async () => held.resolve({ operationId: zoneId }));
+    expect(screen.queryByText(i18n.t("managedDns:accepted"))).toBeNull(); expect(reload).not.toHaveBeenCalled(); expect(api.storeDomains).toHaveBeenCalledTimes(count);
+  });
+
+  it.each([401, 403, 404])("hides the zone draft and private operation link after a %i read", async status => {
+    const user = userEvent.setup(); route(); await ready(); await zoneReview(user, "example.cz");
+    vi.mocked(api.storeDomains).mockRejectedValueOnce(new HttpError("http", status));
+    await user.click(screen.getByRole("button", { name: "Refresh addresses" })); await screen.findByRole("alert");
+    expect(screen.queryByRole("textbox", { name: "DNS zone (optional)" })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Open DNS setup process/ })).toBeNull(); expect(api.startStoreDomainZone).not.toHaveBeenCalled();
   });
 });

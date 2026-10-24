@@ -81,6 +81,12 @@ export async function removeStoreDomain(storeId: string, domainId: string, signa
   const value = await requestJson<unknown>(`${root(storeId)}/${encodeURIComponent(domainId)}`, { method: "DELETE", signal }); signal?.throwIfAborted();
   if (value !== undefined) throw new HttpError("invalid-response", 200);
 }
+export async function startStoreDomainZone(storeId: string, domainId: string, zone: string | null, signal?: AbortSignal) {
+  const value = await requestJson<unknown>(`${root(storeId)}/${encodeURIComponent(domainId)}/zone`, { method: "POST", body: { zone }, signal });
+  signal?.throwIfAborted();
+  if (!record(value) || typeof value.operationId !== "string" || !isSetupId(value.operationId)) throw new HttpError("invalid-response", 202);
+  return { operationId: value.operationId };
+}
 export function domainNeedsRefresh(item: StoreDomain) {
   return item.edge !== null && (["waiting", "binding", "unbinding"].includes(item.edge.state)
     || item.edge.state === "bound" && ["pendingRevalidation", "refreshingValidationToken", "submitting", "pending"].includes(item.edge.validation ?? ""))
