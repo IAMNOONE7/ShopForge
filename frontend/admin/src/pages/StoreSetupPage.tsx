@@ -4,6 +4,7 @@ import { useSelectedStore } from "../adminContext";
 import { statusOf } from "../api/errors";
 import { isSetupId, setupIsActive, setupProgressApi, type SetupDetail, type SetupSummary } from "../api/setupProgress";
 import { Button } from "../components/ui/Button";
+import { SetupRecoveryPanel } from "../components/SetupRecoveryPanel";
 import { EmptyState } from "../components/ui/EmptyState";
 import { LoadingState } from "../components/ui/LoadingState";
 import { RequestError } from "../components/ui/RequestError";
@@ -42,10 +43,10 @@ function Feedback({ state, refresh }: { state: RequestState<unknown>; refresh: (
     {state.status === "ready" && ![401, 403, 404].includes(statusOf(error) ?? 0) && (state.refreshing || error !== null) && <p className="setup-stale" role="status">{t("stale")}</p>}
   </>;
 }
-function RefreshControls({ read }: { read: Pick<ReturnType<typeof useSetupProgress<unknown>>, "refreshing" | "refresh" | "canPause" | "paused" | "toggle" | "mode"> }) {
+function RefreshControls({ read }: { read: Pick<ReturnType<typeof useSetupProgress<unknown>>, "refreshing" | "refresh" | "canPause" | "paused" | "toggle" | "mode" | "suspended"> }) {
   const { t } = useTranslation("setup");
   return <div className="setup-refresh">
-    <div className="cluster"><Button variant="secondary" disabled={read.refreshing} onClick={read.refresh}>{t("refresh")}</Button>
+    <div className="cluster"><Button variant="secondary" disabled={read.refreshing || read.suspended} onClick={read.refresh}>{t("refresh")}</Button>
       {read.canPause && <Button variant="quiet" onClick={read.toggle}>{t(read.paused ? "resume" : "pause")}</Button>}</div>
     <p className="hint">{t(`updates.${read.mode}`)}</p>
   </div>;
@@ -99,6 +100,7 @@ function SetupDetailPage({ operationId }: { operationId: string }) {
     <Link to={`/stores/${store.id}/setup`}>{t("back")}</Link><h1>{t("detailTitle")}</h1><p className="hint">{t("scope", { store: store.name })}</p>
     <RefreshControls read={read} /><Feedback state={read.state} refresh={read.refresh} />
     {statusOf(error) === 404 && <EmptyState headingLevel={2} title={t("missingTitle")}>{t("missingBody")}</EmptyState>}
+    <SetupRecoveryPanel read={read} item={ready?.data ?? null} renderKind={kind => <Kind kind={kind} />} />
     {ready && <Detail item={ready.data} />}
   </div>;
 }

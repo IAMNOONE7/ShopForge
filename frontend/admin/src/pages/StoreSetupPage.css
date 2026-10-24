@@ -25,8 +25,16 @@
 .setup-stale { color: var(--color-danger); }
 .setup-technical summary { cursor: pointer; padding-block: var(--space-2); }
 .setup-technical[open] .setup-facts { margin-top: var(--space-3); }
+.setup-recovery, .setup-confirmation, .setup-action-result { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); min-width: 0; }
+.setup-recovery { padding: var(--space-4); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-panel); }
+.setup-confirmation { padding: var(--space-3); background: var(--color-info-surface); border-left: 3px solid var(--color-info); }
+.setup-action-result details p { white-space: pre-wrap; margin-top: var(--space-2); }
 @container (max-width: 36rem) {
   .setup-page h1 { font-size: 1.5rem; }
+  .setup-recovery { padding: var(--space-2); }
+  .setup-recovery h2 { font-size: 1.25rem; }
+  .setup-recovery h3 { font-size: 1.125rem; }
+  .setup-confirmation { padding: var(--space-1); }
   .setup-list > li, .setup-steps > li, .setup-overview { padding: var(--space-3); }
   .setup-page button { padding-inline: var(--space-2); }
 }

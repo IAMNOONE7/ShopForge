@@ -21,10 +21,14 @@ const detail: SetupDetail = { id, kind: summary.kind, subject: null, state: "awa
     attempts: 0, checks: 0, waitingSince: summary.createdAt, note: "Publish the TXT record.", lastError: "Previous check failed", lastErrorAt: summary.createdAt, startedAt: null, finishedAt: null }] };
 function Shell({ role: initialRole = "Owner" }: { role?: string }) {
   const [selected, setSelected] = useState(store), [role, setRole] = useState(initialRole); const navigate = useNavigate(), location = useLocation();
-  return <SessionContext value={{ user: { id: "staff", email: "staff@example.test", role, tenantId: "tenant" }, logout: vi.fn(), logoutPending: false, logoutError: null }}>
+  const [staff, setStaff] = useState("staff"), [storeRefreshing, setStoreRefreshing] = useState(false);
+  return <SessionContext value={{ user: { id: staff, email: "staff@example.test", role, tenantId: "tenant" }, logout: vi.fn(), logoutPending: false, logoutError: null }}>
     <button onClick={() => { setSelected({ ...store, id: "store-b", name: "Other shop" }); navigate(`/stores/store-b/setup${location.pathname.endsWith(id) ? "/" + id : ""}`); }}>Other store</button>
     <button onClick={() => setRole("Support")}>New role</button>
-    <Outlet context={{ store: selected, storeRefreshing: false, storeRefreshError: null, reloadStores: vi.fn() }} />
+    <button onClick={() => setStaff("other-staff")}>New session</button>
+    <button onClick={() => navigate(`/stores/${selected.id}/setup/22222222-2222-2222-2222-222222222222`)}>Other process</button>
+    <button onClick={() => setStoreRefreshing(value => !value)}>Toggle store refresh</button>
+    <Outlet context={{ store: selected, storeRefreshing, storeRefreshError: null, reloadStores: vi.fn() }} />
   </SessionContext>;
 }
 function app(path = "/stores/store-a/setup", role = "Owner") {
@@ -38,6 +42,7 @@ beforeAll(initializeI18n);
 beforeEach(async () => {
   window.history.replaceState(null, "", "/"); await i18n.changeLanguage("en");
   vi.spyOn(setupProgressApi, "list").mockResolvedValue([summary]); vi.spyOn(setupProgressApi, "detail").mockResolvedValue(detail);
+  vi.spyOn(setupProgressApi, "act").mockRejectedValue(new Error("Unexpected setup action"));
   vi.spyOn(api, "failedMessages").mockResolvedValue([]); vi.spyOn(api, "suppressedAddresses").mockResolvedValue([]);
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
@@ -57,11 +62,13 @@ it("reads an older direct detail without needing it in the latest list", async (
   expect(screen.getByText(i18n.t("setup:stepRunning"))).toBeTruthy(); expect(screen.getAllByText("0")).toHaveLength(2);
   const user = userEvent.setup(); await user.click(screen.getByText("Technical references"));
   expect(screen.getByText("Reference recorded; the secret is not included")).toBeTruthy(); expect(screen.getByText("resource")).toBeTruthy();
-  expect(screen.queryByRole("button", { name: /Continue|Cancel|Retry setup/ })).toBeNull();
+  expect((screen.getByRole("button", { name: "Continue setup" }) as HTMLButtonElement).disabled).toBe(true);
 });
-it.each(["Owner", "Admin", "CatalogManager", "OrderManager", "Warehouse", "Support"])("allows %s to read progress without recovery controls", async role => {
+it.each(["Owner", "Admin", "CatalogManager", "OrderManager", "Warehouse", "Support", "unknown"])("allows %s to read progress while guarding leased recovery", async role => {
   render(app(`/stores/store-a/setup/${id}`, role)); await screen.findByRole("heading", { name: "Recorded steps" });
-  expect(screen.queryByRole("button", { name: /Continue|Cancel|Retry setup/ })).toBeNull();
+  const controls = screen.queryAllByRole("button", { name: /Continue setup|Cancel setup|Retry setup/ });
+  if (["Owner", "Admin"].includes(role)) { expect(controls).toHaveLength(2); expect(controls.every(button => (button as HTMLButtonElement).disabled)).toBe(true); }
+  else expect(controls).toHaveLength(0);
 });
 it("keeps unknown kinds/statuses and malicious-looking notes inert without granting actions", async () => {
   vi.mocked(setupProgressApi.detail).mockResolvedValue({ ...detail, kind: "__proto__", state: "futureState", actions: ["futureWrite"], steps: [{ ...detail.steps[0], status: "futureStep", note: '<script>alert(1)</script>\n' + 'long-record-'.repeat(100) }] });
@@ -123,4 +130,121 @@ it("routes a protected direct setup page through the real merchant shell", async
   const navigation = screen.getByRole("navigation", { name: "Administration" });
   expect(within(navigation).getByRole("link", { name: "Setup progress" }).getAttribute("href")).toBe("/stores/store-a/setup");
   expect(within(navigation).getByRole("link", { name: "Message delivery" }).getAttribute("href")).toBe("/stores/store-a/operations");
+});
+
+function recoveryItem(change: Partial<SetupDetail> = {}): SetupDetail { return { ...detail, stepRunning: false, subject: "mail.workshop.cz", ...change }; }
+async function recovery(change: Partial<SetupDetail> = {}, role = "Owner") {
+  vi.mocked(setupProgressApi.detail).mockResolvedValue(recoveryItem(change)); const user = userEvent.setup();
+  const view = render(app(`/stores/store-a/setup/${id}`, role)); await screen.findByRole("heading", { name: "Recorded steps" }); return { user, ...view };
+}
+it.each(["Owner", "Admin"])("lets %s review the exact named target, close with Escape and return focus without writing", async role => {
+  const { user } = await recovery({}, role), opener = screen.getByRole("button", { name: "Cancel setup" });
+  await user.click(opener); const form = screen.getByRole("form", { name: "Review setup cancellation" });
+  await waitFor(() => expect(document.activeElement).toBe(within(form).getByRole("heading")));
+  expect(within(form).getByText("Workshop")).toBeTruthy(); expect(within(form).getByText("mail.workshop.cz")).toBeTruthy(); expect(within(form).getByText(id)).toBeTruthy();
+  expect(within(form).getByText(/Existing or irreversible resources may remain/)).toBeTruthy();
+  await user.keyboard("{Escape}"); await waitFor(() => expect(document.activeElement).toBe(opener)); expect(screen.queryByRole("form")).toBeNull(); expect(setupProgressApi.act).not.toHaveBeenCalled();
+});
+it.each([
+  { state: "failed", actions: ["retry"], action: "retry", label: "Retry setup", confirm: "Confirm retry", next: "running" },
+  { state: "failed", actions: ["retry"], action: "retry", label: "Retry setup", confirm: "Confirm retry", next: "cancelling" },
+  { state: "awaitingInput", actions: ["continue"], action: "continue", label: "Continue setup", confirm: "Confirm continuation", next: "running" },
+  { state: "awaitingInput", actions: ["cancel"], action: "cancel", label: "Cancel setup", confirm: "Confirm cancellation", next: "cancelling" },
+])("submits $action once and shows the authoritative $next reply while follow-up reading is pending", async ({ state, actions, action, label, confirm, next }) => {
+  const held = deferred<SetupDetail>(), after = deferred<SetupDetail>(); vi.mocked(setupProgressApi.act).mockReturnValueOnce(held.promise);
+  const { user } = await recovery({ state, actions }); await user.click(screen.getByRole("button", { name: label }));
+  if (action === "retry") expect(screen.getByText(/this retries its cleanup instead/)).toBeTruthy();
+  vi.mocked(setupProgressApi.detail).mockReturnValueOnce(after.promise);
+  const form = screen.getByRole("form"); act(() => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+  expect(setupProgressApi.act).toHaveBeenCalledExactlyOnceWith("store-a", id, action, expect.any(AbortSignal));
+  expect((screen.getByRole("button", { name: confirm }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole("button", { name: "Refresh progress" }) as HTMLButtonElement).disabled).toBe(true);
+  const reply = recoveryItem({ state: next, actions: [], steps: [{ ...detail.steps[0], note: "Authoritative action reply" }] });
+  await act(async () => held.resolve(reply)); await screen.findByText("Authoritative action reply"); expect(screen.getByText(/server accepted the request/)).toBeTruthy();
+  expect(screen.queryByText("Cancelled")).toBeNull(); expect(setupProgressApi.detail).toHaveBeenCalledTimes(2);
+  await act(async () => after.resolve(reply)); expect(setupProgressApi.act).toHaveBeenCalledTimes(1);
+});
+it.each(["CatalogManager", "OrderManager", "Warehouse", "Support", "futureRole"])("never enables recovery for %s even when the server offers it", async role => {
+  await recovery({}, role); expect(screen.queryByRole("button", { name: /Continue setup|Cancel setup|Retry setup/ })).toBeNull(); expect(setupProgressApi.act).not.toHaveBeenCalled();
+});
+it.each([
+  { kind: "future" }, { state: "future" }, { actions: ["continue", "future"] }, { steps: [{ ...detail.steps[0], status: "future" }] },
+  { state: "succeeded", actions: ["retry", "continue", "cancel"] }, { state: "cancelling", actions: ["cancel"] }, { state: "running", actions: ["retry", "continue"] },
+])("does not invent recovery for unsupported or incompatible progress %j", async change => {
+  await recovery(change); expect(screen.queryByRole("button", { name: /Continue setup|Cancel setup|Retry setup/ })).toBeNull();
+});
+it("blocks confirmation during a read, then requires a new review when progress changed", async () => {
+  const { user } = await recovery(); await user.click(screen.getByRole("button", { name: "Continue setup" }));
+  const held = deferred<SetupDetail>(); vi.mocked(setupProgressApi.detail).mockReturnValueOnce(held.promise);
+  await user.click(screen.getByRole("button", { name: "Refresh progress" }));
+  expect((screen.getByRole("button", { name: "Confirm continuation" }) as HTMLButtonElement).disabled).toBe(true);
+  await act(async () => held.resolve(recoveryItem({ changedAt: "2026-10-24T08:00:00Z" })));
+  expect(screen.getByText(/recorded progress or store details changed/)).toBeTruthy();
+  expect((screen.getByRole("button", { name: "Confirm continuation" }) as HTMLButtonElement).disabled).toBe(true);
+  await user.click(screen.getByRole("button", { name: "Close review" })); await user.click(screen.getByRole("button", { name: "Continue setup" }));
+  expect((screen.getByRole("button", { name: "Confirm continuation" }) as HTMLButtonElement).disabled).toBe(false); expect(setupProgressApi.act).not.toHaveBeenCalled();
+});
+it("blocks stale data after a failed read until GET recovery succeeds", async () => {
+  const { user } = await recovery(); vi.mocked(setupProgressApi.detail).mockRejectedValueOnce(new HttpError("http", 503));
+  await user.click(screen.getByRole("button", { name: "Refresh progress" })); await screen.findByRole("alert");
+  expect((screen.getByRole("button", { name: "Continue setup" }) as HTMLButtonElement).disabled).toBe(true);
+  await user.click(screen.getByRole("button", { name: "Try again" })); await waitFor(() => expect((screen.getByRole("button", { name: "Continue setup" }) as HTMLButtonElement).disabled).toBe(false));
+  expect(setupProgressApi.act).not.toHaveBeenCalled();
+});
+it.each([new HttpError("network", null), new HttpError("http", 503), new HttpError("invalid-response", 200)])("requires current-read review after an unconfirmed action (%j), without replaying it", async failure => {
+  const { user } = await recovery(); vi.mocked(setupProgressApi.act).mockRejectedValueOnce(failure);
+  const held = deferred<SetupDetail>(); vi.mocked(setupProgressApi.detail).mockReturnValueOnce(held.promise);
+  await user.click(screen.getByRole("button", { name: "Continue setup" })); await user.click(screen.getByRole("button", { name: "Confirm continuation" }));
+  await screen.findByText(/request is unconfirmed/); const finish = screen.getByRole("button", { name: "Finish review of current progress" });
+  expect((finish as HTMLButtonElement).disabled).toBe(true); expect(setupProgressApi.act).toHaveBeenCalledTimes(1);
+  await act(async () => held.resolve(recoveryItem())); expect((finish as HTMLButtonElement).disabled).toBe(false);
+  expect((screen.getByRole("button", { name: "Continue setup" }) as HTMLButtonElement).disabled).toBe(true);
+  await user.click(finish); await user.click(screen.getByRole("button", { name: "Continue setup" }));
+  expect(screen.getByRole("form", { name: "Review setup continuation" })).toBeTruthy(); expect(setupProgressApi.act).toHaveBeenCalledTimes(1);
+});
+it("retains the uncertain latch through failed recovery reads and never turns Try again into a write", async () => {
+  const { user } = await recovery(); vi.mocked(setupProgressApi.act).mockRejectedValueOnce(new HttpError("network", null));
+  vi.mocked(setupProgressApi.detail).mockRejectedValueOnce(new HttpError("http", 503));
+  await user.click(screen.getByRole("button", { name: "Continue setup" })); await user.click(screen.getByRole("button", { name: "Confirm continuation" }));
+  await screen.findByText(/request is unconfirmed/); expect((screen.getByRole("button", { name: "Finish review of current progress" }) as HTMLButtonElement).disabled).toBe(true);
+  await user.click(screen.getByRole("button", { name: "Try again" })); await waitFor(() => expect((screen.getByRole("button", { name: "Finish review of current progress" }) as HTMLButtonElement).disabled).toBe(false));
+  expect(setupProgressApi.act).toHaveBeenCalledTimes(1); expect(setupProgressApi.detail).toHaveBeenCalledTimes(3);
+});
+it.each([403, 404, 409, 429])("refreshes after a %i action refusal without implying cancellation completed", async status => {
+  const { user } = await recovery(); vi.mocked(setupProgressApi.act).mockRejectedValueOnce(new HttpError("http", status, { title: "Not now", detail: "A step is running <script>literal</script>" }));
+  if (status === 403 || status === 404) vi.mocked(setupProgressApi.detail).mockRejectedValueOnce(new HttpError("http", status));
+  await user.click(screen.getByRole("button", { name: "Cancel setup" })); await user.click(screen.getByRole("button", { name: "Confirm cancellation" }));
+  await screen.findByText(/server refused the request/); expect(setupProgressApi.detail).toHaveBeenCalledTimes(2); expect(setupProgressApi.act).toHaveBeenCalledTimes(1);
+  expect(screen.queryByText("Cancelled")).toBeNull(); expect(screen.queryByRole("button", { name: "Finish review of current progress" })).toBeNull();
+  if (status === 403 || status === 404) expect(screen.queryByRole("button", { name: "Cancel setup" })).toBeNull();
+  if (status === 409) { await user.click(screen.getByText("Server explanation")); expect(screen.getByText(/A step is running <script>/)).toBeTruthy(); expect(document.querySelector("script")).toBeNull(); }
+});
+it("keeps an accepted authoritative reply visible after a failed follow-up read", async () => {
+  const { user } = await recovery(); vi.mocked(setupProgressApi.act).mockResolvedValueOnce(recoveryItem({ state: "cancelling", actions: [], steps: [{ ...detail.steps[0], note: "Cleanup requested" }] }));
+  vi.mocked(setupProgressApi.detail).mockRejectedValueOnce(new HttpError("http", 503));
+  await user.click(screen.getByRole("button", { name: "Cancel setup" })); await user.click(screen.getByRole("button", { name: "Confirm cancellation" }));
+  await screen.findByText("Cleanup requested"); expect(screen.getByText("Cancellation in progress")).toBeTruthy(); expect(screen.getByText(/server accepted the request/)).toBeTruthy();
+  expect(screen.getByText(/last loaded records/)).toBeTruthy(); expect(setupProgressApi.act).toHaveBeenCalledTimes(1);
+});
+it("treats a reply for a different immutable target as unconfirmed", async () => {
+  const { user } = await recovery(); vi.mocked(setupProgressApi.act).mockResolvedValueOnce(recoveryItem({ subject: "other.cz" }));
+  await user.click(screen.getByRole("button", { name: "Continue setup" })); await user.click(screen.getByRole("button", { name: "Confirm continuation" }));
+  await screen.findByText(/request is unconfirmed/); expect(screen.queryByText(/server accepted the request/)).toBeNull(); expect(screen.queryByText("other.cz")).toBeNull();
+});
+it.each(["store", "role", "session", "record", "unmount"])("aborts a pending write and ignores its late reply on %s departure", async departure => {
+  const { user, unmount } = await recovery(); const held = deferred<SetupDetail>(); vi.mocked(setupProgressApi.act).mockReturnValueOnce(held.promise);
+  await user.click(screen.getByRole("button", { name: "Continue setup" })); await user.click(screen.getByRole("button", { name: "Confirm continuation" }));
+  if (departure === "record") vi.mocked(setupProgressApi.detail).mockResolvedValueOnce(recoveryItem({ id: "22222222-2222-2222-2222-222222222222" }));
+  if (departure === "unmount") unmount(); else await user.click(screen.getByRole("button", { name: departure === "store" ? "Other store" : departure === "role" ? "New role" : departure === "session" ? "New session" : "Other process" }));
+  expect(vi.mocked(setupProgressApi.act).mock.calls[0][3]?.aborted).toBe(true);
+  const reads = vi.mocked(setupProgressApi.detail).mock.calls.length;
+  await act(async () => held.resolve(recoveryItem({ state: "succeeded", steps: [{ ...detail.steps[0], note: "Late reply" }] })));
+  expect(screen.queryByText("Late reply")).toBeNull(); expect(screen.queryByText(/server accepted the request/)).toBeNull(); expect(setupProgressApi.detail).toHaveBeenCalledTimes(reads);
+});
+it("guards store metadata changes even while a confirmation is open", async () => {
+  const { user } = await recovery(); await user.click(screen.getByRole("button", { name: "Continue setup" }));
+  await user.click(screen.getByRole("button", { name: "Toggle store refresh" }));
+  expect((screen.getByRole("button", { name: "Confirm continuation" }) as HTMLButtonElement).disabled).toBe(true); expect(screen.getByText(/Store details are not current/)).toBeTruthy();
+  await user.click(screen.getByRole("button", { name: "Toggle store refresh" }));
+  expect((screen.getByRole("button", { name: "Confirm continuation" }) as HTMLButtonElement).disabled).toBe(false); expect(setupProgressApi.act).not.toHaveBeenCalled();
 });

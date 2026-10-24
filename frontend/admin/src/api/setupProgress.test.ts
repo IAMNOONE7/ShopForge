@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { setupProgressApi } from "./setupProgress";
+import { offeredSetupActions, setupProgressApi, type SetupAction } from "./setupProgress";
 
 const id = "11111111-1111-1111-1111-111111111111";
 const summary = { id, kind: "email.domain", subject: null, state: "running", currentStep: "verification", createdAt: "2026-10-22T07:00:00Z", finishedAt: null };
@@ -51,4 +51,32 @@ it.each([403, 404, 429, 503])("preserves a %i read failure and never retries it"
 it("refuses an aborted read even if its transport returns a value", async () => {
   const controller = new AbortController(), fetch = answer([summary]); controller.abort();
   await expect(setupProgressApi.list("store", controller.signal)).rejects.toMatchObject({ name: "AbortError" }); expect(fetch).toHaveBeenCalledOnce();
+});
+it.each(["retry", "continue", "cancel"] as const)("posts one bodyless %s to the real action route and checks the returned detail", async action => {
+  const fetch = answer({ ...detail, input: "not-for-the-client" }), signal = new AbortController().signal;
+  expect(await setupProgressApi.act("store/a", id, action, signal)).toEqual(detail);
+  expect(fetch).toHaveBeenCalledExactlyOnceWith(`/api/admin/stores/store%2Fa/operations/${id}/${action}`, { method: "POST", signal, body: undefined, headers: undefined });
+});
+it.each([401, 403, 404, 409, 429, 503])("preserves a %i action refusal without resending", async status => {
+  const fetch = answer({ title: "Not now", detail: "A step is running" }, status);
+  await expect(setupProgressApi.act("store", id, "cancel")).rejects.toMatchObject({ kind: "http", status }); expect(fetch).toHaveBeenCalledOnce();
+});
+it.each([null, {}, { ...detail, id: "22222222-2222-2222-2222-222222222222" }, { ...detail, stepRunning: null }, { ...detail, steps: [{ ...step, checks: -1 }] }])("rejects an unconfirmed action reply %j without resending", async value => {
+  const fetch = answer(value); await expect(setupProgressApi.act("store", id, "retry")).rejects.toMatchObject({ kind: "invalid-response" }); expect(fetch).toHaveBeenCalledOnce();
+});
+it("refuses unknown actions and malformed target IDs before sending", async () => {
+  const fetch = answer(detail);
+  await expect(setupProgressApi.act("store", id, "remove" as SetupAction)).rejects.toMatchObject({ kind: "invalid-response" });
+  await expect(setupProgressApi.act("store", "not-an-id", "retry")).rejects.toMatchObject({ kind: "invalid-response" }); expect(fetch).not.toHaveBeenCalled();
+});
+it("rejects an aborted action reply even when the transport resolves", async () => {
+  answer(detail); const controller = new AbortController(); controller.abort();
+  await expect(setupProgressApi.act("store", id, "cancel", controller.signal)).rejects.toMatchObject({ name: "AbortError" });
+});
+it("uses only offered known actions compatible with the recorded state", () => {
+  expect(offeredSetupActions({ ...detail, actions: ["retry", "continue", "cancel"] })).toEqual(["cancel"]);
+  expect(offeredSetupActions({ ...detail, state: "failed", actions: ["retry"] })).toEqual(["retry"]);
+  for (const change of [{ kind: "future" }, { state: "future" }, { state: "cancelled" }, { actions: ["cancel", "future"] }, { steps: [{ ...step, status: "future" }] }]) {
+    expect(offeredSetupActions({ ...detail, ...change })).toEqual([]);
+  }
 });

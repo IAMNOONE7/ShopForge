@@ -1943,7 +1943,32 @@ const resources = {
     "noReference": "No reference recorded",
     "yes": "Yes",
     "no": "No",
+    "recovery": {
+      "title": "Setup recovery",
+      "readOnly": "You can read progress. Only an owner or administrator can request recovery.",
+      "storeStale": "Store details are not current. Refresh the store details before requesting recovery.",
+      "stale": "Read current progress before requesting recovery.",
+      "unsupported": "This process contains an unrecognised type, status or action. Recovery is unavailable in this version.",
+      "leased": "A step is running. Recovery is unavailable until a fresh read shows it has stopped.",
+      "noActions": "The server offers no recovery actions for this state.",
+      "store": "Store",
+      "subject": "Setup target",
+      "changed": "The recorded progress or store details changed. Close this review, check current progress and review a new request.",
+      "closeReview": "Close review",
+      "pending": "Sending your request. Wait for the reply before requesting another action.",
+      "accepted": "The server accepted the request. Read current progress below; this does not confirm that work or cleanup has finished.",
+      "refused": "The server refused the request. Read current progress before reviewing another action.",
+      "uncertain": "The request is unconfirmed and may have been applied. Read current progress, then finish this review before requesting another action. The request will not be repeated automatically.",
+      "finishReview": "Finish review of current progress",
+      "serverDetail": "Server explanation",
+      "actions": {
+        "retry": { "label": "Retry setup", "title": "Review setup retry", "hint": "Ask the server to retry the work that stopped. If cancellation was already requested, this retries its cleanup instead.", "confirm": "Confirm retry" },
+        "continue": { "label": "Continue setup", "title": "Review setup continuation", "hint": "Complete the recorded instructions first. This asks the server to resume the recorded step; it does not confirm that your changes are valid.", "confirm": "Confirm continuation" },
+        "cancel": { "label": "Cancel setup", "title": "Review setup cancellation", "hint": "Ask the server to stop this process and undo work it created where possible. Existing or irreversible resources may remain. Cancellation is not complete until progress records it as cancelled.", "confirm": "Confirm cancellation" }
+      }
+    },
     "updates": {
+      "pending": "Progress reads are paused while your request is being sent.",
       "active": "Updates automatically while this page is visible. You can pause updates at any time.",
       "paused": "Automatic updates are paused. Refresh once or resume updates.",
       "hidden": "Automatic updates are paused while this page is hidden.",

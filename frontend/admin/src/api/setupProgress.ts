@@ -11,6 +11,8 @@ export type SetupStep = {
 export type SetupDetail = Omit<SetupSummary, "currentStep"> & {
   changedAt: string; nextCheckAt: string | null; stepRunning: boolean; actions: string[]; steps: SetupStep[];
 };
+export const setupActions = ["retry", "continue", "cancel"] as const;
+export type SetupAction = typeof setupActions[number];
 export const isSetupId = (value: string) => /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value);
 const invalid = () => new HttpError("invalid-response", 200);
 const text = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0;
@@ -39,6 +41,12 @@ function step(value: unknown): SetupStep {
     lastErrorAt: row.lastErrorAt, startedAt: row.startedAt, finishedAt: row.finishedAt };
 }
 const root = (storeId: string) => `/api/admin/stores/${encodeURIComponent(storeId)}/operations`;
+function checkedDetail(value: unknown, operationId: string): SetupDetail {
+  const row = record(value), item = base(row);
+  if (item.id.toLowerCase() !== operationId.toLowerCase() || typeof row.stepRunning !== "boolean" || !date(row.changedAt) || !nullableDate(row.nextCheckAt)
+    || !Array.isArray(row.actions) || !row.actions.every(text) || !Array.isArray(row.steps)) throw invalid();
+  return { ...item, stepRunning: row.stepRunning, changedAt: row.changedAt, nextCheckAt: row.nextCheckAt, actions: [...row.actions], steps: row.steps.map(step) };
+}
 export const setupProgressApi = {
   list: async (storeId: string, signal?: AbortSignal): Promise<SetupSummary[]> => {
     const value = await requestJson<unknown>(root(storeId), { signal }); signal?.throwIfAborted();
@@ -53,10 +61,23 @@ export const setupProgressApi = {
   },
   detail: async (storeId: string, operationId: string, signal?: AbortSignal): Promise<SetupDetail> => {
     const value = await requestJson<unknown>(`${root(storeId)}/${encodeURIComponent(operationId)}`, { signal }); signal?.throwIfAborted();
-    const row = record(value), item = base(row);
-    if (item.id.toLowerCase() !== operationId.toLowerCase() || typeof row.stepRunning !== "boolean" || !date(row.changedAt) || !nullableDate(row.nextCheckAt)
-      || !Array.isArray(row.actions) || !row.actions.every(text) || !Array.isArray(row.steps)) throw invalid();
-    return { ...item, stepRunning: row.stepRunning, changedAt: row.changedAt, nextCheckAt: row.nextCheckAt, actions: [...row.actions], steps: row.steps.map(step) };
+    return checkedDetail(value, operationId);
+  },
+  act: async (storeId: string, operationId: string, action: SetupAction, signal?: AbortSignal): Promise<SetupDetail> => {
+    if (!isSetupId(operationId) || !setupActions.some(value => value === action)) throw invalid();
+    const value = await requestJson<unknown>(`${root(storeId)}/${encodeURIComponent(operationId)}/${action}`, { method: "POST", signal }); signal?.throwIfAborted();
+    return checkedDetail(value, operationId);
   },
 };
 export const setupIsActive = (state: string) => state === "running" || state === "cancelling";
+export function setupRecoverySupported(item: SetupDetail) {
+  return ["email.domain", "email.domain.remove", "domain.bind", "domain.unbind", "domain.revalidate", "domain.zone"].includes(item.kind)
+    && ["running", "awaitingInput", "failed", "succeeded", "cancelling", "cancelled"].includes(item.state)
+    && item.actions.every(action => setupActions.some(known => known === action))
+    && item.steps.every(step => ["pending", "waiting", "awaitingInput", "succeeded", "failed", "undone", "kept"].includes(step.status));
+}
+export function offeredSetupActions(item: SetupDetail): SetupAction[] {
+  if (!setupRecoverySupported(item)) return [];
+  return setupActions.filter(action => item.actions.includes(action) && (
+    action === "retry" ? item.state === "failed" : action === "continue" ? item.state === "awaitingInput" : ["running", "awaitingInput", "failed"].includes(item.state)));
+}

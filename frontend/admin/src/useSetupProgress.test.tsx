@@ -39,3 +39,27 @@ it("does not overlap a slow read and aborts the in-flight request on departure",
   const hook = renderHook(() => useSetupProgress("scope", load, value => value)); await settle(); await tick(); await tick(60_000);
   expect(load).toHaveBeenCalledTimes(2); hook.unmount(); expect(signal?.aborted).toBe(true);
 });
+it("synchronously blocks reads during a write and discards a late stale read before accepting its authoritative reply", async () => {
+  const initial = { state: "running" }, reply = { state: "cancelling" };
+  let finish!: (value: typeof initial) => void;
+  const load = vi.fn<(signal: AbortSignal) => Promise<typeof initial>>().mockResolvedValueOnce(initial).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })).mockRejectedValueOnce(new HttpError("http", 503));
+  const hook = renderHook(() => useSetupProgress("scope", load, () => true)); await settle();
+  expect(hook.result.current.isCurrent(initial)).toBe(true);
+  act(() => { hook.result.current.refresh(); expect(hook.result.current.isCurrent(initial)).toBe(false); });
+  act(() => { hook.result.current.suspend(); hook.result.current.refresh(); });
+  expect(load.mock.calls[1][0].aborted).toBe(true); expect(hook.result.current.mode).toBe("pending");
+  await tick(60_000); expect(load).toHaveBeenCalledTimes(2);
+  act(() => hook.result.current.accept(reply)); await act(async () => finish(initial));
+  expect(hook.result.current.state).toMatchObject({ status: "ready", data: reply }); expect(hook.result.current.isCurrent(reply)).toBe(false);
+  act(() => hook.result.current.resume()); await settle();
+  expect(hook.result.current.state).toMatchObject({ status: "ready", data: reply, refreshError: { status: 503 } }); expect(hook.result.current.mode).toBe("error");
+  load.mockResolvedValueOnce(reply); act(() => hook.result.current.refresh()); await settle(); expect(hook.result.current.isCurrent(reply)).toBe(true);
+});
+it("does not let callbacks from a departed scope update or refresh the new record", async () => {
+  const load = vi.fn<() => Promise<boolean>>().mockResolvedValue(false), hook = renderHook(({ scope }) => useSetupProgress(scope, load, value => value), { initialProps: { scope: "a" } });
+  await settle(); const old = hook.result.current; act(() => old.suspend());
+  hook.rerender({ scope: "b" }); await settle();
+  act(() => { old.suspend(); old.accept(true); old.resume(); }); await settle();
+  expect(hook.result.current.state).toMatchObject({ status: "ready", data: false }); expect(hook.result.current.suspended).toBe(false); expect(load).toHaveBeenCalledTimes(2);
+  const departed = hook.result.current; hook.unmount(); act(() => { departed.accept(true); departed.resume(); }); expect(load).toHaveBeenCalledTimes(2);
+});

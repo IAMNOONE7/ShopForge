@@ -1945,7 +1945,32 @@ const resources = {
     "noReference": "Odkaz není zaznamenán",
     "yes": "Ano",
     "no": "Ne",
+    "recovery": {
+      "title": "Obnova nastavení",
+      "readOnly": "Průběh si můžete prohlížet. Obnovu může vyžádat pouze vlastník nebo správce.",
+      "storeStale": "Údaje obchodu nejsou aktuální. Před obnovou nastavení obnovte údaje obchodu.",
+      "stale": "Před obnovou nastavení načtěte aktuální průběh.",
+      "unsupported": "Proces obsahuje neznámý typ, stav nebo akci. V této verzi nelze vyžádat obnovu.",
+      "leased": "Krok právě probíhá. Obnovu lze vyžádat, až nové načtení potvrdí jeho zastavení.",
+      "noActions": "Server pro tento stav nenabízí žádnou akci obnovy.",
+      "store": "Obchod",
+      "subject": "Cíl nastavení",
+      "changed": "Zaznamenaný průběh nebo údaje obchodu se změnily. Zavřete kontrolu, ověřte aktuální průběh a zkontrolujte nový požadavek.",
+      "closeReview": "Zavřít kontrolu",
+      "pending": "Odesílání požadavku. Před další akcí vyčkejte na odpověď.",
+      "accepted": "Server požadavek přijal. Ověřte aktuální průběh níže; přijetí nepotvrzuje dokončení práce ani úklidu.",
+      "refused": "Server požadavek odmítl. Před kontrolou další akce načtěte aktuální průběh.",
+      "uncertain": "Výsledek požadavku není potvrzen a změna mohla proběhnout. Načtěte aktuální průběh a dokončete jeho kontrolu, než vyžádáte další akci. Požadavek se automaticky neopakuje.",
+      "finishReview": "Dokončit kontrolu aktuálního průběhu",
+      "serverDetail": "Vysvětlení serveru",
+      "actions": {
+        "retry": { "label": "Opakovat nastavení", "title": "Kontrola opakování nastavení", "hint": "Požádá server o opakování zastavené práce. Pokud již bylo vyžádáno zrušení, opakuje se místo toho úklid.", "confirm": "Potvrdit opakování" },
+        "continue": { "label": "Pokračovat v nastavení", "title": "Kontrola pokračování nastavení", "hint": "Nejprve splňte zaznamenané pokyny. Tímto požádáte server o pokračování v zaznamenaném kroku; nepotvrzujete správnost provedených změn.", "confirm": "Potvrdit pokračování" },
+        "cancel": { "label": "Zrušit nastavení", "title": "Kontrola zrušení nastavení", "hint": "Požádá server o zastavení procesu a vrácení jím vytvořené práce, kde je to možné. Stávající nebo nevratné prostředky mohou zůstat. Zrušení je dokončeno, až když jej průběh zaznamená jako zrušený.", "confirm": "Potvrdit zrušení" }
+      }
+    },
     "updates": {
+      "pending": "Během odesílání požadavku je načítání průběhu pozastavené.",
       "active": "Průběh se automaticky obnovuje, pokud je stránka viditelná. Aktualizace můžete kdykoli pozastavit.",
       "paused": "Automatické aktualizace jsou pozastavené. Obnovte průběh jednou nebo aktualizace znovu zapněte.",
       "hidden": "Automatické aktualizace jsou pozastavené, dokud je stránka skrytá.",
