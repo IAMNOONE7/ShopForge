@@ -174,6 +174,7 @@ export function AdminNavigation({
             {t("navigation:operations")}
           </NavLink>
           <NavLink to={`/stores/${selectedStore.id}/setup`} onClick={onNavigate}>{t("navigation:setupProgress")}</NavLink>
+          <NavLink to={`/stores/${selectedStore.id}/email`} onClick={onNavigate}>{t("navigation:storeEmail")}</NavLink>
         </>
       )}
     </nav>

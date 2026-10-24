@@ -37,6 +37,7 @@ const NewCategoryPage = lazy(() => import("./pages/CategoryPages").then((pages) 
 const CategoryDetailPage = lazy(() => import("./pages/CategoryPages").then((pages) => ({ default: pages.CategoryDetailPage })));
 const ListingsPage = lazy(() => import("./pages/ListingPages").then((pages) => ({ default: pages.ListingsPage })));
 const StoreDomainsPage = lazy(() => import("./pages/StoreDomainsPage").then((pages) => ({ default: pages.StoreDomainsPage })));
+const StoreEmailPage = lazy(() => import("./pages/StoreEmailPage").then(pages => ({ default: pages.StoreEmailPage })));
 const StoreOrdersPage = lazy(() => import("./pages/OrderPages").then((pages) => ({ default: pages.StoreOrdersPage })));
 const StoreOrderPage = lazy(() => import("./pages/OrderPages").then((pages) => ({ default: pages.StoreOrderPage })));
 const UnappliedPaymentsPage = lazy(() => import("./pages/UnappliedPaymentsPage").then((pages) => ({ default: pages.UnappliedPaymentsPage })));
@@ -222,6 +223,7 @@ function MerchantApp() {
                   <Route path="reviews" element={<StoreReviewsPage />} />
                   <Route path="operations" element={<DeferredPage><StoreOperationsPage /></DeferredPage>} />
                   <Route path="setup" element={<DeferredPage><StoreSetupPage /></DeferredPage>} />
+                  <Route path="email" element={<DeferredPage><StoreEmailPage /></DeferredPage>} />
                   <Route path="setup/:operationId" element={<DeferredPage><StoreSetupDetailPage /></DeferredPage>} />
                   <Route path="provider-connections" element={<DeferredPage><StoreConnectionsPage /></DeferredPage>} />
                   <Route path="tax-classes" element={<DeferredPage><StoreTaxClassesPage /></DeferredPage>} />
