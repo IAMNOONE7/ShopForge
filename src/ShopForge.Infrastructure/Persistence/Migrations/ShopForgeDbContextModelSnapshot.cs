@@ -678,6 +678,14 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(14)")
                         .HasColumnName("ean");
 
+                    b.Property<int?>("HeightMm")
+                        .HasColumnType("integer")
+                        .HasColumnName("height_mm");
+
+                    b.Property<int?>("LengthMm")
+                        .HasColumnType("integer")
+                        .HasColumnName("length_mm");
+
                     b.PrimitiveCollection<string[]>("OptionValues")
                         .IsRequired()
                         .HasColumnType("text[]")
@@ -696,6 +704,10 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("product_id");
 
+                    b.Property<bool>("ShipsAlone")
+                        .HasColumnType("boolean")
+                        .HasColumnName("ships_alone");
+
                     b.Property<string>("Sku")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -710,6 +722,10 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("weight_grams");
 
+                    b.Property<int?>("WidthMm")
+                        .HasColumnType("integer")
+                        .HasColumnName("width_mm");
+
                     b.HasKey("Id")
                         .HasName("pk_product_variants");
 
@@ -722,6 +738,8 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
 
                     b.ToTable("product_variants", "catalog", t =>
                         {
+                            t.HasCheckConstraint("ck_product_variants_sizes", "(length_mm IS NULL AND width_mm IS NULL AND height_mm IS NULL) OR (length_mm > 0 AND width_mm > 0 AND height_mm > 0)");
+
                             t.HasCheckConstraint("ck_product_variants_weight_grams", "weight_grams IS NULL OR weight_grams >= 0");
                         });
                 });

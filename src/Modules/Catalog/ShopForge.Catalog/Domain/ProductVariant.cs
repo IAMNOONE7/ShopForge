@@ -10,6 +10,9 @@ internal sealed class ProductVariant : ITenantOwned
     public const int MaxSkuLength = 64;
     public const int MaxPartNumberLength = 70;
 
+    // Ten metres: no parcel comes near it, so a size beyond it is a slip of the keyboard.
+    public const int MaxSizeMm = 10_000;
+
     private ProductVariant()
     {
     }
@@ -38,6 +41,21 @@ internal sealed class ProductVariant : ITenantOwned
     public string? Ean { get; private set; }
 
     public int? WeightGrams { get; private set; }
+
+    // What the form measures as it is sent, in whole millimetres, all three or none. A carrier prices a parcel by
+    // its weight and refuses one by its size, so delivery cannot be priced for a form without them (D-214).
+    public int? LengthMm { get; private set; }
+
+    public int? WidthMm { get; private set; }
+
+    public int? HeightMm { get; private set; }
+
+    // A form that travels as it is, in its own carton, rather than sharing a parcel with anything else.
+    public bool ShipsAlone { get; private set; }
+
+    // Everything a parcel is priced from: a weight of something, since no carrier takes a parcel that weighs
+    // nothing, and all three sizes.
+    public bool IsMeasured => WeightGrams is > 0 && LengthMm is not null && WidthMm is not null && HeightMm is not null;
 
     // What the manufacturer calls this exact form of the thing, which is not what we call it: the SKU is the
     // shop's own name for a shelf. A feed will take one or the other and prefers both (D-163).
@@ -83,6 +101,39 @@ internal sealed class ProductVariant : ITenantOwned
         WeightGrams = weightGrams;
         PartNumber = updatedPartNumber;
         Condition = condition;
+
+        return true;
+    }
+
+    public static bool IsSize(int millimetres) => millimetres is > 0 and <= MaxSizeMm;
+
+    public bool Measure(int lengthMm, int widthMm, int heightMm)
+    {
+        if (!IsSize(lengthMm) || !IsSize(widthMm) || !IsSize(heightMm))
+        {
+            throw new ArgumentOutOfRangeException(nameof(lengthMm), $"Each size must be a whole number of millimetres from 1 to {MaxSizeMm}.");
+        }
+
+        if (lengthMm == LengthMm && widthMm == WidthMm && heightMm == HeightMm)
+        {
+            return false;
+        }
+
+        LengthMm = lengthMm;
+        WidthMm = widthMm;
+        HeightMm = heightMm;
+
+        return true;
+    }
+
+    public bool SendAlone(bool shipsAlone)
+    {
+        if (shipsAlone == ShipsAlone)
+        {
+            return false;
+        }
+
+        ShipsAlone = shipsAlone;
 
         return true;
     }

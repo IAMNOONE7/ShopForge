@@ -38,6 +38,15 @@ internal static class ImportFiles
         return Upload(stream.ToArray(), "products.xlsx");
     }
 
+    // What every product needs before an import takes it (D-214), for a test whose subject is something else: the
+    // weight and sizes the shared fixtures are created with, so a row about one of their products changes nothing.
+    public static readonly string[] MeasurementColumns = ["weight", "package_length_mm", "package_width_mm", "package_height_mm"];
+
+    public static readonly object?[] Measurements = [850, 450, 400, 90];
+
+    public static MultipartFormDataContent MeasuredWorkbook(string[] columns, params object?[][] rows) =>
+        Workbook([.. columns, .. MeasurementColumns], [.. rows.Select(row => (object?[])[.. row, .. Measurements])]);
+
     public static MultipartFormDataContent Upload(byte[] bytes, string fileName)
     {
         var form = new MultipartFormDataContent();

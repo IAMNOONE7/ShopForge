@@ -91,8 +91,8 @@ public sealed class HardeningTests(ShopForgeApiFactory factory)
         using var capped = factory.WithWebHostBuilder(builder => builder.UseSetting("RateLimiting:Expensive:PermitLimit", "1"));
         using var admin = await TestUsers.LoginAsync(capped, await TestUsers.CreateAsync(factory.Services, furniture.Store.TenantId));
 
-        using var first = await admin.ImportAsync(furniture.Store.StoreId, ImportFiles.Workbook(["sku", "name", "price", "vat"], [["LIMIT-A", "A", 1m, 21m]]));
-        using var second = await admin.ImportAsync(furniture.Store.StoreId, ImportFiles.Workbook(["sku", "name", "price", "vat"], [["LIMIT-B", "B", 1m, 21m]]));
+        using var first = await admin.ImportAsync(furniture.Store.StoreId, ImportFiles.MeasuredWorkbook(["sku", "name", "price", "vat"], [["LIMIT-A", "A", 1m, 21m]]));
+        using var second = await admin.ImportAsync(furniture.Store.StoreId, ImportFiles.MeasuredWorkbook(["sku", "name", "price", "vat"], [["LIMIT-B", "B", 1m, 21m]]));
 
         Assert.Equal(HttpStatusCode.OK, first.StatusCode);
         Assert.Equal(HttpStatusCode.TooManyRequests, second.StatusCode);

@@ -121,7 +121,7 @@ public sealed class FeedIdentifierTests(ShopForgeApiFactory factory)
 
         using var response = await furniture.Admin.ImportAsync(
             furniture.Store.StoreId,
-            ImportFiles.Workbook(
+            ImportFiles.MeasuredWorkbook(
                 columns,
                 ["FEED-1", "Branded Chair", 149.90m, 21m, "Thonet", "5901234123457", "No-14", "Used"],
                 ["FEED-2", "Mistyped Chair", 99m, 21m, "Thonet", "5901234123456", "No-15", "New"]));

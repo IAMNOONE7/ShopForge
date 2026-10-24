@@ -28,7 +28,7 @@ internal sealed record ShirtStore(FurnitureStore Furniture, Guid ProductId, Guid
 
         using var added = await admin.PostAsJsonAsync(
             $"/api/admin/products/{productId}/variants",
-            new { Sku = sku + "-L", Ean = (string?)null, WeightGrams = (int?)null, OptionValues = new[] { "L" } },
+            new { Sku = sku + "-L", Ean = (string?)null, WeightGrams = 260, OptionValues = new[] { "L" }, LengthMm = 320, WidthMm = 250, HeightMm = 30 },
             CancellationToken);
         Assert.Equal(HttpStatusCode.Created, added.StatusCode);
         var large = (await added.Content.ReadFromJsonAsync<CreatedVariant>(CancellationToken))!.Id;

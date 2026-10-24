@@ -169,6 +169,10 @@ internal static class CatalogExport
             .Where(slug => slug is not null)));
         Put(variant.Ean);
         Put(variant.WeightGrams);
+        Put(variant.LengthMm);
+        Put(variant.WidthMm);
+        Put(variant.HeightMm);
+        Put(variant.ShipsAlone);
         Put(product.Brand);
         Put(variant.PartNumber);
         Put(variant.Condition?.ToString());

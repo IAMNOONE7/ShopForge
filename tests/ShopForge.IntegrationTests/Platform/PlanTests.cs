@@ -158,7 +158,7 @@ public sealed class PlanTests(ShopForgeApiFactory factory)
         object?[][] rows = [.. skus.Select(sku => new object?[] { sku, sku, 10m, 21m })];
         using var response = await furniture.Admin.ImportAsync(
             furniture.Store.StoreId,
-            ImportFiles.Workbook(["sku", "name", "price", "vat"], rows));
+            ImportFiles.MeasuredWorkbook(["sku", "name", "price", "vat"], rows));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         return (await response.Content.ReadFromJsonAsync<ImportReportView>(CancellationToken))!;

@@ -138,7 +138,7 @@ internal sealed class RunSetup(RigOptions options, FakeComgate comgate, FakeMail
         ApiSession admin, List<RunStore> stores, string sku, string name, string slug, decimal price, string[] sizes, int stock, CancellationToken cancellationToken)
     {
         var first = sizes.Length > 0 ? $"{sku}-{sizes[0]}" : sku;
-        var product = await admin.PostAsync("api/admin/products", new { sku = first, ean = (string?)null, weightGrams = 300 }, HttpStatusCode.Created, cancellationToken);
+        var product = await admin.PostAsync("api/admin/products", new { sku = first, ean = (string?)null, weightGrams = 300, lengthMm = 250, widthMm = 200, heightMm = 100 }, HttpStatusCode.Created, cancellationToken);
         var productId = product.GetProperty("id").GetGuid();
         var defaultVariant = product.GetProperty("variants")[0].GetProperty("id").GetGuid();
         var variants = new List<RunVariant> { new(defaultVariant, first, sizes.FirstOrDefault(), stock) };
@@ -155,7 +155,7 @@ internal sealed class RunSetup(RigOptions options, FakeComgate comgate, FakeMail
             {
                 var added = await admin.PostAsync(
                     $"api/admin/products/{productId}/variants",
-                    new { sku = $"{sku}-{size}", ean = (string?)null, weightGrams = 300, optionValues = new[] { size } },
+                    new { sku = $"{sku}-{size}", ean = (string?)null, weightGrams = 300, optionValues = new[] { size }, lengthMm = 250, widthMm = 200, heightMm = 100 },
                     HttpStatusCode.Created,
                     cancellationToken);
                 variants.Add(new RunVariant(VariantId(added, $"{sku}-{size}"), $"{sku}-{size}", size, stock));

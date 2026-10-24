@@ -22,6 +22,7 @@ internal static class AdminProductEndpoints
         var products = tenantAdmin.MapGroup("/products");
 
         products.MapGet("/", GetProductsAsync);
+        products.MapGet("/unmeasured", GetUnmeasuredAsync);
         products.MapPost("/", CreateProductAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
         products.MapPut("/{productId:guid}", UpdateProductAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
         products.MapPut("/{productId:guid}/options", SetOptionsAsync).RequireAuthorization(AdminPolicies.CatalogManagement);
@@ -63,7 +64,7 @@ internal static class AdminProductEndpoints
             .Check(request.PartNumber is null || request.PartNumber.Trim().Length <= ProductVariant.MaxPartNumberLength, "partNumber", "A part number can be up to 70 characters.")
             .Check(IsValidCondition(request.Condition), "condition", "A condition is New, Refurbished or Used.");
 
-        if (errors.Any)
+        if (Sized(errors, request.LengthMm, request.WidthMm, request.HeightMm).Any)
         {
             return errors.ToProblem();
         }
@@ -76,6 +77,7 @@ internal static class AdminProductEndpoints
         var product = new Product(storeContext.TenantId!.Value, request.Sku!, request.Ean, request.WeightGrams);
         product.Rebrand(request.Brand);
         product.Default.UpdatePhysicalData(request.Ean, request.WeightGrams, request.PartNumber, ConditionFrom(request.Condition));
+        Measure(product.Default, request.LengthMm, request.WidthMm, request.HeightMm, request.ShipsAlone);
 
         if (await TakenAsync(dbContext, product.Default.Sku, cancellationToken))
         {
@@ -103,7 +105,7 @@ internal static class AdminProductEndpoints
             .Check(request.PartNumber is null || request.PartNumber.Trim().Length <= ProductVariant.MaxPartNumberLength, "partNumber", "A part number can be up to 70 characters.")
             .Check(IsValidCondition(request.Condition), "condition", "A condition is New, Refurbished or Used.");
 
-        if (errors.Any)
+        if (Sized(errors, request.LengthMm, request.WidthMm, request.HeightMm).Any)
         {
             return errors.ToProblem();
         }
@@ -124,13 +126,14 @@ internal static class AdminProductEndpoints
         if (product.Variants.Count > 1 && PerFormDataIn(request))
         {
             return new RequestErrors()
-                .Check(false, "weightGrams", "This product is sold in several forms; set the barcode and weight on each one.")
+                .Check(false, "weightGrams", "This product is sold in several forms; set the barcode, the weight and the sizes on each one.")
                 .ToProblem();
         }
 
         if (product.Variants.Count == 1)
         {
             product.Default.UpdatePhysicalData(request.Ean, request.WeightGrams, request.PartNumber, ConditionFrom(request.Condition));
+            Measure(product.Default, request.LengthMm, request.WidthMm, request.HeightMm, request.ShipsAlone);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -198,6 +201,7 @@ internal static class AdminProductEndpoints
 
         var variant = product.AddVariant(request.Sku!, request.Ean, request.WeightGrams, Cleaned(request.OptionValues));
         variant.UpdatePhysicalData(request.Ean, request.WeightGrams, request.PartNumber, ConditionFrom(request.Condition));
+        Measure(variant, request.LengthMm, request.WidthMm, request.HeightMm, request.ShipsAlone);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return TypedResults.Created($"/api/admin/products/{productId}/variants/{variant.Id}", AdminVariantResponse.From(variant));
@@ -231,6 +235,7 @@ internal static class AdminProductEndpoints
 
         variant.Rename(sku);
         variant.UpdatePhysicalData(request.Ean, request.WeightGrams, request.PartNumber, ConditionFrom(request.Condition));
+        Measure(variant, request.LengthMm, request.WidthMm, request.HeightMm, request.ShipsAlone);
         variant.Choose(Cleaned(request.OptionValues));
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -279,7 +284,75 @@ internal static class AdminProductEndpoints
                 "optionValues",
                 $"This product needs one value for each of: {string.Join(", ", product.OptionNames)}.");
 
-        return errors.Any ? errors.ToProblem() : null;
+        return Sized(errors, request.LengthMm, request.WidthMm, request.HeightMm).Any ? errors.ToProblem() : null;
+    }
+
+    // The forms that cannot yet be priced for delivery, so they can be found and finished before a shopper meets one:
+    // no weight, a weight of nothing, or no sizes (D-214).
+    private static async Task<Ok<AdminUnmeasuredResponse>> GetUnmeasuredAsync(
+        DbContext dbContext,
+        CancellationToken cancellationToken,
+        int page = 1,
+        int pageSize = 50)
+    {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, 200);
+
+        var unmeasured = dbContext.Set<ProductVariant>()
+            .AsNoTracking()
+            .Where(variant => variant.WeightGrams == null || variant.WeightGrams <= 0
+                || variant.LengthMm == null || variant.WidthMm == null || variant.HeightMm == null);
+        var total = await unmeasured.CountAsync(cancellationToken);
+        var variants = await unmeasured
+            .OrderBy(variant => variant.Sku)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(variant => new { variant.ProductId, variant.Id, variant.Sku, variant.OptionValues, variant.WeightGrams, variant.LengthMm })
+            .ToListAsync(cancellationToken);
+
+        return TypedResults.Ok(new AdminUnmeasuredResponse(
+            total,
+            [
+                .. variants.Select(variant => new AdminUnmeasuredVariant(
+                    variant.ProductId,
+                    variant.Id,
+                    variant.Sku,
+                    variant.OptionValues,
+                    [
+                        .. variant.WeightGrams is > 0 ? Array.Empty<string>() : ["weightGrams"],
+                        .. variant.LengthMm is null ? ["lengthMm", "widthMm", "heightMm"] : Array.Empty<string>(),
+                    ])),
+            ]));
+    }
+
+    // The length, the width and the height come together or not at all. Sizes a request leaves out keep what is
+    // stored: the admin's form has no size fields yet, and a save from it must not erase what an import put there.
+    private static RequestErrors Sized(RequestErrors errors, int? lengthMm, int? widthMm, int? heightMm)
+    {
+        const string Rule = "A size is a whole number of millimetres from 1 to 10000.";
+        var given = new[] { lengthMm, widthMm, heightMm }.Count(size => size is not null);
+
+        return errors
+            .Check(
+                given is 0 or 3,
+                lengthMm is null ? "lengthMm" : widthMm is null ? "widthMm" : "heightMm",
+                "The length, the width and the height go together: give all three, in millimetres.")
+            .Check(lengthMm is null || ProductVariant.IsSize(lengthMm.Value), "lengthMm", Rule)
+            .Check(widthMm is null || ProductVariant.IsSize(widthMm.Value), "widthMm", Rule)
+            .Check(heightMm is null || ProductVariant.IsSize(heightMm.Value), "heightMm", Rule);
+    }
+
+    private static void Measure(ProductVariant variant, int? lengthMm, int? widthMm, int? heightMm, bool? shipsAlone)
+    {
+        if (lengthMm is { } length && widthMm is { } width && heightMm is { } height)
+        {
+            variant.Measure(length, width, height);
+        }
+
+        if (shipsAlone is { } alone)
+        {
+            variant.SendAlone(alone);
+        }
     }
 
     private static Task<bool> TakenAsync(DbContext dbContext, string sku, CancellationToken cancellationToken) =>
@@ -429,7 +502,8 @@ internal static class AdminProductEndpoints
     private static bool IsValidEan(string? ean) => string.IsNullOrWhiteSpace(ean) || Gtin.IsValid(ean);
 
     private static bool PerFormDataIn(UpdateProductRequest request) =>
-        request.Ean is not null || request.WeightGrams is not null || request.PartNumber is not null || request.Condition is not null;
+        request.Ean is not null || request.WeightGrams is not null || request.PartNumber is not null || request.Condition is not null
+        || request.LengthMm is not null || request.WidthMm is not null || request.HeightMm is not null || request.ShipsAlone is not null;
 
     private static bool IsValidCondition(string? condition) =>
         condition is null || Enum.TryParse<ProductCondition>(condition, ignoreCase: true, out _);
@@ -444,7 +518,11 @@ internal sealed record CreateProductRequest(
     int? WeightGrams,
     string? Brand = null,
     string? PartNumber = null,
-    string? Condition = null);
+    string? Condition = null,
+    int? LengthMm = null,
+    int? WidthMm = null,
+    int? HeightMm = null,
+    bool? ShipsAlone = null);
 
 internal sealed record VariantRequest(
     string? Sku,
@@ -452,7 +530,11 @@ internal sealed record VariantRequest(
     int? WeightGrams,
     IReadOnlyList<string>? OptionValues,
     string? PartNumber = null,
-    string? Condition = null);
+    string? Condition = null,
+    int? LengthMm = null,
+    int? WidthMm = null,
+    int? HeightMm = null,
+    bool? ShipsAlone = null);
 
 internal sealed record SetProductOptionsRequest(IReadOnlyList<string>? Names, IReadOnlyDictionary<Guid, IReadOnlyList<string>>? Values);
 
@@ -461,25 +543,37 @@ internal sealed record UpdateProductRequest(
     int? WeightGrams,
     string? Brand = null,
     string? PartNumber = null,
-    string? Condition = null);
+    string? Condition = null,
+    int? LengthMm = null,
+    int? WidthMm = null,
+    int? HeightMm = null,
+    bool? ShipsAlone = null);
 
 internal sealed record AdminProductResponse(
     Guid Id,
     string Sku,
     string? Ean,
     int? WeightGrams,
+    int? LengthMm,
+    int? WidthMm,
+    int? HeightMm,
+    bool ShipsAlone,
     string? Brand,
     IReadOnlyList<string> OptionNames,
     List<AdminVariantResponse> Variants,
     List<AdminImageResponse> Images)
 {
-    // Sku, Ean and WeightGrams are the first variant's, so a shop that sells one form of a thing reads the same
-    // answer it always did.
+    // Sku, Ean, the weight and the sizes are the first variant's, so a shop that sells one form of a thing reads the
+    // same answer it always did.
     public static AdminProductResponse From(Product product) => new(
         product.Id,
         product.Default.Sku,
         product.Default.Ean,
         product.Default.WeightGrams,
+        product.Default.LengthMm,
+        product.Default.WidthMm,
+        product.Default.HeightMm,
+        product.Default.ShipsAlone,
         product.Brand,
         product.OptionNames,
         [.. product.Variants.OrderBy(variant => variant.Position).Select(AdminVariantResponse.From)],
@@ -491,6 +585,10 @@ internal sealed record AdminVariantResponse(
     string Sku,
     string? Ean,
     int? WeightGrams,
+    int? LengthMm,
+    int? WidthMm,
+    int? HeightMm,
+    bool ShipsAlone,
     string? PartNumber,
     string? Condition,
     IReadOnlyList<string> OptionValues,
@@ -501,11 +599,20 @@ internal sealed record AdminVariantResponse(
         variant.Sku,
         variant.Ean,
         variant.WeightGrams,
+        variant.LengthMm,
+        variant.WidthMm,
+        variant.HeightMm,
+        variant.ShipsAlone,
         variant.PartNumber,
         variant.Condition?.ToString(),
         variant.OptionValues,
         variant.Position);
 }
+
+// What is missing from each form: the API's own names for the fields, `weightGrams` and the three sizes.
+internal sealed record AdminUnmeasuredResponse(int Total, IReadOnlyList<AdminUnmeasuredVariant> Variants);
+
+internal sealed record AdminUnmeasuredVariant(Guid ProductId, Guid VariantId, string Sku, IReadOnlyList<string> OptionValues, IReadOnlyList<string> Missing);
 
 internal sealed record ReorderImagesRequest(List<Guid>? ImageIds);
 

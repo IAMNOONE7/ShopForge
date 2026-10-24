@@ -182,13 +182,15 @@ internal sealed class CatalogImporter(
         var variant = product?.Variants.SingleOrDefault(candidate => candidate.Sku == sku);
         var ean = ReadEan(row, variant, issues);
         var weight = ReadWeight(row, variant, issues);
+        var sizes = ReadSizes(row, variant, issues);
+        var shipsAlone = ReadShipsAlone(row, variant, issues);
         var brand = ReadBrand(row, product, issues);
         var partNumber = ReadPartNumber(row, variant, issues);
         var condition = ReadCondition(row, variant, issues);
         var stockQuantity = ReadStock(row, issues);
         var optionValues = ReadOptions(row, product, issues);
 
-        if (issues.Count > 0)
+        if (issues.Count > 0 || !Measured(row, weight, sizes, issues))
         {
             return RowOutcome.Invalid;
         }
@@ -213,6 +215,8 @@ internal sealed class CatalogImporter(
         // form of one already here, or a row that changes what was loaded before (D-163).
         changed |= product.Rebrand(brand);
         changed |= variant.UpdatePhysicalData(ean, weight, partNumber, condition);
+        changed |= variant.Measure(sizes.Length!.Value, sizes.Width!.Value, sizes.Height!.Value);
+        changed |= variant.SendAlone(shipsAlone);
 
         catalog.Products[sku] = product;
         catalog.ProductsById[product.Id] = product;
@@ -586,6 +590,71 @@ internal sealed class CatalogImporter(
 
         issues.Add(new ImportIssue(row.Number, ImportColumns.Weight, "Weight must be a whole number of grams."));
         return null;
+    }
+
+    // A size the row does not give keeps what is stored, as the weight does.
+    private static (int? Length, int? Width, int? Height) ReadSizes(ImportRow row, ProductVariant? variant, List<ImportIssue> issues) =>
+        (ReadSize(row, ImportColumns.LengthMm, variant?.LengthMm, issues),
+         ReadSize(row, ImportColumns.WidthMm, variant?.WidthMm, issues),
+         ReadSize(row, ImportColumns.HeightMm, variant?.HeightMm, issues));
+
+    private static int? ReadSize(ImportRow row, string column, int? stored, List<ImportIssue> issues)
+    {
+        if (!row.Has(column))
+        {
+            return stored;
+        }
+
+        if (row[column].TryInteger(out var size) && size is >= 1 and <= ProductVariant.MaxSizeMm)
+        {
+            return (int)size;
+        }
+
+        issues.Add(new ImportIssue(row.Number, column, $"A size is a whole number of millimetres from 1 to {ProductVariant.MaxSizeMm}."));
+        return null;
+    }
+
+    private static bool ReadShipsAlone(ImportRow row, ProductVariant? variant, List<ImportIssue> issues)
+    {
+        if (!row.Has(ImportColumns.ShipsAlone))
+        {
+            return variant?.ShipsAlone ?? false;
+        }
+
+        if (row[ImportColumns.ShipsAlone].TryBoolean(out var shipsAlone))
+        {
+            return shipsAlone;
+        }
+
+        issues.Add(new ImportIssue(row.Number, ImportColumns.ShipsAlone, "Use yes or no."));
+        return false;
+    }
+
+    // Every product is weighed and measured before it can come in: a row that would leave its form without a weight of
+    // something or without all three sizes is refused, naming what is missing (D-214).
+    private static bool Measured(ImportRow row, int? weight, (int? Length, int? Width, int? Height) sizes, List<ImportIssue> issues)
+    {
+        if (weight is not > 0)
+        {
+            issues.Add(new ImportIssue(row.Number, ImportColumns.Weight, "Every product needs a weight of at least 1 gram."));
+        }
+
+        string[] missing =
+        [
+            .. sizes.Length is null ? [ImportColumns.LengthMm] : Array.Empty<string>(),
+            .. sizes.Width is null ? [ImportColumns.WidthMm] : Array.Empty<string>(),
+            .. sizes.Height is null ? [ImportColumns.HeightMm] : Array.Empty<string>(),
+        ];
+
+        if (missing.Length > 0)
+        {
+            issues.Add(new ImportIssue(
+                row.Number,
+                missing[0],
+                $"Every product needs its length, width and height in millimetres; this row has no {string.Join(", ", missing)}."));
+        }
+
+        return weight is > 0 && missing.Length == 0;
     }
 
     internal static IEnumerable<string> Split(string text) =>

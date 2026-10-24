@@ -15,24 +15,24 @@ public static class DevelopmentCatalog
     [
         new("Cutting Boards",
         [
-            new("WH-BOARD-OAK", "Oak Kitchen Cutting Board", "Solid oak board, oiled with food-safe oil.", 499m),
-            new("WH-BOARD-WALNUT", "Walnut Serving Board", "End-grain walnut with juice groove.", 890m),
-            new("WH-TRAY-BEECH", "Beech Serving Tray", "Lightweight beech tray with handles.", 649m),
-            new("WH-BOARD-OAK-XL", "Oak Carving Board XL", "Wide oak board with a channel for the juices.", 1290m),
-            new("WH-BOARD-BEECH-ROUND", "Round Beech Board", "Round board for bread and cheese.", 390m),
-            new("WH-BOARD-WALNUT-MINI", "Walnut Cheese Board", "Small walnut board for the table.", 590m),
+            new("WH-BOARD-OAK", "Oak Kitchen Cutting Board", "Solid oak board, oiled with food-safe oil.", 499m, 1200, 400, 250, 30),
+            new("WH-BOARD-WALNUT", "Walnut Serving Board", "End-grain walnut with juice groove.", 890m, 1500, 450, 300, 40),
+            new("WH-TRAY-BEECH", "Beech Serving Tray", "Lightweight beech tray with handles.", 649m, 900, 500, 350, 60),
+            new("WH-BOARD-OAK-XL", "Oak Carving Board XL", "Wide oak board with a channel for the juices.", 1290m, 2500, 600, 400, 40),
+            new("WH-BOARD-BEECH-ROUND", "Round Beech Board", "Round board for bread and cheese.", 390m, 700, 300, 300, 25),
+            new("WH-BOARD-WALNUT-MINI", "Walnut Cheese Board", "Small walnut board for the table.", 590m, 500, 250, 180, 20),
         ]),
         new("Tables",
         [
-            new("WH-TABLE-OAK-DINING", "Oak Dining Table", "Six-seat table on tapered legs.", 18900m),
-            new("WH-TABLE-SIDE-BEECH", "Beech Side Table", "Low table for beside a chair.", 3490m),
-            new("WH-DESK-WALNUT", "Walnut Writing Desk", "Desk with one drawer and a cable channel.", 12900m),
+            new("WH-TABLE-OAK-DINING", "Oak Dining Table", "Six-seat table on tapered legs.", 18900m, 45000, 1800, 900, 120),
+            new("WH-TABLE-SIDE-BEECH", "Beech Side Table", "Low table for beside a chair.", 3490m, 7000, 500, 500, 120),
+            new("WH-DESK-WALNUT", "Walnut Writing Desk", "Desk with one drawer and a cable channel.", 12900m, 32000, 1200, 600, 150),
         ]),
         new("Storage",
         [
-            new("WH-SHELF-OAK", "Oak Wall Shelf", "Floating shelf with hidden fixings.", 2290m),
-            new("WH-BOX-BEECH", "Beech Storage Box", "Stackable box with a lid.", 890m),
-            new("WH-RACK-WALNUT", "Walnut Spice Rack", "Two tiers, fits above the worktop.", 1490m),
+            new("WH-SHELF-OAK", "Oak Wall Shelf", "Floating shelf with hidden fixings.", 2290m, 3000, 800, 200, 50),
+            new("WH-BOX-BEECH", "Beech Storage Box", "Stackable box with a lid.", 890m, 1800, 400, 300, 250),
+            new("WH-RACK-WALNUT", "Walnut Spice Rack", "Two tiers, fits above the worktop.", 1490m, 1600, 500, 120, 300),
         ]),
     ];
 
@@ -40,24 +40,24 @@ public static class DevelopmentCatalog
     [
         new("Chargers",
         [
-            new("VE-USBC-65W", "USB-C Charger 65 W", "GaN charger for laptops and phones.", 39.90m),
-            new("VE-CABLE-2M", "USB-C Cable 2 m", "Braided cable, 100 W power delivery.", 14.90m),
-            new("VE-USBC-30W", "USB-C Charger 30 W", "Compact charger for phones and tablets.", 24.90m),
-            new("VE-USBC-140W", "USB-C Charger 140 W", "Three ports, enough for a workstation laptop.", 79.90m),
-            new("VE-CABLE-1M", "USB-C Cable 1 m", "Short braided cable for the desk.", 9.90m),
-            new("VE-CABLE-LIGHTNING", "USB-C to Lightning Cable", "Certified cable for fast charging.", 19.90m),
+            new("VE-USBC-65W", "USB-C Charger 65 W", "GaN charger for laptops and phones.", 39.90m, 180, 90, 70, 40),
+            new("VE-CABLE-2M", "USB-C Cable 2 m", "Braided cable, 100 W power delivery.", 14.90m, 80, 120, 100, 25),
+            new("VE-USBC-30W", "USB-C Charger 30 W", "Compact charger for phones and tablets.", 24.90m, 90, 80, 60, 40),
+            new("VE-USBC-140W", "USB-C Charger 140 W", "Three ports, enough for a workstation laptop.", 79.90m, 350, 110, 80, 45),
+            new("VE-CABLE-1M", "USB-C Cable 1 m", "Short braided cable for the desk.", 9.90m, 60, 110, 90, 20),
+            new("VE-CABLE-LIGHTNING", "USB-C to Lightning Cable", "Certified cable for fast charging.", 19.90m, 60, 110, 90, 20),
         ]),
         new("Audio",
         [
-            new("VE-BUDS-PRO", "Wireless Earbuds Pro", "Noise cancelling earbuds with a charging case.", 129.00m),
-            new("VE-HEADPHONES-ANC", "Over-Ear Headphones ANC", "Forty hours on a charge.", 199.00m),
-            new("VE-SPEAKER-MINI", "Portable Speaker Mini", "Pocket speaker, water resistant.", 59.90m),
+            new("VE-BUDS-PRO", "Wireless Earbuds Pro", "Noise cancelling earbuds with a charging case.", 129.00m, 150, 110, 100, 50),
+            new("VE-HEADPHONES-ANC", "Over-Ear Headphones ANC", "Forty hours on a charge.", 199.00m, 450, 230, 200, 100),
+            new("VE-SPEAKER-MINI", "Portable Speaker Mini", "Pocket speaker, water resistant.", 59.90m, 300, 120, 100, 70),
         ]),
         new("Power",
         [
-            new("VE-BANK-10K", "Power Bank 10 000 mAh", "Slim bank with a 30 W output.", 34.90m),
-            new("VE-BANK-20K", "Power Bank 20 000 mAh", "Charges a laptop and a phone at once.", 54.90m),
-            new("VE-HUB-7", "USB-C Hub 7-in-1", "HDMI, card reader and three USB ports.", 69.90m),
+            new("VE-BANK-10K", "Power Bank 10 000 mAh", "Slim bank with a 30 W output.", 34.90m, 250, 150, 80, 30),
+            new("VE-BANK-20K", "Power Bank 20 000 mAh", "Charges a laptop and a phone at once.", 54.90m, 450, 170, 90, 35),
+            new("VE-HUB-7", "USB-C Hub 7-in-1", "HDMI, card reader and three USB ports.", 69.90m, 120, 140, 70, 25),
         ]),
     ];
 
@@ -201,7 +201,8 @@ public static class DevelopmentCatalog
                     continue;
                 }
 
-                var product = new Product(tenantId, item.Sku, ean: null, weightGrams: null);
+                var product = new Product(tenantId, item.Sku, ean: null, weightGrams: item.WeightGrams);
+                product.Default.Measure(item.LengthMm, item.WidthMm, item.HeightMm);
                 var storeProduct = new StoreProduct(storeId, product,
                     new StoreProductDetails(item.Name, Slugs.Create(item.Name), item.Description, item.Price, VatRate: 21m, IsVisible: true, SortOrder: 0),
                     currency);
@@ -228,5 +229,7 @@ public static class DevelopmentCatalog
 
     private sealed record SeedCategory(string Name, SeedItem[] Items);
 
-    private sealed record SeedItem(string Sku, string Name, string Description, decimal Price);
+    // Weighed and measured as they are sent (D-214). The dining table and the desk are larger than any parcel service
+    // takes, so a local shop shows what happens to a cart that cannot go by parcel.
+    private sealed record SeedItem(string Sku, string Name, string Description, decimal Price, int WeightGrams, int LengthMm, int WidthMm, int HeightMm);
 }

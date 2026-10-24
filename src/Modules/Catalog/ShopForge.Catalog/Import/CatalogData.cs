@@ -126,6 +126,14 @@ internal static class ImportColumns
     public const string Categories = "categories";
     public const string Ean = "ean";
     public const string Weight = "weight";
+
+    // The size of the product's package, as it is sent. With underscores, which no attribute code can have, so a shop
+    // whose products carry a Width attribute, or a length-mm one, keeps that column and cannot mistake one for the
+    // other (D-214).
+    public const string LengthMm = "package_length_mm";
+    public const string WidthMm = "package_width_mm";
+    public const string HeightMm = "package_height_mm";
+    public const string ShipsAlone = "ships_alone";
     public const string Brand = "brand";
     public const string PartNumber = "partnumber";
     public const string Condition = "condition";
@@ -135,7 +143,7 @@ internal static class ImportColumns
     public const string OptionPrefix = "option:";
 
     public static readonly string[] All =
-        [Sku, Name, Slug, Description, Price, Vat, TaxClass, Stock, Visible, SortOrder, Categories, Ean, Weight, Brand, PartNumber, Condition];
+        [Sku, Name, Slug, Description, Price, Vat, TaxClass, Stock, Visible, SortOrder, Categories, Ean, Weight, LengthMm, WidthMm, HeightMm, ShipsAlone, Brand, PartNumber, Condition];
 
     public static bool IsOption(string column) => column.StartsWith(OptionPrefix, StringComparison.Ordinal);
 

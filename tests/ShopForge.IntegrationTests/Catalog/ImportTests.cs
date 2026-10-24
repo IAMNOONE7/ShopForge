@@ -198,7 +198,7 @@ public sealed class ImportTests(ShopForgeApiFactory factory)
 
     private static async Task<ImportReport> ImportAsync(FurnitureStore furniture, string[] columns, params object?[][] rows)
     {
-        using var response = await furniture.Admin.ImportAsync(furniture.Store.StoreId, ImportFiles.Workbook(columns, rows));
+        using var response = await furniture.Admin.ImportAsync(furniture.Store.StoreId, ImportFiles.MeasuredWorkbook(columns, rows));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         return (await response.Content.ReadFromJsonAsync<ImportReport>(CancellationToken))!;

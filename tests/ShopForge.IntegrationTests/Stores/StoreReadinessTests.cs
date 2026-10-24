@@ -160,6 +160,7 @@ public sealed class StoreReadinessTests : IDisposable
         Assert.False(readiness.IsReady);
         Assert.Equal(
             [
+                "catalog.shipping-data",
                 "catalog.tax-classes",
                 "catalog.visible-products",
                 "orders.payment-connected",

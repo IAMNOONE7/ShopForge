@@ -44,7 +44,14 @@ internal sealed class ProductVariantEntityConfiguration : IEntityTypeConfigurati
     public void Configure(EntityTypeBuilder<ProductVariant> builder)
     {
         builder.ToTable("product_variants", CatalogModule.Schema, table =>
-            table.HasCheckConstraint("ck_product_variants_weight_grams", "weight_grams IS NULL OR weight_grams >= 0"));
+        {
+            table.HasCheckConstraint("ck_product_variants_weight_grams", "weight_grams IS NULL OR weight_grams >= 0");
+
+            // All three sizes or none, and each of them something: a form half measured is not measured (D-214).
+            table.HasCheckConstraint(
+                "ck_product_variants_sizes",
+                "(length_mm IS NULL AND width_mm IS NULL AND height_mm IS NULL) OR (length_mm > 0 AND width_mm > 0 AND height_mm > 0)");
+        });
 
         builder.Property(variant => variant.Sku).HasMaxLength(ProductVariant.MaxSkuLength);
         builder.Property(variant => variant.Ean).HasMaxLength(14);
