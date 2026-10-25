@@ -3,7 +3,7 @@ import { HttpError, isHttpError, requestJson } from "./http";
 
 export type ListingQuery = { page?: number; pageSize?: number; sort?: string; q?: string; archived?: boolean };
 
-function isListing(value: unknown): value is StoreProduct {
+export function isListing(value: unknown): value is StoreProduct {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const item = value as Record<string, unknown>;
   const id = (value: unknown) => typeof value === "string" && /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value);

@@ -122,10 +122,12 @@ describe("store content workspace", () => {
   it.each([false, true])("confirms publication changes for published=%s and preserves all text/SEO", async published => {
     pages = [{ ...page, isPublished: published }]; const user = userEvent.setup(); route(); const action = published ? "unpublish" : "publish";
     const opener = await screen.findByRole("button", { name: i18n.t(`contentPages:actions.${action}`) }); await user.click(opener);
+    expect(screen.queryByRole("link", { name: "Search and sharing" })).toBeNull();
     expect(contentPagesApi.update).not.toHaveBeenCalled();
     const form = screen.getByRole("form", { name: i18n.t(`contentPages:confirmTitles.${action}`) });
     expect(document.activeElement).toBe(within(form).getByRole("heading"));
-    await user.keyboard("{Escape}"); await waitFor(() => expect(document.activeElement).toBe(opener)); await user.click(opener);
+    await user.keyboard("{Escape}"); await waitFor(() => expect(document.activeElement).toBe(opener));
+    expect(screen.getByRole("link", { name: "Search and sharing" }).getAttribute("href")).toBe(`/stores/store-a/pages/${id}/metadata`); await user.click(opener);
     await user.click(screen.getByRole("button", { name: i18n.t(`contentPages:confirmActions.${action}`) }));
     await screen.findByText(i18n.t(`contentPages:notices.${published ? "unpublished" : "published"}`));
     expect(contentPagesApi.update).toHaveBeenCalledExactlyOnceWith("store-a", id, { title: page.title, slug: page.slug, body: page.body, isPublished: !published,

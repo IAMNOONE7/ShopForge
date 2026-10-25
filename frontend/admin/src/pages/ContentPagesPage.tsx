@@ -26,13 +26,13 @@ export function ContentPagesPage() { return <ContentRoute mode="list" />; }
 export function NewContentPage() { return <ContentRoute mode="new" />; }
 export function ContentPageDetailPage() { return <ContentRoute mode="detail" />; }
 function ContentRoute({ mode }: { mode: Mode }) {
-  const { user } = useSession(), { store } = useSelectedStore(), { pageId = "" } = useParams(), { t } = useTranslation("contentPages");
+  const { user } = useSession(), { store } = useSelectedStore(), { pageId = "" } = useParams(), { t } = useTranslation(["contentPages", "metadata"]);
   if (!canManageStore(user.role)) return <ForbiddenPage />;
   if (mode === "detail" && !isContentPageId(pageId)) return <div className="content-workspace"><h1>{t("detailTitle")}</h1><Link to={`/stores/${store.id}/pages`}>{t("back")}</Link><EmptyState title={t("missingTitle")}>{t("missingBody")}</EmptyState></div>;
   return <ContentWorkspace key={`${user.tenantId}:${user.id}:${user.role}:${store.id}:${mode}:${pageId.toLowerCase()}`} mode={mode} pageId={pageId.toLowerCase()} />;
 }
 function ContentWorkspace({ mode, pageId }: { mode: Mode; pageId: string }) {
-  const { store, storeRefreshing, storeRefreshError } = useSelectedStore(), { t } = useTranslation("contentPages");
+  const { store, storeRefreshing, storeRefreshError } = useSelectedStore(), { t } = useTranslation(["contentPages", "metadata"]);
   const navigate = useNavigate(), location = useLocation(), base = `/stores/${store.id}/pages`;
   const read = useSetupProgress(`content:${store.id}`, signal => contentPagesApi.list(store.id, signal), () => false);
   const [editor, setEditor] = useState<{ page: ContentPage; storeName: string } | null>(null), [review, setReview] = useState<Review | null>(null);
@@ -151,6 +151,7 @@ function ContentWorkspace({ mode, pageId }: { mode: Mode; pageId: string }) {
         <article className="content-text-preview" lang={store.culture} aria-label={t("savedText")}>
           {contentParagraphs(item.body).map((paragraph, index) => <p key={index}>{paragraph}</p>)}{!item.body.trim() && <p>{t("emptyBody")}</p>}
         </article>
+        {!review && !pending && <Link to={`${base}/${item.id}/metadata`}>{t("metadata:open")}</Link>}
         <details className="content-seo"><summary>{t("metadata")}</summary><p className="hint">{t("metadataHint")}</p><dl>
           <div><dt>{t("metadataTitle")}</dt><dd>{item.seoTitle ?? t("notSet")}</dd></div>
           <div><dt>{t("metadataDescription")}</dt><dd>{item.seoDescription ?? t("notSet")}</dd></div>

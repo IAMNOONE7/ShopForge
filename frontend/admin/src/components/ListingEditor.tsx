@@ -29,7 +29,7 @@ export function ListingEditor({ storeId, currency, item, categories, definitions
   storeId: string; currency: string; item: StoreProduct; categories: RequestState<Category[]>; definitions: RequestState<AttributeDefinition[]>; values: RequestState<{ values: AttributeValues }>;
   reloadCategories: () => void; reloadDefinitions: () => void; reloadValues: () => void; reload: () => void; allowed: boolean; refreshing: boolean; refreshFailed: boolean; archived?: boolean;
 }) {
-  const { t, i18n } = useTranslation(["listings", "common", "taxAssignments"]);
+  const { t, i18n } = useTranslation(["listings", "common", "taxAssignments", "metadata"]);
   const [editor, setEditor] = useState<Editor | null>(null);
   const [saved, setSaved] = useState(false);
   const [attempted, setAttempted] = useState(false);
@@ -61,6 +61,7 @@ export function ListingEditor({ storeId, currency, item, categories, definitions
     {stale && <InlineMessage>{t("listings:draftStale")}</InlineMessage>}
     {!allowed && <InlineMessage>{t("listings:readOnly")}</InlineMessage>}
     <section className="physical-panel" aria-labelledby="listing-details-title"><div className="listing-section-heading"><h2 id="listing-details-title" ref={heading} tabIndex={-1}>{t("listings:details")}</h2>
+      {allowed && !archived && !editor && !retirementOpen && <Link to={`/stores/${storeId}/products/${item.id}/metadata`}>{t("metadata:open")}</Link>}
       {allowed && !archived && <Button type="button" variant="secondary" disabled={disabled || !!editor} onClick={(event) => open("details", event.currentTarget)}>{t("listings:editDetails")}</Button>}
     </div><dl className="listing-facts">
       <div><dt>{t("listings:slug")}</dt><dd><code>{item.slug}</code></dd></div><div><dt>{t("listings:price")}</dt><dd>{currencyFormatter(currency, i18n.resolvedLanguage).format(item.price)}</dd></div>

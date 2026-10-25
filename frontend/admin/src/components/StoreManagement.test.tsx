@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import {
@@ -73,6 +73,19 @@ afterEach(() => {
 afterAll(() => i18n.changeLanguage("en"));
 
 describe("store management", () => {
+  it("links to metadata only when a settings save is not in flight", async () => {
+    const user = userEvent.setup(), selected = store();
+    let finish!: (value: AdminStore) => void;
+    const held = new Promise<AdminStore>(resolve => { finish = resolve; });
+    vi.spyOn(api, "updateStore").mockReturnValueOnce(held);
+    render(<MemoryRouter><StoreSettingsSection store={selected} reloadStores={() => undefined} canManageDomains /></MemoryRouter>);
+    expect(screen.getByRole("link", { name: "Search and sharing" }).getAttribute("href")).toBe("/stores/store-a/metadata");
+    await user.click(screen.getByRole("button", { name: "Save settings" }));
+    expect(screen.queryByRole("link", { name: "Search and sharing" })).toBeNull();
+    await act(async () => finish(selected));
+    expect(await screen.findByRole("link", { name: "Search and sharing" })).toBeTruthy();
+    expect(vi.mocked(api.updateStore).mock.calls[0][1]).not.toHaveProperty("seo");
+  });
   it("rejects malformed creation values before a request is possible", () => {
     const draft: CreateStoreDraft = {
       name: "Example",

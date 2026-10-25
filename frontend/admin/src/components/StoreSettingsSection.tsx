@@ -28,7 +28,7 @@ export function StoreSettingsSection({
   reloadStores: () => void;
   canManageDomains?: boolean;
 }) {
-  const { t } = useTranslation("stores");
+  const { t } = useTranslation(["stores", "metadata"]);
   const [draft, setDraft] = useState<StoreSettingsDraft>(() =>
     settingsDraft(store),
   );
@@ -81,6 +81,7 @@ export function StoreSettingsSection({
           <h2 id="store-details-title">{t("storeDetails")}</h2>
           <p className="hint">{t("storeDetailsHint")}</p>
         </div>
+        {canManageDomains && !pending && <Link to={`/stores/${store.id}/metadata`}>{t("metadata:open")}</Link>}
       </div>
       <form className="store-settings-form" noValidate onSubmit={save}>
         <StoreValidationSummary

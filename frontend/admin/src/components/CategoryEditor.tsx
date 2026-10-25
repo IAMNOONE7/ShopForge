@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router";
 import { api, type AttributeDefinition, type Category } from "../api";
 import { useAction } from "../useAction";
 import type { RequestState } from "../useRequest";
@@ -17,7 +18,7 @@ export function CategoryEditor({ storeId, category, categories, attributes, relo
   storeId: string; category: Category; categories: Category[]; attributes: RequestState<AttributeDefinition[]>;
   reloadAttributes: () => void; allowed: boolean; refreshing: boolean; refreshFailed: boolean; reload: () => void; archived?: boolean;
 }) {
-  const { t } = useTranslation("categories");
+  const { t } = useTranslation(["categories", "metadata"]);
   const [editor, setEditor] = useState<Editor | null>(null);
   const [saved, setSaved] = useState(false);
   const [attempted, setAttempted] = useState(false);
@@ -61,6 +62,7 @@ export function CategoryEditor({ storeId, category, categories, attributes, relo
     {!allowed && <InlineMessage>{t("readOnly")}</InlineMessage>}
     <section className="physical-panel" aria-labelledby="category-details-title">
       <div className="category-section-heading"><h2 id="category-details-title" ref={heading} tabIndex={-1}>{t("details")}</h2>
+        {allowed && !archived && !editor && !retirementOpen && <Link to={`/stores/${storeId}/categories/${category.id}/metadata`}>{t("metadata:open")}</Link>}
         {allowed && !archived && <Button type="button" variant="secondary" disabled={disabled || !!editor} onClick={(event) => open("details", event.currentTarget)}>{t("editDetails")}</Button>}
       </div>
       <dl className="category-facts">

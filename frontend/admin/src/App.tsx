@@ -53,6 +53,7 @@ const StoreTaxClassesPage = lazy(() => import("./pages/StoreTaxClassesPage").the
 const ContentPagesPage = lazy(() => import("./pages/ContentPagesPage").then(pages => ({ default: pages.ContentPagesPage })));
 const NewContentPage = lazy(() => import("./pages/ContentPagesPage").then(pages => ({ default: pages.NewContentPage })));
 const ContentPageDetailPage = lazy(() => import("./pages/ContentPagesPage").then(pages => ({ default: pages.ContentPageDetailPage })));
+const MetadataPage = lazy(() => import("./pages/MetadataPage").then(pages => ({ default: pages.MetadataPage })));
 
 type SessionState =
   | { status: "checking" }
@@ -209,6 +210,10 @@ function MerchantApp() {
                   <Route path="pages" element={canManageStore(session.user.role) ? <DeferredPage><ContentPagesPage /></DeferredPage> : <ForbiddenPage />} />
                   <Route path="pages/new" element={canManageStore(session.user.role) ? <DeferredPage><NewContentPage /></DeferredPage> : <ForbiddenPage />} />
                   <Route path="pages/:pageId" element={canManageStore(session.user.role) ? <DeferredPage><ContentPageDetailPage /></DeferredPage> : <ForbiddenPage />} />
+                  <Route path="metadata" element={<DeferredPage><MetadataPage kind="store" /></DeferredPage>} />
+                  <Route path="products/:listingId/metadata" element={<DeferredPage><MetadataPage kind="listing" /></DeferredPage>} />
+                  <Route path="categories/:categoryId/metadata" element={<DeferredPage><MetadataPage kind="category" /></DeferredPage>} />
+                  <Route path="pages/:pageId/metadata" element={<DeferredPage><MetadataPage kind="page" /></DeferredPage>} />
                   <Route path="products" element={<DeferredPage><ListingsPage /></DeferredPage>} />
                   <Route path="products/new" element={<DeferredPage><NewListingPage /></DeferredPage>} />
                   <Route path="products/:listingId" element={<DeferredPage><ListingDetailPage /></DeferredPage>} />
