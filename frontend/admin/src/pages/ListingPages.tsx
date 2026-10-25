@@ -76,7 +76,7 @@ function NewListingWorkspace({ storeId }: { storeId: string }) {
   const [error, run, pending] = useAction(() => undefined);
   return <div className="listing-page"><Link className="physical-back-link" to={`/stores/${storeId}/products`}>{t("back")}</Link><h1>{t("newListing")}</h1><p className="hint">{t("createHint")}</p>
     <ListingRead state={products} reload={reload} label={t("loadingProducts")} />
-    {products.status === "ready" && (products.data.length ? <section className="physical-panel listing-editor"><ListingForm storeId={storeId} products={products.data} disabled={pending || products.refreshing || products.refreshError !== null} pending={pending}
+    {products.status === "ready" && (products.data.length ? <section className="physical-panel listing-editor"><ListingForm storeId={storeId} products={products.data} disabled={pending || products.refreshing || products.refreshError !== null} pending={pending} error={error}
       onSave={(input, productId) => run(async () => { const item = await api.listProduct(storeId, productId, input); if (active.current) await navigate(`/stores/${storeId}/products/${item.id}`); })} />
       {error !== null && <RequestError error={error} operation="write" />}</section> : <EmptyState headingLevel={2} title={t("noProductsTitle")} action={<Link to="/products/new">{t("createPhysicalProduct")}</Link>}><p>{t("noProductsBody")}</p></EmptyState>)}
   </div>;

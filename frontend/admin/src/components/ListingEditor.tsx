@@ -86,7 +86,7 @@ export function ListingEditor({ storeId, currency, item, categories, definitions
     <CatalogRetirement storeId={storeId} kind="products" id={item.id} name={item.name} snapshot={JSON.stringify({ item, archived })}
       archived={archived} allowed={allowed} disabled={baseDisabled || !!editor} pending={pending} run={run} reload={reload} onOpenChange={setRetirementOpen} />
     {editor && <section className="physical-panel listing-editor" ref={root}>
-      {editor.kind === "details" ? <ListingForm storeId={storeId} item={editor.item} disabled={disabled} pending={pending} onCancel={close} onSave={(input) => save(() => api.updateStoreProduct(storeId, item.id, input))} />
+      {editor.kind === "details" ? <ListingForm storeId={storeId} item={editor.item} disabled={disabled} pending={pending} error={attempted ? error : null} onCancel={close} onSave={(input) => save(() => api.updateStoreProduct(storeId, item.id, input))} />
         : editor.kind === "categories" ? <ListingCategoryForm item={editor.item} categories={editor.categories} disabled={disabled || !categoriesReady} pending={pending} onCancel={close} onSave={(ids) => save(() => api.assignCategories(storeId, item.id, ids))} />
           : <ListingAttributeForm attributes={editor.definitions} values={editor.values} disabled={disabled || !valuesReady} pending={pending} onCancel={close} onSave={(input) => save(() => api.setProductAttributes(storeId, item.id, input))} />}
       {attempted && error !== null && <RequestError error={error} operation="write" />}

@@ -2258,3 +2258,8 @@ input[readonly] {
   .method-workspace > .section-heading { flex-direction: column; align-items: start; }
   .method-editor > .cluster { display: grid; grid-template-columns: minmax(0, 1fr); }
 }
+
+.listing-visibility, .listing-visibility-error { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); min-width: 0; overflow-wrap: anywhere; }
+.listing-visibility-error { padding: var(--space-3); border: 1px solid var(--color-danger); border-radius: var(--radius-control); }
+.listing-visibility-error p, .listing-visibility-error ul { margin: 0; }
+.listing-visibility-error ul { padding-inline-start: 1.25em; }

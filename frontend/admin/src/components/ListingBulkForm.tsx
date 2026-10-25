@@ -11,11 +11,13 @@ import { ListingRead } from "./ListingEditor";
 import { Button } from "./ui/Button";
 import { Field } from "./ui/Field";
 import { InlineMessage } from "./ui/InlineMessage";
+import { ListingVisibilityError } from "./ListingVisibilityError";
 
 const activeActions: BulkListingAction[] = ["hide", "show", "setPrice", "changePrice", "categories", "taxClass", "archive"];
 
-export function ListingBulkForm({ storeId, currency, archived, disabled, hidden, revision, onReview }: {
+export function ListingBulkForm({ storeId, currency, archived, disabled, hidden, revision, visibilityMessages, onReview }: {
   storeId: string; currency: string; archived: boolean; disabled: boolean; hidden: boolean; revision: number; onReview: (intent: BulkListingIntent) => void;
+  visibilityMessages: string[];
 }) {
   const { t } = useTranslation("bulkListings");
   const [action, setAction] = useState<BulkListingAction>(archived ? "restore" : "hide");
@@ -53,9 +55,11 @@ export function ListingBulkForm({ storeId, currency, archived, disabled, hidden,
   return <form className="bulk-listing-form" aria-label={t("form")} hidden={hidden} noValidate onSubmit={review}>
     <fieldset className="bulk-fields" disabled={disabled}>
       <legend>{t("chooseAction")}</legend>
-      <div className="listing-field"><label htmlFor="bulk-action">{t("action")}</label><select id="bulk-action" value={action} onChange={event => {
+      <div className="listing-field"><label htmlFor="bulk-action">{t("action")}</label><select id="bulk-action" value={action}
+        aria-invalid={action === "show" && visibilityMessages.length > 0 || undefined} aria-describedby={action === "show" && visibilityMessages.length ? "bulk-visibility-error" : undefined} onChange={event => {
         setAction(event.target.value as BulkListingAction); setInvalid(false); setValue("");
       }}>{(archived ? ["restore"] as const : activeActions).map(option => <option key={option} value={option}>{t(`actions.${option}`)}</option>)}</select></div>
+      {action === "show" && <ListingVisibilityError id="bulk-visibility-error" messages={visibilityMessages} />}
       {(action === "setPrice" || action === "changePrice") && <Field id="bulk-value" name={action === "setPrice" ? "set" : "byPercent"} label={t(action === "setPrice" ? "setPrice" : "percentage", { currency })}
         inputMode={action === "setPrice" ? "decimal" : "text"} value={value} onChange={event => { setValue(event.target.value); setInvalid(false); }}
         hint={t(action === "setPrice" ? "priceHint" : "percentageHint", { decimals: bulkPriceDecimals(currency), currency })}

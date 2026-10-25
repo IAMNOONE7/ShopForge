@@ -11,6 +11,7 @@ import { ListingBulkForm } from "./ListingBulkForm";
 import { Button } from "./ui/Button";
 import { InlineMessage } from "./ui/InlineMessage";
 import { RequestError } from "./ui/RequestError";
+import { listingVisibilityMessages } from "./listingVisibility";
 
 function SelectedListings({ listings, storeId, archived }: { listings: SelectedListing[]; storeId: string; archived: boolean }) {
   const { t } = useTranslation("bulkListings");
@@ -36,6 +37,7 @@ export function ListingBulkPanel({ bulk, storeId, currency, archived, items }: {
   const intent = bulk.confirmation;
   const verified = intent !== null && verifiedIntent === intent;
   const outcome = bulk.outcome;
+  const visibilityMessages = outcome?.kind === "refused" && outcome.intent.action === "show" ? listingVisibilityMessages(outcome.error, "storeProductIds") : [];
   const serverErrors = outcome && outcome.kind !== "success" ? [...new Map(fieldIssues(outcome.error).map(issue => {
     const selection = issue.field.toLowerCase().startsWith("storeproductids");
     const category = issue.field.toLowerCase().includes("category");
@@ -59,7 +61,7 @@ export function ListingBulkPanel({ bulk, storeId, currency, archived, items }: {
     </div>}
     {bulk.selection.size > 0 && outcome?.kind !== "uncertain" && <>
       <div id="bulk-selection" tabIndex={-1}><SelectedListings listings={[...bulk.selection.values()]} storeId={storeId} archived={archived} /></div>
-      <ListingBulkForm storeId={storeId} currency={currency} archived={archived} disabled={bulk.locked} hidden={intent !== null} revision={bulk.revision} onReview={bulk.prepare} />
+      <ListingBulkForm storeId={storeId} currency={currency} archived={archived} disabled={bulk.locked} hidden={intent !== null} revision={bulk.revision} visibilityMessages={visibilityMessages} onReview={bulk.prepare} />
     </>}
     {intent && <form className="bulk-confirmation" aria-labelledby="bulk-confirm-title" onSubmit={event => { event.preventDefault(); if (verified) void bulk.confirm(); }} onKeyDown={event => {
       if (event.key === "Escape") { event.preventDefault(); if (!bulk.pending) cancel(); }

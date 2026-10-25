@@ -8,9 +8,12 @@ import { generatedCode } from "./attributeValidation";
 import { listingDraft, listingInput, validateListing, type ListingDraft, type ListingIssue } from "./listingValidation";
 import { Button } from "./ui/Button";
 import { Field } from "./ui/Field";
+import { ListingVisibilityError } from "./ListingVisibilityError";
+import { listingVisibilityMessages } from "./listingVisibility";
 
-export function ListingForm({ storeId, item, products, disabled, pending, onSave, onCancel }: {
+export function ListingForm({ storeId, item, products, disabled, pending, error: requestError, onSave, onCancel }: {
   storeId: string; item?: StoreProduct; products?: Product[]; disabled: boolean; pending: boolean;
+  error?: unknown;
   onSave: (input: StoreProductInput, productId: string) => Promise<void>; onCancel?: () => void;
 }) {
   const { t } = useTranslation("listings");
@@ -20,9 +23,12 @@ export function ListingForm({ storeId, item, products, disabled, pending, onSave
   const [issues, setIssues] = useState<ListingIssue[]>([]);
   const [taxClass, setTaxClass] = useState(item?.taxClass ?? null);
   const [taxInvalid, setTaxInvalid] = useState(false);
+  const [dismissedVisibilityError, setDismissedVisibilityError] = useState<unknown>(null);
+  const visibilityMessages = draft.isVisible && requestError !== dismissedVisibilityError ? listingVisibilityMessages(requestError, "isVisible") : [];
   const choices = useTaxChoices(storeId);
   const taxValid = taxAssignmentValid(taxClass, choices, item?.taxClass ?? null);
   function update<K extends keyof ListingDraft>(key: K, value: ListingDraft[K]) {
+    if (key === "isVisible") setDismissedVisibilityError(requestError);
     setDraft((current) => ({ ...current, [key]: value }));
     setIssues((current) => current.filter((issue) => issue.field !== key));
   }
@@ -45,7 +51,7 @@ export function ListingForm({ storeId, item, products, disabled, pending, onSave
       <legend>{t("details")}</legend>
       {!item && <div className="listing-field"><label htmlFor="listing-productId">{t("productToList")}</label>
         <select id="listing-productId" name="productId" value={productId} aria-describedby={`listing-product-hint${productInvalid ? " listing-product-error" : ""}`} aria-invalid={productInvalid || undefined}
-          onChange={(event) => { setProductId(event.target.value); setProductInvalid(false); }}>
+          onChange={(event) => { setProductId(event.target.value); setProductInvalid(false); setDismissedVisibilityError(requestError); }}>
           <option value="">{t("chooseProduct")}</option>{products?.map((product) => <option key={product.id} value={product.id}>{product.sku} · {t("variantCount", { count: product.variants.length })}</option>)}
         </select><span id="listing-product-hint" className="hint">{t("productChoiceHint")}</span>
         {productInvalid && <span id="listing-product-error" className="field-error">{t("validation.productInvalid")}</span>}
@@ -65,7 +71,11 @@ export function ListingForm({ storeId, item, products, disabled, pending, onSave
       <TaxClassField id="listing-taxClass" choices={choices} value={taxClass} saved={item?.taxClass ?? null} disabled={disabled}
         invalid={taxInvalid} onChange={value => { setTaxClass(value); setTaxInvalid(false); }} />
       <Field id="listing-sortOrder" name="sortOrder" label={t("sortOrder")} hint={t("sortHint")} value={draft.sortOrder} error={error("sortOrder")} onChange={(event) => update("sortOrder", event.target.value)} />
-      <label className="listing-check"><input type="checkbox" name="isVisible" checked={draft.isVisible} onChange={(event) => update("isVisible", event.target.checked)} />{t("storefrontVisible")}</label>
+      <div className="listing-visibility"><label className="listing-check"><input id="listing-isVisible" type="checkbox" name="isVisible" checked={draft.isVisible}
+        aria-invalid={visibilityMessages.length > 0 || undefined} aria-describedby={visibilityMessages.length ? "listing-visibility-error" : undefined}
+        onChange={(event) => update("isVisible", event.target.checked)} />{t("storefrontVisible")}</label>
+        <ListingVisibilityError id="listing-visibility-error" messages={visibilityMessages} productId={item?.productId ?? selected?.id} />
+      </div>
     </fieldset>
     <div className="cluster"><Button type="submit" disabled={disabled || !taxValid} busy={pending} busyLabel={t("saving")}>{t(item ? "saveDetails" : "listProduct")}</Button>
       {onCancel && <Button type="button" variant="secondary" disabled={pending} onClick={onCancel}>{t("cancel")}</Button>}

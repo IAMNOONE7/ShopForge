@@ -49,6 +49,39 @@ beforeEach(() => { vi.stubGlobal("CSS", { escape: (name: string) => name }); HTM
 afterEach(async () => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); await i18n.changeLanguage("en"); });
 
 describe("focused store listings", () => {
+  it.each(["en", "cs"])("shows a create visibility refusal next to the retained toggle in %s", async language => {
+    await i18n.changeLanguage(language); const user = userEvent.setup(); reads();
+    const message = "This product cannot be shown until every form has measurements. Still without them: CHAIR-RED.";
+    const create = vi.spyOn(api, "listProduct").mockRejectedValueOnce(new HttpError("http", 400, { errors: { isVisible: [message] } }));
+    route("/stores/store-a/products/new");
+    await user.selectOptions(await screen.findByRole("combobox", { name: i18n.t("listings:productToList") }), product.id);
+    await user.type(screen.getByRole("textbox", { name: i18n.t("listings:name") }), "Retained name");
+    await user.type(screen.getByRole("textbox", { name: i18n.t("listings:price") }), "12,50");
+    const toggle = screen.getByRole("checkbox", { name: i18n.t("listings:storefrontVisible") }); await user.click(toggle);
+    await user.click(screen.getByRole("button", { name: i18n.t("listings:listProduct") })); await screen.findByText(message);
+    expect(toggle).toHaveProperty("checked", true); expect(toggle.getAttribute("aria-invalid")).toBe("true");
+    expect(document.getElementById(toggle.getAttribute("aria-describedby")!)?.textContent).toContain(message);
+    expect(screen.getByRole("link", { name: i18n.t("listings:fixMeasurements") }).getAttribute("href")).toBe("/products/" + product.id);
+    expect(screen.getByRole("textbox", { name: i18n.t("listings:name") })).toHaveProperty("value", "Retained name");
+    expect(create).toHaveBeenCalledOnce(); expect(create.mock.calls[0][2]).toMatchObject({ price: 12.5, isVisible: true });
+    await user.click(toggle); expect(screen.queryByText(message)).toBeNull(); expect(toggle.getAttribute("aria-invalid")).toBeNull();
+  });
+
+  it.each(["en", "cs"])("retains edit values after an isVisible refusal and allows an explicit hidden save in %s", async language => {
+    await i18n.changeLanguage(language); const user = userEvent.setup(); reads(); vi.mocked(api.findStoreProduct).mockResolvedValue({ ...item, isVisible: false });
+    const message = "Still without them: CHAIR-<script>literal</script>.";
+    const update = vi.spyOn(api, "updateStoreProduct").mockRejectedValueOnce(new HttpError("http", 400, { errors: { isVisible: [message] } })).mockResolvedValue(item);
+    route(); await user.click(await screen.findByRole("button", { name: i18n.t("listings:editDetails") }));
+    const toggle = screen.getByRole("checkbox", { name: i18n.t("listings:storefrontVisible") }); await user.click(toggle);
+    await user.click(screen.getByRole("button", { name: i18n.t("listings:saveDetails") })); await screen.findByText(message);
+    expect(document.querySelector(".listing-visibility-error script")).toBeNull(); expect(update).toHaveBeenCalledOnce();
+    expect(screen.getByRole("textbox", { name: i18n.t("listings:price") })).toHaveProperty("value", "100");
+    await user.click(within(screen.getByRole("alert")).getByRole("button")); expect(document.activeElement).toBe(toggle);
+    await user.click(toggle); await user.click(screen.getByRole("button", { name: i18n.t("listings:saveDetails") }));
+    await waitFor(() => expect(editor()).toBeNull());
+    expect(update).toHaveBeenLastCalledWith("store-a", item.id, { name: item.name, slug: item.slug, description: item.description, price: 100, vatRate: 21, isVisible: false, sortOrder: 0, taxClass: "standard" });
+  });
+
   it("uses server paging, sort and search, resets page and preserves the list query on detail links", async () => {
     const user = userEvent.setup(); reads();
     const list = vi.spyOn(api, "storeProducts").mockResolvedValue(page);

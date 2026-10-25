@@ -186,3 +186,29 @@ it("never replays an uncertain bulk tax clear when listing reads recover", async
   await user.click(screen.getByRole("button", { name: "Try again" })); await waitFor(() => expect(screen.getByRole("button", { name: "Finish review and clear selection" }).matches(":disabled")).toBe(false));
   await user.click(screen.getByRole("button", { name: "Finish review and clear selection" })); expect(change).toHaveBeenCalledOnce(); expect(screen.getByText("Selected: 0 / 500")).toBeTruthy();
 });
+
+it.each(["en", "cs"])("shows exact bulk-show refusal names beside the action and keeps selection in %s", async language => {
+  await i18n.changeLanguage(language); const user = userEvent.setup(), change = reads();
+  const message = "1 of these products cannot be shown until every form has measurements: Chair <b>literal</b>. Add them first, or leave it out.";
+  change.mockRejectedValueOnce(new HttpError("http", 400, { errors: { storeProductIds: [message] } }));
+  route(); await user.click(await screen.findByRole("button", { name: i18n.t("bulkListings:selectPage") }));
+  const action = screen.getByRole("combobox", { name: i18n.t("bulkListings:action") }); await user.selectOptions(action, "show");
+  await user.click(screen.getByRole("button", { name: i18n.t("bulkListings:review") }));
+  const form = screen.getByRole("form", { name: i18n.t("bulkListings:confirmTitle", { action: i18n.t("bulkListings:actions.show"), count: 2 }) });
+  await user.click(within(form).getByRole("checkbox")); await user.click(within(form).getByRole("button", { name: i18n.t("bulkListings:apply") }));
+  await screen.findByText(message);
+  expect(action).toHaveProperty("value", "show"); expect(action.getAttribute("aria-describedby")).toBe("bulk-visibility-error");
+  expect(document.getElementById("bulk-visibility-error")?.querySelector("b")).toBeNull();
+  expect(screen.getByRole("link", { name: i18n.t("listings:fixMeasurements") }).getAttribute("href")).toBe("/products");
+  expect(screen.getByText(i18n.t("bulkListings:selectedCount", { count: 2, max: 500 }))).toBeTruthy();
+  expect(screen.queryByText(i18n.t("bulkListings:complete"))).toBeNull(); expect(change).toHaveBeenCalledExactlyOnceWith("store-a", ["a", "b"], { action: "visibility", isVisible: true });
+  await user.selectOptions(action, "hide"); expect(screen.queryByText(message)).toBeNull(); expect(action.getAttribute("aria-invalid")).toBeNull();
+  await user.click(screen.getByRole("button", { name: i18n.t("bulkListings:review") }));
+  expect(change).toHaveBeenCalledOnce();
+});
+
+it("keeps other bulk selection errors out of the shipping feedback", async () => {
+  const user = userEvent.setup(), change = reads(); change.mockRejectedValueOnce(new HttpError("http", 400, { errors: { storeProductIds: ["Name at least one listing."] } }));
+  route(); await selectPage(user); await apply(user); await screen.findByText(/The request was refused/);
+  expect(document.querySelector(".listing-visibility-error")).toBeNull(); expect(change).toHaveBeenCalledOnce();
+});
