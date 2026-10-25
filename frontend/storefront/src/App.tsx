@@ -16,6 +16,7 @@ import { applyStore, fetchStore, type Store } from "./store";
 import { StoreContext } from "./storeContext";
 import { statusOf } from "./api/errors";
 import { publicRoutes } from "./publicPages";
+import { installPageMetadata } from "./pageMetadata";
 
 const AccountOrderPage = lazy(() => import("./pages/AccountOrderPage").then((module) => ({ default: module.AccountOrderPage })));
 const AccountPage = lazy(() => import("./pages/AccountPage").then((module) => ({ default: module.AccountPage })));
@@ -46,6 +47,7 @@ function App() {
           ? t("errors:storeNotFoundTitle")
           : t("errors:storeUnavailableTitle");
     document.title = title;
+    return installPageMetadata(null);
   }, [i18n.resolvedLanguage, state.status, t]);
 
   useEffect(() => {

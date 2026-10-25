@@ -12,6 +12,7 @@ import { RequestError } from "../components/ui/RequestError";
 import { formatPrice, useStore } from "../storeContext";
 import { useRequest } from "../useRequest";
 import { categoryPath } from "../publicPages";
+import { useCurrentSlug, usePageMetadata } from "../usePageMetadata";
 
 export function ProductDetailPage() {
   const { t } = useTranslation(["catalog", "errors"]);
@@ -20,6 +21,9 @@ export function ProductDetailPage() {
   const product = useRequest(`product:${slug}`, (signal) =>
     getProduct(slug, signal),
   );
+  const moved = useCurrentSlug("product", slug, product.status === "ready" ? product.data.slug : undefined);
+  usePageMetadata(product.status === "ready" && !product.refreshing && product.refreshError === null && !moved ? product.data : null, "product");
+  if (moved) return <ProductDetailLoading label={t("catalog:loadingProduct")} />;
 
   switch (product.status) {
     case "loading":

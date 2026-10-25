@@ -5,6 +5,7 @@ import { Message } from "../components/Message";
 import { LoadingState } from "../components/ui/LoadingState";
 import { RequestError } from "../components/ui/RequestError";
 import { useRequest } from "../useRequest";
+import { usePageMetadata } from "../usePageMetadata";
 
 export function ContentPage() {
   const { t } = useTranslation(["content", "errors"]);
@@ -12,6 +13,7 @@ export function ContentPage() {
   const page = useRequest(`content:${slug}`, (signal) =>
     getContentPage(slug, signal),
   );
+  usePageMetadata(page.status === "ready" && !page.refreshing && page.refreshError === null ? page.data : null, "content");
 
   switch (page.status) {
     case "loading":

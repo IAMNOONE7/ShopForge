@@ -26,6 +26,7 @@ import { RequestError } from "../components/ui/RequestError";
 import { useRequest } from "../useRequest";
 import { useStore } from "../storeContext";
 import { searchTerm, searchMaximum, searchMinimum } from "../search";
+import { useCurrentSlug, usePageMetadata } from "../usePageMetadata";
 
 export function ProductListPage() {
   const { t } = useTranslation(["catalog", "errors", "navigation"]);
@@ -47,6 +48,8 @@ export function ProductListPage() {
     },
   );
   const retainedData = products.transitionData ?? null;
+  const moved = useCurrentSlug("catalog", categorySlug, products.status === "ready" ? products.data.path.at(-1)?.slug : undefined, slug !== undefined);
+  usePageMetadata(products.status === "ready" && !products.refreshing && products.refreshError === null && !moved ? products.data : null, "catalog");
   // Keep the established root catalog URLs. A filtered/sorted/paged visit opens directly
   // on its results, while a fresh home visit adds the store's discovery entry points.
   const showDiscovery = !slug && !Array.from(searchParams.keys()).some(
@@ -112,7 +115,7 @@ export function ProductListPage() {
     ];
   }
 
-  if (products.status === "loading" && retainedData === null) {
+  if (moved || products.status === "loading" && retainedData === null) {
     return (
       <>
         {pageHeading}

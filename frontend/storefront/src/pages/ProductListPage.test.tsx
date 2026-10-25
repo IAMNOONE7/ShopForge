@@ -88,7 +88,7 @@ describe("ProductListPage recovery", () => {
       children: [{ name: "Dining", slug: "dining", parentSlug: "tables" }],
       pageText: "Shop text.\n\n<script>store content</script>",
     }, refreshing: false, refreshError: null, reload: vi.fn() };
-    renderPage("/c/old-tables?sort=price&f.material=oak&page=3");
+    renderPage("/c/tables?sort=price&f.material=oak&page=3");
     expect(screen.getByRole("heading", { level: 1, name: "Tables" })).toBeTruthy();
     const crumbs = screen.getByRole("navigation", { name: "Category breadcrumb" });
     expect(within(crumbs).getByRole("link", { name: "Furniture" }).getAttribute("href")).toBe("/c/furniture");
@@ -96,6 +96,7 @@ describe("ProductListPage recovery", () => {
     expect(document.querySelector(".catalog-description script")).toBeNull();
     expect(screen.getByText("<script>store content</script>")).toBeTruthy();
     expect(document.querySelector(".catalog-filter-rail")).toBeNull();
+    request.state = { status: "loading", reload: vi.fn() };
     await user.click(within(screen.getByRole("navigation", { name: "Browse subcategories" })).getByRole("link", { name: "Dining" }));
     expect(screen.getByText("/c/dining")).toBeTruthy();
   });

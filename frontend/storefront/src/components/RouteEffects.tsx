@@ -4,6 +4,7 @@ import { useLocation } from "react-router";
 import type { Category } from "../api";
 import type { Store } from "../store";
 import { searchTerm } from "../search";
+import { hasPageTitle, installPageMetadata } from "../pageMetadata";
 
 export function RouteEffects({
   store,
@@ -61,11 +62,15 @@ export function RouteEffects({
       (previousRoute.current.pathname !== location.pathname || previousRoute.current.query !== query);
     previousRoute.current = { pathname: location.pathname, query };
     let focused = false;
+    let fallbackMetadata: (() => void) | undefined;
 
     function update() {
+      if (!document.head.querySelector('meta[data-shopforge-seo][name="robots"]')) {
+        fallbackMetadata?.(); fallbackMetadata = installPageMetadata(null);
+      }
       const heading = main?.querySelector<HTMLElement>("h1");
       const page = heading?.textContent?.trim() || fallbackTitle;
-      document.title = location.pathname === "/" && page === store.name
+      if (!hasPageTitle()) document.title = location.pathname === "/" && page === store.name
         ? store.name
         : t("navigation:pageTitle", { page, store: store.name });
       if (!shouldFocus || focused || !heading) return;
@@ -83,7 +88,8 @@ export function RouteEffects({
       subtree: true,
       characterData: true,
     });
-    return () => observer.disconnect();
+    observer.observe(document.head, { attributes: true, attributeFilter: ["data-shopforge-title"] });
+    return () => { observer.disconnect(); fallbackMetadata?.(); };
   }, [fallbackTitle, i18n.resolvedLanguage, location.pathname, query, store.name, t]);
 
   return null;

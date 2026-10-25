@@ -1,4 +1,5 @@
 import { requestJson } from "./api/http";
+import type { PublicMetadata } from "./pageMetadata";
 
 export type Category = {
   name: string;
@@ -43,7 +44,7 @@ export type Facet = {
   selected: boolean | null;
 };
 
-export type ProductPage = {
+export type ProductPage = PublicMetadata & {
   items: ProductSummary[];
   totalCount: number;
   page: number;
@@ -68,7 +69,7 @@ export type ProductVariant = {
   available: number;
 };
 
-export type ProductDetail = {
+export type ProductDetail = PublicMetadata & {
   id: string;
   slug: string;
   name: string;
@@ -90,7 +91,7 @@ export type ContentPage = {
   slug: string;
   title: string;
   body: string;
-  seo: { title: string; description: string | null; noIndex: boolean; canonical: string | null };
+  seo: { title: string; description: string | null; socialImageUrl?: string | null; noIndex: boolean; canonical: string | null };
 };
 
 export function getContentPage(slug: string, signal: AbortSignal) {
