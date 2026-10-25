@@ -50,6 +50,12 @@ internal static class AdminBulkListingEndpoints
         }
 
         var listings = await ChosenAsync(dbContext, request.StoreProductIds!, cancellationToken);
+
+        if (request.IsVisible && await UnshowableAsync(dbContext, listings, cancellationToken) is { } unshowable)
+        {
+            return unshowable;
+        }
+
         var changed = listings.Count(listing => listing.SetVisible(request.IsVisible));
 
         return await SavedAsync(
@@ -189,6 +195,37 @@ internal static class AdminBulkListingEndpoints
         return await SavedAsync(
             dbContext, audit, "catalog.listings.archive", request.StoreProductIds!.Count, changed,
             $"{(request.Archived ? "archived" : "restored")} {changed}", cancellationToken);
+    }
+
+    // Showing is all or nothing when some of the hidden ones have a form without a weight or its sizes: shown in
+    // part, the rest would come back unchanged with no reason a screen could give (D-216). Those already shown are
+    // readiness's to name.
+    private static async Task<ValidationProblem?> UnshowableAsync(
+        DbContext dbContext, List<StoreProduct> listings, CancellationToken cancellationToken)
+    {
+        var hidden = listings.Where(listing => !listing.IsVisible).ToList();
+        var productIds = hidden.Select(listing => listing.ProductId).ToList();
+        var unmeasured = await dbContext.Set<ProductVariant>()
+            .Where(ProductVariant.Unmeasured)
+            .Where(variant => productIds.Contains(variant.ProductId))
+            .Select(variant => variant.ProductId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        if (unmeasured.Count == 0)
+        {
+            return null;
+        }
+
+        var names = hidden.Where(listing => unmeasured.Contains(listing.ProductId)).Select(listing => listing.Name).Order(StringComparer.Ordinal).ToList();
+        var named = string.Join(", ", names.Take(5)) + (names.Count > 5 ? $" and {names.Count - 5} more" : string.Empty);
+
+        return new RequestErrors()
+            .Check(
+                false,
+                "storeProductIds",
+                $"{names.Count} of these {(names.Count == 1 ? "products cannot be shown until every form of it has" : "products cannot be shown until every form of them has")} a weight and its length, width and height: {named}. Add them first, or leave {(names.Count == 1 ? "it" : "them")} out.")
+            .ToProblem();
     }
 
     // The listings the store has, out of the ones named. Another store's ids are not found, which is the

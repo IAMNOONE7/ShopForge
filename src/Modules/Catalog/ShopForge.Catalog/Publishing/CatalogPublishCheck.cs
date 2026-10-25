@@ -21,33 +21,30 @@ internal sealed class CatalogPublishCheck(DbContext dbContext, ITaxRates taxRate
         ];
     }
 
-    // A visible product with a form that has no weight, or no sizes, cannot be priced for delivery by weight and size
-    // (D-214). Advice for now: the admin's form cannot send sizes yet, so a merchant could not act on a refusal
-    // without an import. It becomes a refusal once the form can (V28b's second step).
+    // A visible product with a form that has no weight, or no sizes, cannot be priced for delivery by weight and size,
+    // so a store with one does not open (D-216). Nothing unmeasured can be created or shown any more, so only a
+    // product from before that rule can be one.
     private async Task<StoreReadiness> MeasuredAsync(CancellationToken cancellationToken)
     {
         const string Check = "catalog.shipping-data";
 
+        var unmeasuredProducts = dbContext.Set<ProductVariant>().Where(ProductVariant.Unmeasured).Select(variant => variant.ProductId);
         var unmeasured = await dbContext.Set<StoreProduct>()
-            .Where(listing => listing.IsVisible)
-            .Where(listing => dbContext.Set<ProductVariant>().Any(variant => variant.ProductId == listing.ProductId
-                && (variant.WeightGrams == null || variant.WeightGrams <= 0
-                    || variant.LengthMm == null || variant.WidthMm == null || variant.HeightMm == null)))
+            .Where(listing => listing.IsVisible && unmeasuredProducts.Contains(listing.ProductId))
             .OrderBy(listing => listing.Name)
             .Select(listing => listing.Name)
             .ToListAsync(cancellationToken);
 
         if (unmeasured.Count == 0)
         {
-            return StoreReadiness.Ready(Check, ReadinessWeight.Advised);
+            return StoreReadiness.Ready(Check);
         }
 
         var named = string.Join(", ", unmeasured.Take(5)) + (unmeasured.Count > 5 ? $" and {unmeasured.Count - 5} more" : string.Empty);
 
         return StoreReadiness.NotReady(
             Check,
-            $"{unmeasured.Count} visible {(unmeasured.Count == 1 ? "product has" : "products have")} a form without a weight or its length, width and height, so delivery cannot be priced for {(unmeasured.Count == 1 ? "it" : "them")}: {named}. Add them in the product or through the import.",
-            ReadinessWeight.Advised);
+            $"{unmeasured.Count} visible {(unmeasured.Count == 1 ? "product has" : "products have")} a form without a weight or its length, width and height, so delivery cannot be priced for {(unmeasured.Count == 1 ? "it" : "them")}: {named}. Add them in the product or through the import, or hide {(unmeasured.Count == 1 ? "it" : "them")}.");
     }
 
     // A listing pointed at a tax class the shop has priced nowhere relevant is taxed at the rate the listing

@@ -37,7 +37,7 @@ public sealed class VariantTests(ShopForgeApiFactory factory)
         var furniture = await FurnitureStore.CreateAsync(factory);
 
         using var created = await furniture.Admin.PostAsJsonAsync(
-            "/api/admin/products", new { Sku = "plain-1", Ean = "8594000000006", WeightGrams = 850 }, CancellationToken);
+            "/api/admin/products", new { Sku = "plain-1", Ean = "8594000000006", WeightGrams = 850, LengthMm = 450, WidthMm = 400, HeightMm = 90 }, CancellationToken);
         var product = await created.Content.ReadFromJsonAsync<ProductView>(CancellationToken);
 
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
@@ -179,7 +179,7 @@ public sealed class VariantTests(ShopForgeApiFactory factory)
     private async Task<ProductView> ProductAsync(FurnitureStore furniture, string sku)
     {
         using var created = await furniture.Admin.PostAsJsonAsync(
-            "/api/admin/products", new { Sku = sku, Ean = (string?)null, WeightGrams = (int?)null }, CancellationToken);
+            "/api/admin/products", new { Sku = sku, Ean = (string?)null, WeightGrams = 850, LengthMm = 450, WidthMm = 400, HeightMm = 90 }, CancellationToken);
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
 
         return (await created.Content.ReadFromJsonAsync<ProductView>(CancellationToken))!;
@@ -199,7 +199,7 @@ public sealed class VariantTests(ShopForgeApiFactory factory)
     private Task<HttpResponseMessage> VariantResponseAsync(FurnitureStore furniture, Guid productId, string sku, string[] optionValues) =>
         furniture.Admin.PostAsJsonAsync(
             $"/api/admin/products/{productId}/variants",
-            new { Sku = sku, Ean = (string?)null, WeightGrams = (int?)null, OptionValues = optionValues },
+            new { Sku = sku, Ean = (string?)null, WeightGrams = 850, OptionValues = optionValues, LengthMm = 450, WidthMm = 400, HeightMm = 90 },
             CancellationToken);
 
     private async Task<Guid> AddVariantAsync(FurnitureStore furniture, Guid productId, string sku, string[] optionValues)

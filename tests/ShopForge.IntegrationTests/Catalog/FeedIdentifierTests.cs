@@ -21,6 +21,9 @@ public sealed class FeedIdentifierTests(ShopForgeApiFactory factory)
                 Sku = AdminCatalogApi.UniqueSku(),
                 Ean = "5901234123457",
                 WeightGrams = 850,
+                LengthMm = 450,
+                WidthMm = 400,
+                HeightMm = 90,
                 Brand = "Thonet",
                 PartNumber = "No-14-OAK",
                 Condition = "Refurbished",
@@ -62,10 +65,11 @@ public sealed class FeedIdentifierTests(ShopForgeApiFactory factory)
 
         using var refused = await furniture.Admin.PostAsJsonAsync(
             "/api/admin/products",
-            new { Sku = AdminCatalogApi.UniqueSku(), Ean = barcode },
+            new { Sku = AdminCatalogApi.UniqueSku(), Ean = barcode, WeightGrams = 850, LengthMm = 450, WidthMm = 400, HeightMm = 90 },
             CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Equal(["ean"], (await refused.Content.ReadFromJsonAsync<ProblemView>(CancellationToken))!.Errors.Keys);
     }
 
     [Fact]
@@ -75,10 +79,11 @@ public sealed class FeedIdentifierTests(ShopForgeApiFactory factory)
 
         using var refused = await furniture.Admin.PostAsJsonAsync(
             "/api/admin/products",
-            new { Sku = AdminCatalogApi.UniqueSku(), Condition = "slightly-used" },
+            new { Sku = AdminCatalogApi.UniqueSku(), Condition = "slightly-used", WeightGrams = 850, LengthMm = 450, WidthMm = 400, HeightMm = 90 },
             CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Equal(["condition"], (await refused.Content.ReadFromJsonAsync<ProblemView>(CancellationToken))!.Errors.Keys);
     }
 
     // The brand belongs to the product, not to one of its sizes, so it is settable on a product sold in
@@ -98,7 +103,7 @@ public sealed class FeedIdentifierTests(ShopForgeApiFactory factory)
 
         using var second = await furniture.Admin.PostAsJsonAsync(
             $"/api/admin/products/{productId}/variants",
-            new { Sku = AdminCatalogApi.UniqueSku(), OptionValues = new[] { "Large" } },
+            new { Sku = AdminCatalogApi.UniqueSku(), WeightGrams = 900, OptionValues = new[] { "Large" }, LengthMm = 450, WidthMm = 400, HeightMm = 90 },
             CancellationToken);
         Assert.Equal(HttpStatusCode.Created, second.StatusCode);
 
@@ -150,6 +155,8 @@ public sealed class FeedIdentifierTests(ShopForgeApiFactory factory)
     private sealed record VariantView(Guid Id, string Sku, string? Ean, string? PartNumber, string? Condition);
 
     private sealed record ImportReportView(List<ImportIssueView> Issues);
+
+    private sealed record ProblemView(Dictionary<string, string[]> Errors);
 
     private sealed record ImportIssueView(int Row, string Column, string Message);
 }

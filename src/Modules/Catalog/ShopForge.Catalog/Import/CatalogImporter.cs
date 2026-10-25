@@ -30,6 +30,7 @@ internal sealed class CatalogImporter(
     private readonly HashSet<Guid> _touched = [];
     private readonly HashSet<Guid> _repriced = [];
     private readonly HashSet<Guid> _reclassified = [];
+    private readonly Dictionary<StoreProduct, Product> _shown = [];
 
     private string[] _axes = [];
 
@@ -72,6 +73,18 @@ internal sealed class CatalogImporter(
             return Report(file, catalog, outcomes, wouldHaveChanged, issues);
         }
 
+        // Every row leaves its own form measured, but a product shown by the file may have another form, from before
+        // the rule, that no row mentions. Showing it would put something in front of a shopper that delivery cannot be
+        // priced for, so the file is refused as a whole, as above (D-216).
+        if (Unshowable() is { } unshowable)
+        {
+            var wouldHaveChanged = outcomes.Count(outcome => outcome is RowOutcome.Created or RowOutcome.Updated);
+            outcomes.RemoveAll(outcome => outcome is RowOutcome.Created or RowOutcome.Updated);
+            issues.Add(new ImportIssue(0, ImportColumns.Visible, unshowable));
+
+            return Report(file, catalog, outcomes, wouldHaveChanged, issues);
+        }
+
         if (outcomes.Any(outcome => outcome is RowOutcome.Created or RowOutcome.Updated))
         {
             try
@@ -107,6 +120,25 @@ internal sealed class CatalogImporter(
     }
 
     private int NewProducts() => dbContext.ChangeTracker.Entries<Product>().Count(entry => entry.State == EntityState.Added);
+
+    private string? Unshowable()
+    {
+        var unmeasured = _shown
+            .Where(shown => shown.Key.IsVisible)
+            .Select(shown => shown.Value.Variants.Where(variant => !variant.IsMeasured).Select(variant => variant.Sku).ToList())
+            .Where(skus => skus.Count > 0)
+            .ToList();
+
+        if (unmeasured.Count == 0)
+        {
+            return null;
+        }
+
+        var skus = unmeasured.SelectMany(product => product).Order(StringComparer.Ordinal).ToList();
+        var named = string.Join(", ", skus.Take(5)) + (skus.Count > 5 ? $" and {skus.Count - 5} more" : string.Empty);
+
+        return $"Nothing was imported: {unmeasured.Count} {(unmeasured.Count == 1 ? "product" : "products")} would be shown with a form that has no weight or no length, width and height: {named}. Add them, in this file or in the admin, or leave {(unmeasured.Count == 1 ? "the product" : "the products")} hidden.";
+    }
 
     private static ImportReport Report(ImportFile file, CatalogData catalog, List<RowOutcome> outcomes, int failed, List<ImportIssue> issues) =>
         new(
@@ -235,6 +267,7 @@ internal sealed class CatalogImporter(
             listing = new StoreProduct(storeContext.StoreId!.Value, product, details!, currency);
             dbContext.Add(listing);
             catalog.Listings[product.Id] = listing;
+            _shown[listing] = product;
         }
         else
         {
@@ -243,6 +276,12 @@ internal sealed class CatalogImporter(
             var wasCalled = listing.Slug;
             var wasPriced = listing.Price;
             var wasTaxed = listing.TaxClass;
+
+            if (!listing.IsVisible)
+            {
+                _shown[listing] = product;
+            }
+
             changed |= listing.Update(details!, currency);
 
             if (listing.Price != wasPriced)

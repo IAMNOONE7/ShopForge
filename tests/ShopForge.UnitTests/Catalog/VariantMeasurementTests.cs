@@ -69,5 +69,23 @@ public sealed class VariantMeasurementTests
         Assert.True(variant.ShipsAlone);
     }
 
+    // The rule a query asks the database is the same rule, turned round.
+    [Theory]
+    [InlineData(850, true)]
+    [InlineData(850, false)]
+    [InlineData(0, true)]
+    [InlineData(null, true)]
+    public void The_rule_a_query_asks_is_the_same_rule(int? weightGrams, bool sized)
+    {
+        var variant = Variant(weightGrams);
+
+        if (sized)
+        {
+            variant.Measure(450, 400, 90);
+        }
+
+        Assert.Equal(!variant.IsMeasured, ProductVariant.Unmeasured.Compile()(variant));
+    }
+
     private static ProductVariant Variant(int? weightGrams) => new Product(Guid.NewGuid(), "SKU-1", ean: null, weightGrams).Default;
 }

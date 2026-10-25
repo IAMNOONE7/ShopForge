@@ -4,9 +4,9 @@ using ClosedXML.Excel;
 
 namespace ShopForge.IntegrationTests.Catalog;
 
-// Every product is weighed and measured before delivery can be priced for it (D-214). The first step of V28b: the
-// fields, an import that refuses anything incomplete, the export, the list of what is still unmeasured, and readiness
-// advising about it. Refusing on create, visibility and publication waits until the admin's form can send sizes.
+// Every product is weighed and measured before delivery can be priced for it (D-214): the fields, the import, the
+// export and the list of what is still unmeasured (D-215), and since the admin's forms send sizes, a refusal wherever a
+// form is created, changed or shown without them, and no store opening with one (D-216).
 public sealed class MeasurementTests(ShopForgeApiFactory factory)
 {
     private static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
@@ -28,7 +28,7 @@ public sealed class MeasurementTests(ShopForgeApiFactory factory)
         Assert.Equal((600, 400, 120, true), (variant.LengthMm, variant.WidthMm, variant.HeightMm, variant.ShipsAlone));
     }
 
-    // The admin's form has no size fields yet, and a save from it must not erase what an import put there.
+    // A save about something else need not repeat the sizes, and does not erase them.
     [Fact]
     public async Task A_save_that_says_nothing_about_sizes_keeps_them()
     {
@@ -49,11 +49,12 @@ public sealed class MeasurementTests(ShopForgeApiFactory factory)
     }
 
     [Theory]
+    [InlineData(null, null, null, "lengthMm")]
     [InlineData(500, 400, null, "heightMm")]
     [InlineData(null, 400, 100, "lengthMm")]
     [InlineData(0, 400, 100, "lengthMm")]
     [InlineData(500, 10_001, 100, "widthMm")]
-    public async Task Sizes_come_all_three_together_and_each_within_ten_metres(int? length, int? width, int? height, string field)
+    public async Task A_new_product_needs_all_three_sizes_each_within_ten_metres(int? length, int? width, int? height, string field)
     {
         var furniture = await FurnitureStore.CreateAsync(factory);
 
@@ -64,7 +65,70 @@ public sealed class MeasurementTests(ShopForgeApiFactory factory)
         var problem = await refused.Content.ReadFromJsonAsync<ProblemView>(CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
-        Assert.True(problem!.Errors.ContainsKey(field), string.Join(", ", problem.Errors.Keys));
+        Assert.Equal([field], problem!.Errors.Keys);
+    }
+
+    // No carrier takes a parcel that weighs nothing, so a weight of nought is as good as none.
+    [Theory]
+    [InlineData(null)]
+    [InlineData(0)]
+    public async Task A_new_product_needs_a_weight_of_something(int? weight)
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+
+        using var refused = await furniture.Admin.PostAsJsonAsync(
+            "/api/admin/products",
+            new { Sku = AdminCatalogApi.UniqueSku(), Ean = (string?)null, WeightGrams = weight, LengthMm = 500, WidthMm = 400, HeightMm = 100 },
+            CancellationToken);
+        var problem = await refused.Content.ReadFromJsonAsync<ProblemView>(CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Equal(["weightGrams"], problem!.Errors.Keys);
+    }
+
+    // Wherever a form is saved, it comes out weighed and measured.
+    [Fact]
+    public async Task A_form_is_refused_without_a_weight_or_its_sizes_wherever_it_is_saved()
+    {
+        var shirt = await ShirtStore.CreateAsync(factory);
+        var admin = shirt.Furniture.Admin;
+        var large = (await ProductAsync(admin, shirt.ProductId)).Variants.Single(variant => variant.Id == shirt.Large);
+        var single = shirt.Furniture.ProductIds["oak-chair"];
+
+        using var unsizedForm = await admin.PostAsJsonAsync(
+            $"/api/admin/products/{shirt.ProductId}/variants",
+            new { Sku = AdminCatalogApi.UniqueSku(), Ean = (string?)null, WeightGrams = 270, OptionValues = new[] { "XL" } },
+            CancellationToken);
+        using var weightlessForm = await admin.PutAsJsonAsync(
+            $"/api/admin/products/{shirt.ProductId}/variants/{shirt.Large}",
+            new { large.Sku, Ean = (string?)null, WeightGrams = (int?)null, OptionValues = new[] { "L" } },
+            CancellationToken);
+        using var weightlessProduct = await admin.PutAsJsonAsync(
+            $"/api/admin/products/{single}", new { Ean = (string?)null, WeightGrams = 0 }, CancellationToken);
+        var after = await ProductsAsync(admin);
+
+        Assert.Equal(["lengthMm"], (await ProblemAsync(unsizedForm)).Errors.Keys);
+        Assert.Equal(["weightGrams"], (await ProblemAsync(weightlessForm)).Errors.Keys);
+        Assert.Equal(["weightGrams"], (await ProblemAsync(weightlessProduct)).Errors.Keys);
+        Assert.Equal(260, after.Single(product => product.Id == shirt.ProductId).Variants.Single(variant => variant.Id == shirt.Large).WeightGrams);
+        Assert.Equal(850, after.Single(product => product.Id == single).WeightGrams);
+    }
+
+    // A form from before the rule is finished at its next save rather than saved unfinished again.
+    [Fact]
+    public async Task A_form_from_before_the_rule_is_measured_at_its_next_save()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+        var productId = await furniture.Admin.CreateProductAsync();
+        await FormsFromBefore.UnsizeAsync(factory, productId);
+
+        using var refused = await furniture.Admin.PutAsJsonAsync(
+            $"/api/admin/products/{productId}", new { Ean = (string?)null, WeightGrams = 900 }, CancellationToken);
+        using var measured = await furniture.Admin.PutAsJsonAsync(
+            $"/api/admin/products/{productId}", new { Ean = (string?)null, WeightGrams = 900, LengthMm = 300, WidthMm = 200, HeightMm = 100 }, CancellationToken);
+
+        Assert.Equal(["lengthMm"], (await ProblemAsync(refused)).Errors.Keys);
+        Assert.Equal(HttpStatusCode.OK, measured.StatusCode);
     }
 
     // A product sold in several forms has no single size: each form carries its own, and the product refuses one.
@@ -87,6 +151,75 @@ public sealed class MeasurementTests(ShopForgeApiFactory factory)
         Assert.Equal(HttpStatusCode.OK, onTheForm.StatusCode);
         Assert.Equal((330, 260, 35), Sizes(product.Variants.Single(variant => variant.Id == shirt.Large)));
         Assert.Equal((450, 400, 90), Sizes(product.Variants.Single(variant => variant.Id == shirt.Small)));
+    }
+
+    // Nothing goes in front of a shopper that delivery cannot be priced for, by any of the ways a listing is shown.
+    [Fact]
+    public async Task A_product_with_an_unmeasured_form_cannot_be_shown()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+        var storeId = furniture.Store.StoreId;
+        var sku = AdminCatalogApi.UniqueSku();
+        var productId = await furniture.Admin.CreateProductAsync(sku);
+        await FormsFromBefore.UnsizeAsync(factory, productId);
+
+        using var listedShown = await furniture.Admin.PostAsJsonAsync(
+            $"/api/admin/stores/{storeId}/products",
+            new { ProductId = productId, Name = "Unsized Lamp", Price = 10m, VatRate = 21m, IsVisible = true, SortOrder = 0 },
+            CancellationToken);
+        var listing = await furniture.Admin.ListProductAsync(storeId, productId, "Unsized Lamp", 10m, isVisible: false);
+        using var editedShown = await furniture.Admin.PutAsJsonAsync(
+            $"/api/admin/stores/{storeId}/products/{listing}",
+            new { Name = "Unsized Lamp", Price = 10m, VatRate = 21m, IsVisible = true, SortOrder = 0 },
+            CancellationToken);
+        using var bulkShown = await ShowAsync(furniture, listing);
+        using var measured = await furniture.Admin.PutAsJsonAsync(
+            $"/api/admin/products/{productId}", new { Ean = (string?)null, WeightGrams = 900, LengthMm = 300, WidthMm = 200, HeightMm = 100 }, CancellationToken);
+        using var shownAfterwards = await ShowAsync(furniture, listing);
+
+        var refusal = Assert.Single((await ProblemAsync(listedShown)).Errors["isVisible"]);
+        Assert.Contains(sku.ToUpperInvariant(), refusal, StringComparison.Ordinal);
+        Assert.Equal(["isVisible"], (await ProblemAsync(editedShown)).Errors.Keys);
+        Assert.Contains("Unsized Lamp", Assert.Single((await ProblemAsync(bulkShown)).Errors["storeProductIds"]), StringComparison.Ordinal);
+        Assert.Equal(HttpStatusCode.OK, measured.StatusCode);
+        Assert.Equal(new BulkView(1, 1), await shownAfterwards.Content.ReadFromJsonAsync<BulkView>(CancellationToken));
+    }
+
+    // A listing already shown from before the rule is readiness's to name: an edit of its price is no moment to take it
+    // off the shelf, and the store cannot open with it.
+    [Fact]
+    public async Task A_shown_product_from_before_the_rule_can_be_edited_but_keeps_the_store_shut()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+        var storeId = furniture.Store.StoreId;
+
+        var measured = await CheckAsync(furniture);
+        var unsized = await furniture.Admin.CreateProductAsync();
+        var unsizedListing = await furniture.Admin.ListProductAsync(storeId, unsized, "Unsized Lamp", 10m);
+        var weightless = await furniture.Admin.CreateProductAsync();
+        await furniture.Admin.ListProductAsync(storeId, weightless, "Weightless Lamp", 10m);
+        var hidden = await furniture.Admin.CreateProductAsync();
+        await furniture.Admin.ListProductAsync(storeId, hidden, "Hidden Lamp", 10m, isVisible: false);
+        await FormsFromBefore.UnsizeAsync(factory, unsized);
+        await FormsFromBefore.UnweighAsync(factory, weightless);
+        await FormsFromBefore.UnsizeAsync(factory, hidden);
+
+        using var repriced = await furniture.Admin.PutAsJsonAsync(
+            $"/api/admin/stores/{storeId}/products/{unsizedListing}",
+            new { Name = "Unsized Lamp", Price = 12m, VatRate = 21m, IsVisible = true, SortOrder = 0 },
+            CancellationToken);
+        using var shownAgain = await ShowAsync(furniture, unsizedListing);
+        var refused = await CheckAsync(furniture);
+
+        Assert.True(measured.IsReady);
+        Assert.Equal("required", measured.Weight);
+        Assert.Equal(HttpStatusCode.OK, repriced.StatusCode);
+        Assert.Equal(new BulkView(1, 0), await shownAgain.Content.ReadFromJsonAsync<BulkView>(CancellationToken));
+        Assert.False(refused.IsReady);
+        Assert.Equal("required", refused.Weight);
+        Assert.Contains("Unsized Lamp", refused.Problem!, StringComparison.Ordinal);
+        Assert.Contains("Weightless Lamp", refused.Problem!, StringComparison.Ordinal);
+        Assert.DoesNotContain("Hidden Lamp", refused.Problem!, StringComparison.Ordinal);
     }
 
     // The owner's rule: a product without a weight or its sizes does not come in (D-214).
@@ -134,6 +267,53 @@ public sealed class MeasurementTests(ShopForgeApiFactory factory)
         Assert.Equal((0, 2, 0), (restated.Updated, restated.Skipped, restated.Invalid));
     }
 
+    // Every row leaves its own form measured, but the file may show a product whose other form, from before the rule,
+    // no row mentions. Then nothing is imported, and the form is named. A product already shown is readiness's to name.
+    [Fact]
+    public async Task An_import_that_would_show_a_form_from_before_the_rule_imports_nothing()
+    {
+        var shirt = await ShirtStore.CreateAsync(factory);
+        var admin = shirt.Furniture.Admin;
+        var variants = (await ProductAsync(admin, shirt.ProductId)).Variants;
+        var small = variants.Single(variant => variant.Id == shirt.Small).Sku;
+        var large = variants.Single(variant => variant.Id == shirt.Large).Sku;
+        await FormsFromBefore.UnsizeFormAsync(factory, shirt.Large);
+
+        var whileShown = await ImportAsync(shirt.Furniture, ImportFiles.Workbook(["sku", "option:size", "price"], [small, "S", 65m]));
+        using var hidden = await admin.PostAsJsonAsync(
+            $"/api/admin/stores/{shirt.Furniture.Store.StoreId}/products/bulk/visibility",
+            new { StoreProductIds = new[] { shirt.Listing }, IsVisible = false },
+            CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, hidden.StatusCode);
+        var shown = await ImportAsync(shirt.Furniture, ImportFiles.Workbook(["sku", "option:size", "visible"], [small, "S", "yes"]));
+        var listing = await admin.GetFromJsonAsync<ListingView>(
+            $"/api/admin/stores/{shirt.Furniture.Store.StoreId}/products/{shirt.Listing}", CancellationToken);
+
+        Assert.Equal((1, 0), (whileShown.Updated, whileShown.Failed));
+        Assert.Equal((0, 1), (shown.Updated, shown.Failed));
+        var refusal = Assert.Single(shown.Issues);
+        Assert.Equal("visible", refusal.Column);
+        Assert.Contains(large, refusal.Message, StringComparison.Ordinal);
+        Assert.False(listing!.IsVisible);
+    }
+
+    // Listing the product in a second store is showing it there too, unless the file keeps it hidden.
+    [Fact]
+    public async Task An_import_listing_a_form_from_before_the_rule_elsewhere_lists_it_hidden_or_not_at_all()
+    {
+        var shirt = await ShirtStore.CreateAsync(factory);
+        var small = (await ProductAsync(shirt.Furniture.Admin, shirt.ProductId)).Variants.Single(variant => variant.Id == shirt.Small).Sku;
+        await FormsFromBefore.UnsizeFormAsync(factory, shirt.Large);
+        string[] columns = ["sku", "option:size", "name", "price", "vat", "visible"];
+
+        var shown = await ImportAsync(shirt.Furniture, shirt.Furniture.OtherStore.StoreId, ImportFiles.Workbook(columns, [small, "S", ShirtStore.Name, 60m, 21m, "yes"]));
+        var hidden = await ImportAsync(shirt.Furniture, shirt.Furniture.OtherStore.StoreId, ImportFiles.Workbook(columns, [small, "S", ShirtStore.Name, 60m, 21m, "no"]));
+
+        Assert.Equal((0, 1), (shown.Created, shown.Failed));
+        Assert.Equal("visible", Assert.Single(shown.Issues).Column);
+        Assert.Equal((1, 0), (hidden.Created, hidden.Failed));
+    }
+
     [Theory]
     [InlineData("package_length_mm", "ten")]
     [InlineData("package_width_mm", 0)]
@@ -177,9 +357,12 @@ public sealed class MeasurementTests(ShopForgeApiFactory factory)
     {
         var furniture = await FurnitureStore.CreateAsync(factory);
         var other = await FurnitureStore.CreateAsync(factory);
-        var unsized = await CreateAsync(furniture.Admin, new { Sku = "UNSIZED-1", Ean = (string?)null, WeightGrams = 900 });
-        var weightless = await CreateAsync(furniture.Admin, new { Sku = "WEIGHTLESS-1", Ean = (string?)null, WeightGrams = 0, LengthMm = 100, WidthMm = 100, HeightMm = 100 });
-        await CreateAsync(other.Admin, new { Sku = "OTHERS-1", Ean = (string?)null, WeightGrams = (int?)null });
+        var unsized = await furniture.Admin.CreateProductAsync("UNSIZED-1");
+        var weightless = await furniture.Admin.CreateProductAsync("WEIGHTLESS-1");
+        var others = await other.Admin.CreateProductAsync("OTHERS-1");
+        await FormsFromBefore.UnsizeAsync(factory, unsized);
+        await FormsFromBefore.UnweighAsync(factory, weightless);
+        await FormsFromBefore.UnsizeAsync(factory, others);
 
         var list = await furniture.Admin.GetFromJsonAsync<UnmeasuredView>("/api/admin/products/unmeasured", CancellationToken);
         var paged = await furniture.Admin.GetFromJsonAsync<UnmeasuredView>("/api/admin/products/unmeasured?page=2&pageSize=1", CancellationToken);
@@ -193,40 +376,19 @@ public sealed class MeasurementTests(ShopForgeApiFactory factory)
         Assert.Equal(["WEIGHTLESS-1"], paged!.Variants.Select(variant => variant.Sku));
     }
 
-    // Advice for now, never a refusal: the admin's form cannot send sizes yet (V28b's second step).
-    [Fact]
-    public async Task Readiness_advises_about_a_visible_product_that_is_not_measured()
-    {
-        var furniture = await FurnitureStore.CreateAsync(factory);
-        var storeId = furniture.Store.StoreId;
-
-        var measured = await CheckAsync(furniture);
-        var productId = await CreateAsync(furniture.Admin, new { Sku = AdminCatalogApi.UniqueSku(), Ean = (string?)null, WeightGrams = 900 });
-        await furniture.Admin.ListProductAsync(storeId, productId, "Unsized Lamp", 10m);
-        var weightless = await CreateAsync(
-            furniture.Admin, new { Sku = AdminCatalogApi.UniqueSku(), Ean = (string?)null, WeightGrams = (int?)null, LengthMm = 300, WidthMm = 300, HeightMm = 300 });
-        await furniture.Admin.ListProductAsync(storeId, weightless, "Weightless Lamp", 10m);
-        await furniture.Admin.ListProductAsync(storeId, await CreateAsync(furniture.Admin, new { Sku = AdminCatalogApi.UniqueSku(), Ean = (string?)null, WeightGrams = (int?)null }), "Hidden Lamp", 10m, isVisible: false);
-
-        var advised = await CheckAsync(furniture);
-
-        Assert.True(measured.IsReady);
-        Assert.Equal("advised", measured.Weight);
-        Assert.False(advised.IsReady);
-        Assert.Equal("advised", advised.Weight);
-        Assert.Contains("Unsized Lamp", advised.Problem!, StringComparison.Ordinal);
-        Assert.Contains("Weightless Lamp", advised.Problem!, StringComparison.Ordinal);
-        Assert.DoesNotContain("Hidden Lamp", advised.Problem!, StringComparison.Ordinal);
-    }
-
     private static (int?, int?, int?) Sizes(VariantView variant) => (variant.LengthMm, variant.WidthMm, variant.HeightMm);
 
-    private static async Task<Guid> CreateAsync(HttpClient admin, object body)
-    {
-        using var response = await admin.PostAsJsonAsync("/api/admin/products", body, CancellationToken);
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    private static async Task<HttpResponseMessage> ShowAsync(FurnitureStore furniture, Guid listing) =>
+        await furniture.Admin.PostAsJsonAsync(
+            $"/api/admin/stores/{furniture.Store.StoreId}/products/bulk/visibility",
+            new { StoreProductIds = new[] { listing }, IsVisible = true },
+            CancellationToken);
 
-        return (await response.Content.ReadFromJsonAsync<ProductView>(CancellationToken))!.Id;
+    private static async Task<ProblemView> ProblemAsync(HttpResponseMessage response)
+    {
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        return (await response.Content.ReadFromJsonAsync<ProblemView>(CancellationToken))!;
     }
 
     private static async Task<ProductView> ProductAsync(HttpClient admin, Guid productId) =>
@@ -235,9 +397,12 @@ public sealed class MeasurementTests(ShopForgeApiFactory factory)
     private static async Task<List<ProductView>> ProductsAsync(HttpClient admin) =>
         (await admin.GetFromJsonAsync<List<ProductView>>("/api/admin/products", CancellationToken))!;
 
-    private static async Task<ImportReport> ImportAsync(FurnitureStore furniture, MultipartFormDataContent file)
+    private static Task<ImportReport> ImportAsync(FurnitureStore furniture, MultipartFormDataContent file) =>
+        ImportAsync(furniture, furniture.Store.StoreId, file);
+
+    private static async Task<ImportReport> ImportAsync(FurnitureStore furniture, Guid storeId, MultipartFormDataContent file)
     {
-        using var response = await furniture.Admin.ImportAsync(furniture.Store.StoreId, file);
+        using var response = await furniture.Admin.ImportAsync(storeId, file);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         return (await response.Content.ReadFromJsonAsync<ImportReport>(CancellationToken))!;
@@ -255,6 +420,10 @@ public sealed class MeasurementTests(ShopForgeApiFactory factory)
         Guid Id, string Sku, int? WeightGrams, int? LengthMm, int? WidthMm, int? HeightMm, bool ShipsAlone, List<VariantView> Variants);
 
     private sealed record VariantView(Guid Id, string Sku, int? WeightGrams, int? LengthMm, int? WidthMm, int? HeightMm, bool ShipsAlone);
+
+    private sealed record ListingView(bool IsVisible);
+
+    private sealed record BulkView(int Asked, int Changed);
 
     private sealed record ProblemView(Dictionary<string, string[]> Errors);
 

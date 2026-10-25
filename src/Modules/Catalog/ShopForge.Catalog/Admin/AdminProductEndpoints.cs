@@ -57,14 +57,13 @@ internal static class AdminProductEndpoints
         var errors = new RequestErrors()
             .Check(!string.IsNullOrWhiteSpace(request.Sku) && request.Sku.Trim().Length <= 64, "sku", "SKU is required (up to 64 characters).")
             .Check(IsValidEan(request.Ean), "ean", "A barcode must be a GTIN of 8, 12, 13 or 14 digits whose check digit agrees.")
-            .Check(request.WeightGrams is null or >= 0, "weightGrams", "Weight cannot be negative.")
             .Check(request.PartNumber is null || request.PartNumber.Trim().Length <= ProductVariant.MaxPartNumberLength, "partNumber", "A part number can be up to 70 characters.")
             .Check(IsValidCondition(request.Condition), "condition", "A condition is New, Refurbished or Used.")
             .Check(request.Brand is null || request.Brand.Trim().Length <= Product.MaxBrandLength, "brand", "A brand can be up to 70 characters.")
             .Check(request.PartNumber is null || request.PartNumber.Trim().Length <= ProductVariant.MaxPartNumberLength, "partNumber", "A part number can be up to 70 characters.")
             .Check(IsValidCondition(request.Condition), "condition", "A condition is New, Refurbished or Used.");
 
-        if (Sized(errors, request.LengthMm, request.WidthMm, request.HeightMm).Any)
+        if (Measured(errors, request.WeightGrams, request.LengthMm, request.WidthMm, request.HeightMm, stored: null).Any)
         {
             return errors.ToProblem();
         }
@@ -98,14 +97,13 @@ internal static class AdminProductEndpoints
     {
         var errors = new RequestErrors()
             .Check(IsValidEan(request.Ean), "ean", "A barcode must be a GTIN of 8, 12, 13 or 14 digits whose check digit agrees.")
-            .Check(request.WeightGrams is null or >= 0, "weightGrams", "Weight cannot be negative.")
             .Check(request.PartNumber is null || request.PartNumber.Trim().Length <= ProductVariant.MaxPartNumberLength, "partNumber", "A part number can be up to 70 characters.")
             .Check(IsValidCondition(request.Condition), "condition", "A condition is New, Refurbished or Used.")
             .Check(request.Brand is null || request.Brand.Trim().Length <= Product.MaxBrandLength, "brand", "A brand can be up to 70 characters.")
             .Check(request.PartNumber is null || request.PartNumber.Trim().Length <= ProductVariant.MaxPartNumberLength, "partNumber", "A part number can be up to 70 characters.")
             .Check(IsValidCondition(request.Condition), "condition", "A condition is New, Refurbished or Used.");
 
-        if (Sized(errors, request.LengthMm, request.WidthMm, request.HeightMm).Any)
+        if (errors.Any)
         {
             return errors.ToProblem();
         }
@@ -132,6 +130,11 @@ internal static class AdminProductEndpoints
 
         if (product.Variants.Count == 1)
         {
+            if (Measured(new RequestErrors(), request.WeightGrams, request.LengthMm, request.WidthMm, request.HeightMm, product.Default) is { Any: true } unmeasured)
+            {
+                return unmeasured.ToProblem();
+            }
+
             product.Default.UpdatePhysicalData(request.Ean, request.WeightGrams, request.PartNumber, ConditionFrom(request.Condition));
             Measure(product.Default, request.LengthMm, request.WidthMm, request.HeightMm, request.ShipsAlone);
         }
@@ -189,7 +192,7 @@ internal static class AdminProductEndpoints
             return TypedResults.NotFound();
         }
 
-        if (Refused(request, product) is { } errors)
+        if (Refused(request, product, stored: null) is { } errors)
         {
             return errors;
         }
@@ -221,7 +224,7 @@ internal static class AdminProductEndpoints
             return TypedResults.NotFound();
         }
 
-        if (Refused(request, product) is { } errors)
+        if (Refused(request, product, variant) is { } errors)
         {
             return errors;
         }
@@ -268,7 +271,7 @@ internal static class AdminProductEndpoints
         return TypedResults.NoContent();
     }
 
-    private static ValidationProblem? Refused(VariantRequest request, Product product)
+    private static ValidationProblem? Refused(VariantRequest request, Product product, ProductVariant? stored)
     {
         var errors = new RequestErrors()
             .Check(
@@ -276,7 +279,6 @@ internal static class AdminProductEndpoints
                 "sku",
                 $"SKU is required (up to {ProductVariant.MaxSkuLength} characters).")
             .Check(IsValidEan(request.Ean), "ean", "A barcode must be a GTIN of 8, 12, 13 or 14 digits whose check digit agrees.")
-            .Check(request.WeightGrams is null or >= 0, "weightGrams", "Weight cannot be negative.")
             .Check(request.PartNumber is null || request.PartNumber.Trim().Length <= ProductVariant.MaxPartNumberLength, "partNumber", "A part number can be up to 70 characters.")
             .Check(IsValidCondition(request.Condition), "condition", "A condition is New, Refurbished or Used.")
             .Check(
@@ -284,7 +286,7 @@ internal static class AdminProductEndpoints
                 "optionValues",
                 $"This product needs one value for each of: {string.Join(", ", product.OptionNames)}.");
 
-        return Sized(errors, request.LengthMm, request.WidthMm, request.HeightMm).Any ? errors.ToProblem() : null;
+        return Measured(errors, request.WeightGrams, request.LengthMm, request.WidthMm, request.HeightMm, stored).Any ? errors.ToProblem() : null;
     }
 
     // The forms that cannot yet be priced for delivery, so they can be found and finished before a shopper meets one:
@@ -298,10 +300,7 @@ internal static class AdminProductEndpoints
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 200);
 
-        var unmeasured = dbContext.Set<ProductVariant>()
-            .AsNoTracking()
-            .Where(variant => variant.WeightGrams == null || variant.WeightGrams <= 0
-                || variant.LengthMm == null || variant.WidthMm == null || variant.HeightMm == null);
+        var unmeasured = dbContext.Set<ProductVariant>().AsNoTracking().Where(ProductVariant.Unmeasured);
         var total = await unmeasured.CountAsync(cancellationToken);
         var variants = await unmeasured
             .OrderBy(variant => variant.Sku)
@@ -325,14 +324,17 @@ internal static class AdminProductEndpoints
             ]));
     }
 
-    // The length, the width and the height come together or not at all. Sizes a request leaves out keep what is
-    // stored: the admin's form has no size fields yet, and a save from it must not erase what an import put there.
-    private static RequestErrors Sized(RequestErrors errors, int? lengthMm, int? widthMm, int? heightMm)
+    // Every save leaves a form weighed and measured: a weight of at least a gram, as a save replaces it, and the
+    // length, the width and the height, which come together or not at all. Sizes a request leaves out keep what is
+    // stored, so a save about something else need not repeat them (D-216).
+    private static RequestErrors Measured(RequestErrors errors, int? weightGrams, int? lengthMm, int? widthMm, int? heightMm, ProductVariant? stored)
     {
         const string Rule = "A size is a whole number of millimetres from 1 to 10000.";
         var given = new[] { lengthMm, widthMm, heightMm }.Count(size => size is not null);
 
         return errors
+            .Check(weightGrams is > 0, "weightGrams", "Every product needs a weight of at least 1 gram.")
+            .Check(given > 0 || stored?.LengthMm is not null, "lengthMm", "Every product needs its length, width and height in millimetres.")
             .Check(
                 given is 0 or 3,
                 lengthMm is null ? "lengthMm" : widthMm is null ? "widthMm" : "heightMm",

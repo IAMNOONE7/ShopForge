@@ -148,6 +148,22 @@ public sealed class StoreReadinessTests : IDisposable
         Assert.Contains("books", advice.Problem!, StringComparison.Ordinal);
     }
 
+    // A visible product that delivery cannot be priced for keeps the shop shut, and the refusal names it (D-216).
+    [Fact]
+    public async Task A_visible_product_without_its_measurements_stops_a_publication()
+    {
+        var world = await ReadyToPublishAsync();
+        var listing = await world.Admin.GetFromJsonAsync<ListedProduct>(
+            $"/api/admin/stores/{world.StoreId}/products/{world.ListingId}", CancellationToken);
+        await FormsFromBefore.UnsizeAsync(_factory, listing!.ProductId);
+
+        using var refused = await world.Admin.PostAsync($"/api/admin/stores/{world.StoreId}/publish", null, CancellationToken);
+        var problems = (await refused.Content.ReadFromJsonAsync<PublishProblem>(CancellationToken))!.Problems;
+
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        Assert.Contains("Spade", Assert.Single(problems), StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Every_check_is_named_and_the_draft_store_reports_what_it_is_missing()
     {
@@ -261,4 +277,6 @@ public sealed class StoreReadinessTests : IDisposable
     private sealed record ReadinessCheck(string Check, bool IsReady, string? Problem, string Weight);
 
     private sealed record PublishProblem(List<string> Problems);
+
+    private sealed record ListedProduct(Guid ProductId);
 }

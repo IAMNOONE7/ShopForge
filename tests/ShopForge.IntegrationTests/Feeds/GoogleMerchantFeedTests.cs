@@ -184,7 +184,7 @@ public sealed class GoogleMerchantFeedTests(ShopForgeApiFactory factory)
     {
         using var forgotten = await furniture.Admin.PutAsJsonAsync(
             $"/api/admin/products/{furniture.ProductIds[slug]}",
-            new { Ean = (string?)null, WeightGrams = (int?)null },
+            new { Ean = (string?)null, WeightGrams = 850 },
             CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, forgotten.StatusCode);

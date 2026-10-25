@@ -54,11 +54,13 @@ public sealed class PlanTests(ShopForgeApiFactory factory)
         using var operatorClient = await SignInAsync();
         await MoveToAsync(operatorClient, furniture.Store.TenantId, "tiny", maxProducts: 4);
 
-        using var refused = await furniture.Admin.PostAsJsonAsync("/api/admin/products", new { Sku = $"SKU-{Guid.NewGuid():N}" }, CancellationToken);
+        using var refused = await furniture.Admin.PostAsJsonAsync(
+            "/api/admin/products", new { Sku = $"SKU-{Guid.NewGuid():N}", WeightGrams = 850, LengthMm = 450, WidthMm = 400, HeightMm = 90 }, CancellationToken);
         var problem = await refused.Content.ReadAsStringAsync(CancellationToken);
 
         await MoveToAsync(operatorClient, furniture.Store.TenantId, "scale");
-        using var allowed = await furniture.Admin.PostAsJsonAsync("/api/admin/products", new { Sku = $"SKU-{Guid.NewGuid():N}" }, CancellationToken);
+        using var allowed = await furniture.Admin.PostAsJsonAsync(
+            "/api/admin/products", new { Sku = $"SKU-{Guid.NewGuid():N}", WeightGrams = 850, LengthMm = 450, WidthMm = 400, HeightMm = 90 }, CancellationToken);
 
         Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
         Assert.Contains("no more products", problem, StringComparison.OrdinalIgnoreCase);

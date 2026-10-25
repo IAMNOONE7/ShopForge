@@ -114,7 +114,8 @@ public sealed class CatalogTests(ShopForgeApiFactory factory)
         var productId = await admin.CreateProductAsync(sku);
         await admin.ListProductAsync(store.StoreId, productId, "Board", 5m, slug: "board");
 
-        using var duplicateSku = await admin.PostAsJsonAsync("/api/admin/products", new { Sku = sku.ToLowerInvariant() }, CancellationToken);
+        using var duplicateSku = await admin.PostAsJsonAsync(
+            "/api/admin/products", new { Sku = sku.ToLowerInvariant(), WeightGrams = 850, LengthMm = 450, WidthMm = 400, HeightMm = 90 }, CancellationToken);
         using var duplicateSlug = await admin.PostAsJsonAsync(
             $"/api/admin/stores/{store.StoreId}/products",
             new { ProductId = await admin.CreateProductAsync(), Name = "Board", Slug = "board", Price = 5m, IsVisible = true },

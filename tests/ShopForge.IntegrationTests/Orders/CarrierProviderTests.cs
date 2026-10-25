@@ -199,12 +199,18 @@ public sealed class CarrierProviderTests : IDisposable
 
         using var weighed = await admin.PutAsJsonAsync(
             $"/api/admin/products/{productId}",
-            new { Ean = "8594000000013", WeightGrams = weightGrams },
+            new { Ean = "8594000000013", WeightGrams = weightGrams ?? 850 },
             CancellationToken);
         Assert.Equal(HttpStatusCode.OK, weighed.StatusCode);
 
         var storeProductId = await admin.ListProductAsync(furniture.Store.StoreId, productId, "Parcel Chair", 100m);
         await admin.StockAsync(productId, 10);
+
+        // Only a form from before every form had to be weighed can be on sale without a weight (D-216).
+        if (weightGrams is null)
+        {
+            await FormsFromBefore.UnweighAsync(_factory, productId);
+        }
 
         var shopper = new StorefrontApi(_withCarrier, furniture.Store);
         using var added = await shopper.PostAsync(

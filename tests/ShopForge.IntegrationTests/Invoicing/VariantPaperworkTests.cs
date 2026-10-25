@@ -84,7 +84,7 @@ public sealed class VariantPaperworkTests(ShopForgeApiFactory factory)
 
         using var renamed = await shirt.Furniture.Admin.PutAsJsonAsync(
             $"/api/admin/products/{shirt.ProductId}/variants/{shirt.Large}",
-            new { Sku = "RENAMED-L", Ean = (string?)null, WeightGrams = (int?)null, OptionValues = new[] { "Extra Large" } },
+            new { Sku = "RENAMED-L", Ean = (string?)null, WeightGrams = 260, OptionValues = new[] { "Extra Large" } },
             CancellationToken);
         var confirmation = await shopper.GetJsonAsync<OrderView>($"/api/storefront/orders/{order.Number}?token={order.Token}");
 

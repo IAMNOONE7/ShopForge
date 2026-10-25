@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Catalog.Domain;
@@ -56,6 +57,10 @@ internal sealed class ProductVariant : ITenantOwned
     // Everything a parcel is priced from: a weight of something, since no carrier takes a parcel that weighs
     // nothing, and all three sizes.
     public bool IsMeasured => WeightGrams is > 0 && LengthMm is not null && WidthMm is not null && HeightMm is not null;
+
+    // The same rule turned round, in a form a query can translate.
+    public static readonly Expression<Func<ProductVariant, bool>> Unmeasured = variant =>
+        variant.WeightGrams == null || variant.WeightGrams <= 0 || variant.LengthMm == null || variant.WidthMm == null || variant.HeightMm == null;
 
     // What the manufacturer calls this exact form of the thing, which is not what we call it: the SKU is the
     // shop's own name for a shelf. A feed will take one or the other and prefers both (D-163).

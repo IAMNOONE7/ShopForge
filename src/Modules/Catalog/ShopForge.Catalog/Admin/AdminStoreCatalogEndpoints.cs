@@ -157,6 +157,11 @@ internal static class AdminStoreCatalogEndpoints
         var product = await dbContext.Set<Product>().SingleOrDefaultAsync(product => product.Id == request.ProductId, cancellationToken);
         errors.Check(product is not null, "productId", "Product not found.");
 
+        if (request.IsVisible && product is not null && Unshowable(product) is { } unshowable)
+        {
+            errors.Check(false, "isVisible", unshowable);
+        }
+
         if (errors.Any)
         {
             return errors.ToProblem();
@@ -204,10 +209,17 @@ internal static class AdminStoreCatalogEndpoints
             return TypedResults.NotFound();
         }
 
+        var product = await dbContext.Set<Product>().AsNoTracking().SingleAsync(product => product.Id == storeProduct.ProductId, cancellationToken);
+
         // Without an explicit slug the public URL stays as it is, even when the name changes.
         var slug = request.Slug ?? storeProduct.Slug;
         var currency = (await storeSettings.GetAsync(cancellationToken)).Currency;
         var errors = ValidateDetails(request.Name, slug, request.Price, request.VatRate, currency, request.TaxClass, await taxRates.ClassesAsync(cancellationToken));
+
+        if (request.IsVisible && !storeProduct.IsVisible && Unshowable(product) is { } unshowable)
+        {
+            errors.Check(false, "isVisible", unshowable);
+        }
 
         if (errors.Any)
         {
@@ -250,8 +262,6 @@ internal static class AdminStoreCatalogEndpoints
 
         // A name or a description that has changed is a different answer to what somebody types.
         await search.RefreshAsync(storeProduct.Id, cancellationToken);
-
-        var product = await dbContext.Set<Product>().AsNoTracking().SingleAsync(product => product.Id == storeProduct.ProductId, cancellationToken);
 
         return TypedResults.Ok(AdminStoreProductResponse.From(storeProduct, product));
     }
@@ -653,6 +663,18 @@ internal static class AdminStoreCatalogEndpoints
             .Check(!string.IsNullOrWhiteSpace(request.Name) && request.Name.Trim().Length <= 200, "name", "Name is required (up to 200 characters).")
             .Check(request.Slug is null || Slugs.IsValid(request.Slug), "slug", "Slug may contain lower-case letters, digits and single hyphens.")
             .Check(request.Name is null || request.Slug is not null || Slugs.Create(request.Name).Length > 0, "slug", "A slug cannot be derived from this name; provide one.");
+
+    // Nothing goes in front of a shopper that delivery cannot be priced for (D-216). Only showing it is refused: a
+    // listing already shown from before the rule is readiness's to name, and an edit of its price is no moment to take
+    // it off the shelf.
+    internal static string? Unshowable(Product product)
+    {
+        var unmeasured = product.Variants.Where(variant => !variant.IsMeasured).Select(variant => variant.Sku).Order(StringComparer.Ordinal).ToList();
+
+        return unmeasured.Count == 0
+            ? null
+            : $"This product cannot be shown until every form of it has a weight and its length, width and height. Still without them: {string.Join(", ", unmeasured)}.";
+    }
 
     private static StoreProductDetails ToDetails(
         string name, string? slug, string? description, decimal price, decimal vatRate, bool isVisible, int sortOrder, string? taxClass) =>
