@@ -3,8 +3,8 @@ import { Link } from "react-router";
 import type { StoreReadinessCheck } from "../api";
 
 type Definition = {
-  label: "logo" | "company" | "product" | "shippingData" | "payment" | "shipping" | "domain" | "paymentConnected" | "shippingConnected" | "tax" | "email" | "emailSender";
-  destination?: "products" | "methods" | "domains" | "provider-connections" | "/products";
+  label: "logo" | "company" | "product" | "shippingData" | "payment" | "shipping" | "parcelMethods" | "domain" | "paymentConnected" | "shippingConnected" | "tax" | "email" | "emailSender";
+  destination?: "products" | "methods" | "shipping-settings" | "domains" | "provider-connections" | "/products";
   heading?: "store-logo-title" | "store-details-title";
 };
 const definitions = new Map<string, Definition>([
@@ -16,6 +16,7 @@ const definitions = new Map<string, Definition>([
   ["catalog.tax-classes", { label: "tax" }],
   ["orders.payment-method", { label: "payment", destination: "methods" }],
   ["orders.shipping-method", { label: "shipping", destination: "methods" }],
+  ["orders.parcel-methods", { label: "parcelMethods", destination: "shipping-settings" }],
   ["orders.payment-connected", { label: "paymentConnected", destination: "provider-connections" }],
   ["orders.shipping-connected", { label: "shippingConnected", destination: "provider-connections" }],
   ["platform.email", { label: "email" }],

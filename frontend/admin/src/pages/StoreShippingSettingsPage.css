@@ -1,0 +1,14 @@
+.shipping-settings-page, .shipping-settings-panel, .shipping-settings-panel form, .shipping-settings-fields, .shipping-settings-outcome { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); min-width: 0; overflow-wrap: anywhere; }
+.shipping-settings-page { container-type: inline-size; max-width: 68rem; }
+.shipping-settings-page :is(h1, h2, p, dl) { margin: 0; }
+.shipping-settings-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: start; gap: var(--space-3); }
+.shipping-settings-panel { padding: var(--space-6); border: 1px solid var(--color-border); border-radius: var(--radius-panel); background: var(--color-surface); box-shadow: var(--shadow-sm); }
+.shipping-settings-panel dl { display: grid; gap: var(--space-3); }
+.shipping-settings-panel dd { margin: 0; font-weight: 650; }
+.shipping-settings-panel dt { color: var(--color-text-muted); }
+.shipping-settings-panel > button { justify-self: start; }
+.shipping-settings-fields { padding: 0; margin: 0; border: 0; }
+.shipping-settings-fields legend { padding: 0 0 var(--space-3); font-weight: 650; }
+.shipping-settings-page :is(button, input, a) { min-width: 0; max-width: 100%; }
+.shipping-settings-page button { white-space: normal; overflow-wrap: anywhere; }
+@container (max-width: 32rem) { .shipping-settings-panel { padding: var(--space-3); } .shipping-settings-page :is(h1,h2) { font-size: 1.25rem; } }

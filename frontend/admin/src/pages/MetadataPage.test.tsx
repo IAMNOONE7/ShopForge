@@ -164,6 +164,6 @@ describe("metadata workspace", () => {
     window.history.replaceState(null, "", path(kind)); render(<App />);
     const allowed = ["Owner", "Admin"].includes(role) || role === "CatalogManager" && ["listing", "category"].includes(kind);
     await screen.findByRole("heading", { name: allowed ? i18n.t(kind === "store" ? "metadata:storeHeading" : "metadata:pageHeading") : "Permission required" });
-    expect(metadataApi.read).toHaveBeenCalledTimes(allowed ? 1 : 0);
+    await waitFor(() => expect(metadataApi.read).toHaveBeenCalledTimes(allowed ? 1 : 0));
   });
 });

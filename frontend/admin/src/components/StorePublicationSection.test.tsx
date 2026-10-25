@@ -41,6 +41,16 @@ beforeEach(async () => { await i18n.changeLanguage("en"); vi.stubGlobal("CSS", {
 afterEach(async () => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); window.history.replaceState(null, "", "/"); await i18n.changeLanguage("en"); });
 
 describe("server publication readiness", () => {
+  it.each(["en", "cs"])("labels required parcel-method readiness and preserves its numerical reason in %s", async language => {
+    await i18n.changeLanguage(language);
+    const problem = '"Locker" sends parcels of at most 2000 g, and packaging weighs 3000 g.';
+    vi.spyOn(api, "storeReadiness").mockResolvedValue({ isReady: false, checks: [{ check: "orders.parcel-methods", isReady: false, weight: "required", problem }] });
+    const publish = vi.spyOn(api, "publishStore"); render(view());
+    const label = await screen.findByText(i18n.t("stores:checks.parcelMethods"));
+    expect(within(label.closest("li")!).getByText(problem)).toBeTruthy();
+    expect(within(label.closest("li")!).getByRole("link", { name: i18n.t("stores:fixCheck") }).getAttribute("href")).toBe("/stores/store-a/shipping-settings");
+    expect(screen.getByRole("button", { name: i18n.t("stores:reviewPublication") })).toHaveProperty("disabled", true); expect(publish).not.toHaveBeenCalled();
+  });
   it.each(["en", "cs"])("labels shipping data and links to company products, respecting the server weight in %s", async (language) => {
     await i18n.changeLanguage(language);
     const shipping = { check: "catalog.shipping-data", isReady: false, problem: "One visible variant is unmeasured.", weight: "advised" as const };

@@ -138,6 +138,7 @@ export function AdminNavigation({
           >
             {t("navigation:methods")}
           </NavLink>
+          <NavLink to={`/stores/${selectedStore.id}/shipping-settings`} onClick={onNavigate}>{t("navigation:shippingSettings")}</NavLink>
           <NavLink
             to={`/stores/${selectedStore.id}/discounts`}
             onClick={onNavigate}

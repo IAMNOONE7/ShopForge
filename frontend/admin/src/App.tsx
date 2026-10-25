@@ -57,6 +57,7 @@ const ContentPagesPage = lazy(() => import("./pages/ContentPagesPage").then(page
 const NewContentPage = lazy(() => import("./pages/ContentPagesPage").then(pages => ({ default: pages.NewContentPage })));
 const ContentPageDetailPage = lazy(() => import("./pages/ContentPagesPage").then(pages => ({ default: pages.ContentPageDetailPage })));
 const MetadataPage = lazy(() => import("./pages/MetadataPage").then(pages => ({ default: pages.MetadataPage })));
+const StoreShippingSettingsPage = lazy(() => import("./pages/StoreShippingSettingsPage").then(pages => ({ default: pages.StoreShippingSettingsPage })));
 
 type SessionState =
   | { status: "checking" }
@@ -231,6 +232,7 @@ function MerchantApp() {
                   <Route path="attributes/:attributeId" element={<AttributeDetailPage />} />
                   <Route path="import" element={<StoreImportPage />} />
                   <Route path="methods" element={<StoreMethodsPage />} />
+                  <Route path="shipping-settings" element={<DeferredPage><StoreShippingSettingsPage /></DeferredPage>} />
                   <Route path="discounts" element={<StoreDiscountsPage />} />
                   <Route path="orders" element={<DeferredPage><StoreOrdersPage /></DeferredPage>} />
                   <Route path="orders/:number" element={<DeferredPage><StoreOrderPage /></DeferredPage>} />
