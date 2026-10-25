@@ -250,6 +250,11 @@ public sealed class ParcelMethodTests(ShopForgeApiFactory factory)
         var before = await ParcelCheckAsync(furniture);
         using var created = await CreateMethodAsync(furniture, OwnDeliveryMethod(key) with { ParcelMaxWeightGrams = 1_000 });
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        using var priced = await furniture.Admin.PutAsJsonAsync(
+            $"/api/admin/stores/{furniture.Store.StoreId}/shipping-methods/own-van-by-the-parcel/rates",
+            new { Source = "own", Bands = new[] { new { UpToGrams = 1_000, Price = 5m } } },
+            CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, priced.StatusCode);
         var fits = await ParcelCheckAsync(furniture);
         await SettingsAsync(furniture, packagingWeightGrams: 1_000);
         var heavyPackaging = await ParcelCheckAsync(furniture);

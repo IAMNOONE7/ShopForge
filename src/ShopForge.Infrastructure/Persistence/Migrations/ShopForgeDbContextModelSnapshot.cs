@@ -3312,6 +3312,15 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("provider_key");
 
+                    b.Property<string>("RatesFrom")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("rates_from");
+
+                    b.Property<DateOnly?>("RatesPricedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("rates_priced_on");
+
                     b.Property<bool>("RequiresPickupPoint")
                         .HasColumnType("boolean")
                         .HasColumnName("requires_pickup_point");
@@ -4763,6 +4772,46 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                         });
 
                     b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("ShopForge.Orders.Domain.ShippingMethod", b =>
+                {
+                    b.OwnsMany("ShopForge.Orders.Domain.RateBand", "RateBands", b1 =>
+                        {
+                            b1.Property<Guid>("ShippingMethodId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("shipping_method_id");
+
+                            b1.Property<int>("Id")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("integer")
+                                .HasColumnName("id");
+
+                            NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b1.Property<int>("Id"));
+
+                            b1.Property<decimal>("Price")
+                                .HasPrecision(12, 2)
+                                .HasColumnType("numeric(12,2)")
+                                .HasColumnName("price");
+
+                            b1.Property<int>("UpToGrams")
+                                .HasColumnType("integer")
+                                .HasColumnName("up_to_grams");
+
+                            b1.HasKey("ShippingMethodId", "Id")
+                                .HasName("pk_shipping_rate_bands");
+
+                            b1.ToTable("shipping_rate_bands", "orders", t =>
+                                {
+                                    t.HasCheckConstraint("ck_shipping_rate_bands_values", "up_to_grams > 0 AND price >= 0");
+                                });
+
+                            b1.WithOwner()
+                                .HasForeignKey("ShippingMethodId")
+                                .HasConstraintName("fk_shipping_rate_bands_shipping_methods_shipping_method_id");
+                        });
+
+                    b.Navigation("RateBands");
                 });
 
             modelBuilder.Entity("ShopForge.Stores.Domain.Store", b =>

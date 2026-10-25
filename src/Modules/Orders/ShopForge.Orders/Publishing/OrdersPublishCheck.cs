@@ -85,7 +85,8 @@ internal sealed class OrdersPublishCheck(
 
     // Every method priced by the parcel that is switched on sends by a carrier service in use, of its own provider, and
     // has room in a parcel for goods once the store's packaging is in it (D-218). Without either, nothing it is asked to
-    // carry could ever be priced.
+    // carry could ever be priced. And it has prices of its own: none, or the invented placeholder ones, must not reach a
+    // shopper (D-219).
     private async Task<StoreReadiness> ParcelMethodsAsync(IReadOnlyList<ShippingMethod> active, CancellationToken cancellationToken)
     {
         const string Check = "orders.parcel-methods";
@@ -114,6 +115,14 @@ internal sealed class OrdersPublishCheck(
             else if (method.LimitsWithin(service).MaxWeightGrams is var heaviest && heaviest <= packing.WeightGrams)
             {
                 problems.Add($"\"{method.Name}\" sends parcels of at most {heaviest} g, and the store's packaging alone weighs {packing.WeightGrams} g, so no goods fit. Raise the limit or lighten the packaging.");
+            }
+            else if (method.RateBands.Count == 0)
+            {
+                problems.Add($"\"{method.Name}\" has no prices yet. Give it a rate card, or switch it off.");
+            }
+            else if (method.RatesFrom == RateSource.Placeholder)
+            {
+                problems.Add($"\"{method.Name}\" still has the placeholder prices, which are invented. Enter your own, or your carrier's price list, before the store opens.");
             }
         }
 

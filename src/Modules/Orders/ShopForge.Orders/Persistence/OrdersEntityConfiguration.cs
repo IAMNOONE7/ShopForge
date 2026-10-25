@@ -155,6 +155,15 @@ internal sealed class ShippingMethodEntityConfiguration : IEntityTypeConfigurati
         builder.PrimitiveCollection(method => method.Countries).ElementType(country => country.HasMaxLength(2).IsFixedLength());
         builder.Property(method => method.Pricing).HasConversion<string>().HasMaxLength(20).HasDefaultValue(ShippingPricing.Flat).HasSentinel(ShippingPricing.Flat);
         builder.Property(method => method.CarrierServiceKey).HasMaxLength(CarrierService.MaxKeyLength);
+        builder.Property(method => method.RatesFrom).HasConversion<string>().HasMaxLength(20);
+
+        builder.OwnsMany(method => method.RateBands, bands =>
+        {
+            bands.ToTable("shipping_rate_bands", OrdersModule.Schema, table =>
+                table.HasCheckConstraint("ck_shipping_rate_bands_values", "up_to_grams > 0 AND price >= 0"));
+            bands.WithOwner().HasForeignKey("ShippingMethodId");
+            bands.Property(band => band.Price).HasPrecision(12, 2);
+        });
 
         builder.HasIndex(method => new { method.StoreId, method.Code }).IsUnique();
     }

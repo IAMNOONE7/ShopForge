@@ -220,7 +220,31 @@ public sealed class CarrierProviderTests : IDisposable
         return new CarrierWorld(furniture, shopper);
     }
 
+    // The merchant's preview asks the carrier too, as the checkout will (D-219): what only the carrier can say makes the
+    // method unavailable there as well.
+    [Fact]
+    public async Task The_preview_asks_the_carrier_what_only_the_carrier_can_say()
+    {
+        var world = await CarrierStoreAsync();
+        using var admin = await TestUsers.LoginAsync(_withCarrier, await TestUsers.CreateAsync(_factory.Services, world.Furniture.Store.TenantId));
+        var path = $"/api/admin/stores/{world.Furniture.Store.StoreId}/shipping-methods/{MapCarrier.MethodCode}/quote";
+        var lines = new { Lines = new[] { new { StoreProductId = world.Furniture.Products["oak-chair"], Quantity = 1 } } };
+
+        using var taken = await admin.PostAsJsonAsync(path, lines, CancellationToken);
+        var quoted = await taken.Content.ReadFromJsonAsync<QuoteView>(CancellationToken);
+        _carrier.RefusesOver = 100;
+        using var refused = await admin.PostAsJsonAsync(path, lines, CancellationToken);
+        var declined = await refused.Content.ReadFromJsonAsync<QuoteView>(CancellationToken);
+
+        Assert.Equal((true, 59m), (quoted!.IsAvailable, quoted.Total));
+        Assert.Equal("carrierRefused", declined!.Unavailable!.Reason);
+    }
+
     private sealed record CarrierWorld(FurnitureStore Furniture, StorefrontApi Shopper);
+
+    private sealed record QuoteView(bool IsAvailable, decimal Total, RefusalView? Unavailable);
+
+    private sealed record RefusalView(string Reason);
 
     private sealed record MethodsView(List<ShippingMethodView> ShippingMethods, string? DestinationCountry);
 

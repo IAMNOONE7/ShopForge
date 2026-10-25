@@ -235,6 +235,8 @@ public sealed partial class IdorSweepTests(ShopForgeApiFactory factory)
         ["/api/admin/stores/{storeId:guid}/discounts/{code}"] = "keyed by a code of the store in the path",
         ["/api/admin/stores/{storeId:guid}/payment-methods/{code}"] = "keyed by a code of the store in the path",
         ["/api/admin/stores/{storeId:guid}/shipping-methods/{code}"] = "keyed by a code of the store in the path",
+        ["/api/admin/stores/{storeId:guid}/shipping-methods/{code}/rates"] = "keyed by a code of the store in the path",
+        ["/api/admin/stores/{storeId:guid}/shipping-methods/{code}/quote"] = "keyed by a code of the store in the path",
         ["/api/admin/stores/{storeId:guid}/pickup-points/{code}"] = "keyed by a code of the store in the path",
         ["/api/admin/stores/{storeId:guid}/tax-classes/{code}"] = "keyed by a code of the store in the path",
 

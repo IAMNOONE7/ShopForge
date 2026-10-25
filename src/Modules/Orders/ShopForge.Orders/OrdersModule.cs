@@ -54,6 +54,7 @@ public static class OrdersModule
         services.AddScoped<Invoices>();
         services.AddScoped<DiscountCodes>();
         services.AddScoped<OrderReturns>();
+        services.AddScoped<ShippingQuotes>();
         services.AddScoped<IEventHandler<OrderCancelled>, OrderNotifications>();
         services.AddScoped<IEventHandler<ShipmentCreated>, OrderNotifications>();
         services.AddScoped<IEventHandler<ReturnDecided>, OrderNotifications>();
@@ -102,6 +103,7 @@ public static class OrdersModule
         storeAdmin.MapAdminReconciliation();
         storeAdmin.MapAdminMethods();
         storeAdmin.MapAdminShippingSettings();
+        storeAdmin.MapAdminParcelPricing();
         storeAdmin.MapAdminPickupPoints();
         storeAdmin.MapAdminDiscounts();
         storeAdmin.MapAdminReturns();

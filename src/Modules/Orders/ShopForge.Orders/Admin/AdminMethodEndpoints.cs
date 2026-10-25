@@ -173,6 +173,12 @@ internal static class AdminMethodEndpoints
             request.Countries,
             request.TaxClass);
         method.SendBy(pricing, service?.Key, request.ParcelMaxWeightGrams, ParcelSides(request));
+
+        if (pricing == ShippingPricing.PerParcel)
+        {
+            PlaceholderRates.StartFrom(method, currency);
+        }
+
         dbContext.Add(method);
         audit.Record("shipping-method.added", method.Name, Terms(method));
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -239,7 +245,13 @@ internal static class AdminMethodEndpoints
 
         if (choosing)
         {
+            var moved = method.Pricing != pricing || method.CarrierServiceKey != service?.Key;
             method.SendBy(pricing, service?.Key, request.ParcelMaxWeightGrams, ParcelSides(request));
+
+            if (moved && pricing == ShippingPricing.PerParcel)
+            {
+                PlaceholderRates.StartFrom(method, currency);
+            }
         }
 
         audit.Record("shipping-method.changed", method.Name, new { Before = before, After = Terms(method) });
@@ -335,7 +347,7 @@ internal static class AdminMethodEndpoints
             ParcelLargest = method.ParcelLargest is { } largest ? new[] { largest.Longest, largest.Middle, largest.Shortest } : null,
         };
 
-    private static AdminShippingMethodResponse ShippingResponse(ShippingMethod method) =>
+    internal static AdminShippingMethodResponse ShippingResponse(ShippingMethod method) =>
         new(
             method.Code,
             method.Name,
@@ -352,7 +364,10 @@ internal static class AdminMethodEndpoints
             method.ParcelMaxWeightGrams,
             method.ParcelLongestMm,
             method.ParcelMiddleMm,
-            method.ParcelShortestMm);
+            method.ParcelShortestMm,
+            method.RatesFrom,
+            method.RatesPricedOn,
+            [.. method.RateBands.OrderBy(band => band.UpToGrams).Select(band => new RateBandResponse(band.UpToGrams, band.Price))]);
 
     private static RequestErrors ValidateName(string? name) =>
         new RequestErrors().Check(!string.IsNullOrWhiteSpace(name) && name.Trim().Length <= 100, "name", "Name is required (up to 100 characters).");
@@ -412,7 +427,12 @@ internal sealed record AdminShippingMethodResponse(
     int? ParcelMaxWeightGrams,
     int? ParcelLengthMm,
     int? ParcelWidthMm,
-    int? ParcelHeightMm);
+    int? ParcelHeightMm,
+    RateSource? RatesFrom,
+    DateOnly? RatesPricedOn,
+    IReadOnlyList<RateBandResponse> RateBands);
+
+internal sealed record RateBandResponse(int UpToGrams, decimal Price);
 
 internal static class Codes
 {

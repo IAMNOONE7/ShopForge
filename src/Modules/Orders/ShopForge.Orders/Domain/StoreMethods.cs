@@ -120,6 +120,14 @@ internal sealed class ShippingMethod : IStoreOwned
     public Sides? ParcelLargest =>
         ParcelLongestMm is { } longest && ParcelMiddleMm is { } middle && ParcelShortestMm is { } shortest ? new Sides(longest, middle, shortest) : null;
 
+    // What a parcel costs by a method priced by the parcel, band by band on its gross weight, and where those prices
+    // came from, so a price list that changes is easy to spot (D-219).
+    public List<RateBand> RateBands { get; private set; } = [];
+
+    public RateSource? RatesFrom { get; private set; }
+
+    public DateOnly? RatesPricedOn { get; private set; }
+
     public void Update(
         string name,
         decimal price,
@@ -171,7 +179,40 @@ internal sealed class ShippingMethod : IStoreOwned
         ParcelLongestMm = parcelLargest?.Longest;
         ParcelMiddleMm = parcelLargest?.Middle;
         ParcelShortestMm = parcelLargest?.Shortest;
+
+        // A flat method has one price and no rate card.
+        if (pricing == ShippingPricing.Flat)
+        {
+            ForgetRates();
+        }
     }
+
+    public void PriceParcels(RateSource source, DateOnly? pricedOn, IReadOnlyList<RateBand> bands, Currency currency)
+    {
+        if (Pricing != ShippingPricing.PerParcel
+            || bands.Count == 0
+            || bands.Any(band => band.UpToGrams <= 0 || band.Price < 0 || !currency.Holds(band.Price))
+            || bands.Zip(bands.Skip(1)).Any(pair => pair.Second.UpToGrams <= pair.First.UpToGrams))
+        {
+            throw new ArgumentException("A rate card belongs to a method priced by the parcel: at least one band, each heavier than the last, at prices the currency can hold.");
+        }
+
+        RateBands = [.. bands];
+        RatesFrom = source;
+        RatesPricedOn = pricedOn;
+    }
+
+    public void ForgetRates()
+    {
+        RateBands = [];
+        RatesFrom = null;
+        RatesPricedOn = null;
+    }
+
+    // The band a parcel of this gross weight falls in: at a band's bound it is that band, a gram over it the next. Above
+    // the heaviest there is none, and a parcel is never charged the top band's price instead (D-219).
+    public RateBand? BandFor(int grossWeightGrams) =>
+        RateBands.Where(band => grossWeightGrams <= band.UpToGrams).MinBy(band => band.UpToGrams);
 
     // What the method sends by its service: the service's limits, and the method's own where they are tighter.
     public ServiceLimits LimitsWithin(CarrierService service) =>
@@ -196,4 +237,15 @@ internal enum ShippingPricing
 {
     Flat,
     PerParcel,
+}
+
+// One band of a rate card: a parcel up to this gross weight, inclusive, costs this, gross.
+internal sealed record RateBand(int UpToGrams, decimal Price);
+
+// The carrier's price list of a date, the shop's own prices, or invented ones that must not reach a shopper (D-219).
+internal enum RateSource
+{
+    Carrier,
+    Own,
+    Placeholder,
 }
