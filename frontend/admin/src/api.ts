@@ -205,22 +205,6 @@ export type AttributeValues = Record<
   string | number | boolean | string[]
 >;
 
-export type ImportIssue = {
-  row: number;
-  column: string | null;
-  message: string;
-};
-
-export type ImportReport = {
-  created: number;
-  updated: number;
-  skipped: number;
-  invalid: number;
-  failed: number;
-  ignoredColumns: string[];
-  issues: ImportIssue[];
-};
-
 export type StoreProductInput = {
   name: string;
   slug?: string | null;
@@ -559,13 +543,6 @@ export const api = {
       "PUT",
       `/api/admin/stores/${storeId}/products/${storeProductId}/categories`,
       { categoryIds },
-    ),
-
-  importProducts: (storeId: string, file: File) =>
-    request<ImportReport>(
-      "POST",
-      `/api/admin/stores/${storeId}/import`,
-      formWith(file),
     ),
 
   attributes: (storeId: string, signal?: AbortSignal) =>

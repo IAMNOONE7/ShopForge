@@ -1,0 +1,21 @@
+.import-page, .import-panel, .import-panel form, .import-selection, .import-feedback, .import-results { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); min-width: 0; overflow-wrap: anywhere; }
+.import-page { max-width: 70rem; container-type: inline-size; }
+.import-page :is(h1, h2, h3, h4, p, dl) { margin: 0; }
+.import-panel { padding: var(--space-6); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-panel); }
+.import-panel > button, .import-panel form > button, .import-selection > button { justify-self: start; }
+.import-page :is(button, input, a) { min-width: 0; max-width: 100%; }
+.import-page button { white-space: normal; overflow-wrap: anywhere; }
+.import-guide { display: grid; gap: var(--space-3); padding-inline-start: var(--space-6); }
+.import-selection { padding: var(--space-3); background: var(--color-surface-subtle); border: 1px solid var(--color-border); border-radius: var(--radius-control); }
+.import-counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); gap: var(--space-3); }
+.import-counts dd { margin: 0; font-size: var(--text-xl); font-weight: 650; }
+.import-issues { display: grid; gap: var(--space-4); list-style: none; margin: 0; padding: 0; }
+.import-issues > li { display: grid; gap: var(--space-3); min-width: 0; padding-block: var(--space-3); border-top: 1px solid var(--color-border); }
+.import-issues dl { display: flex; flex-wrap: wrap; gap: var(--space-4); }
+.import-issues dd { margin: 0; }
+.import-issues details p { white-space: pre-wrap; margin-top: var(--space-3); }
+@container (max-width: 32rem) { .import-panel { padding: var(--space-3); } .import-page :is(h1,h2) { font-size: 1.25rem; } }
+.import-file-field { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); position: relative; }
+.import-file-field > button { justify-self: start; }
+.import-file-error { color: var(--color-danger); }
+.import-file-field button[aria-invalid="true"] { border-color: var(--color-danger); }

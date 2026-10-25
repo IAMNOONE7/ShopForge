@@ -2,16 +2,13 @@ import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useSelectedStore } from "../adminContext";
 import { DiscountsSection } from "../components/DiscountsSection";
-import { ImportSection } from "../components/ImportSection";
 import { MethodsSection } from "../components/MethodsSection";
 import { PermissionScope } from "../components/PermissionScope";
 import { ReviewsSection } from "../components/ReviewsSection";
 import { StoreLogoSection } from "../components/StoreLogoSection";
 import { StorePublicationSection } from "../components/StorePublicationSection";
 import { StoreSettingsSection } from "../components/StoreSettingsSection";
-import { RequestError } from "../components/ui/RequestError";
 import { canManageCatalog, canManageStore, useSession } from "../session";
-import { useAction } from "../useAction";
 import { currencyFormatter } from "../utils/format";
 
 function StoreRoute({
@@ -87,19 +84,6 @@ export function StoreDiscountsPage() {
         storeId={store.id}
         money={currencyFormatter(store.currency, i18n.resolvedLanguage)}
       />
-    </StoreRoute>
-  );
-}
-
-export function StoreImportPage() {
-  const { t } = useTranslation(["import", "errors"]);
-  const { user } = useSession();
-  const { store } = useSelectedStore();
-  const [error, run] = useAction(() => undefined);
-  return (
-    <StoreRoute title={t("import:title")} allowed={canManageCatalog(user.role)}>
-      {error !== null && <RequestError error={error} operation="write" />}
-      <ImportSection storeId={store.id} run={run} />
     </StoreRoute>
   );
 }
