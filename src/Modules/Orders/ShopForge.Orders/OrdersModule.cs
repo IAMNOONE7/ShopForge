@@ -81,6 +81,13 @@ public static class OrdersModule
         return storefront;
     }
 
+    public static IEndpointRouteBuilder MapOrdersPlatformEndpoints(this IEndpointRouteBuilder platform)
+    {
+        platform.MapPlatformCarrierServices();
+
+        return platform;
+    }
+
     public static IEndpointRouteBuilder MapPaymentWebhookEndpoints(this IEndpointRouteBuilder payments)
     {
         payments.MapPaymentWebhooks();
@@ -94,6 +101,7 @@ public static class OrdersModule
         storeAdmin.MapAdminUnappliedPayments();
         storeAdmin.MapAdminReconciliation();
         storeAdmin.MapAdminMethods();
+        storeAdmin.MapAdminShippingSettings();
         storeAdmin.MapAdminPickupPoints();
         storeAdmin.MapAdminDiscounts();
         storeAdmin.MapAdminReturns();

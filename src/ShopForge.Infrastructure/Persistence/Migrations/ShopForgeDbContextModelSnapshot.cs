@@ -2159,6 +2159,110 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                     b.ToTable("warehouses", "inventory");
                 });
 
+            modelBuilder.Entity("ShopForge.Orders.Domain.CarrierService", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Country")
+                        .IsRequired()
+                        .HasMaxLength(2)
+                        .HasColumnType("character(2)")
+                        .HasColumnName("country")
+                        .IsFixedLength();
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("key");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("kind");
+
+                    b.Property<long>("LargestVolumeMm3")
+                        .HasColumnType("bigint")
+                        .HasColumnName("largest_volume_mm3");
+
+                    b.Property<int>("LongestMm")
+                        .HasColumnType("integer")
+                        .HasColumnName("longest_mm");
+
+                    b.Property<int?>("MaxParcels")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_parcels");
+
+                    b.Property<int?>("MaxSumOfSidesMm")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_sum_of_sides_mm");
+
+                    b.Property<int>("MaxWeightGrams")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_weight_grams");
+
+                    b.Property<int>("MiddleMm")
+                        .HasColumnType("integer")
+                        .HasColumnName("middle_mm");
+
+                    b.Property<int>("MinLongestMm")
+                        .HasColumnType("integer")
+                        .HasColumnName("min_longest_mm");
+
+                    b.Property<int>("MinMiddleMm")
+                        .HasColumnType("integer")
+                        .HasColumnName("min_middle_mm");
+
+                    b.Property<int>("MinShortestMm")
+                        .HasColumnType("integer")
+                        .HasColumnName("min_shortest_mm");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("ProviderKey")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("provider_key");
+
+                    b.Property<int>("ShortestMm")
+                        .HasColumnType("integer")
+                        .HasColumnName("shortest_mm");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("source");
+
+                    b.Property<DateOnly>("SourceDate")
+                        .HasColumnType("date")
+                        .HasColumnName("source_date");
+
+                    b.HasKey("Id")
+                        .HasName("pk_carrier_services");
+
+                    b.HasIndex("Key")
+                        .IsUnique()
+                        .HasDatabaseName("ix_carrier_services_key");
+
+                    b.ToTable("carrier_services", "orders", t =>
+                        {
+                            t.HasCheckConstraint("ck_carrier_services_limits", "max_weight_grams > 0 AND largest_volume_mm3 > 0 AND (max_parcels IS NULL OR max_parcels >= 1) AND longest_mm >= middle_mm AND middle_mm >= shortest_mm AND min_longest_mm >= min_middle_mm AND min_middle_mm >= min_shortest_mm AND min_shortest_mm > 0 AND min_longest_mm <= longest_mm AND min_middle_mm <= middle_mm AND min_shortest_mm <= shortest_mm");
+                        });
+                });
+
             modelBuilder.Entity("ShopForge.Orders.Domain.Cart", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3143,6 +3247,11 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("CarrierServiceKey")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("carrier_service_key");
+
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -3168,10 +3277,34 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("name");
 
+                    b.Property<int?>("ParcelLongestMm")
+                        .HasColumnType("integer")
+                        .HasColumnName("parcel_longest_mm");
+
+                    b.Property<int?>("ParcelMaxWeightGrams")
+                        .HasColumnType("integer")
+                        .HasColumnName("parcel_max_weight_grams");
+
+                    b.Property<int?>("ParcelMiddleMm")
+                        .HasColumnType("integer")
+                        .HasColumnName("parcel_middle_mm");
+
+                    b.Property<int?>("ParcelShortestMm")
+                        .HasColumnType("integer")
+                        .HasColumnName("parcel_shortest_mm");
+
                     b.Property<decimal>("Price")
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)")
                         .HasColumnName("price");
+
+                    b.Property<string>("Pricing")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Flat")
+                        .HasColumnName("pricing");
 
                     b.Property<string>("ProviderKey")
                         .IsRequired()
@@ -3206,7 +3339,38 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
 
                     b.ToTable("shipping_methods", "orders", t =>
                         {
+                            t.HasCheckConstraint("ck_shipping_methods_parcel_limits", "(parcel_max_weight_grams IS NULL OR parcel_max_weight_grams > 0) AND ((parcel_longest_mm IS NULL AND parcel_middle_mm IS NULL AND parcel_shortest_mm IS NULL) OR (parcel_longest_mm >= parcel_middle_mm AND parcel_middle_mm >= parcel_shortest_mm AND parcel_shortest_mm > 0))");
+
+                            t.HasCheckConstraint("ck_shipping_methods_parcels", "(pricing = 'PerParcel' AND carrier_service_key IS NOT NULL) OR (pricing = 'Flat' AND parcel_max_weight_grams IS NULL AND parcel_longest_mm IS NULL)");
+
                             t.HasCheckConstraint("ck_shipping_methods_price", "price >= 0 AND vat_rate >= 0 AND vat_rate <= 100");
+                        });
+                });
+
+            modelBuilder.Entity("ShopForge.Orders.Domain.ShippingSettings", b =>
+                {
+                    b.Property<Guid>("StoreId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("store_id");
+
+                    b.Property<int>("FillPercent")
+                        .HasColumnType("integer")
+                        .HasColumnName("fill_percent");
+
+                    b.Property<int>("LargestParcelOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("largest_parcel_order");
+
+                    b.Property<int>("PackagingWeightGrams")
+                        .HasColumnType("integer")
+                        .HasColumnName("packaging_weight_grams");
+
+                    b.HasKey("StoreId")
+                        .HasName("pk_shipping_settings");
+
+                    b.ToTable("shipping_settings", "orders", t =>
+                        {
+                            t.HasCheckConstraint("ck_shipping_settings_values", "packaging_weight_grams >= 0 AND fill_percent BETWEEN 1 AND 100 AND largest_parcel_order >= 1");
                         });
                 });
 

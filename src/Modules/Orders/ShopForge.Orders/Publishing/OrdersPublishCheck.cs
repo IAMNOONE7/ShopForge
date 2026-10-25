@@ -35,7 +35,6 @@ internal sealed class OrdersPublishCheck(
         var shipping = await dbContext.Set<ShippingMethod>()
             .AsNoTracking()
             .Where(method => method.IsActive)
-            .Select(method => new { method.Name, method.ProviderKey, method.RequiresPickupPoint })
             .ToListAsync(cancellationToken);
 
         var needsConnection = paymentProviders
@@ -64,9 +63,14 @@ internal sealed class OrdersPublishCheck(
             payment.Count > 0
                 ? StoreReadiness.Ready("orders.payment-method")
                 : StoreReadiness.NotReady("orders.payment-method", "The store has no active payment method."),
-            shipping.Count > 0
+            // Only a method the checkout offers counts, and one priced by the parcel is offered once it can be priced (V28f).
+            shipping.Any(method => method.Pricing == ShippingPricing.Flat)
                 ? StoreReadiness.Ready("orders.shipping-method")
-                : StoreReadiness.NotReady("orders.shipping-method", "The store has no active shipping method."),
+                : StoreReadiness.NotReady(
+                    "orders.shipping-method",
+                    shipping.Count == 0
+                        ? "The store has no active shipping method."
+                        : "The store has no active shipping method with a flat price, and methods priced by the parcel are not offered at the checkout yet."),
             await ConnectedAsync("orders.payment-connected", [.. payment.Select(method => (method.Name, method.ProviderKey))], needsConnection, offered, [], cancellationToken),
             await ConnectedAsync(
                 "orders.shipping-connected",
@@ -75,7 +79,45 @@ internal sealed class OrdersPublishCheck(
                 offered,
                 [.. shipping.Where(method => method.RequiresPickupPoint && mapped.Contains(method.ProviderKey)).Select(method => (method.Name, method.ProviderKey))],
                 cancellationToken),
+            await ParcelMethodsAsync(shipping, cancellationToken),
         ];
+    }
+
+    // Every method priced by the parcel that is switched on sends by a carrier service in use, of its own provider, and
+    // has room in a parcel for goods once the store's packaging is in it (D-218). Without either, nothing it is asked to
+    // carry could ever be priced.
+    private async Task<StoreReadiness> ParcelMethodsAsync(IReadOnlyList<ShippingMethod> active, CancellationToken cancellationToken)
+    {
+        const string Check = "orders.parcel-methods";
+
+        var methods = active.Where(method => method.Pricing == ShippingPricing.PerParcel).OrderBy(method => method.Name).ToList();
+
+        if (methods.Count == 0)
+        {
+            return StoreReadiness.Ready(Check);
+        }
+
+        var keys = methods.Select(method => method.CarrierServiceKey).Distinct().ToList();
+        var services = await dbContext.Set<CarrierService>()
+            .AsNoTracking()
+            .Where(service => keys.Contains(service.Key))
+            .ToDictionaryAsync(service => service.Key, cancellationToken);
+        var packing = (await dbContext.Set<ShippingSettings>().AsNoTracking().SingleOrDefaultAsync(cancellationToken))?.Packing ?? ShippingSettings.DefaultPacking;
+        var problems = new List<string>();
+
+        foreach (var method in methods)
+        {
+            if (!services.TryGetValue(method.CarrierServiceKey!, out var service) || !service.IsActive || service.ProviderKey != method.ProviderKey)
+            {
+                problems.Add($"\"{method.Name}\" sends by a carrier service that is not in use. Choose another, or switch the method off.");
+            }
+            else if (method.LimitsWithin(service).MaxWeightGrams is var heaviest && heaviest <= packing.WeightGrams)
+            {
+                problems.Add($"\"{method.Name}\" sends parcels of at most {heaviest} g, and the store's packaging alone weighs {packing.WeightGrams} g, so no goods fit. Raise the limit or lighten the packaging.");
+            }
+        }
+
+        return problems.Count == 0 ? StoreReadiness.Ready(Check) : StoreReadiness.NotReady(Check, string.Join(" ", problems));
     }
 
     private async Task<StoreReadiness> ConnectedAsync(

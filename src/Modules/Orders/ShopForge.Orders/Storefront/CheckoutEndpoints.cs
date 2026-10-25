@@ -81,8 +81,9 @@ internal static class CheckoutEndpoints
             cart is null ? null : (await carts.ContentsAsync(cart, cancellationToken)).WeightGrams,
             DestinationCountry: destination);
         var carriers = await UsableProvidersAsync(shippingProviders, connections, cancellationToken);
+        // A method priced by the parcel is offered once a cart can be priced by it (V28f); until then it has no price.
         var methods = await dbContext.Set<ShippingMethod>()
-            .Where(method => method.IsActive && carriers.Contains(method.ProviderKey))
+            .Where(method => method.IsActive && method.Pricing == ShippingPricing.Flat && carriers.Contains(method.ProviderKey))
             .OrderBy(method => method.Price)
             .ThenBy(method => method.Name)
             .ToListAsync(cancellationToken);
@@ -162,7 +163,10 @@ internal static class CheckoutEndpoints
         var shippingProviderKeys = await UsableProvidersAsync(shippingProviders, connections, cancellationToken);
         var shipping = await dbContext.Set<ShippingMethod>()
             .SingleOrDefaultAsync(
-                method => method.Code == request.ShippingMethodCode && method.IsActive && shippingProviderKeys.Contains(method.ProviderKey),
+                method => method.Code == request.ShippingMethodCode
+                    && method.IsActive
+                    && method.Pricing == ShippingPricing.Flat
+                    && shippingProviderKeys.Contains(method.ProviderKey),
                 cancellationToken);
         var carrier = shipping is null
             ? null

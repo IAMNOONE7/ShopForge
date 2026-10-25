@@ -253,6 +253,7 @@ var platform = app.MapGroup("/api/platform").RequireRateLimiting(RateLimits.Writ
 platform.MapPlatformAuthEndpoints();
 var platformOperator = platform.MapGroup(string.Empty).RequireAuthorization(PlatformPolicies.PlatformUser);
 platformOperator.MapStoresPlatformEndpoints();
+platformOperator.MapOrdersPlatformEndpoints();
 platformOperator.MapPlatformOperatorEndpoints();
 platformOperator.MapPlatformOutboxEndpoints();
 platformOperator.MapPlatformAuditEndpoints();

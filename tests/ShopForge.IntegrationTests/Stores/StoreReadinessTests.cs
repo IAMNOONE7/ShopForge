@@ -179,6 +179,7 @@ public sealed class StoreReadinessTests : IDisposable
                 "catalog.shipping-data",
                 "catalog.tax-classes",
                 "catalog.visible-products",
+                "orders.parcel-methods",
                 "orders.payment-connected",
                 "orders.payment-method",
                 "orders.shipping-connected",

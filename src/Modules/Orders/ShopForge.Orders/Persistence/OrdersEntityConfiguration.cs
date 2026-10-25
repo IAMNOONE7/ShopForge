@@ -130,7 +130,21 @@ internal sealed class ShippingMethodEntityConfiguration : IEntityTypeConfigurati
     public void Configure(EntityTypeBuilder<ShippingMethod> builder)
     {
         builder.ToTable("shipping_methods", OrdersModule.Schema, table =>
-            table.HasCheckConstraint("ck_shipping_methods_price", "price >= 0 AND vat_rate >= 0 AND vat_rate <= 100"));
+        {
+            table.HasCheckConstraint("ck_shipping_methods_price", "price >= 0 AND vat_rate >= 0 AND vat_rate <= 100");
+
+            // A method priced by the parcel sends by a service, and only it limits its parcels: a weight of
+            // something, and all three sides or none (D-218).
+            table.HasCheckConstraint(
+                "ck_shipping_methods_parcels",
+                "(pricing = 'PerParcel' AND carrier_service_key IS NOT NULL) "
+                + "OR (pricing = 'Flat' AND parcel_max_weight_grams IS NULL AND parcel_longest_mm IS NULL)");
+            table.HasCheckConstraint(
+                "ck_shipping_methods_parcel_limits",
+                "(parcel_max_weight_grams IS NULL OR parcel_max_weight_grams > 0) AND "
+                + "((parcel_longest_mm IS NULL AND parcel_middle_mm IS NULL AND parcel_shortest_mm IS NULL) "
+                + "OR (parcel_longest_mm >= parcel_middle_mm AND parcel_middle_mm >= parcel_shortest_mm AND parcel_shortest_mm > 0))");
+        });
 
         builder.Property(method => method.Code).HasMaxLength(50);
         builder.Property(method => method.Name).HasMaxLength(100);
@@ -139,8 +153,46 @@ internal sealed class ShippingMethodEntityConfiguration : IEntityTypeConfigurati
         builder.Property(method => method.VatRate).HasPrecision(5, 2);
         builder.Property(method => method.TaxClass).HasMaxLength(50);
         builder.PrimitiveCollection(method => method.Countries).ElementType(country => country.HasMaxLength(2).IsFixedLength());
+        builder.Property(method => method.Pricing).HasConversion<string>().HasMaxLength(20).HasDefaultValue(ShippingPricing.Flat).HasSentinel(ShippingPricing.Flat);
+        builder.Property(method => method.CarrierServiceKey).HasMaxLength(CarrierService.MaxKeyLength);
 
         builder.HasIndex(method => new { method.StoreId, method.Code }).IsUnique();
+    }
+}
+
+internal sealed class CarrierServiceEntityConfiguration : IEntityTypeConfiguration<CarrierService>
+{
+    public void Configure(EntityTypeBuilder<CarrierService> builder)
+    {
+        builder.ToTable("carrier_services", OrdersModule.Schema, table =>
+            table.HasCheckConstraint(
+                "ck_carrier_services_limits",
+                "max_weight_grams > 0 AND largest_volume_mm3 > 0 AND (max_parcels IS NULL OR max_parcels >= 1) "
+                + "AND longest_mm >= middle_mm AND middle_mm >= shortest_mm "
+                + "AND min_longest_mm >= min_middle_mm AND min_middle_mm >= min_shortest_mm AND min_shortest_mm > 0 "
+                + "AND min_longest_mm <= longest_mm AND min_middle_mm <= middle_mm AND min_shortest_mm <= shortest_mm"));
+
+        builder.Property(service => service.Key).HasMaxLength(CarrierService.MaxKeyLength);
+        builder.Property(service => service.ProviderKey).HasMaxLength(50);
+        builder.Property(service => service.Name).HasMaxLength(100);
+        builder.Property(service => service.Kind).HasConversion<string>().HasMaxLength(20);
+        builder.Property(service => service.Country).HasMaxLength(2).IsFixedLength();
+        builder.Property(service => service.Source).HasMaxLength(CarrierService.MaxSourceLength);
+
+        builder.HasIndex(service => service.Key).IsUnique();
+    }
+}
+
+internal sealed class ShippingSettingsEntityConfiguration : IEntityTypeConfiguration<ShippingSettings>
+{
+    public void Configure(EntityTypeBuilder<ShippingSettings> builder)
+    {
+        builder.ToTable("shipping_settings", OrdersModule.Schema, table =>
+            table.HasCheckConstraint(
+                "ck_shipping_settings_values",
+                "packaging_weight_grams >= 0 AND fill_percent BETWEEN 1 AND 100 AND largest_parcel_order >= 1"));
+
+        builder.HasKey(settings => settings.StoreId);
     }
 }
 
