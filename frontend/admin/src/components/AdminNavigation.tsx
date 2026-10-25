@@ -105,6 +105,7 @@ export function AdminNavigation({
             {t("navigation:settings")}
           </NavLink>
           {canManageStore(role) && <NavLink to={`/stores/${selectedStore.id}/domains`} onClick={onNavigate}>{t("navigation:domains")}</NavLink>}
+          {canManageStore(role) && <NavLink to={`/stores/${selectedStore.id}/pages`} onClick={onNavigate}>{t("navigation:contentPages")}</NavLink>}
           {canManageCatalog(role) && <NavLink to={`/stores/${selectedStore.id}/tax-classes`} onClick={onNavigate}>{t("navigation:taxClasses")}</NavLink>}
           <NavLink
             to={`/stores/${selectedStore.id}/products`}

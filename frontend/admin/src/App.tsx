@@ -50,6 +50,9 @@ const StoreSetupPage = lazy(() => import("./pages/StoreSetupPage").then(pages =>
 const StoreSetupDetailPage = lazy(() => import("./pages/StoreSetupPage").then(pages => ({ default: pages.StoreSetupDetailPage })));
 const StoreConnectionsPage = lazy(() => import("./pages/StoreConnectionsPage").then(pages => ({ default: pages.StoreConnectionsPage })));
 const StoreTaxClassesPage = lazy(() => import("./pages/StoreTaxClassesPage").then((pages) => ({ default: pages.StoreTaxClassesPage })));
+const ContentPagesPage = lazy(() => import("./pages/ContentPagesPage").then(pages => ({ default: pages.ContentPagesPage })));
+const NewContentPage = lazy(() => import("./pages/ContentPagesPage").then(pages => ({ default: pages.NewContentPage })));
+const ContentPageDetailPage = lazy(() => import("./pages/ContentPagesPage").then(pages => ({ default: pages.ContentPageDetailPage })));
 
 type SessionState =
   | { status: "checking" }
@@ -203,6 +206,9 @@ function MerchantApp() {
                   <Route index element={<StoreOverviewPage />} />
                   <Route path="settings" element={<StoreSettingsPage />} />
                   <Route path="domains" element={canManageStore(session.user.role) ? <DeferredPage><StoreDomainsPage /></DeferredPage> : <ForbiddenPage />} />
+                  <Route path="pages" element={canManageStore(session.user.role) ? <DeferredPage><ContentPagesPage /></DeferredPage> : <ForbiddenPage />} />
+                  <Route path="pages/new" element={canManageStore(session.user.role) ? <DeferredPage><NewContentPage /></DeferredPage> : <ForbiddenPage />} />
+                  <Route path="pages/:pageId" element={canManageStore(session.user.role) ? <DeferredPage><ContentPageDetailPage /></DeferredPage> : <ForbiddenPage />} />
                   <Route path="products" element={<DeferredPage><ListingsPage /></DeferredPage>} />
                   <Route path="products/new" element={<DeferredPage><NewListingPage /></DeferredPage>} />
                   <Route path="products/:listingId" element={<DeferredPage><ListingDetailPage /></DeferredPage>} />
