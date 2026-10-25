@@ -30,6 +30,9 @@ import {
 import { adminHomePath, safeAdminReturnPath } from "./routing";
 import { canManageCatalog, canManageStore, SessionContext } from "./session";
 import { isOperatorPath } from "./platform/routing";
+import type { InvitationEntry } from "./invitationEntry";
+
+const InvitationAcceptancePage = lazy(() => import("./pages/InvitationAcceptancePage").then(pages => ({ default: pages.InvitationAcceptancePage })));
 
 const PlatformApp = lazy(() => import("./platform/PlatformApp"));
 const CategoriesPage = lazy(() => import("./pages/CategoryPages").then((pages) => ({ default: pages.CategoriesPage })));
@@ -67,7 +70,10 @@ function currentReturnPath() {
   );
 }
 
-function App() {
+function App({ invitationEntry = null }: { invitationEntry?: InvitationEntry | null }) {
+  if (invitationEntry) return <BrowserRouter basename={import.meta.env.BASE_URL}><Routes>
+    <Route path="invitations/accept" element={<DeferredPage><InvitationAcceptancePage entry={invitationEntry} /></DeferredPage>} />
+  </Routes></BrowserRouter>;
   if (isOperatorPath(window.location.pathname)) return <BrowserRouter basename={import.meta.env.BASE_URL}>
     <Routes><Route path="platform/*" element={<DeferredPage><PlatformApp /></DeferredPage>} /></Routes>
   </BrowserRouter>;

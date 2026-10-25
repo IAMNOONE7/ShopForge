@@ -6,6 +6,9 @@ import "./styles/tokens.css";
 import "./styles/base.css";
 import "./index.css";
 import App from "./App.tsx";
+import { captureInvitationEntry } from "./invitationEntry";
+
+const invitationEntry = captureInvitationEntry();
 
 async function render() {
   await initializeI18n();
@@ -14,7 +17,7 @@ async function render() {
       <div className="utility-bar">
         <LanguageSwitcher />
       </div>
-      <App />
+      <App invitationEntry={invitationEntry} />
     </StrictMode>,
   );
 }
