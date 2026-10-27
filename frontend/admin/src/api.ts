@@ -340,6 +340,15 @@ export type ShippingMethod = {
   maxWeightGrams: number | null;
   countries: string[];
   taxClass: string | null;
+  pricing?: "flat" | "perParcel";
+  carrierService?: string | null;
+  parcelMaxWeightGrams?: number | null;
+  parcelLengthMm?: number | null;
+  parcelWidthMm?: number | null;
+  parcelHeightMm?: number | null;
+  ratesFrom?: "carrier" | "own" | "placeholder" | null;
+  ratesPricedOn?: string | null;
+  rateBands?: { upToGrams: number; price: number }[];
 };
 
 export type PickupPoint = {

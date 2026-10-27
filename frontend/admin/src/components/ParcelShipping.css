@@ -1,0 +1,15 @@
+.parcel-terms, .parcel-rate-form, .parcel-rate-form fieldset, .parcel-bands, .parcel-band, .shipping-quote-panel, .quote-cart, .quote-selection, .quote-feedback, .quote-result { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); min-width: 0; overflow-wrap: anywhere; }
+.parcel-rate-form, .shipping-quote-panel { margin-block: var(--space-4); padding: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-panel); background: var(--color-surface); }
+.parcel-rate-form fieldset { border: 0; padding: 0; margin: 0; }
+.parcel-limit-fields, .parcel-service-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: var(--space-3); min-width: 0; }
+.parcel-service-facts dd { margin: 0; }
+.parcel-band, .quoted-parcels > li { padding-block: var(--space-3); border-top: 1px solid var(--color-border); }
+.parcel-rate-form button, .shipping-quote-panel button, .parcel-terms button { justify-self: start; white-space: normal; max-width: 100%; }
+.parcel-rate-form :is(input,select), .shipping-quote-panel :is(input,select), .parcel-terms select { width: 100%; min-width: 0; max-width: 100%; }
+.quote-search { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: end; gap: var(--space-3); }
+.quote-products, .quote-cart > ul { list-style: none; display: grid; gap: var(--space-3); margin: 0; padding: 0; }
+.quote-products li { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; justify-content: space-between; }
+.quote-cart > ul > li { display: grid; gap: var(--space-3); min-width: 0; padding-block: var(--space-3); border-bottom: 1px solid var(--color-border); }
+.shipping-quote-panel :is(h3,h4,h5,p), .parcel-rate-form :is(h3,h4,p), .parcel-terms p { margin: 0; }
+.quoted-parcels { display: grid; gap: var(--space-3); padding-inline-start: var(--space-6); }
+@container (max-width: 36rem) { .quote-search { grid-template-columns: minmax(0,1fr); } .parcel-rate-form, .shipping-quote-panel { padding: var(--space-3); } }

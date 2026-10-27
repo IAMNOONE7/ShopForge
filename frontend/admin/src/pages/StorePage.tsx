@@ -64,7 +64,7 @@ export function StoreMethodsPage() {
   return (
     <StoreRoute title={t("title")} allowed={canManageStore(user.role)}>
       <MethodsSection
-        key={`${user.tenantId}:${user.id}:${user.role}:${store.id}`}
+        key={`${user.tenantId}:${user.id}:${user.role}:${store.id}:${store.currency}`}
         storeId={store.id}
         canManage={canManageStore(user.role)}
         storeStale={storeRefreshing || storeRefreshError !== null}

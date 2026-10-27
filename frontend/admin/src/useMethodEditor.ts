@@ -18,8 +18,9 @@ export function useMethodEditor<T extends MethodRecord>({ storeId, kind, load, l
   const active = useRef(true), opener = useRef<HTMLButtonElement | null>(null), heading = useRef<HTMLHeadingElement>(null), result = useRef<HTMLDivElement>(null);
   const headingRef = useCallback((node: HTMLHeadingElement | null) => { heading.current = node; }, []);
   const resultRef = useCallback((node: HTMLDivElement | null) => { result.current = node; }, []);
+  const mutation = useRef<AbortController | null>(null);
   const attempt = useRef(onAttempt); useEffect(() => { attempt.current = onAttempt; }, [onAttempt]);
-  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
+  useEffect(() => { active.current = true; return () => { active.current = false; mutation.current?.abort(); }; }, []);
   useEffect(() => { if (refreshToken > 0) { reload(); reloadProviders(); } }, [refreshToken, reload, reloadProviders]);
   useEffect(() => { if (outcome) result.current?.focus(); }, [outcome]);
   const ready = state.status === "ready" && !state.refreshing && state.refreshError === null && state.data !== invalidated;
@@ -37,12 +38,13 @@ export function useMethodEditor<T extends MethodRecord>({ storeId, kind, load, l
     if (pending) return; setEditor(null); setOutcome(null);
     window.requestAnimationFrame(() => { if (opener.current?.isConnected && !opener.current.disabled) opener.current.focus(); else heading.current?.focus(); });
   }
-  async function save(change: () => Promise<unknown>) {
+  async function save(change: (signal: AbortSignal) => Promise<unknown>) {
     if (editorDisabled || !editor || state.status !== "ready") return;
     await run(async () => {
-      setOutcome(null); setInvalidated(state.data);
+      setOutcome(null); setInvalidated(state.data); const controller = new AbortController(); mutation.current = controller;
       try {
-        const saved = await change();
+        const saved = await change(controller.signal);
+        if (!active.current || controller.signal.aborted) return;
         if (editor.item && (!saved || typeof saved !== "object" || !("providerKey" in saved) || saved.providerKey !== editor.item.providerKey)) {
           throw new HttpError("invalid-response", null);
         }
@@ -52,7 +54,7 @@ export function useMethodEditor<T extends MethodRecord>({ storeId, kind, load, l
         const refused = isHttpError(error) && error.kind === "http" && error.status !== null && [400, 401, 403, 404, 409, 415, 422, 429].includes(error.status);
         if (!refused) setEditor(null);
         setOutcome({ kind: refused ? "refused" : "uncertain", error });
-      } finally { if (active.current) { reload(); reloadProviders(); attempt.current(); } }
+      } finally { mutation.current = null; if (active.current && !controller.signal.aborted) { reload(); reloadProviders(); attempt.current(); } }
     });
   }
   function finishReview() { if (ready && !pending) { setOutcome(null); heading.current?.focus(); } }

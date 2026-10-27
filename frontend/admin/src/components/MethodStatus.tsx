@@ -15,7 +15,7 @@ export function MethodStatus<T extends MethodRecord>({ work, kind }: { work: Ret
   const { state, providers, outcome, resultRef } = work;
   const readError = state.status === "error" || state.status === "not-found" ? state.error : state.status === "ready" ? state.refreshError : null;
   const providerError = providers.status === "error" || providers.status === "not-found" ? providers.error : providers.status === "ready" ? providers.refreshError : null;
-  const known = ["name", "providerKey", "price", "vatRate", "taxClass", "maxWeightGrams", "countries", "requiresPickupPoint", "isActive"];
+  const known = ["name", "providerKey", "price", "vatRate", "taxClass", "maxWeightGrams", "countries", "requiresPickupPoint", "isActive", "pricing", "carrierService", "parcelMaxWeightGrams", "parcelLengthMm", "parcelWidthMm", "parcelHeightMm", "source", "pricedOn", "bands"];
   const errors = fieldIssues(outcome?.error).flatMap(issue => {
     const field = known.find(field => field.toLowerCase() === issue.field.toLowerCase());
     return field && work.editor ? [{ field: kind === "shipping" ? `shipping-${work.editor.item?.code ?? "new"}-${field}` : `payment-${field}`, message: t("serverField") }] : [];
@@ -28,6 +28,7 @@ export function MethodStatus<T extends MethodRecord>({ work, kind }: { work: Ret
     {work.stale && <InlineMessage>{t("draftStale")}</InlineMessage>}
     {outcome && <div className="method-result shipping-method-result" ref={resultRef} tabIndex={-1}>
       {outcome.error !== null && <RequestError error={outcome.error} operation="write" fieldErrors={errors} />}
+      {kind === "shipping" && isHttpError(outcome.error) && outcome.error.problem?.errors && <details><summary>{t("serverDetails")}</summary>{Object.entries(outcome.error.problem.errors).flatMap(([field, messages]) => known.some(key => key.toLowerCase() === field.toLowerCase()) && Array.isArray(messages) ? messages.filter(message => typeof message === "string").map((message, index) => <p key={field + index}>{message}</p>) : [])}</details>}
       <InlineMessage tone={outcome.kind === "acknowledged" ? "success" : outcome.kind === "uncertain" ? "error" : "info"}>{t(outcome.kind)}</InlineMessage>
       {isHttpError(outcome.error) && outcome.error.status === 409 && <p>{t("duplicate")}</p>}
       {outcome.kind === "uncertain" && <Button type="button" variant="secondary" disabled={!work.ready || work.pending} onClick={work.finishReview}>{t("finishReview")}</Button>}
