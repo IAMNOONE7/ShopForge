@@ -20,6 +20,7 @@ describe("auth helpers", () => {
     );
     expect(safeAuthReturn("https://attacker.example/checkout")).toBe("/account");
     expect(safeAuthReturn("//attacker.example/checkout")).toBe("/account");
+    expect(safeAuthReturn("/account/privacy")).toBe("/account/privacy");
     expect(safeAuthReturn("/cart")).toBe("/account");
     expect(authPath("/account/sign-in", "/checkout")).toBe(
       "/account/sign-in?returnTo=%2Fcheckout",

@@ -19,6 +19,7 @@ import { publicRoutes } from "./publicPages";
 import { installPageMetadata } from "./pageMetadata";
 import type { EmailChangeEntry } from "./emailChangeEntry";
 
+const AccountPrivacyPage = lazy(() => import("./pages/AccountPrivacyPage").then(module => ({ default: module.AccountPrivacyPage })));
 const AccountEmailPage = lazy(() => import("./pages/AccountEmailPage").then(module => ({ default: module.AccountEmailPage })));
 const ResendVerificationPage = lazy(() => import("./pages/ResendVerificationPage").then(module => ({ default: module.ResendVerificationPage })));
 const ConfirmEmailPage = lazy(() => import("./pages/ConfirmEmailPage").then(module => ({ default: module.ConfirmEmailPage })));
@@ -124,6 +125,7 @@ function App({ emailChangeEntry = null }: { emailChangeEntry?: EmailChangeEntry 
                     <Route path="checkout" element={<CheckoutPage />} />
                     <Route path="order/:number" element={<OrderPage />} />
                     <Route path="account" element={<AccountPage />} />
+                    <Route path="account/privacy" element={<AccountPrivacyPage />} />
                     <Route path="account/email" element={<AccountEmailPage />} />
                     <Route path="account/resend-verification" element={<ResendVerificationPage />} />
                     <Route path="account/confirm-email" element={<ConfirmEmailPage entry={emailChangeEntry} />} />

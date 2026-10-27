@@ -16,6 +16,7 @@ it("uses exact token/password bodies on same-origin paths with cancellation and 
     ["/api/storefront/account/email/confirm", "POST", '{"token":"fixture-proof-token"}', signal],
     ["/api/storefront/account/me", "GET", undefined, signal], ["/api/storefront/account/logout", "POST", undefined, signal],
   ]);
+  expect(fetch.mock.calls[3][1].cache).toBe("no-store");
 });
 it.each(["resend", "request"] as const)("does not infer acceptance from an unexpected %s response body", async kind => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ queued: true })));

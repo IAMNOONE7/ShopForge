@@ -45,6 +45,7 @@ type RequestOptions = {
   body?: unknown;
   headers?: Record<string, string>;
   signal?: AbortSignal;
+  cache?: RequestCache;
   notifyUnauthorized?: boolean;
 };
 
@@ -86,6 +87,11 @@ export async function requestJson<T>(
   } catch {
     throw invalidResponse(response);
   }
+}
+
+export async function requestNoContent(url: string, options: RequestOptions = {}): Promise<void> {
+  const response = await send(url, options);
+  if (response.status !== 204) throw invalidResponse(response);
 }
 
 export async function requestBlob(
@@ -140,6 +146,7 @@ async function send(url: string, options: RequestOptions) {
     response = await fetch(url, {
       method: options.method ?? "GET",
       signal: options.signal,
+      ...(options.cache ? { cache: options.cache } : {}),
       headers: Object.keys(headers).length > 0 ? headers : undefined,
       body,
     });

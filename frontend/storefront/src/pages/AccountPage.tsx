@@ -118,6 +118,7 @@ function AuthenticatedAccount({
         <a href="#account-orders-heading">{t("account:orders")}</a>
         <a href="#account-profile-heading">{t("account:details")}</a>
         <Link to="/account/email">{t("account:changeEmail")}</Link>
+        <Link to="/account/privacy">{t("account:privacy")}</Link>
         <Link to="/">{t("navigation:allProducts")}</Link>
       </nav>
       <div className="account-layout">

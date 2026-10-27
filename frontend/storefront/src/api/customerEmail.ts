@@ -10,7 +10,7 @@ function customer(value: unknown): Customer {
 }
 async function read(path: string, signal: AbortSignal, body?: unknown): Promise<unknown> {
   try {
-    return await requestJson<unknown>(`/api/storefront/account/${path}`, { method: body === undefined ? "GET" : "POST", body, signal, notifyUnauthorized: false });
+    return await requestJson<unknown>(`/api/storefront/account/${path}`, { method: body === undefined ? "GET" : "POST", body, signal, ...(body === undefined ? { cache: "no-store" as const } : {}), notifyUnauthorized: false });
   } catch (error) {
     if (!isHttpError(error)) throw error;
     // These replies concern credentials; retain actionable field keys, never server text or references.

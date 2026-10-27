@@ -1,0 +1,15 @@
+.privacy-workspace { min-width: 0; overflow-wrap: anywhere; }
+.privacy-workspace section + section { margin-top: var(--space-8); padding-top: var(--space-6); border-top: 1px solid var(--color-border); }
+.privacy-workspace h2 { font-size: var(--text-xl); }
+.privacy-target { font-weight: 650; }
+.privacy-delete form { display: grid; gap: var(--space-4); }
+.account-form .privacy-confirm { display: block; font-weight: 400; }
+.privacy-confirm input { margin-inline-end: var(--space-2); vertical-align: middle; }
+.privacy-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.privacy-workspace button, .privacy-workspace .button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.privacy-feedback { margin-block: var(--space-4); }
+.privacy-sections { display: grid; gap: var(--space-2); }
+.privacy-sections > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2); }
+.privacy-sections dd { margin: 0; }
+.privacy-page .password-reveal:hover:not(:disabled) { color: var(--color-text); background: var(--color-store-surface); border-color: var(--color-text); }
+@container (max-width: 26rem) { .privacy-page .auth-content { padding: var(--space-2); } }
