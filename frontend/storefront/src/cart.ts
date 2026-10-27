@@ -1,5 +1,6 @@
 import { HttpError, requestJson } from "./api/http";
 import { withOrderFacts, type CustomerRefund } from "./refundFacts";
+import { validShippingTerms, validUnavailableMethod, type MapParcel, type UnavailableShippingMethod } from "./shippingQuotes";
 
 export type CartLine = {
   storeProductId: string;
@@ -50,6 +51,9 @@ export type ShippingMethod = {
   requiresPickupPoint: boolean;
   // Where the shopper chooses the point: nowhere, a list this shop can produce, or the carrier's own map.
   pickupPointChoice: "none" | "list" | "carrier-map";
+  pricing?: "flat" | "perParcel";
+  parcels?: number | null;
+  mapParcel?: MapParcel | null;
 };
 
 export type PickupPoint = {
@@ -65,6 +69,7 @@ export type CheckoutMethods = {
   destinationCountry: string | null;
   paymentMethods: PaymentMethod[];
   shippingMethods: ShippingMethod[];
+  unavailableShippingMethods?: UnavailableShippingMethod[];
 };
 
 export type Address = {
@@ -84,6 +89,7 @@ export type CheckoutRequest = {
   paymentMethodCode: string;
   shippingMethodCode: string;
   pickupPointCode: string | null;
+  expectedShippingPrice: number;
 };
 
 export type PlacedOrder = {
@@ -178,9 +184,13 @@ export async function getCheckoutMethods(country: string | null, signal?: AbortS
     !result.paymentMethods.every(validPaymentMethod) ||
     !result.shippingMethods.every(method => validPaymentMethod(method) &&
       Number.isFinite(method.price) && method.price >= 0 && typeof method.requiresPickupPoint === "boolean" &&
-      ["none", "list", "carrier-map"].includes(method.pickupPointChoice)) ||
+      ["none", "list", "carrier-map"].includes(method.pickupPointChoice) && validShippingTerms(method)) ||
     new Set(result.paymentMethods.map(method => method.code)).size !== result.paymentMethods.length ||
-    new Set(result.shippingMethods.map(method => method.code)).size !== result.shippingMethods.length)
+    new Set(result.shippingMethods.map(method => method.code)).size !== result.shippingMethods.length ||
+    (result.unavailableShippingMethods !== undefined && (!Array.isArray(result.unavailableShippingMethods) ||
+      !result.unavailableShippingMethods.every(validUnavailableMethod) ||
+      new Set([...result.shippingMethods, ...result.unavailableShippingMethods].map(method => method.code)).size !==
+        result.shippingMethods.length + result.unavailableShippingMethods.length)))
     throw new HttpError("invalid-response", null);
   return result;
 }

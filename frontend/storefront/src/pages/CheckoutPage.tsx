@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router";
 import { statusOf } from "../api/errors";
@@ -37,8 +37,10 @@ import { RequestError } from "../components/ui/RequestError";
 import { useCustomer } from "../customerContext";
 import type { Customer } from "../account";
 import { attemptFor, changedSince, inFlightWrite, uncertainWrite, type WriteAttempt } from "../idempotency";
-import { useStore } from "../storeContext";
+import { formatPrice, useStore } from "../storeContext";
 import { useRequest, type RequestState } from "../useRequest";
+import { deliveryPriceChanged, readChangedShippingQuote, shippingMethodErrors, type ShippingQuote } from "../shippingQuotes";
+import { DeliveryQuoteReview, UnavailableDeliveryMethods } from "../components/checkout/DeliveryQuoteReview";
 
 export function CheckoutPage() {
   const { t } = useTranslation(["checkout", "cart"]);
@@ -161,13 +163,22 @@ function CheckoutForm({
   const [showValidation, setShowValidation] = useState(false);
   const [failed, setFailed] = useState<unknown | null>(null);
   const [refreshFailure, setRefreshFailure] = useState<unknown | null>(null);
-  const [reviewKind, setReviewKind] = useState<"cart" | "inFlight" | "mismatch" | null>(null);
+  const [reviewKind, setReviewKind] = useState<"cart" | "shipping" | "inFlight" | "mismatch" | null>(null);
+  const [priceChange, setPriceChange] = useState<{ scope: string; quote: ShippingQuote; previousPrice: number } | null>(null);
+  const [shippingRefusal, setShippingRefusal] = useState<{ scope: string; messages: string[] } | null>(null);
   const [refreshingCart, setRefreshingCart] = useState(false);
   const [pending, setPending] = useState(false);
   const submitLock = useRef(false);
   const [attempt, setAttempt] = useState<WriteAttempt<CheckoutRequest> | null>(null);
   const validationSummary = useRef<HTMLDivElement>(null);
   const reviewNotice = useRef<HTMLDivElement>(null);
+  const submitButton = useRef<HTMLButtonElement>(null);
+  const alive = useRef(true);
+  const recoveryRead = useRef<AbortController | null>(null);
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; recoveryRead.current?.abort(); };
+  }, []);
 
   const countryInput = (shipElsewhere ? shippingAddress : billing).country.trim();
   const invalidCountry = countryInput !== "" && !isCountryCode(countryInput);
@@ -190,6 +201,9 @@ function CheckoutForm({
   const chosenShipping = methods?.shippingMethods.find(method => method.code === shippingCode);
   const chosenPayment = methods?.paymentMethods.find(method => method.code === paymentCode);
   const chosenShippingCode = chosenShipping?.code ?? "";
+  const shippingScope = JSON.stringify([methodsScope, shippingCode]);
+  const currentPriceChange = priceChange?.scope === shippingScope ? priceChange : null;
+  const currentShippingRefusal = shippingRefusal?.scope === methodsScope ? shippingRefusal.messages : [];
   const chosenPaymentCode = chosenPayment?.code ?? "";
   // Defaults are only for the first offer. A removed choice stays empty until the shopper chooses again.
   if (methodsReady && shippingCode === null) setShippingCode(methods.shippingMethods[0]?.code ?? "");
@@ -197,7 +211,7 @@ function CheckoutForm({
   if (methodsReady && paymentCode === null) setPaymentCode(methods.paymentMethods[0]?.code ?? "");
   else if (methodsReady && paymentCode && !chosenPayment) setPaymentCode("");
 
-  const pickupScope = JSON.stringify([methodsScope, chosenShippingCode, chosenShipping?.requiresPickupPoint, chosenShipping?.pickupPointChoice]);
+  const pickupScope = JSON.stringify([methodsScope, chosenShippingCode, chosenShipping?.requiresPickupPoint, chosenShipping?.pickupPointChoice, chosenShipping?.mapParcel]);
   const [pointScope, setPointScope] = useState(pickupScope);
   const [pointReset, setPointReset] = useState(false);
   if (pointScope !== pickupScope) {
@@ -261,10 +275,14 @@ function CheckoutForm({
     paymentMethodCode: chosenPaymentCode,
     shippingMethodCode: chosenShippingCode,
     pickupPointCode: chosenShipping?.requiresPickupPoint ? chosenPointCode : null,
+    expectedShippingPrice: chosenShipping?.price ?? 0,
   };
   const changedAfterUncertain = failed !== null && (uncertainWrite(failed) || inFlightWrite(failed)) &&
     changedSince(attempt, requestBody);
   const mustReview = reviewKind !== null || adjusted || changedAfterUncertain;
+  useEffect(() => {
+    if (mustReview && !pending) reviewNotice.current?.focus();
+  }, [mustReview, pending]);
   const pickupUnavailable = fromOurList && pickupPoints.status === "ready" &&
     (pickupPoints.refreshing || pickupPoints.refreshError !== null);
   const canSubmit =
@@ -284,19 +302,24 @@ function CheckoutForm({
     setMapPoint(null);
     setPointReset(false);
     setShowValidation(false);
+    setShippingRefusal(null);
   }
 
   async function refreshAfterConflict() {
+    recoveryRead.current?.abort();
+    const controller = new AbortController();
+    recoveryRead.current = controller;
     setRefreshingCart(true);
     setRefreshFailure(null);
     methodsRequest.reload();
     if (fromOurList) pickupPoints.reload();
     try {
-      applyCart(await getCart());
+      const current = await getCart(controller.signal);
+      if (alive.current && !controller.signal.aborted) applyCart(current);
     } catch (error) {
-      setRefreshFailure(error);
+      if (alive.current && !controller.signal.aborted) setRefreshFailure(error);
     } finally {
-      setRefreshingCart(false);
+      if (alive.current && !controller.signal.aborted) setRefreshingCart(false);
     }
   }
 
@@ -307,6 +330,9 @@ function CheckoutForm({
     setReviewKind(null);
     setFailed(null);
     setRefreshFailure(null);
+    setPriceChange(null);
+    setShippingRefusal(null);
+    window.requestAnimationFrame(() => { if (alive.current) submitButton.current?.focus(); });
   }
 
   function focusTarget(target: string) {
@@ -342,6 +368,7 @@ function CheckoutForm({
       const current = attemptFor(attempt, requestBody);
       setAttempt(current);
       const order = await placeOrder(current.payload, current.key);
+      if (!alive.current) return;
       setAttempt(null);
       const confirmationPath = rememberCheckout(order);
       reloadCart();
@@ -353,19 +380,30 @@ function CheckoutForm({
         state: { instructions: order.paymentInstructions },
       });
     } catch (error) {
+      if (!alive.current) return;
       setFailed(error);
       if (statusOf(error) === 409) {
         if (inFlightWrite(error)) {
           setReviewKind("inFlight");
         } else {
-          setReviewKind("cart");
+          let changedQuote: ShippingQuote | null = null;
+          if (chosenShipping) {
+            try { changedQuote = readChangedShippingQuote(error, store.currency, cart, chosenShipping); }
+            catch (invalid) { setFailed(invalid); }
+          }
+          setPriceChange(changedQuote ? { scope: shippingScope, quote: changedQuote, previousPrice: chosenShipping!.price } : null);
+          setReviewKind(changedQuote ? "shipping" : "cart");
           await refreshAfterConflict();
         }
+      } else if (statusOf(error) === 400 && shippingMethodErrors(error).length > 0) {
+        setShippingRefusal({ scope: methodsScope, messages: shippingMethodErrors(error) });
+        setReviewKind("cart");
+        await refreshAfterConflict();
       } else if (statusOf(error) === 422) {
         setReviewKind("mismatch");
       }
     } finally {
-      setPending(false);
+      if (alive.current) setPending(false);
       submitLock.current = false;
     }
   }
@@ -399,8 +437,9 @@ function CheckoutForm({
               role="alert"
               tabIndex={-1}
             >
-              <InlineMessage title={t(changedAfterUncertain ? "checkout:uncertainChangedTitle" : reviewKind === "inFlight" ? "checkout:inFlightTitle" : reviewKind === "mismatch" ? "checkout:keyMismatchTitle" : "checkout:reviewTitle")}>
-                <p>{t(changedAfterUncertain ? "checkout:uncertainChangedBody" : reviewKind === "inFlight" ? "checkout:inFlightBody" : reviewKind === "mismatch" ? "checkout:keyMismatchBody" : "checkout:reviewBody")}</p>
+              <InlineMessage title={t(changedAfterUncertain ? "checkout:uncertainChangedTitle" : currentPriceChange ? "checkout:shippingPriceChangedTitle" : reviewKind === "inFlight" ? "checkout:inFlightTitle" : reviewKind === "mismatch" ? "checkout:keyMismatchTitle" : "checkout:reviewTitle")}>
+                {!currentPriceChange && <p>{t(changedAfterUncertain ? "checkout:uncertainChangedBody" : reviewKind === "inFlight" ? "checkout:inFlightBody" : reviewKind === "mismatch" ? "checkout:keyMismatchBody" : "checkout:reviewBody")}</p>}
+                {currentPriceChange && <DeliveryQuoteReview quote={currentPriceChange.quote} previousPrice={currentPriceChange.previousPrice} />}
                 <button
                   type="button"
                   disabled={refreshingCart || !methodsReady || refreshFailure !== null}
@@ -408,7 +447,9 @@ function CheckoutForm({
                 >
                   {refreshingCart || methodsRefreshing
                     ? t("checkout:refreshingOrder")
-                    : t(changedAfterUncertain || reviewKind === "mismatch" ? "checkout:newAttemptAction" : reviewKind === "inFlight" ? "checkout:retryReviewAction" : "checkout:reviewAction")}
+                    : currentPriceChange && chosenShipping
+                      ? t("checkout:reviewShippingPriceAction", { price: formatPrice(chosenShipping.price, store) })
+                      : t(changedAfterUncertain || reviewKind === "mismatch" ? "checkout:newAttemptAction" : reviewKind === "inFlight" ? "checkout:retryReviewAction" : "checkout:reviewAction")}
                 </button>
               </InlineMessage>
             </div>
@@ -438,7 +479,8 @@ function CheckoutForm({
           )}
           {failed !== null && (
             <>
-              <RequestError error={failed} operation="checkout" />
+              {!(deliveryPriceChanged(failed) && currentPriceChange) && <RequestError error={failed} operation="checkout"
+                fieldTargets={{ shippingMethodCode: "checkout-shipping-heading", expectedShippingPrice: "checkout-shipping-heading" }} />}
               {!mustReview && (
                 <p className="hint">{t(uncertainWrite(failed) ? "checkout:sameRequestRetry" : "checkout:noAutomaticRetry")}</p>
               )}
@@ -555,7 +597,9 @@ function CheckoutForm({
             store={store}
             disabled={pending || !methodsReady}
             onChange={chooseShipping}
+            error={currentShippingRefusal}
           />
+          {methodsReady && <UnavailableDeliveryMethods methods={methods.unavailableShippingMethods ?? []} cart={cart} />}
 
           {fromOurList && (
             <PickupPointSelect
@@ -575,6 +619,7 @@ function CheckoutForm({
               chosen={mapPoint}
               disabled={pending}
               showError={showValidation}
+              parcel={chosenShipping?.mapParcel}
               onChoose={(point) => { setMapPoint(point); setPointReset(false); }}
             />
           )}
@@ -598,6 +643,7 @@ function CheckoutForm({
         >
           <div className="checkout-actions">
             <button
+              ref={submitButton}
               type="submit"
               className="button checkout-submit"
               disabled={pending || cartPending || refreshingCart || methodsRefreshing || (fromOurList && pickupPoints.status === "ready" && pickupPoints.refreshing)}

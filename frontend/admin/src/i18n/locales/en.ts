@@ -168,7 +168,7 @@ const resources = {
     "rateEditor": "Rate card for {{name}}",
     "rateCard": "Parcel rate card",
     "separateSaves": "Method terms and the whole rate card save separately. Edit one at a time; saving either closes this workspace. A rate-card save does not change the service or parcel limits.",
-    "placeholderWarning": "Placeholder prices are examples, not carrier prices. Active per-parcel methods with missing or placeholder prices block publication. Per-parcel delivery is not offered at checkout yet.",
+    "placeholderWarning": "Placeholder prices are examples, not carrier prices. Active per-parcel methods with missing or placeholder prices block publication and are not offered at checkout.",
     "saveTermsFirst": "Finish or cancel changes in the other form before editing this one.",
     "checkCard": "Check these rate-card fields.",
     "sourceInvalid": "Choose where these prices come from.",
@@ -242,7 +242,7 @@ const resources = {
       "carrierRefused": "Carrier refused this cart"
     },
     "serviceSource": "Limits source",
-    "checkoutWait": "Per-parcel methods are not offered at checkout yet. Active state alone does not make them a checkout option."
+    "checkoutWait": "Checkout quotes per-parcel delivery for the current cart and destination. Active methods also need usable provider settings, a real rate card and parcels that fit."
   },
   shippingSettings: {
     "title": "Parcel settings",
@@ -746,7 +746,7 @@ const resources = {
       product: "At least one visible product",
       shippingData: "Package weights and sizes",
       payment: "At least one active payment method",
-      shipping: "At least one active flat-price shipping method",
+      shipping: "At least one active shipping method",
       parcelMethods: "Per-parcel methods ready",
       domain: "Verified primary address",
       paymentConnected: "Usable payment providers",
@@ -762,7 +762,7 @@ const resources = {
       product: "Make at least one store listing visible to shoppers.",
       shippingData: "For every variant of each visible product, add a weight of at least 1 g and its packed length, width and height in the shared physical catalog.",
       payment: "Offer at least one active payment method.",
-      shipping: "Offer an active flat-price delivery method. Methods priced by the parcel are not offered at checkout yet.",
+      shipping: "Offer an active shipping method. Checkout checks provider settings, destination and cart; per-parcel delivery also needs a real rate card and parcels that fit.",
       parcelMethods: "Review the reported carrier service, parcel limits and prices. Packaging must leave weight capacity for goods; active methods need a real carrier or own rate card. Check parcel settings and the method, or deactivate it.",
       paymentConnected: "Active payment providers must be offered by the platform and have usable account credentials. Configure the account or deactivate the affected method.",
       shippingConnected: "Active delivery providers must be offered by the platform and have usable account credentials. Configure the account or deactivate the affected method.",

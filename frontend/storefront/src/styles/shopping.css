@@ -591,3 +591,50 @@ fieldset.checkout-fields {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.checkout-option-copy > .hint {
+  flex-basis: 100%;
+}
+
+.checkout-unavailable-delivery,
+.delivery-quote-review,
+.checkout-review {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.checkout-review > div > div {
+  min-width: 0;
+}
+
+.checkout-review {
+  padding: 0;
+}
+
+.checkout-review button {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.checkout-unavailable-delivery ul {
+  padding-left: var(--space-6);
+}
+
+.delivery-parcel-prices {
+  padding: 0;
+  list-style: none;
+}
+
+.delivery-parcel-prices li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+
+@container (max-width: 26rem) {
+  .checkout-review > div {
+    padding-inline: var(--space-2);
+  }
+}

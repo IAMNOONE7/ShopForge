@@ -23,7 +23,7 @@ it("sends variant identities and idempotency headers on commerce writes", async 
   await placeOrder({
     email: "shopper@example.test", phone: "+420123456789",
     billingAddress: { fullName: "Shopper", line1: "1 Main St", line2: null, city: "Prague", postalCode: "10000", country: "CZ" },
-    shippingAddress: null, paymentMethodCode: "bank", shippingMethodCode: "pickup", pickupPointCode: null,
+    shippingAddress: null, paymentMethodCode: "bank", shippingMethodCode: "pickup", pickupPointCode: null, expectedShippingPrice: 0,
   }, "checkout-key");
 
   expect(fetcher).toHaveBeenNthCalledWith(1,

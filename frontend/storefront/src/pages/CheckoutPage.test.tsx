@@ -932,3 +932,211 @@ function deferred<T>() {
 function offerMethods(value = methods) {
   mocks.getCheckoutMethods.mockImplementation(async (country: string | null) => ({ ...value, destinationCountry: country }));
 }
+
+const parcelMethod = { ...methods.shippingMethods[0], code: "parcel", name: "Parcel delivery", price: 16,
+  pricing: "perParcel" as const, parcels: 2, mapParcel: { weightKg: 1.25, lengthCm: 31, widthCm: 20, depthCm: 10 } };
+const replacementQuote = { currency: "EUR", total: 20, isAvailable: true, unavailable: null, parcels: [{
+  contents: [{ variantId: "oak-variant", sku: "OAK", quantity: 1 }],
+  grossWeightGrams: 1200, bandUpToGrams: 2000, price: 20, alone: true,
+}] };
+function fillFast() {
+  for (const [name, value] of [["email", "guest@example.com"], ["phone", "+420123456789"],
+    ["billing.fullName", "Guest Buyer"], ["billing.line1", "1 Main Street"], ["billing.city", "Dublin"],
+    ["billing.postalCode", "D01"], ["billing.country", "IE"]])
+    fireEvent.change(document.querySelector(`[name="${name}"]`)!, { target: { value } });
+}
+async function readyParcelCheckout() {
+  offerMethods({ ...methods, shippingMethods: [parcelMethod] });
+  renderCheckout();
+  await screen.findByRole("radio", { name: /Parcel delivery/ });
+  fillFast();
+  await waitFor(() => expect(screen.getByRole("button", { name: "Place order" }).getAttribute("aria-disabled")).toBeNull());
+}
+function priceConflict(quote: unknown = replacementQuote) {
+  return new HttpError("http", 409, { title: "The delivery price has changed", shippingQuote: quote });
+}
+
+describe("cart-priced delivery at checkout", () => {
+  it("ignores an order answer after switching stores", async () => {
+    const answer = deferred<{ number: string; token: string; paymentInstructions: string; redirectUrl: null }>();
+    await readyParcelCheckout();
+    mocks.placeOrder.mockReturnValue(answer.promise);
+    fireEvent.submit(document.querySelector("form.checkout")!);
+    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button", { name: "Change store" }));
+    await screen.findByRole("radio", { name: /Parcel delivery/ });
+    await act(async () => answer.resolve({ number: "OLD-ORDER", token: "11111111-1111-1111-1111-111111111111", paymentInstructions: "Pay", redirectUrl: null }));
+    expect(screen.queryByText("Order destination")).toBeNull();
+    expect(mocks.reloadCart).not.toHaveBeenCalled();
+    expect(window.sessionStorage.getItem("shopforge.checkout.recovery")).toBeNull();
+    expect(screen.getByRole("textbox", { name: "E-mail" })).toHaveProperty("value", "");
+  });
+
+  it("aborts a conflict recovery read when the store changes and ignores its late cart", async () => {
+    const read = deferred<Cart>();
+    await readyParcelCheckout();
+    mocks.getCart.mockReturnValue(read.promise);
+    mocks.placeOrder.mockRejectedValue(priceConflict());
+    fireEvent.submit(document.querySelector("form.checkout")!);
+    await waitFor(() => expect(mocks.getCart).toHaveBeenCalledTimes(1));
+    const signal = mocks.getCart.mock.calls[0][0] as AbortSignal;
+    fireEvent.click(screen.getByRole("button", { name: "Change store" }));
+    expect(signal.aborted).toBe(true);
+    await act(async () => read.resolve({ ...cart, itemsTotal: 999 }));
+    await screen.findByRole("radio", { name: /Parcel delivery/ });
+    expect(document.querySelector(".delivery-quote-review")).toBeNull();
+    expect(screen.queryByText("€999.00")).toBeNull();
+  });
+
+  it.each(["flat", "perParcel"])("sends exactly the displayed %s delivery total", async pricing => {
+    offerMethods({ ...methods, shippingMethods: [pricing === "flat" ? { ...methods.shippingMethods[0], price: 0 } : parcelMethod] });
+    mocks.placeOrder.mockRejectedValue(new HttpError("http", 400));
+    renderCheckout();
+    await screen.findByRole("radio", { name: pricing === "flat" ? /Courier/ : /Parcel delivery/ });
+    fillFast();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Place order" }).getAttribute("aria-disabled")).toBeNull());
+    fireEvent.submit(document.querySelector("form.checkout")!);
+    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(1));
+    expect(mocks.placeOrder.mock.calls[0][0].expectedShippingPrice).toBe(pricing === "flat" ? 0 : 16);
+    if (pricing === "perParcel") {
+      expect(screen.getByText("2 parcels · total delivery price")).toBeTruthy();
+      expect(document.querySelector(".checkout-total strong")?.textContent).toBe("€136.00");
+    }
+  });
+
+  it("shows the changed quote and blocks Enter until explicit review, then submits the refreshed price with a new key", async () => {
+    const user = userEvent.setup();
+    await readyParcelCheckout();
+    mocks.getCart.mockResolvedValue(cart);
+    offerMethods({ ...methods, shippingMethods: [{ ...parcelMethod, price: 20, parcels: 1 }] });
+    mocks.placeOrder.mockRejectedValueOnce(priceConflict()).mockRejectedValue(new HttpError("http", 400));
+    await user.click(screen.getByRole("button", { name: "Place order" }));
+    expect(await screen.findByText("The delivery price has changed")).toBeTruthy();
+    expect(screen.getByText("Previously shown: €16.00. New quote: €20.00.")).toBeTruthy();
+    expect(screen.getByText("Parcel 1")).toBeTruthy();
+    expect(document.querySelector(".checkout-total strong")?.textContent).toBe("€140.00");
+    await waitFor(() => expect(document.activeElement).toBe(document.querySelector(".checkout-review")));
+    fireEvent.submit(document.querySelector("form.checkout")!);
+    expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: "I reviewed delivery at €20.00" }));
+    expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: "Place order" }));
+    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(2));
+    expect(mocks.placeOrder.mock.calls[1][0].expectedShippingPrice).toBe(20);
+    expect(mocks.placeOrder.mock.calls[1][1]).not.toBe(mocks.placeOrder.mock.calls[0][1]);
+    expect(screen.queryByText("Previously shown: €16.00. New quote: €20.00.")).toBeNull();
+  });
+
+  it("does not approve a changed quote while refreshing methods has failed", async () => {
+    await readyParcelCheckout();
+    mocks.getCart.mockResolvedValue(cart);
+    mocks.getCheckoutMethods.mockRejectedValue(new HttpError("network", null));
+    mocks.placeOrder.mockRejectedValue(priceConflict());
+    fireEvent.submit(document.querySelector("form.checkout")!);
+    const review = await screen.findByRole("button", { name: "I reviewed delivery at €16.00" });
+    await waitFor(() => expect(review).toHaveProperty("disabled", true));
+    expect(screen.getByText("Previously shown: €16.00. New quote: €20.00.")).toBeTruthy();
+    fireEvent.submit(document.querySelector("form.checkout")!);
+    expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
+    expect(document.querySelector(".checkout-total strong")).toBeNull();
+  });
+
+  it("uses an even newer GET price only after the shopper reviews the current summary", async () => {
+    const user = userEvent.setup();
+    await readyParcelCheckout();
+    mocks.getCart.mockResolvedValue(cart);
+    offerMethods({ ...methods, shippingMethods: [{ ...parcelMethod, price: 22 }] });
+    mocks.placeOrder.mockRejectedValueOnce(priceConflict()).mockRejectedValue(new HttpError("http", 400));
+    await user.click(screen.getByRole("button", { name: "Place order" }));
+    await screen.findByText("Previously shown: €16.00. New quote: €20.00.");
+    await waitFor(() => expect(document.querySelector(".checkout-total strong")?.textContent).toBe("€142.00"));
+    const review = screen.getByRole("button", { name: "I reviewed delivery at €22.00" });
+    await waitFor(() => expect(review).toHaveProperty("disabled", false));
+    await user.click(review);
+    await user.click(screen.getByRole("button", { name: "Place order" }));
+    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(2));
+    expect(mocks.placeOrder.mock.calls[1][0].expectedShippingPrice).toBe(22);
+  });
+
+  it.each([null, { ...replacementQuote, currency: "CZK" }, { ...replacementQuote, total: 1 }])("keeps malformed price changes out of the review %j", async quote => {
+    await readyParcelCheckout();
+    mocks.getCart.mockResolvedValue(cart);
+    mocks.placeOrder.mockRejectedValue(priceConflict(quote));
+    fireEvent.submit(document.querySelector("form.checkout")!);
+    await screen.findByRole("button", { name: "I reviewed these changes" });
+    expect(screen.queryByText("The delivery price has changed")).toBeNull();
+    expect(document.querySelector(".delivery-quote-review")).toBeNull();
+    expect(screen.getByText(/unexpected response/i)).toBeTruthy();
+    fireEvent.submit(document.querySelector("form.checkout")!);
+    expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it("discards the old destination's quote when the shopper changes country during review", async () => {
+    await readyParcelCheckout();
+    mocks.getCart.mockResolvedValue(cart);
+    mocks.placeOrder.mockRejectedValue(priceConflict());
+    fireEvent.submit(document.querySelector("form.checkout")!);
+    await screen.findByText("Previously shown: €16.00. New quote: €20.00.");
+    fireEvent.change(document.querySelector('[name="billing.country"]')!, { target: { value: "CZ" } });
+    await screen.findByRole("radio", { name: /Parcel delivery/ });
+    expect(document.querySelector(".delivery-quote-review")).toBeNull();
+    expect(screen.getByText("Review the updated order")).toBeTruthy();
+    fireEvent.submit(document.querySelector("form.checkout")!);
+    expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains the shopper's exact shipping refusal beside the methods while only refreshing reads", async () => {
+    await readyParcelCheckout();
+    mocks.getCart.mockResolvedValue(cart);
+    mocks.placeOrder.mockRejectedValue(new HttpError("http", 400, { errors: { shippingMethodCode: ["<b>This order is too heavy.</b>"] } }));
+    fireEvent.submit(document.querySelector("form.checkout")!);
+    await waitFor(() => expect(document.querySelector("#shipping-method-error")?.textContent).toBe("<b>This order is too heavy.</b>"));
+    expect(document.querySelector("#shipping-method-error b")).toBeNull();
+    expect(screen.getByRole("radio", { name: /Parcel delivery/ }).getAttribute("aria-describedby")).toBe("shipping-method-error");
+    expect(screen.getByRole("textbox", { name: "E-mail" })).toHaveProperty("value", "guest@example.com");
+    expect(mocks.getCart).toHaveBeenCalledTimes(1);
+    expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
+    fireEvent.submit(document.querySelector("form.checkout")!);
+    expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["en", "cs"])("shows all unavailable reasons with real item names and no selectable or priced refusal in %s", async language => {
+    await i18n.changeLanguage(language);
+    try {
+      offerMethods({ ...methods, shippingMethods: [], unavailableShippingMethods:
+        ["notToCountry", "tooHeavy", "tooLarge", "missingData", "tooManyParcels"].map((reason, index) => ({
+          code: "refused-" + index, name: "<b>Refused " + index + "</b>", reason: reason as "tooLarge", variantId: index === 0 ? "oak-variant" : "unknown",
+        })) });
+      renderCheckout();
+      await screen.findByText("<b>Refused 0</b>");
+      const region = document.querySelector(".checkout-unavailable-delivery")!;
+      expect(region.querySelectorAll("li")).toHaveLength(5);
+      expect(region.querySelectorAll("b")).toHaveLength(0);
+      expect(within(region as HTMLElement).getByText("Oak chair")).toBeTruthy();
+      expect(within(region as HTMLElement).getByRole("link").getAttribute("href")).toBe("/cart");
+      expect(screen.queryByRole("radio", { name: /Refused/ })).toBeNull();
+      expect(mocks.placeOrder).not.toHaveBeenCalled();
+    } finally { await i18n.changeLanguage("en"); }
+  });
+
+  it("passes exactly the quoted numeric units to Packeta and invalidates old callbacks when they change", async () => {
+    const user = userEvent.setup();
+    const callbacks: ((point: { id: number }) => void)[] = [];
+    const pick = vi.fn((_key, callback) => callbacks.push(callback));
+    (window as { Packeta?: unknown }).Packeta = { Widget: { pick } };
+    try {
+      offerMethods({ ...methods, shippingMethods: [{ ...parcelMethod, requiresPickupPoint: true, pickupPointChoice: "carrier-map" }] });
+      renderCheckout();
+      await screen.findByRole("radio", { name: /Parcel delivery/ }); fillFast();
+      await user.click(await screen.findByRole("button", { name: "Choose a pickup point" }));
+      expect(pick).toHaveBeenLastCalledWith("widget-key", expect.any(Function), { country: "cz", group: "zbox", language: "en", weight: 1.25, length: 31, width: 20, depth: 10 });
+      offerMethods({ ...methods, shippingMethods: [{ ...parcelMethod, requiresPickupPoint: true, pickupPointChoice: "carrier-map", mapParcel: { ...parcelMethod.mapParcel, weightKg: 2.5 } }] });
+      await user.click(screen.getByRole("button", { name: "Change cart contents" }));
+      await screen.findByRole("button", { name: "Choose a pickup point" });
+      act(() => callbacks[0]({ id: 999 }));
+      expect(screen.queryByText("999")).toBeNull();
+      await user.click(screen.getByRole("button", { name: "Choose a pickup point" }));
+      expect(pick).toHaveBeenLastCalledWith("widget-key", expect.any(Function), expect.objectContaining({ weight: 2.5 }));
+    } finally { delete (window as { Packeta?: unknown }).Packeta; }
+  });
+});

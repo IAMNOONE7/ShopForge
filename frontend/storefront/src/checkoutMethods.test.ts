@@ -51,3 +51,37 @@ describe("destination-aware checkout method contract", () => {
     expect(isCountryCode("ZZ")).toBe(true);
   });
 });
+
+const parcelMethod = { ...methods.shippingMethods[0], pricing: "perParcel", parcels: 2,
+  mapParcel: { weightKg: 1.25, lengthCm: 31, widthCm: 20, depthCm: 10 } };
+it("keeps the cart quote, parcel count, map units and separately unavailable methods", async () => {
+  const offer = { ...methods, shippingMethods: [parcelMethod], unavailableShippingMethods: [
+    { code: "locker", name: "Locker", reason: "tooLarge", variantId: "red" },
+    { code: "van", name: "Van", reason: "notToCountry", variantId: null },
+  ] };
+  serve(offer);
+  expect(await getCheckoutMethods("CZ")).toEqual(offer);
+});
+it("accepts the current flat and empty-cart contracts", async () => {
+  const offer = { ...methods, shippingMethods: [{ ...methods.shippingMethods[0], pricing: "flat", parcels: null, mapParcel: null }], unavailableShippingMethods: [] };
+  serve(offer);
+  expect(await getCheckoutMethods("CZ")).toEqual(offer);
+});
+it.each([
+  { ...parcelMethod, pricing: "future" }, { ...parcelMethod, parcels: 0 }, { ...parcelMethod, parcels: 1.5 },
+  { ...parcelMethod, mapParcel: null }, { ...parcelMethod, mapParcel: { ...parcelMethod.mapParcel, weightKg: -1 } },
+  { ...parcelMethod, mapParcel: { ...parcelMethod.mapParcel, depthCm: null } },
+  { ...methods.shippingMethods[0], pricing: "flat" },
+  { ...parcelMethod, pricing: "flat" },
+])("refuses unusable parcel terms %j", async method => {
+  serve({ ...methods, shippingMethods: [method] });
+  await expect(getCheckoutMethods("CZ")).rejects.toMatchObject({ kind: "invalid-response" });
+});
+it.each([null, {}, [null], [{ code: "no", name: "No", reason: "future", variantId: null }],
+  [{ code: "courier", name: "No", reason: "missingData", variantId: null }],
+  [{ code: "no", name: "No", reason: "tooHeavy" }],
+  [{ code: "no", name: "No", reason: "tooManyParcels", variantId: {} }],
+])("refuses malformed or contradictory unavailable methods %j", async unavailableShippingMethods => {
+  serve({ ...methods, unavailableShippingMethods });
+  await expect(getCheckoutMethods("CZ")).rejects.toMatchObject({ kind: "invalid-response" });
+});

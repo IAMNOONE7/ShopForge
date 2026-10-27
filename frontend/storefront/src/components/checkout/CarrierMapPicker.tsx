@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { InlineMessage } from "../ui/InlineMessage";
+import type { MapParcel } from "../../shippingQuotes";
 
 // One country and one kind of place, matching what the server validates the answer against. A point that is
 // real but is a counter in another country is not one this method may use.
@@ -18,7 +19,7 @@ type Packeta = {
     pick: (
       apiKey: string,
       callback: (point: { id?: string | number; name?: string; place?: string } | null) => void,
-      options: Record<string, string>,
+      options: Record<string, string | number>,
     ) => void;
   };
 };
@@ -33,6 +34,7 @@ export function CarrierMapPicker({
   chosen,
   disabled,
   showError,
+  parcel,
   onChoose,
 }: {
   apiKey: string | null;
@@ -40,6 +42,7 @@ export function CarrierMapPicker({
   chosen: ChosenPoint | null;
   disabled: boolean;
   showError: boolean;
+  parcel?: MapParcel | null;
   onChoose: (point: ChosenPoint | null) => void;
 }) {
   const { t } = useTranslation("checkout");
@@ -80,7 +83,12 @@ export function CarrierMapPicker({
             label: [point.name, point.place].filter(Boolean).join(", ") || String(point.id),
           });
         },
-        { country, group, language },
+        { country, group, language, ...(parcel ? {
+          weight: parcel.weightKg,
+          ...(parcel.lengthCm !== null ? { length: parcel.lengthCm } : {}),
+          ...(parcel.widthCm !== null ? { width: parcel.widthCm } : {}),
+          ...(parcel.depthCm !== null ? { depth: parcel.depthCm } : {}),
+        } : {}) },
       );
     } catch {
       if (!alive.current) return;

@@ -169,7 +169,7 @@ const resources = {
     "rateEditor": "Ceník dopravy {{name}}",
     "rateCard": "Ceník balíků",
     "separateSaves": "Podmínky dopravy a celý ceník se ukládají samostatně. Upravujte je postupně; uložení zavře tuto pracovní plochu. Uložení ceníku nemění službu ani limity balíků.",
-    "placeholderWarning": "Ukázkové ceny jsou příklady, nikoli ceny dopravce. Aktivní doprava po balících bez cen nebo s ukázkovými cenami blokuje zveřejnění. Doprava po balících zatím není nabízena v pokladně.",
+    "placeholderWarning": "Ukázkové ceny jsou příklady, nikoli ceny dopravce. Aktivní doprava po balících bez cen nebo s ukázkovými cenami blokuje zveřejnění a v pokladně se nenabízí.",
     "saveTermsFirst": "Před úpravou tohoto formuláře dokončete nebo zrušte změny v druhém formuláři.",
     "checkCard": "Zkontrolujte tato pole ceníku.",
     "sourceInvalid": "Vyberte původ těchto cen.",
@@ -243,7 +243,7 @@ const resources = {
       "carrierRefused": "Dopravce košík odmítl"
     },
     "serviceSource": "Zdroj limitů",
-    "checkoutWait": "Doprava po balících zatím není nabízena v pokladně. Samotné zapnutí z ní nedělá dostupný způsob v pokladně."
+    "checkoutWait": "Pokladna oceňuje dopravu po balících pro aktuální košík a cílovou zemi. Aktivní doprava potřebuje také funkční nastavení poskytovatele, skutečný ceník a vyhovující balíky."
   },
   shippingSettings: {
     "title": "Nastavení balíků",
@@ -748,7 +748,7 @@ const resources = {
       product: "Alespoň jeden viditelný produkt",
       shippingData: "Hmotnosti a rozměry balení",
       payment: "Alespoň jedna aktivní platební metoda",
-      shipping: "Alespoň jedna aktivní doprava s pevnou cenou",
+      shipping: "Alespoň jedna aktivní doprava",
       parcelMethods: "Připravenost dopravy po balících",
       domain: "Ověřená hlavní adresa",
       paymentConnected: "Funkční poskytovatelé plateb",
@@ -764,7 +764,7 @@ const resources = {
       product: "Zobrazte zákazníkům alespoň jedno zařazení produktu v obchodě.",
       shippingData: "U každé varianty viditelného produktu doplňte ve společném fyzickém katalogu hmotnost nejméně 1 g a délku, šířku a výšku balení.",
       payment: "Nabídněte alespoň jednu aktivní platební metodu.",
-      shipping: "Zapněte dopravu s pevnou cenou. Doprava oceňovaná po balících zatím není nabízena v pokladně.",
+      shipping: "Zapněte dopravu. Pokladna ověřuje nastavení poskytovatele, cílovou zemi a košík; doprava po balících potřebuje také skutečný ceník a vyhovující balíky.",
       parcelMethods: "Zkontrolujte uvedenou službu dopravce, limity balíku i ceny. Po odečtení obalu musí zbýt hmotnost pro zboží; aktivní doprava potřebuje skutečný ceník dopravce nebo vlastní ceny. Upravte nastavení balíků a dopravy nebo ji vypněte.",
       paymentConnected: "Aktivní poskytovatelé plateb musí být nabízeni platformou a mít použitelné přihlašovací údaje účtu. Nastavte účet nebo vypněte dotčenou metodu.",
       shippingConnected: "Aktivní poskytovatelé dopravy musí být nabízeni platformou a mít použitelné přihlašovací údaje účtu. Nastavte účet nebo vypněte dotčenou metodu.",
