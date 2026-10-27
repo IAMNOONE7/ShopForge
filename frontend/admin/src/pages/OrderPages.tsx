@@ -42,7 +42,8 @@ export function StoreOrdersPage() {
 }
 
 function OrdersWorkspace({ storeId, storeName }: { storeId: string; storeName: string }) {
-  const { t, i18n } = useTranslation("orders");
+  const { t, i18n } = useTranslation(["orders", "exports"]);
+  const { user } = useSession();
   const [parameters, setParameters] = useSearchParams();
   const { page, q, sort, shortQuery, invalidOptions } = orderListQuery(parameters);
   const query = orderListParameters({ page, q, sort });
@@ -76,6 +77,7 @@ function OrdersWorkspace({ storeId, storeName }: { storeId: string; storeName: s
   return <div className="orders-page">
     <div className="order-page-heading"><div><h1>{t("title")}</h1><p className="hint">{t("listHint", { store: storeName })}</p></div>
       <Button type="button" variant="secondary" disabled={refreshing} onClick={reload}>{t("refresh")}</Button></div>
+    {canManageStore(user.role) && <Link to={`/stores/${storeId}/exports`}>{t("exports:options")}</Link>}
     <section className="order-list-controls" aria-label={t("listControls")}>
       <OrderSearch key={q} q={q} onSearch={search} />
       <div className="order-sort"><label htmlFor="order-sort">{t("sort")}</label>

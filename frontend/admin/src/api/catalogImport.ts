@@ -1,7 +1,9 @@
-import { HttpError, requestBlob, requestJson } from "./http";
+import { HttpError, requestJson } from "./http";
+
+import { readSpreadsheet } from "./spreadsheet";
 
 export const importFileLimit = 10 * 1024 * 1024;
-export const spreadsheetContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+export { spreadsheetContentType } from "./spreadsheet";
 export type ImportIssue = { row: number; column: string | null; message: string };
 export type ImportReport = {
   created: number;
@@ -41,14 +43,7 @@ function checkedReport(value: unknown): ImportReport {
 }
 const root = (storeId: string) => "/api/admin/stores/" + encodeURIComponent(storeId) + "/import";
 export const catalogImportApi = {
-  template: async (storeId: string, signal?: AbortSignal) => {
-    const download = await requestBlob(root(storeId) + "/template", "shopforge-import-template.xlsx", { signal, expectedContentType: spreadsheetContentType });
-    signal?.throwIfAborted();
-    const signature = new Uint8Array(await download.blob.slice(0, 4).arrayBuffer());
-    signal?.throwIfAborted();
-    if (signature.length !== 4 || signature[0] !== 0x50 || signature[1] !== 0x4b || signature[2] !== 3 || signature[3] !== 4) throw new HttpError("invalid-response", 200);
-    return download;
-  },
+  template: (storeId: string, signal?: AbortSignal) => readSpreadsheet(root(storeId) + "/template", "shopforge-import-template.xlsx", signal),
   apply: async (storeId: string, file: File, signal?: AbortSignal) => {
     if (importFileProblem(file)) throw new TypeError("An .xlsx workbook within the upload limit is required.");
     const body = new FormData(); body.append("file", file);

@@ -1,0 +1,11 @@
+.exports-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); max-width: 74rem; min-width: 0; container-type: inline-size; overflow-wrap: anywhere; }
+.exports-page :is(h1,h2,p) { margin: 0; }
+.exports-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); gap: var(--space-4); min-width: 0; }
+.exports-card, .export-feedback { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--space-4); min-width: 0; padding: var(--space-6); border: 1px solid var(--color-border); border-radius: var(--radius-panel); background: var(--color-surface); }
+.exports-limit-note { padding: var(--space-4); border-inline-start: 3px solid var(--color-info); background: var(--color-info-surface); }
+.export-guide { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); padding-top: var(--space-3); }
+.exports-card > button { justify-self: start; }
+.exports-pending { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); min-width: 0; }
+.exports-page button { white-space: normal; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+@container (max-width: 32rem) { .exports-card, .export-feedback { padding: var(--space-3); } .exports-page :is(h1,h2) { font-size: 1.25rem; } }
+@container (max-width: 18rem) { .exports-page button { padding-inline: var(--space-1); } }

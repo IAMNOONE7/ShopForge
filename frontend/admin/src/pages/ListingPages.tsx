@@ -35,7 +35,7 @@ export function ListingsPage() {
   return <ListingsWorkspace key={`${store.id}:${store.currency}:${user.id}:${user.role}:${parameters.get("archived") === "true"}`} />;
 }
 function ListingsWorkspace() {
-  const { t, i18n } = useTranslation(["listings", "retirement", "bulkListings"]); const { store, storeRefreshing, storeRefreshError } = useSelectedStore(); const { user } = useSession();
+  const { t, i18n } = useTranslation(["listings", "retirement", "bulkListings", "exports"]); const { store, storeRefreshing, storeRefreshError } = useSelectedStore(); const { user } = useSession();
   const [parameters, setParameters] = useSearchParams(); const rawPage = parameters.get("page") ?? "1";
   const page = /^\d+$/.test(rawPage) && Number(rawPage) >= 1 && Number(rawPage) <= 100000 ? Number(rawPage) : 1;
   const typedQuery = (parameters.get("q") ?? "").trim(); const q = typedQuery.length >= 2 ? typedQuery : ""; const sort = sorts.find((key) => key === parameters.get("sort")) ?? "default";
@@ -46,6 +46,7 @@ function ListingsWorkspace() {
   const query = searchParameters(page, q, sort, archived).toString();
   return <div className="listing-page"><div className="page-heading-row"><div><h1>{t("title")}</h1><p className="hint">{t("listHint", { store: store.name })}</p></div>
     {canManageCatalog(user.role) && <Link className="button" to="new">{t("newListing")}</Link>}</div>
+    {allowed && <Link to={`/stores/${store.id}/exports`}>{t("exports:options")}</Link>}
     <CatalogChangeNotice storeId={store.id} kind="products" />
     <CatalogCollections archived={archived} activeUrl={`?${searchParameters(1, q, sort)}`} archivedUrl={`?${searchParameters(1, q, sort, true)}`} />
     {archived && <InlineMessage>{t("retirement:archivedListHint")}</InlineMessage>}
