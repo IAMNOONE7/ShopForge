@@ -58,6 +58,7 @@ const MetadataPage = lazy(() => import("./pages/MetadataPage").then(pages => ({ 
 const AttributesIndexPage = lazy(() => import("./pages/AttributePages").then(pages => ({ default: pages.AttributesIndexPage })));
 const AttributeDetailPage = lazy(() => import("./pages/AttributePages").then(pages => ({ default: pages.AttributeDetailPage })));
 const NewAttributePage = lazy(() => import("./pages/AttributePages").then(pages => ({ default: pages.NewAttributePage })));
+const StoreFeedsPage = lazy(() => import("./pages/StoreFeedsPage").then(pages => ({ default: pages.StoreFeedsPage })));
 const StoreExportsPage = lazy(() => import("./pages/StoreExportsPage").then(pages => ({ default: pages.StoreExportsPage })));
 const StoreImportPage = lazy(() => import("./pages/StoreImportPage").then(pages => ({ default: pages.StoreImportPage })));
 const StoreShippingSettingsPage = lazy(() => import("./pages/StoreShippingSettingsPage").then(pages => ({ default: pages.StoreShippingSettingsPage })));
@@ -233,6 +234,8 @@ function MerchantApp() {
                   <Route path="attributes" element={<DeferredPage><AttributesIndexPage /></DeferredPage>} />
                   <Route path="attributes/new" element={canManageCatalog(session.user.role) ? <DeferredPage><NewAttributePage /></DeferredPage> : <ForbiddenPage />} />
                   <Route path="attributes/:attributeId" element={<DeferredPage><AttributeDetailPage /></DeferredPage>} />
+                  <Route path="feeds" element={<DeferredPage><StoreFeedsPage /></DeferredPage>} />
+                  <Route path="feeds/:feed" element={<DeferredPage><StoreFeedsPage /></DeferredPage>} />
                   <Route path="exports" element={<DeferredPage><StoreExportsPage /></DeferredPage>} />
                   <Route path="import" element={<DeferredPage><StoreImportPage /></DeferredPage>} />
                   <Route path="methods" element={<StoreMethodsPage />} />

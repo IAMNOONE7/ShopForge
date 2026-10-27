@@ -131,6 +131,7 @@ export function AdminNavigation({
           >
             {t("navigation:import")}
           </NavLink>
+          <NavLink to={`/stores/${selectedStore.id}/feeds`} onClick={onNavigate}>{t("navigation:feeds")}</NavLink>
           {canManageCatalog(role) && <NavLink to={`/stores/${selectedStore.id}/exports`} onClick={onNavigate}>{t("navigation:exports")}</NavLink>}
           <NavLink to={`/stores/${selectedStore.id}/provider-connections`} onClick={onNavigate}>{t("navigation:providerConnections")}</NavLink>
           <NavLink

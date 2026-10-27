@@ -1,0 +1,28 @@
+.feeds-page { min-width: 0; container-type: inline-size; overflow-wrap: anywhere; }
+.feeds-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.feeds-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+.feed-panel { min-width: 0; padding: var(--space-4); margin-block: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-panel); background: var(--color-surface); }
+.feeds-grid .feed-panel { margin-block: 0; }
+.feed-panel h2 { margin-top: 0; }
+.feed-facts { display: grid; gap: var(--space-3); }
+.feed-facts > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2); }
+.feed-facts dt { color: var(--color-text-muted); }
+.feed-facts dd { margin: 0; }
+.feed-state { font-weight: 700; }
+.feed-literal { white-space: pre-wrap; overflow-wrap: anywhere; }
+.feed-run-error { border-inline-start: 3px solid var(--color-danger, #a32121); padding-inline-start: var(--space-3); }
+.feed-address textarea { display: block; width: 100%; box-sizing: border-box; margin-block: var(--space-3); font: inherit; resize: vertical; }
+.feed-address > button { margin-bottom: var(--space-3); }
+.feed-switch { display: block; min-height: 2.75rem; }
+.feed-switch input { margin-inline-end: var(--space-2); }
+.feed-editor form { display: grid; gap: var(--space-4); }
+.feed-feedback:empty { display: none; }
+.feed-feedback { margin-block: var(--space-4); }
+.feed-category-list { list-style: none; padding: 0; display: grid; gap: var(--space-3); }
+.feed-category-list > li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: start; gap: var(--space-3); border-top: 1px solid var(--color-border); padding-block: var(--space-3); }
+.feed-category-list > li > div { min-width: 0; flex: 1 1 15rem; }
+.feed-problems { padding-inline-start: var(--space-4); }
+.feed-problems > li { margin-block: var(--space-3); }
+.feeds-page button, .feeds-page .button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+@container (min-width: 56rem) { .feeds-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (max-width: 26rem) { .feed-panel { padding: var(--space-2); } }
