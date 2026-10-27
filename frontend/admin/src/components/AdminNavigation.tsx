@@ -43,6 +43,8 @@ export function AdminNavigation({
         </NavLink>
       )}
 
+      {canManageStore(role) && <NavLink to="/users" onClick={onNavigate}>{t("navigation:colleagues")}</NavLink>}
+
       <div className="store-selector">
         {stores.status === "loading" && (
           <span className="navigation-status" role="status">

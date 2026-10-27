@@ -109,3 +109,10 @@ describe("admin navigation", () => {
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
   });
 });
+
+it.each(["Owner", "Admin", "CatalogManager", "OrderManager", "Warehouse", "Support"])("offers company colleagues only to store managers: %s", role => {
+  render(<MemoryRouter><AdminNavigation stores={{ status: "ready", data: stores, refreshing: false, refreshError: null }} reloadStores={() => {}} selectedStore={null} role={role} /></MemoryRouter>);
+  const link = screen.queryByRole("link", { name: "Colleagues" });
+  expect(link !== null).toBe(["Owner", "Admin"].includes(role));
+  if (link) expect(link.getAttribute("href")).toBe("/users");
+});

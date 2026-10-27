@@ -30,6 +30,7 @@ import { canManageCatalog, canManageStore, SessionContext } from "./session";
 import { isOperatorPath } from "./platform/routing";
 import type { InvitationEntry } from "./invitationEntry";
 
+const ColleaguesPage = lazy(() => import("./pages/ColleaguesPage").then(pages => ({ default: pages.ColleaguesPage })));
 const InvitationAcceptancePage = lazy(() => import("./pages/InvitationAcceptancePage").then(pages => ({ default: pages.InvitationAcceptancePage })));
 
 const PlatformApp = lazy(() => import("./platform/PlatformApp"));
@@ -201,6 +202,7 @@ function MerchantApp() {
                   canManageCatalog(session.user.role) ? <NewPhysicalProductPage /> : <ForbiddenPage />
                 } />
                 <Route path="products/:productId" element={<PhysicalProductPage />} />
+                <Route path="users" element={canManageStore(session.user.role) ? <DeferredPage><ColleaguesPage /></DeferredPage> : <ForbiddenPage />} />
                 <Route path="stock" element={<StockPage />} />
                 <Route path="stock/:variantId" element={<ProductStockPage />} />
                 <Route path="stores" element={<StoreIndexPage />} />
