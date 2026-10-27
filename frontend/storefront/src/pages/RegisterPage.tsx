@@ -64,6 +64,7 @@ export function RegisterPage() {
         }
       >
         <p role="status">{t("auth:registrationEmailSent")}</p>
+        <Link to={authPath("/account/resend-verification", returnTo)}>{t("auth:resendVerification")}</Link>
       </AuthLayout>
     );
 

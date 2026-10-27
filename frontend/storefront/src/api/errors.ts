@@ -98,7 +98,7 @@ function targetName(field: string) {
 
 function validationKey(field: string): ValidationMessageKey {
   const normalized = field.toLowerCase();
-  if (normalized === "email") return "emailInvalid";
+  if (normalized === "email" || normalized === "newemail") return "emailInvalid";
   if (normalized === "password") return "passwordInvalid";
   if (
     normalized === "firstname" ||

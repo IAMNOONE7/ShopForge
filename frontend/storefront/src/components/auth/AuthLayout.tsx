@@ -7,16 +7,18 @@ export function AuthLayout({
   introduction,
   children,
   footer,
+  className,
 }: {
   title: ReactNode;
   introduction?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
+  className?: string;
 }) {
   const heading = useId();
   const { t } = useTranslation(["account", "cart"]);
   return (
-    <section className="customer-auth" aria-labelledby={heading}>
+    <section className={className ? `customer-auth ${className}` : "customer-auth"} aria-labelledby={heading}>
       <div className="account-form">
         <header className="auth-header">
           <p className="customer-eyebrow">{t("account:title")}</p>

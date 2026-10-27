@@ -65,3 +65,18 @@ describe("CustomerProvider", () => {
     expect(getProfile).toHaveBeenCalledTimes(2);
   });
 });
+
+function EditableState() {
+  const state = useCustomer();
+  return <><span>{state.status}:{state.customer?.email ?? "none"}</span>
+    <button onClick={() => state.apply({ ...profile, email: "confirmed@example.test" })}>confirm customer</button>
+    <button onClick={() => state.apply(null)}>apply guest</button></>;
+}
+it.each(["customer", "guest"])("does not let an older profile read overwrite the explicitly applied %s", async kind => {
+  let resolve!: (value: typeof profile) => void;
+  vi.mocked(getProfile).mockImplementation(() => new Promise(done => { resolve = done; }));
+  render(<CustomerProvider><EditableState /></CustomerProvider>);
+  fireEvent.click(screen.getByRole("button", { name: kind === "customer" ? "confirm customer" : "apply guest" }));
+  const signal = vi.mocked(getProfile).mock.calls[0][0]!; expect(signal.aborted).toBe(true);
+  resolve(profile); await waitFor(() => expect(screen.getByText(kind === "customer" ? "authenticated:confirmed@example.test" : "guest:none")).toBeTruthy());
+});

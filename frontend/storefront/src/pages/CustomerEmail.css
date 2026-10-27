@@ -1,0 +1,16 @@
+.customer-email { min-width: 0; overflow-wrap: anywhere; }
+.customer-email form { display: grid; gap: var(--space-4); }
+.customer-email .button, .customer-email button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.customer-email-feedback { margin-block: var(--space-4); scroll-margin-top: var(--space-4); }
+.customer-email-feedback:focus { outline-offset: 0.25rem; }
+.customer-email-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
+.customer-email [readonly] { overflow-wrap: anywhere; }
+
+.customer-email-page .password-reveal:hover:not(:disabled) {
+  color: var(--color-text);
+  background: var(--color-store-surface);
+  border-color: var(--color-text);
+}
+@container (max-width: 26rem) {
+  .customer-email-page .auth-content { padding: var(--space-2); }
+}

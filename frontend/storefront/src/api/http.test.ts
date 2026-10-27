@@ -145,4 +145,14 @@ describe("HTTP transport", () => {
       requestBlob("/api/not-pdf", "fallback.pdf"),
     ).rejects.toMatchObject({ kind: "invalid-response" });
   });
+  it("does not expire a new session from an aborted older request's 401", async () => {
+    const controller = new AbortController();
+    const response = new Response('{}', { status: 401, headers: { "Content-Type": "application/json" } });
+    vi.spyOn(response, "json").mockImplementation(async () => { controller.abort(); return {}; });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+    const listener = vi.fn(), unsubscribe = onUnauthorized(listener);
+    try { await expect(requestJson("/api/private", { signal: controller.signal })).rejects.toMatchObject({ name: "AbortError" }); expect(listener).not.toHaveBeenCalled(); }
+    finally { unsubscribe(); }
+  });
+
 });

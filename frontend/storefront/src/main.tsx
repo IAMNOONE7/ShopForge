@@ -11,6 +11,9 @@ import "./styles/product.css";
 import "./styles/shopping.css";
 import "./styles/customer.css";
 import App from "./App.tsx";
+import { captureEmailChangeEntry } from "./emailChangeEntry";
+
+const emailChangeEntry = captureEmailChangeEntry();
 
 async function render() {
   await initializeI18n();
@@ -19,7 +22,7 @@ async function render() {
       <div className="utility-bar">
         <LanguageSwitcher />
       </div>
-      <App />
+      <App emailChangeEntry={emailChangeEntry} />
     </StrictMode>,
   );
 }

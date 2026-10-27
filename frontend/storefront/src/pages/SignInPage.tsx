@@ -59,6 +59,7 @@ export function SignInPage() {
             {t("auth:createAccount")}
           </Link>{" "}
           ·{" "}
+          <Link to={authPath("/account/resend-verification", returnTo)}>{t("auth:resendVerification")}</Link>{" "}
           <Link to={authPath("/account/forgot-password", returnTo)}>
             {t("auth:forgottenPassword")}
           </Link>

@@ -150,6 +150,7 @@ async function send(url: string, options: RequestOptions) {
 
   if (!response.ok) {
     const error = await responseError(response);
+    options.signal?.throwIfAborted();
     if (response.status === 401 && options.notifyUnauthorized !== false) {
       for (const listener of unauthorizedListeners) listener();
     }

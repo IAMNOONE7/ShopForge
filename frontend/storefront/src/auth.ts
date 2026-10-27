@@ -61,6 +61,7 @@ export function safeAuthReturn(value: string | null, fallback = "/account") {
     const allowed =
       url.pathname === "/checkout" ||
       url.pathname === "/account" ||
+      url.pathname === "/account/email" ||
       url.pathname.startsWith("/account/orders/");
     if (!allowed) return fallback;
     return url.pathname + url.search + url.hash;

@@ -17,7 +17,11 @@ import { StoreContext } from "./storeContext";
 import { statusOf } from "./api/errors";
 import { publicRoutes } from "./publicPages";
 import { installPageMetadata } from "./pageMetadata";
+import type { EmailChangeEntry } from "./emailChangeEntry";
 
+const AccountEmailPage = lazy(() => import("./pages/AccountEmailPage").then(module => ({ default: module.AccountEmailPage })));
+const ResendVerificationPage = lazy(() => import("./pages/ResendVerificationPage").then(module => ({ default: module.ResendVerificationPage })));
+const ConfirmEmailPage = lazy(() => import("./pages/ConfirmEmailPage").then(module => ({ default: module.ConfirmEmailPage })));
 const AccountOrderPage = lazy(() => import("./pages/AccountOrderPage").then((module) => ({ default: module.AccountOrderPage })));
 const AccountPage = lazy(() => import("./pages/AccountPage").then((module) => ({ default: module.AccountPage })));
 const ForgotPasswordPage = lazy(() => import("./pages/ForgotPasswordPage").then((module) => ({ default: module.ForgotPasswordPage })));
@@ -33,7 +37,7 @@ type StoreState =
   | { status: "not-found" }
   | { status: "unavailable"; error: unknown };
 
-function App() {
+function App({ emailChangeEntry = null }: { emailChangeEntry?: EmailChangeEntry | null }) {
   const { t, i18n } = useTranslation(["common", "errors"]);
   const [state, setState] = useState<StoreState>({ status: "loading" });
   const [version, setVersion] = useState(0);
@@ -120,6 +124,9 @@ function App() {
                     <Route path="checkout" element={<CheckoutPage />} />
                     <Route path="order/:number" element={<OrderPage />} />
                     <Route path="account" element={<AccountPage />} />
+                    <Route path="account/email" element={<AccountEmailPage />} />
+                    <Route path="account/resend-verification" element={<ResendVerificationPage />} />
+                    <Route path="account/confirm-email" element={<ConfirmEmailPage entry={emailChangeEntry} />} />
                     <Route
                       path="account/orders/:number"
                       element={<AccountOrderPage />}

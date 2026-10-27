@@ -52,6 +52,7 @@ export function VerifyEmailPage() {
         }
       >
         <p>{t("expiredLinkBody")}</p>
+        <Link to={authPath("/account/resend-verification", returnTo)}>{t("resendVerification")}</Link>
       </AuthLayout>
     );
 
