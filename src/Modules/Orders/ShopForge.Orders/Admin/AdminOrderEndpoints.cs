@@ -112,7 +112,24 @@ internal static class AdminOrderEndpoints
             await Documents.OfAsync(dbContext, order.Number, cancellationToken),
             await AttemptsAsync(dbContext, order.Number, cancellationToken),
             await AdminUnappliedPaymentEndpoints.OfOrderAsync(dbContext, order.Number, cancellationToken),
-            await ReturnsAsync(dbContext, order.Number, cancellationToken));
+            await ReturnsAsync(dbContext, order.Number, cancellationToken),
+            await ParcelsAsync(dbContext, order.Number, cancellationToken));
+
+    // The parcels the delivery was priced on and what goes in each: a suggestion, which booking starts from (D-220).
+    private static async Task<List<AdminOrderParcelResponse>> ParcelsAsync(
+        DbContext dbContext, string orderNumber, CancellationToken cancellationToken) =>
+        await dbContext.Set<OrderParcel>()
+            .AsNoTracking()
+            .Where(parcel => parcel.OrderNumber == orderNumber)
+            .OrderBy(parcel => parcel.Number)
+            .Select(parcel => new AdminOrderParcelResponse(
+                parcel.Number,
+                parcel.GrossWeightGrams,
+                parcel.BandUpToGrams,
+                parcel.Price,
+                parcel.Alone,
+                parcel.Contents.Select(item => new AdminOrderParcelItemResponse(item.VariantId, item.Sku, item.Quantity)).ToList()))
+            .ToListAsync(cancellationToken);
 
     // What came back from this order, and where each refund stands: a refused one is visible from the order itself.
     private static async Task<List<AdminOrderReturnResponse>> ReturnsAsync(
@@ -457,7 +474,8 @@ internal sealed record AdminOrderDetailResponse(
         List<DocumentResponse> documents,
         List<AdminPaymentAttemptResponse> attempts,
         List<AdminUnappliedPaymentResponse> unappliedPayments,
-        List<AdminOrderReturnResponse> returns) => new(
+        List<AdminOrderReturnResponse> returns,
+        List<AdminOrderParcelResponse> parcels) => new(
         order.Number,
         order.PlacedAt,
         order.Status.ToString(),
@@ -485,15 +503,7 @@ internal sealed record AdminOrderDetailResponse(
         returns,
         documents,
         [.. order.Lines.Select(line => new AdminOrderLineResponse(line.ProductName, line.UnitPrice, line.VatRate, line.Quantity, line.LineTotal))],
-        [
-            .. order.Parcels.OrderBy(parcel => parcel.Number).Select(parcel => new AdminOrderParcelResponse(
-                parcel.Number,
-                parcel.GrossWeightGrams,
-                parcel.BandUpToGrams,
-                parcel.Price,
-                parcel.Alone,
-                [.. parcel.Contents.Select(item => new AdminOrderParcelItemResponse(item.VariantId, item.Sku, item.Quantity))])),
-        ]);
+        parcels);
 }
 
 internal sealed record AdminOrderParcelResponse(int Number, int GrossWeightGrams, int BandUpToGrams, decimal Price, bool Alone, List<AdminOrderParcelItemResponse> Contents);

@@ -371,7 +371,9 @@ internal static class CheckoutEndpoints
             order.AssignTo(account.StoreCustomerId);
         }
 
-        order.PlanParcels(quote.Parcels.Select((parcel, index) => new OrderParcel(
+        dbContext.AddRange(quote.Parcels.Select((parcel, index) => new OrderParcel(
+            order.StoreId,
+            order.Number,
             index + 1,
             parcel.GrossWeightGrams,
             parcel.BandUpToGrams,

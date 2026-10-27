@@ -17,9 +17,9 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                 schema: "orders",
                 columns: table => new
                 {
-                    order_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    store_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    order_number = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
                     number = table.Column<int>(type: "integer", nullable: false),
                     gross_weight_grams = table.Column<int>(type: "integer", nullable: false),
                     band_up_to_grams = table.Column<int>(type: "integer", nullable: false),
@@ -28,15 +28,8 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("pk_order_parcels", x => new { x.order_id, x.id });
+                    table.PrimaryKey("pk_order_parcels", x => x.id);
                     table.CheckConstraint("ck_order_parcels_values", "number >= 1 AND gross_weight_grams > 0 AND band_up_to_grams >= gross_weight_grams AND price >= 0");
-                    table.ForeignKey(
-                        name: "fk_order_parcels_orders_order_id",
-                        column: x => x.order_id,
-                        principalSchema: "orders",
-                        principalTable: "orders",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -44,8 +37,7 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                 schema: "orders",
                 columns: table => new
                 {
-                    order_parcel_order_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    order_parcel_id = table.Column<int>(type: "integer", nullable: false),
+                    order_parcel_id = table.Column<Guid>(type: "uuid", nullable: false),
                     id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     variant_id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -54,16 +46,23 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("pk_order_parcel_items", x => new { x.order_parcel_order_id, x.order_parcel_id, x.id });
+                    table.PrimaryKey("pk_order_parcel_items", x => new { x.order_parcel_id, x.id });
                     table.CheckConstraint("ck_order_parcel_items_quantity", "quantity >= 1");
                     table.ForeignKey(
-                        name: "fk_order_parcel_items_order_parcels_order_parcel_order_id_orde",
-                        columns: x => new { x.order_parcel_order_id, x.order_parcel_id },
+                        name: "fk_order_parcel_items_order_parcels_order_parcel_id",
+                        column: x => x.order_parcel_id,
                         principalSchema: "orders",
                         principalTable: "order_parcels",
-                        principalColumns: new[] { "order_id", "id" },
+                        principalColumn: "id",
                         onDelete: ReferentialAction.Cascade);
                 });
+
+            migrationBuilder.CreateIndex(
+                name: "ix_order_parcels_store_id_order_number_number",
+                schema: "orders",
+                table: "order_parcels",
+                columns: new[] { "store_id", "order_number", "number" },
+                unique: true);
         }
 
         /// <inheritdoc />

@@ -7,7 +7,6 @@ namespace ShopForge.Orders.Domain;
 internal sealed class Order : IStoreOwned
 {
     private readonly List<OrderLine> _lines = [];
-    private readonly List<OrderParcel> _parcels = [];
 
     private Order()
     {
@@ -124,10 +123,6 @@ internal sealed class Order : IStoreOwned
 
     public IReadOnlyList<OrderLine> Lines => _lines;
 
-    // The parcels the delivery was priced on, estimated when the order was placed (D-217, D-220): a suggestion booking
-    // starts from, kept as priced, so a later change of settings or prices alters nothing already sold.
-    public IReadOnlyList<OrderParcel> Parcels => _parcels;
-
     public decimal ItemsTotal => _lines.Sum(line => line.LineTotal);
 
     public decimal ShippingCharged => ShippingPrice - ShippingDiscount;
@@ -150,8 +145,6 @@ internal sealed class Order : IStoreOwned
 
         _lines.Add(new OrderLine(storeProductId, variantId, name, unitPrice, vatRate, quantity, discount));
     }
-
-    public void PlanParcels(IEnumerable<OrderParcel> parcels) => _parcels.AddRange(parcels);
 
     public void ApplyDiscount(string code, string name, decimal shippingDiscount)
     {
@@ -256,42 +249,6 @@ internal sealed class Shipment
 
     public DateTimeOffset ShippedAt { get; private set; }
 }
-
-// One estimated parcel: what goes in it, what it weighs with its packaging, the band of the rate card it fell in, and
-// what it cost (D-220).
-internal sealed class OrderParcel
-{
-    private readonly List<OrderParcelItem> _contents = [];
-
-    private OrderParcel()
-    {
-    }
-
-    internal OrderParcel(int number, int grossWeightGrams, int bandUpToGrams, decimal price, bool alone, IEnumerable<OrderParcelItem> contents)
-    {
-        Number = number;
-        GrossWeightGrams = grossWeightGrams;
-        BandUpToGrams = bandUpToGrams;
-        Price = price;
-        Alone = alone;
-        _contents.AddRange(contents);
-    }
-
-    public int Number { get; private set; }
-
-    public int GrossWeightGrams { get; private set; }
-
-    public int BandUpToGrams { get; private set; }
-
-    public decimal Price { get; private set; }
-
-    // A form that travels in its own carton, alone in the parcel (D-215).
-    public bool Alone { get; private set; }
-
-    public IReadOnlyList<OrderParcelItem> Contents => _contents;
-}
-
-internal sealed record OrderParcelItem(Guid VariantId, string Sku, int Quantity);
 
 internal sealed class OrderLine
 {

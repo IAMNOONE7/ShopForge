@@ -88,22 +88,6 @@ internal sealed class OrderEntityConfiguration : IEntityTypeConfiguration<Order>
             lines.Property(line => line.VatRate).HasPrecision(5, 2);
             lines.Ignore(line => line.LineTotal);
         });
-
-        // A table rather than a document, because booking keeps the parcels actually sent beside these and gives each a
-        // tracking number (D-214, V8).
-        builder.OwnsMany(order => order.Parcels, parcels =>
-        {
-            parcels.ToTable("order_parcels", OrdersModule.Schema, table =>
-                table.HasCheckConstraint("ck_order_parcels_values", "number >= 1 AND gross_weight_grams > 0 AND band_up_to_grams >= gross_weight_grams AND price >= 0"));
-            parcels.WithOwner().HasForeignKey("OrderId");
-            parcels.Property(parcel => parcel.Price).HasPrecision(12, 2);
-            parcels.OwnsMany(parcel => parcel.Contents, contents =>
-            {
-                contents.ToTable("order_parcel_items", OrdersModule.Schema, table =>
-                    table.HasCheckConstraint("ck_order_parcel_items_quantity", "quantity >= 1"));
-                contents.Property(item => item.Sku).HasMaxLength(64);
-            });
-        });
     }
 
     private static void ConfigureOwnedAddress(OwnedNavigationBuilder<Order, Address> address, string prefix)
@@ -420,6 +404,29 @@ internal sealed class InvoiceEntityConfiguration : IEntityTypeConfiguration<Invo
             .IsUnique()
             .HasFilter("return_id IS NULL")
             .HasDatabaseName("ix_invoices_store_id_order_number_kind");
+    }
+}
+
+// A table rather than a document, because booking keeps the parcels actually sent beside these and gives each a
+// tracking number (D-214, V8).
+internal sealed class OrderParcelEntityConfiguration : IEntityTypeConfiguration<OrderParcel>
+{
+    public void Configure(EntityTypeBuilder<OrderParcel> builder)
+    {
+        builder.ToTable("order_parcels", OrdersModule.Schema, table =>
+            table.HasCheckConstraint("ck_order_parcels_values", "number >= 1 AND gross_weight_grams > 0 AND band_up_to_grams >= gross_weight_grams AND price >= 0"));
+
+        builder.Property(parcel => parcel.OrderNumber).HasMaxLength(20);
+        builder.Property(parcel => parcel.Price).HasPrecision(12, 2);
+
+        builder.OwnsMany(parcel => parcel.Contents, contents =>
+        {
+            contents.ToTable("order_parcel_items", OrdersModule.Schema, table =>
+                table.HasCheckConstraint("ck_order_parcel_items_quantity", "quantity >= 1"));
+            contents.Property(item => item.Sku).HasMaxLength(64);
+        });
+
+        builder.HasIndex(parcel => new { parcel.StoreId, parcel.OrderNumber, parcel.Number }).IsUnique();
     }
 }
 

@@ -85,6 +85,16 @@ public sealed class ParcelCheckoutTests(ShopForgeApiFactory factory)
             preview.Parcels.Select(parcel => (parcel.GrossWeightGrams, parcel.BandUpToGrams, parcel.Price, string.Join(",", parcel.Contents.Select(item => $"{item.Sku}x{item.Quantity}")))),
             stored.Parcels.Select(parcel => (parcel.GrossWeightGrams, parcel.BandUpToGrams, parcel.Price, string.Join(",", parcel.Contents.Select(item => $"{item.Sku}x{item.Quantity}")))));
         Assert.Equal($"{FurnitureStore.SkuOf("oak-chair")}x8", string.Join(",", stored.Parcels[0].Contents.Select(item => $"{item.Sku}x{item.Quantity}")));
+
+        // The parcels are kept beside each order, so another order by the same van keeps its own and leaves these alone.
+        var (_, _, another) = await CartAsync(chairs: 1, furniture, code);
+        using var placedToo = await another.PostAsync("/api/storefront/checkout", OwnVan.Checkout(code, expectedShippingPrice: 8m));
+        var orderToo = await another.ReadAsync<PlacedOrder>(placedToo, HttpStatusCode.Created);
+        var storedToo = await furniture.Admin.GetFromJsonAsync<AdminOrderView>($"/api/admin/stores/{furniture.Store.StoreId}/orders/{orderToo.Number}", CancellationToken);
+        var storedAgain = await furniture.Admin.GetFromJsonAsync<AdminOrderView>($"/api/admin/stores/{furniture.Store.StoreId}/orders/{order.Number}", CancellationToken);
+
+        Assert.Equal([(1, 1_150)], storedToo!.Parcels.Select(parcel => (parcel.Number, parcel.GrossWeightGrams)));
+        Assert.Equal([7_100, 2_000], storedAgain!.Parcels.Select(parcel => parcel.GrossWeightGrams));
     }
 
     // A price by the parcel moves with the cart and with prices the store can change at any moment, so the shopper says
