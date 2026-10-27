@@ -15,6 +15,7 @@ import { RefundRecovery } from "./RefundRecovery";
 import { OrderDelivery, OrderItems, OrderPaymentAttempts, OrderPaymentRecord, OrderRelatedRecords } from "./OrderDetailRead";
 import { canChangeOrder, orderActionProblem, type OrderAction } from "./orderDetailFacts";
 import { OrderStatus } from "./OrderStatus";
+import { OrderParcels } from "./OrderParcels";
 import { Button } from "./ui/Button";
 import { EmptyState } from "./ui/EmptyState";
 import { InlineMessage } from "./ui/InlineMessage";
@@ -25,7 +26,7 @@ type Props = { storeId: string; userId: string; number: string; canManage: boole
 export function OrderDetailsSection(props: Props) { return <OrderWorkspace key={`${props.userId}:${props.storeId}:${props.number}`} {...props} />; }
 
 function OrderWorkspace({ storeId, userId, number, canManage }: Props) {
-  const { t, i18n } = useTranslation(["orderDetails", "orders", "refunds"]);
+  const { t, i18n } = useTranslation(["orderDetails", "orders", "refunds", "orderParcels"]);
   const { hash } = useLocation();
   const [detail, reload] = useRequest(`order:${storeId}:${number}`, async (signal) => {
     const order = await api.order(storeId, number, signal);
@@ -56,7 +57,7 @@ function OrderWorkspace({ storeId, userId, number, canManage }: Props) {
     if (!order || !hash) return;
     let id: string;
     try { id = decodeURIComponent(hash.slice(1)); } catch { return; }
-    if (!["order-payment-title", "order-payment-attempts", "order-unapplied", "order-returns", "order-actions-title", "order-refund-actions", ...order.unappliedPayments.map((payment) => `order-unapplied-${payment.id}`), ...order.returns.map((returned) => `order-return-${returned.id}`)].includes(id)) return;
+    if (!["order-payment-title", "order-payment-attempts", "order-unapplied", "order-returns", "order-parcels-title", "order-actions-title", "order-refund-actions", ...order.unappliedPayments.map((payment) => `order-unapplied-${payment.id}`), ...order.returns.map((returned) => `order-return-${returned.id}`)].includes(id)) return;
     const target = document.getElementById(id);
     if (target) focusedHash.current = hash;
     target?.focus({ preventScroll: true }); target?.scrollIntoView({ block: "start" });
@@ -106,6 +107,7 @@ function OrderWorkspace({ storeId, userId, number, canManage }: Props) {
         <a href="#order-payment-attempts">{t("attemptsLink", { total: formatNumber(order.paymentAttempts.length, i18n.resolvedLanguage) })}</a>
         <a href="#order-unapplied">{t("unappliedLink", { total: formatNumber(order.unappliedPayments.length, i18n.resolvedLanguage) })}</a>
         <a href="#order-returns">{t("returnsLink", { total: formatNumber(order.returns.length, i18n.resolvedLanguage) })}</a>
+        <a href="#order-parcels-title">{t("orderParcels:title")}</a>
         {canManage && <a href="#order-actions-title">{t("orders:actions")}</a>}
         {canManage && <a href="#order-refund-actions">{t("refunds:orderTitle")}</a>}
       </nav>
@@ -114,6 +116,7 @@ function OrderWorkspace({ storeId, userId, number, canManage }: Props) {
         <OrderPaymentRecord order={order} />
       </div>
       <OrderDelivery order={order} storeId={storeId} />
+      <OrderParcels order={order} />
       <OrderPaymentAttempts order={order} />
       <OrderRelatedRecords order={order} storeId={storeId} />
       {canManage ? <OrderActions order={order} disabled={disabled} pending={pending} trackingError={trackingError} onChange={change} onFocusHeading={() => heading.current?.focus()} /> : <p className="hint">{t("readOnly")}</p>}

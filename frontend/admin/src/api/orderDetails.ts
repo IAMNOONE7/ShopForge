@@ -1,6 +1,7 @@
 import type { AdminOrderDetail } from "../api";
 import { HttpError, requestJson } from "./http";
 import { isUnappliedPayment } from "./unappliedPayments";
+import { checkedOrderParcels } from "./orderParcels";
 
 const object = (value: unknown): Record<string, unknown> | null => typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null;
 const string = (value: unknown): value is string => typeof value === "string";
@@ -41,7 +42,7 @@ function validOrder(value: unknown): value is AdminOrderDetail {
 }
 function checked(value: unknown, number: string) {
   if (!validOrder(value) || value.number !== number) throw new HttpError("invalid-response", 200);
-  return value;
+  return value.parcels === undefined ? value : { ...value, parcels: checkedOrderParcels(value.parcels) };
 }
 const path = (storeId: string, number: string) => `/api/admin/stores/${encodeURIComponent(storeId)}/orders/${encodeURIComponent(number)}`;
 

@@ -23,3 +23,10 @@ export const unappliedPayment: AdminUnappliedPayment = {
 export const returnedOrder: AdminOrderReturn = {
   id: "return-a", number: "RET-1", status: "Received", refundedAmount: 90, refund: "Failed", refundProblem: "Provider refused the refund.",
 };
+
+export const orderParcels = [
+  { number: 1, grossWeightGrams: 7100, bandUpToGrams: 10000, price: 12, alone: false,
+    contents: [{ variantId: "11111111-1111-1111-1111-111111111111", sku: "CHAIR-OAK", quantity: 8 }] },
+  { number: 2, grossWeightGrams: 2000, bandUpToGrams: 3000, price: 8, alone: true,
+    contents: [{ variantId: "22222222-2222-2222-2222-222222222222", sku: "TABLE-OAK", quantity: 1 }] },
+];

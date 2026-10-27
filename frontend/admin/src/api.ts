@@ -278,6 +278,15 @@ export type AdminOrderReturn = {
   refundProblem: string | null;
 };
 
+export type AdminOrderParcel = {
+  number: number;
+  grossWeightGrams: number;
+  bandUpToGrams: number;
+  price: number;
+  alone: boolean;
+  contents: { variantId: string; sku: string; quantity: number }[];
+};
+
 export type AdminOrderDetail = {
   number: string;
   placedAt: string;
@@ -305,6 +314,8 @@ export type AdminOrderDetail = {
   paymentAttempts: AdminPaymentAttempt[];
   unappliedPayments: AdminUnappliedPayment[];
   returns: AdminOrderReturn[];
+  // Absent on legacy answers; null when supplied parcel data could not be checked.
+  parcels?: AdminOrderParcel[] | null;
 };
 
 export type Stock = {

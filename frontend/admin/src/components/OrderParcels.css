@@ -1,0 +1,31 @@
+.order-parcels,
+.order-parcel-contents > li,
+.order-parcel-contents > li > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.order-parcel-contents {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.order-parcel-contents > li > div {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.order-parcel-contents summary {
+  min-height: 2.75rem;
+  padding-block: var(--space-2);
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+
+.order-parcel-contents bdi {
+  display: block;
+  font-size: var(--text-sm);
+}

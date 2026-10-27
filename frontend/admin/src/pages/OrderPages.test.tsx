@@ -9,7 +9,7 @@ import { HttpError } from "../api/http";
 import { i18n, initializeI18n } from "../i18n";
 import { StoreLayout } from "../layouts/StoreLayout";
 import { SessionContext } from "../session";
-import { order, orderDetail, orderPage } from "../test/orderFixtures";
+import { order, orderDetail, orderPage, orderParcels } from "../test/orderFixtures";
 import { maxOrderPage } from "../utils/orderListQuery";
 import { StoreOrderPage, StoreOrdersPage } from "./OrderPages";
 
@@ -187,5 +187,22 @@ describe("focused order list", () => {
     render(<App />); await screen.findAllByText("€149.00");
     expect(api.orders).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Mark as paid" })).toBeNull();
+  });
+});
+
+
+describe("saved parcels on the actual order route", () => {
+  beforeEach(() => { HTMLElement.prototype.scrollIntoView = vi.fn(); });
+  it.each(["Owner", "Admin", "CatalogManager", "OrderManager", "Warehouse", "Support"])("lets %s read the saved packing estimate without gaining management controls", async role => {
+    const user = userEvent.setup();
+    vi.mocked(api.order).mockResolvedValue({ ...orderDetail, parcels: orderParcels });
+    route("/stores/store-a/orders/" + orderDetail.number + "#order-parcels-title", role);
+    expect(await screen.findByRole("heading", { name: "Saved parcel estimate" })).toBeTruthy();
+    expect(screen.getByText("CHAIR-OAK")).toBeTruthy();
+    await user.click(screen.getAllByText("Variant ID")[0]);
+    expect(document.querySelector(".order-parcel-contents details")).toHaveProperty("open", true);
+    expect(screen.queryByRole("button", { name: "Mark as paid" }) !== null).toBe(["Owner", "Admin"].includes(role));
+    expect(api.orders).not.toHaveBeenCalled();
+    expect(api.order).toHaveBeenCalledTimes(1);
   });
 });
