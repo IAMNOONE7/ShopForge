@@ -40,6 +40,27 @@ internal sealed class ShippingQuotes(DbContext dbContext, ICurrentStoreSettings 
         return quote.Unavailable is null ? await AskTheCarrierAsync(method, quote, items, destination, currency, cancellationToken) : quote;
     }
 
+    // What a carrier is told about the parcel when a point is checked or its map opened (D-220). For a method priced by
+    // the parcel, the heaviest parcel estimated, and the least any parcel could measure that holds the cart's largest
+    // things, which is each sorted side at its longest across the cart: a box that cannot take that cannot take the
+    // order. A flat method tells it no more than before.
+    public static Parcel ForPoint(ShippingQuote quote, IReadOnlyList<QuotedItem> items, string? destination)
+    {
+        var sides = items
+            .Where(item => item.Variant is { LengthMm: not null, WidthMm: not null, HeightMm: not null })
+            .Select(item => Sides.Of(item.Variant.LengthMm!.Value, item.Variant.WidthMm!.Value, item.Variant.HeightMm!.Value))
+            .ToList();
+
+        return quote.Parcels.Count == 0 || sides.Count == 0
+            ? new Parcel(null, destination)
+            : new Parcel(
+                quote.Parcels.Max(parcel => parcel.GrossWeightGrams),
+                destination,
+                sides.Max(side => side.Longest),
+                sides.Max(side => side.Middle),
+                sides.Max(side => side.Shortest));
+    }
+
     // What only the carrier can say at the time (D-145), asked about every parcel the rules let through. A flat
     // method's cart is one parcel.
     private async Task<ShippingQuote> AskTheCarrierAsync(
@@ -80,15 +101,22 @@ internal static class Quoting
         // An unknown weight is not a light one: a limit cannot be promised about what nobody weighed (D-145).
         if (method.MaxWeightGrams is { } limit)
         {
-            if (items.FirstOrDefault(item => item.Variant.WeightGrams is null) is { } unweighed)
+            if (WeightOf(items) is not { } weight)
             {
+                var unweighed = items.FirstOrDefault(item => item.Variant.WeightGrams is null);
+
                 return ShippingQuote.Refused(
-                    currency, QuoteRefusalReason.MissingWeight, $"{unweighed.Variant.Sku} has no weight, and this method takes up to {limit} g.", unweighed.Variant.Id);
+                    currency,
+                    QuoteRefusalReason.MissingWeight,
+                    unweighed is null
+                        ? $"Nothing in the order is weighed, and this method takes up to {limit} g."
+                        : $"{unweighed.Variant.Sku} has no weight, and this method takes up to {limit} g.",
+                    unweighed?.Variant.Id);
             }
 
-            if (WeightOf(items) > limit)
+            if (weight > limit)
             {
-                return ShippingQuote.Refused(currency, QuoteRefusalReason.TooHeavy, $"The order weighs {WeightOf(items)} g; this method takes up to {limit} g.");
+                return ShippingQuote.Refused(currency, QuoteRefusalReason.TooHeavy, $"The order weighs {weight} g; this method takes up to {limit} g.");
             }
         }
 
@@ -167,9 +195,10 @@ internal static class Quoting
         return new ShippingQuote(currency.Code, parcels.Sum(parcel => parcel.Price), parcels, null);
     }
 
-    // What the whole cart weighs, or nothing when any of it is unweighed.
+    // What the whole cart weighs, or nothing when any of it is unweighed or there is nothing in it to weigh, as a
+    // checkout without a cart has always been asked (D-145).
     public static int? WeightOf(IReadOnlyList<QuotedItem> items) =>
-        items.Any(item => item.Variant.WeightGrams is null)
+        items.Count == 0 || items.Any(item => item.Variant.WeightGrams is null)
             ? null
             : (int)Math.Min(int.MaxValue, items.Sum(item => (long)item.Variant.WeightGrams!.Value * item.Quantity));
 }

@@ -20,8 +20,17 @@ internal interface IPacketaClient
 
 // What the widget was opened with, repeated to the validator as Packeta asks, so the two are asking about the same
 // thing: a point that is real but belongs to another country or another kind of place is not one this method may use.
-// Packeta calls a country and a group together a vendor; `zbox` is the group of its boxes.
-internal sealed record PacketaPointChoice(string PointId, string Country, string Group)
+// Packeta calls a country and a group together a vendor; `zbox` is the group of its boxes. The parcel's weight, in
+// kilograms, and its sides, in whole centimetres, are the widget's and the validator's own options: a point that cannot
+// take a parcel that heavy or that large is neither shown nor accepted (D-220, docs.packeta.com/docs/pudo-delivery/widget).
+internal sealed record PacketaPointChoice(
+    string PointId,
+    string Country,
+    string Group,
+    decimal? WeightKg = null,
+    int? LengthCm = null,
+    int? WidthCm = null,
+    int? DepthCm = null)
 {
     // Packeta's own points are numbered, and a parcel is addressed to one by `addressId`, an unsigned 32-bit number. A
     // code that is not one could never be booked, whatever the validator said, so nobody needs to be asked.
@@ -46,7 +55,13 @@ internal sealed class PacketaHttpClient(HttpClient client) : IPacketaClient
         var question = new Question(
             apiKey,
             new QuestionPoint(choice.PointId),
-            new QuestionOptions(choice.Country, [new QuestionVendor(choice.Country, choice.Group)]));
+            new QuestionOptions(
+                choice.Country,
+                [new QuestionVendor(choice.Country, choice.Group)],
+                choice.WeightKg,
+                choice.LengthCm,
+                choice.WidthCm,
+                choice.DepthCm));
 
         // Sent whole, with its length, rather than streamed in chunks: nothing in the reference says the endpoint reads a
         // chunked body, and every server reads a length.
@@ -97,9 +112,14 @@ internal sealed class PacketaHttpClient(HttpClient client) : IPacketaClient
 
     private sealed record QuestionPoint([property: JsonPropertyName("id")] string Id);
 
+    // A parcel nobody estimated is asked about without its weight and sides, as before (D-213).
     private sealed record QuestionOptions(
         [property: JsonPropertyName("country")] string Country,
-        [property: JsonPropertyName("vendors")] IReadOnlyList<QuestionVendor> Vendors);
+        [property: JsonPropertyName("vendors")] IReadOnlyList<QuestionVendor> Vendors,
+        [property: JsonPropertyName("weight"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? Weight,
+        [property: JsonPropertyName("length"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Length,
+        [property: JsonPropertyName("width"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Width,
+        [property: JsonPropertyName("depth"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Depth);
 
     private sealed record QuestionVendor(
         [property: JsonPropertyName("country")] string Country,

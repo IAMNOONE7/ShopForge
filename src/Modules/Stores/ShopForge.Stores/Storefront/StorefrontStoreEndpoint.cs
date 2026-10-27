@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Shared.Connections;
+using ShopForge.Shared.Shipping;
 using ShopForge.Shared.Tenancy;
 using ShopForge.Stores.Domain;
 
@@ -18,6 +19,7 @@ internal static class StorefrontStoreEndpoint
         DbContext dbContext,
         IStoreContext storeContext,
         IProviderConnections connections,
+        IStoreDeliveryPrices deliveryPrices,
         CancellationToken cancellationToken)
     {
         var store = await dbContext.Set<Store>()
@@ -40,7 +42,9 @@ internal static class StorefrontStoreEndpoint
             // The keys a provider issued to be used in the shopper's own browser — a carrier's map widget needs
             // one before it will open. Only these; a credential has no way into this response.
             [.. (await connections.PublishedKeysAsync(cancellationToken))
-                .Select(published => new StorefrontProviderKeyResponse(published.Provider, published.Key))]));
+                .Select(published => new StorefrontProviderKeyResponse(published.Provider, published.Key))],
+            // What delivery costs at the least, for "delivery from" on a product page and in the cart (D-220).
+            await deliveryPrices.CheapestAsync(cancellationToken)));
     }
 }
 
@@ -52,7 +56,8 @@ internal sealed record StorefrontStoreResponse(
     string? LogoUrl,
     int ReturnWindowDays,
     StorefrontThemeResponse Theme,
-    IReadOnlyList<StorefrontProviderKeyResponse> ProviderKeys);
+    IReadOnlyList<StorefrontProviderKeyResponse> ProviderKeys,
+    decimal? DeliveryFrom);
 
 internal sealed record StorefrontProviderKeyResponse(string Provider, string Key);
 

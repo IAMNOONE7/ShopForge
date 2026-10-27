@@ -4689,6 +4689,99 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                                 .HasConstraintName("fk_order_lines_orders_order_id");
                         });
 
+                    b.OwnsMany("ShopForge.Orders.Domain.OrderParcel", "Parcels", b1 =>
+                        {
+                            b1.Property<Guid>("OrderId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("order_id");
+
+                            b1.Property<int>("Id")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("integer")
+                                .HasColumnName("id");
+
+                            NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b1.Property<int>("Id"));
+
+                            b1.Property<bool>("Alone")
+                                .HasColumnType("boolean")
+                                .HasColumnName("alone");
+
+                            b1.Property<int>("BandUpToGrams")
+                                .HasColumnType("integer")
+                                .HasColumnName("band_up_to_grams");
+
+                            b1.Property<int>("GrossWeightGrams")
+                                .HasColumnType("integer")
+                                .HasColumnName("gross_weight_grams");
+
+                            b1.Property<int>("Number")
+                                .HasColumnType("integer")
+                                .HasColumnName("number");
+
+                            b1.Property<decimal>("Price")
+                                .HasPrecision(12, 2)
+                                .HasColumnType("numeric(12,2)")
+                                .HasColumnName("price");
+
+                            b1.HasKey("OrderId", "Id")
+                                .HasName("pk_order_parcels");
+
+                            b1.ToTable("order_parcels", "orders", t =>
+                                {
+                                    t.HasCheckConstraint("ck_order_parcels_values", "number >= 1 AND gross_weight_grams > 0 AND band_up_to_grams >= gross_weight_grams AND price >= 0");
+                                });
+
+                            b1.WithOwner()
+                                .HasForeignKey("OrderId")
+                                .HasConstraintName("fk_order_parcels_orders_order_id");
+
+                            b1.OwnsMany("ShopForge.Orders.Domain.OrderParcelItem", "Contents", b2 =>
+                                {
+                                    b2.Property<Guid>("OrderParcelOrderId")
+                                        .HasColumnType("uuid")
+                                        .HasColumnName("order_parcel_order_id");
+
+                                    b2.Property<int>("OrderParcelId")
+                                        .HasColumnType("integer")
+                                        .HasColumnName("order_parcel_id");
+
+                                    b2.Property<int>("Id")
+                                        .ValueGeneratedOnAdd()
+                                        .HasColumnType("integer")
+                                        .HasColumnName("id");
+
+                                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b2.Property<int>("Id"));
+
+                                    b2.Property<int>("Quantity")
+                                        .HasColumnType("integer")
+                                        .HasColumnName("quantity");
+
+                                    b2.Property<string>("Sku")
+                                        .IsRequired()
+                                        .HasMaxLength(64)
+                                        .HasColumnType("character varying(64)")
+                                        .HasColumnName("sku");
+
+                                    b2.Property<Guid>("VariantId")
+                                        .HasColumnType("uuid")
+                                        .HasColumnName("variant_id");
+
+                                    b2.HasKey("OrderParcelOrderId", "OrderParcelId", "Id")
+                                        .HasName("pk_order_parcel_items");
+
+                                    b2.ToTable("order_parcel_items", "orders", t =>
+                                        {
+                                            t.HasCheckConstraint("ck_order_parcel_items_quantity", "quantity >= 1");
+                                        });
+
+                                    b2.WithOwner()
+                                        .HasForeignKey("OrderParcelOrderId", "OrderParcelId")
+                                        .HasConstraintName("fk_order_parcel_items_order_parcels_order_parcel_order_id_orde");
+                                });
+
+                            b1.Navigation("Contents");
+                        });
+
                     b.OwnsOne("ShopForge.Orders.Domain.Shipment", "Shipment", b1 =>
                         {
                             b1.Property<Guid>("OrderId")
@@ -4726,6 +4819,8 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                         });
 
                     b.Navigation("Lines");
+
+                    b.Navigation("Parcels");
 
                     b.Navigation("PickupPointAddress");
 

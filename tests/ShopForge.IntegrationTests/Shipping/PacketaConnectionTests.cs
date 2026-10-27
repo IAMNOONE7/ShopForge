@@ -127,6 +127,49 @@ public sealed class PacketaConnectionTests : IDisposable
         Assert.Equal(WidgetKey, _packeta.LastKey);
     }
 
+    // A box chosen for a method priced by the parcel is asked whether it takes that parcel, in Packeta's own units: the
+    // heaviest parcel estimated in kilograms, and the cart's largest things side by side in whole centimetres, rounded up
+    // (D-220). The map is opened with the same, and a flat method's check asks as it always has.
+    [Fact]
+    public async Task A_box_by_the_parcel_is_asked_whether_it_takes_the_parcel()
+    {
+        var world = await PacketaStoreAsync(connect: true);
+        var storeId = world.Furniture.Store.StoreId;
+        using var flat = await world.Shopper.PostAsync("/api/storefront/checkout", PacketaCheckout());
+        Assert.Equal(HttpStatusCode.Created, flat.StatusCode);
+        var asFlat = _packeta.LastChoice;
+        using var method = await world.Admin.PostAsJsonAsync(
+            $"/api/admin/stores/{storeId}/shipping-methods",
+            new { Name = "Z-BOX by the parcel", ProviderKey = PacketaShippingProvider.ProviderKey, Price = 0m, VatRate = 21m, IsActive = true, RequiresPickupPoint = true, Pricing = "perParcel", CarrierService = "packeta-cz-zbox" },
+            CancellationToken);
+        Assert.Equal(HttpStatusCode.Created, method.StatusCode);
+        using var priced = await world.Admin.PutAsJsonAsync(
+            $"/api/admin/stores/{storeId}/shipping-methods/z-box-by-the-parcel/rates",
+            new { Source = "own", Bands = new[] { new { UpToGrams = 15_000, Price = 3.50m } } },
+            CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, priced.StatusCode);
+        using var added = await world.Shopper.PostAsync("/api/storefront/cart/items", new { StoreProductId = world.Furniture.Products["oak-chair"], Quantity = 2 });
+        Assert.Equal(HttpStatusCode.OK, added.StatusCode);
+
+        var methods = await world.Shopper.GetJsonAsync<ParcelMethodsView>("/api/storefront/checkout/methods?country=CZ");
+        using var placed = await world.Shopper.PostAsync("/api/storefront/checkout", new
+        {
+            Email = "buyer@example.test",
+            Phone = "+420 123 456 789",
+            BillingAddress = new { FullName = "Alex Buyer", Line1 = "Wilsonova 8", Line2 = (string?)null, City = "Praha", PostalCode = "110 00", Country = "CZ" },
+            ShippingAddress = (object?)null,
+            PaymentMethodCode = "bank-transfer",
+            ShippingMethodCode = "z-box-by-the-parcel",
+            PickupPointCode = "99",
+            ExpectedShippingPrice = 3.50m,
+        });
+
+        Assert.Equal((null, null, null, null), (asFlat!.WeightKg, asFlat.LengthCm, asFlat.WidthCm, asFlat.DepthCm));
+        Assert.Equal(new MapParcelView(2.0m, 45, 40, 9), methods.ShippingMethods.Single(candidate => candidate.Code == "z-box-by-the-parcel").MapParcel);
+        Assert.Equal(HttpStatusCode.Created, placed.StatusCode);
+        Assert.Equal(("99", 2.0m, 45, 40, 9), (_packeta.LastChoice!.PointId, _packeta.LastChoice.WeightKg, _packeta.LastChoice.LengthCm, _packeta.LastChoice.WidthCm, _packeta.LastChoice.DepthCm));
+    }
+
     // Packeta's points are numbered, and a parcel can only ever be addressed to a number. Anything else is refused as a
     // point nobody chose, and Packeta is not asked about it.
     [Fact]
@@ -530,6 +573,12 @@ public sealed class PacketaConnectionTests : IDisposable
     private sealed record AdminAddressView(string FullName, string Line1, string City, string PostalCode, string Country);
 
     private sealed record MethodsView(List<ShippingMethodView> ShippingMethods);
+
+    private sealed record ParcelMethodsView(List<ParcelMethodView> ShippingMethods);
+
+    private sealed record ParcelMethodView(string Code, MapParcelView? MapParcel);
+
+    private sealed record MapParcelView(decimal WeightKg, int? LengthCm, int? WidthCm, int? DepthCm);
 
     private sealed record ShippingMethodView(string Code, string Name, decimal Price, bool RequiresPickupPoint, string PickupPointChoice);
 

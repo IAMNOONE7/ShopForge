@@ -36,9 +36,16 @@ internal sealed class PacketaShippingProvider(
     public Task<IReadOnlyList<PickupPoint>> FindPickupPointsAsync(CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<PickupPoint>>([]);
 
-    public async Task<PickupPoint?> FindPickupPointAsync(string code, CancellationToken cancellationToken)
+    public async Task<PickupPoint?> FindPickupPointAsync(string code, Parcel parcel, CancellationToken cancellationToken)
     {
-        var choice = new PacketaPointChoice(code, Country, Group);
+        var choice = new PacketaPointChoice(
+            code,
+            Country,
+            Group,
+            parcel.WeightGrams / 1000m,
+            Parcel.Centimetres(parcel.LongestMm),
+            Parcel.Centimetres(parcel.MiddleMm),
+            Parcel.Centimetres(parcel.ShortestMm));
 
         if (!choice.CouldBeBooked)
         {

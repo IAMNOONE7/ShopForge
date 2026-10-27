@@ -27,7 +27,7 @@ internal sealed class StoreShippingProvider(DbContext dbContext) : IShippingProv
 
     // The store's own points are rows it keeps, so the one the shopper chose is read back the same way the list
     // was: by code, and only while the store still has it open.
-    public async Task<PickupPoint?> FindPickupPointAsync(string code, CancellationToken cancellationToken) =>
+    public async Task<PickupPoint?> FindPickupPointAsync(string code, Parcel parcel, CancellationToken cancellationToken) =>
         await dbContext.Set<StorePickupPoint>()
             .Where(point => point.Code == code && point.IsActive)
             .Select(point => new PickupPoint(

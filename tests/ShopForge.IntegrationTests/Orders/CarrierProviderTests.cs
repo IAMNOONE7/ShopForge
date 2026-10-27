@@ -279,7 +279,7 @@ internal sealed class MapCarrier : IShippingProvider
         return Task.FromResult<IReadOnlyList<PickupPoint>>([]);
     }
 
-    public Task<PickupPoint?> FindPickupPointAsync(string code, CancellationToken cancellationToken) =>
+    public Task<PickupPoint?> FindPickupPointAsync(string code, Parcel parcel, CancellationToken cancellationToken) =>
         Task.FromResult(Knows
             ? new PickupPoint(code, "Z-BOX Hlavní nádraží", "Wilsonova 8", "Praha", "110 00", "CZ")
             : null);

@@ -8,6 +8,7 @@ using ShopForge.Orders.Discounts;
 using ShopForge.Orders.Domain;
 using ShopForge.Orders.Persistence;
 using ShopForge.Orders.Returns;
+using ShopForge.Orders.Shipping;
 using ShopForge.Shared.Catalog;
 using ShopForge.Shared.Connections;
 using ShopForge.Shared.Customers;
@@ -50,6 +51,7 @@ internal static class CheckoutEndpoints
         IProviderConnections connections,
         IEnumerable<IShippingProvider> shippingProviders,
         DiscountCodes discounts,
+        ShippingQuotes quotes,
         TimeProvider clock,
         CancellationToken cancellationToken)
     {
@@ -77,32 +79,55 @@ internal static class CheckoutEndpoints
 
         var carts = new Carts(httpContext, dbContext, storeContext, products, stock, discounts, storeSettings, taxRates, clock);
         var cart = await carts.FindAsync(cancellationToken);
-        var parcel = new Parcel(
-            cart is null ? null : (await carts.ContentsAsync(cart, cancellationToken)).WeightGrams,
-            DestinationCountry: destination);
+        IReadOnlyList<QuotedItem> items = cart is null ? [] : Quoted(await carts.ContentsAsync(cart, cancellationToken));
         var carriers = await UsableProvidersAsync(shippingProviders, connections, cancellationToken);
-        // A method priced by the parcel is offered once a cart can be priced by it (V28f); until then it has no price.
         var methods = await dbContext.Set<ShippingMethod>()
-            .Where(method => method.IsActive && method.Pricing == ShippingPricing.Flat && carriers.Contains(method.ProviderKey))
+            .AsNoTracking()
+            .Where(method => method.IsActive && method.RatesFrom != RateSource.Placeholder && carriers.Contains(method.ProviderKey))
             .OrderBy(method => method.Price)
             .ThenBy(method => method.Name)
             .ToListAsync(cancellationToken);
         var shipping = new List<ShippingMethodResponse>();
+        var unavailable = new List<UnavailableShippingResponse>();
 
+        // Each method answers with the quote the checkout will charge (D-220). One that cannot take this cart is listed
+        // apart with a reason a shopper can act on; one whose trouble is the store's own configuration is left out, as a
+        // method with no account behind it is, and so is one still on the invented placeholder prices (D-219), whatever
+        // readiness said when the store opened.
         foreach (var method in methods)
         {
-            if (await CarriesAsync(method, shippingProviders, parcel, cancellationToken))
+            // An empty cart is nothing to estimate parcels for.
+            if (method.Pricing == ShippingPricing.PerParcel && items.Count == 0)
             {
-                shipping.Add(new ShippingMethodResponse(
-                    method.Code,
-                    method.Name,
-                    method.Price,
-                    method.RequiresPickupPoint,
-                    Choice(method, shippingProviders)));
+                continue;
             }
+
+            var quote = await quotes.QuoteAsync(method, items, destination, cancellationToken);
+
+            if (quote.Unavailable is { } refusal)
+            {
+                // Nothing in an empty cart is the shopper's to change, so it lists no method apart.
+                if (items.Count > 0 && ShopperReason(refusal.Reason) is { } reason)
+                {
+                    unavailable.Add(new UnavailableShippingResponse(method.Code, method.Name, reason, refusal.VariantId));
+                }
+
+                continue;
+            }
+
+            shipping.Add(new ShippingMethodResponse(
+                method.Code,
+                method.Name,
+                quote.Total,
+                method.RequiresPickupPoint,
+                Choice(method, shippingProviders),
+                method.Pricing,
+                method.Pricing == ShippingPricing.PerParcel ? quote.Parcels.Count : null,
+                MapParcel(ShippingQuotes.ForPoint(quote, items, destination))));
         }
 
-        return TypedResults.Ok(new CheckoutMethodsResponse(payment, shipping, destination));
+        // Cheapest first, as before; a method priced by the parcel takes its place by what this cart costs.
+        return TypedResults.Ok(new CheckoutMethodsResponse(payment, [.. shipping.OrderBy(method => method.Price)], destination, unavailable));
     }
 
     private static async Task<Results<Ok<List<PickupPointResponse>>, NotFound>> GetPickupPointsAsync(
@@ -145,6 +170,7 @@ internal static class CheckoutEndpoints
         IProviderConnections connections,
         IEnumerable<IShippingProvider> shippingProviders,
         DiscountCodes discounts,
+        ShippingQuotes quotes,
         IOutbox outbox,
         IShopForgeMetrics metrics,
         ILoggerFactory loggerFactory,
@@ -165,14 +191,20 @@ internal static class CheckoutEndpoints
             .SingleOrDefaultAsync(
                 method => method.Code == request.ShippingMethodCode
                     && method.IsActive
-                    && method.Pricing == ShippingPricing.Flat
+                    && method.RatesFrom != RateSource.Placeholder
                     && shippingProviderKeys.Contains(method.ProviderKey),
                 cancellationToken);
         var carrier = shipping is null
             ? null
             : shippingProviders.SingleOrDefault(candidate => candidate.Key == shipping.ProviderKey);
-        var chosenPoint = carrier is not null && shipping!.RequiresPickupPoint && !string.IsNullOrWhiteSpace(request.PickupPointCode)
-            ? await AskAboutPointAsync(carrier, request.PickupPointCode, loggerFactory, cancellationToken)
+
+        // The delivery is priced by the same quote the shopper was shown (D-220), from the rows this order is written with:
+        // the method read above and the cart as it stands now.
+        var destinationCountry = (request.ShippingAddress ?? request.BillingAddress)?.Country?.Trim().ToUpperInvariant();
+        IReadOnlyList<QuotedItem> items = contents is null ? [] : Quoted(contents);
+        var quote = shipping is null || items.Count == 0 ? null : await quotes.QuoteAsync(shipping, items, destinationCountry, cancellationToken);
+        var chosenPoint = carrier is not null && quote is { IsAvailable: true } && shipping!.RequiresPickupPoint && !string.IsNullOrWhiteSpace(request.PickupPointCode)
+            ? await AskAboutPointAsync(carrier, request.PickupPointCode, ShippingQuotes.ForPoint(quote, items, destinationCountry), loggerFactory, cancellationToken)
             : new PickupPointAnswer(null, Answered: true);
 
         // A carrier that cannot be reached has not refused the point; it has said nothing. An order placed on
@@ -224,16 +256,32 @@ internal static class CheckoutEndpoints
             .Check(request.ShippingAddress is null || request.ShippingAddress.IsComplete, "shippingAddress", "The shipping address is incomplete.")
             .Check(payment is not null, "paymentMethodCode", "Choose one of the store's payment methods.")
             .Check(shipping is not null, "shippingMethodCode", "Choose one of the store's shipping methods.")
-            .Check(shipping?.RequiresPickupPoint != true || pickupPoint is not null, "pickupPointCode", "Choose one of the pickup points.")
             .Check(
-                shipping is null || await CarriesAsync(shipping, shippingProviders, Parcel(contents, request), cancellationToken),
+                quote?.Unavailable is not { } refusal,
                 "shippingMethodCode",
-                "That delivery method cannot carry this order.")
+                quote?.Unavailable is { } unavailable ? Explain(unavailable.Reason) : string.Empty)
+            .Check(quote?.Unavailable is not null || shipping?.RequiresPickupPoint != true || pickupPoint is not null, "pickupPointCode", "Choose one of the pickup points.")
+            // A price by the parcel depends on the cart and on prices the store can change at any moment, so the shopper
+            // says which price they agreed to. A flat price is checked when it is sent (D-220).
+            .Check(
+                shipping?.Pricing != ShippingPricing.PerParcel || request.ExpectedShippingPrice is not null,
+                "expectedShippingPrice",
+                "Say which delivery price you were shown.")
             .Check(contents is { Items.Count: > 0 }, "cart", "The cart is empty.");
 
         if (errors.Any)
         {
             return errors.ToProblem();
+        }
+
+        // Never a quietly different price: one that moved since the page showed it is refused with the new quote.
+        if (request.ExpectedShippingPrice is { } expected && expected != quote!.Total)
+        {
+            return TypedResults.Problem(
+                statusCode: StatusCodes.Status409Conflict,
+                title: "The delivery price has changed",
+                detail: $"Delivery now costs {quote.Total} {quote.Currency}. Please check it before ordering again.",
+                extensions: new Dictionary<string, object?> { ["shippingQuote"] = quote });
         }
 
         var settings = await storeSettings.GetAsync(cancellationToken);
@@ -275,7 +323,7 @@ internal static class CheckoutEndpoints
         var discount = contents.Discount?.Discount;
         var allocation = discount is null
             ? null
-            : DiscountAllocation.For(discount, [.. contents.Items.Select(item => item.LineTotal)], shipping!.Price, contents.Currency);
+            : DiscountAllocation.For(discount, [.. contents.Items.Select(item => item.LineTotal)], quote!.Total, contents.Currency);
 
         if (discount is not null)
         {
@@ -307,7 +355,7 @@ internal static class CheckoutEndpoints
                 shipping!.ProviderKey,
                 shipping.Code,
                 shipping.Name,
-                shipping.Price,
+                quote!.Total,
                 rates.For(shipping.TaxClass, shipping.VatRate)),
             pickupPoint is null
                 ? null
@@ -322,6 +370,14 @@ internal static class CheckoutEndpoints
         {
             order.AssignTo(account.StoreCustomerId);
         }
+
+        order.PlanParcels(quote.Parcels.Select((parcel, index) => new OrderParcel(
+            index + 1,
+            parcel.GrossWeightGrams,
+            parcel.BandUpToGrams,
+            parcel.Price,
+            parcel.Alone,
+            parcel.Contents.Select(content => new OrderParcelItem(content.VariantId, content.Sku, content.Quantity)))));
 
         foreach (var (item, index) in contents.Items.Select((item, index) => (item, index)))
         {
@@ -404,7 +460,7 @@ internal static class CheckoutEndpoints
     // today. A platform account is not a store's to use unless the deployment says so (D-196); a provider that
     // needs no connection is otherwise always usable; one that does is usable where the store has finished
     // connecting an account to it (D-138, D-153).
-    private static async Task<List<string>> UsableProvidersAsync<TProvider>(
+    internal static async Task<List<string>> UsableProvidersAsync<TProvider>(
         IEnumerable<TProvider> providers,
         IProviderConnections connections,
         CancellationToken cancellationToken)
@@ -492,12 +548,13 @@ internal static class CheckoutEndpoints
     private static async Task<PickupPointAnswer> AskAboutPointAsync(
         IShippingProvider carrier,
         string code,
+        Parcel parcel,
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
         try
         {
-            return new PickupPointAnswer(await carrier.FindPickupPointAsync(code, cancellationToken), Answered: true);
+            return new PickupPointAnswer(await carrier.FindPickupPointAsync(code, parcel, cancellationToken), Answered: true);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -508,26 +565,36 @@ internal static class CheckoutEndpoints
         }
     }
 
-    // Both gates, in the one place that knows about either: what the store said this method takes (D-145), and
-    // then the carrier's own answer, which is the only one that can speak for a box in somebody else's network.
-    private static async Task<bool> CarriesAsync(
-        ShippingMethod method,
-        IEnumerable<IShippingProvider> shippingProviders,
-        Parcel parcel,
-        CancellationToken cancellationToken)
+    private static List<QuotedItem> Quoted(CartContents contents) => [.. contents.Items.Select(item => new QuotedItem(item.Variant, item.Quantity))];
+
+    // What a shopper can do something about, in five words; a method the store has misconfigured is no business of
+    // theirs and is left out instead (D-220).
+    private static string? ShopperReason(QuoteRefusalReason reason) => reason switch
     {
-        if (!method.Carries(parcel))
-        {
-            return false;
-        }
+        QuoteRefusalReason.NotServed => "notToCountry",
+        QuoteRefusalReason.TooHeavy or QuoteRefusalReason.ItemTooHeavy or QuoteRefusalReason.AboveHighestBand => "tooHeavy",
+        QuoteRefusalReason.ItemTooLarge => "tooLarge",
+        QuoteRefusalReason.MissingWeight or QuoteRefusalReason.MissingSize => "missingData",
+        QuoteRefusalReason.TooManyParcels => "tooManyParcels",
+        _ => null,
+    };
 
-        var provider = shippingProviders.SingleOrDefault(candidate => candidate.Key == method.ProviderKey);
+    private static string Explain(QuoteRefusalReason reason) => ShopperReason(reason) switch
+    {
+        "notToCountry" => "That delivery method does not deliver to this country.",
+        "tooHeavy" => "This order is too heavy for that delivery method.",
+        "tooLarge" => "Something in this order is too large for that delivery method.",
+        "missingData" => "That delivery method cannot be priced for something in this order.",
+        "tooManyParcels" => "This order is too large to send by parcel. Please contact the store about delivering it.",
+        _ => "That delivery method cannot carry this order.",
+    };
 
-        return provider is not null && await provider.CanCarryAsync(parcel, cancellationToken);
-    }
-
-    private static Parcel Parcel(CartContents? contents, CheckoutRequest request) =>
-        new(contents?.WeightGrams, (request.ShippingAddress ?? request.BillingAddress)?.Country);
+    // The parcel the carrier's map is opened for, in the map's own units: kilograms, and sides rounded up to whole
+    // centimetres (D-220). Only a method priced by the parcel has one.
+    private static MapParcelResponse? MapParcel(Parcel parcel) =>
+        parcel.WeightGrams is { } grams
+            ? new MapParcelResponse(grams / 1000m, Parcel.Centimetres(parcel.LongestMm), Parcel.Centimetres(parcel.MiddleMm), Parcel.Centimetres(parcel.ShortestMm))
+            : null;
 
     // Enough to tell a telephone number from a line of prose, and no more: what a carrier will accept is the
     // carrier's rule to state, not ours to guess at (D-144).
@@ -550,7 +617,8 @@ internal sealed record CheckoutRequest(
     AddressRequest? ShippingAddress,
     string? PaymentMethodCode,
     string? ShippingMethodCode,
-    string? PickupPointCode);
+    string? PickupPointCode,
+    decimal? ExpectedShippingPrice = null);
 
 internal sealed record AddressRequest(string? FullName, string? Line1, string? Line2, string? City, string? PostalCode, string? Country)
 {
@@ -567,19 +635,33 @@ internal sealed record AddressRequest(string? FullName, string? Line1, string? L
 // The country the methods were chosen for, so a page can tell an answer to an address the shopper has since changed
 // from one to the address in front of them.
 internal sealed record CheckoutMethodsResponse(
-    List<PaymentMethodResponse> PaymentMethods, List<ShippingMethodResponse> ShippingMethods, string? DestinationCountry);
+    List<PaymentMethodResponse> PaymentMethods,
+    List<ShippingMethodResponse> ShippingMethods,
+    string? DestinationCountry,
+    List<UnavailableShippingResponse> UnavailableShippingMethods);
 
 internal sealed record PaymentMethodResponse(string Code, string Name);
 
 // `PickupPointChoice` tells the shop which way to ask: nowhere, our own list of points, or the carrier's map
 // opened in the shopper's browser. Without it an empty list of points is indistinguishable from a store that
 // configured none (D-158).
+// `Price` is the quote's total for this cart, the flat price for a flat method; `Parcels` is how many parcels a method
+// priced by the parcel estimates, and `MapParcel` what the carrier's map is told about the heaviest of them (D-220).
 internal sealed record ShippingMethodResponse(
     string Code,
     string Name,
     decimal Price,
     bool RequiresPickupPoint,
-    string PickupPointChoice);
+    string PickupPointChoice,
+    ShippingPricing Pricing,
+    int? Parcels,
+    MapParcelResponse? MapParcel);
+
+// A method that cannot take this cart, and why: notToCountry, tooHeavy, tooLarge, missingData or tooManyParcels, and the
+// form to blame where there is one.
+internal sealed record UnavailableShippingResponse(string Code, string Name, string Reason, Guid? VariantId);
+
+internal sealed record MapParcelResponse(decimal WeightKg, int? LengthCm, int? WidthCm, int? DepthCm);
 
 
 internal sealed record PickupPointResponse(string Code, string Name, string Line1, string City, string PostalCode, string Country);

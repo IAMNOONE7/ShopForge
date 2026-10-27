@@ -63,14 +63,9 @@ internal sealed class OrdersPublishCheck(
             payment.Count > 0
                 ? StoreReadiness.Ready("orders.payment-method")
                 : StoreReadiness.NotReady("orders.payment-method", "The store has no active payment method."),
-            // Only a method the checkout offers counts, and one priced by the parcel is offered once it can be priced (V28f).
-            shipping.Any(method => method.Pricing == ShippingPricing.Flat)
+            shipping.Count > 0
                 ? StoreReadiness.Ready("orders.shipping-method")
-                : StoreReadiness.NotReady(
-                    "orders.shipping-method",
-                    shipping.Count == 0
-                        ? "The store has no active shipping method."
-                        : "The store has no active shipping method with a flat price, and methods priced by the parcel are not offered at the checkout yet."),
+                : StoreReadiness.NotReady("orders.shipping-method", "The store has no active shipping method."),
             await ConnectedAsync("orders.payment-connected", [.. payment.Select(method => (method.Name, method.ProviderKey))], needsConnection, offered, [], cancellationToken),
             await ConnectedAsync(
                 "orders.shipping-connected",

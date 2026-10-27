@@ -40,6 +40,7 @@ public static class OrdersModule
         services.AddScoped<IPaymentAttempts, PaymentAttempts>();
         services.AddScoped<IShippingProvider, StoreShippingProvider>();
         services.AddScoped<IStoreShippingRates, StoreShippingRates>();
+        services.AddScoped<IStoreDeliveryPrices, StoreDeliveryPrices>();
         services.AddScoped<IStorePublishCheck, OrdersPublishCheck>();
         services.AddScoped<IStoreInitializer, DefaultStoreMethods>();
         services.AddScoped<ITaxClassUsers, MethodsNamingATaxClass>();

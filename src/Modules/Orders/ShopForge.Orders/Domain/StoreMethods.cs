@@ -222,15 +222,6 @@ internal sealed class ShippingMethod : IStoreOwned
             service.MaxSumOfSidesMm,
             ParcelLargest is { } largest ? Math.Min(service.LargestVolumeMm3, largest.Volume) : service.LargestVolumeMm3,
             service.MaxParcels);
-
-    // A method with no limits carries anything, which is every method until a store says otherwise. A method
-    // with a weight limit cannot carry a parcel nobody has weighed: an unknown weight is not a light one, and
-    // quietly treating it as nothing is how an unliftable parcel reaches a carrier that will refuse it.
-    public bool Carries(Parcel parcel) =>
-        (MaxWeightGrams is not { } limit || parcel.WeightGrams <= limit)
-        && (Countries.Count == 0
-            || parcel.DestinationCountry is not { } country
-            || Countries.Contains(country.Trim().ToUpperInvariant()));
 }
 
 internal enum ShippingPricing

@@ -2,6 +2,7 @@ using ShopForge.Orders.Domain;
 using ShopForge.Orders.Shipping;
 using ShopForge.Shared.Catalog;
 using ShopForge.Shared.Payments;
+using ShopForge.Shared.Shipping;
 
 namespace ShopForge.UnitTests.Shipping;
 
@@ -166,6 +167,49 @@ public sealed class QuotingTests
         var pickup = new ShippingMethod(Guid.NewGuid(), "pickup", "Pickup", "manual", 0m, 21m, Koruna);
 
         Assert.Null(Quoting.Flat(pickup, [Item("BARE", 0, 1, 1, 1) with { Variant = Variant("BARE", null, null, null, null) }], null, Koruna).Unavailable);
+    }
+
+    // What a box is asked about (D-220): the heaviest parcel, and each sorted side at its longest across the cart, so a box
+    // that cannot take the order's largest things is neither shown nor accepted. A flat method asks as before.
+    [Fact]
+    public void A_box_is_asked_about_the_heaviest_parcel_and_the_carts_largest_sides()
+    {
+        var doorstep = Doorstep();
+        var method = Method(doorstep, [new(2_000, 109m), new(5_000, 129m)]);
+        QuotedItem[] items = [Item("ANVIL", 4_500, 300, 150, 120), Item("FILE", 300, 251, 30, 10), Item("RULER", 50, 30, 200, 160)];
+
+        var quote = Quoting.PerParcel(method, doorstep, Packing, items, "CZ", Koruna);
+        var courier = new ShippingMethod(Guid.NewGuid(), "courier", "Courier", "manual", 129m, 21m, Koruna);
+
+        // The ruler shares the anvil's parcel (4550 g and 300 g of packaging), and its middle side, 160 mm, is longer than the
+        // anvil's.
+        Assert.Equal(new Parcel(4_850, "CZ", 300, 160, 120), ShippingQuotes.ForPoint(quote, items, "CZ"));
+        Assert.Equal(new Parcel(null, "CZ"), ShippingQuotes.ForPoint(Quoting.Flat(courier, items, "CZ", Koruna), items, "CZ"));
+    }
+
+    // A carrier that takes whole centimetres is given them rounded up.
+    [Theory]
+    [InlineData(450, 45)]
+    [InlineData(451, 46)]
+    [InlineData(1, 1)]
+    public void A_side_in_centimetres_is_rounded_up(int millimetres, int centimetres)
+    {
+        Assert.Equal(centimetres, Parcel.Centimetres(millimetres));
+        Assert.Null(Parcel.Centimetres(null));
+    }
+
+    // A cart with nothing in it is as unweighed as one with a form nobody weighed, as a checkout without a cart always
+    // was (D-145).
+    [Fact]
+    public void A_weight_limit_cannot_be_promised_about_an_empty_cart()
+    {
+        var courier = new ShippingMethod(Guid.NewGuid(), "courier", "Courier", "manual", 129m, 21m, Koruna, maxWeightGrams: 30_000);
+
+        var quote = Quoting.Flat(courier, [], null, Koruna);
+
+        Assert.Null(Quoting.WeightOf([]));
+        Assert.Equal(new QuoteRefusal(QuoteRefusalReason.MissingWeight, "Nothing in the order is weighed, and this method takes up to 30000 g.", null), quote.Unavailable);
+        Assert.Equal(2_600 + 600, Quoting.WeightOf([Item("DRILL", 2_600, 420, 330, 110), Item("FILE", 300, 250, 30, 10, quantity: 2)]));
     }
 
     // The owner's placeholder prices, in korunas only, and never over the merchant's own.

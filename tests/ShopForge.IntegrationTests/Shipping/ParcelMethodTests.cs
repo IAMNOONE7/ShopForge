@@ -211,11 +211,11 @@ public sealed class ParcelMethodTests(ShopForgeApiFactory factory)
         Assert.Equal(["pricing"], (await halfSent.Content.ReadFromJsonAsync<ProblemView>(CancellationToken))!.Errors.Keys);
     }
 
-    // Until a cart can be priced by the parcel (V28f), such a method is not offered, cannot be ordered with, is not
-    // published in a feed, and does not count as the store's shipping method. The store's own delivery needs no
-    // account, so nothing but the pricing keeps it from the checkout.
+    // A method priced by the parcel with no prices yet is not offered and cannot be ordered with; whatever its prices, a
+    // feed publishes no rate for it (D-220). It counts as a method the store has, and its own check names what it lacks.
+    // The store's own delivery needs no account, so nothing but the missing prices keeps it from the checkout.
     [Fact]
-    public async Task A_method_priced_by_the_parcel_is_not_offered_until_it_can_be_priced()
+    public async Task A_method_priced_by_the_parcel_without_prices_is_not_offered_and_no_feed_publishes_it()
     {
         var furniture = await FurnitureStore.CreateAsync(factory);
         using var created = await CreateMethodAsync(furniture, OwnDeliveryMethod(await ServiceAsync(isActive: true)));
@@ -228,16 +228,22 @@ public sealed class ParcelMethodTests(ShopForgeApiFactory factory)
         Assert.Equal(HttpStatusCode.OK, added.StatusCode);
         var methods = await shopper.GetJsonAsync<CheckoutMethodsView>("/api/storefront/checkout/methods?country=CZ");
         using var ordered = await shopper.PostAsync("/api/storefront/checkout", Checkout.Request(shipping: code));
+        var unpriced = await shopper.GetJsonAsync<StoreView>("/api/storefront/store");
+        using var priced = await furniture.Admin.PutAsJsonAsync(
+            $"/api/admin/stores/{furniture.Store.StoreId}/shipping-methods/{code}/rates",
+            new { Source = "own", Bands = new[] { new { UpToGrams = 10_000, Price = 8m } } },
+            CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, priced.StatusCode);
         await using var scope = TestStores.CreateScope(factory.Services, furniture.Store);
         var rates = await scope.ServiceProvider.GetRequiredService<IStoreShippingRates>().FindAsync(CancellationToken);
-        var shipping = (await ReadinessAsync(furniture)).Single(check => check.Check == "orders.shipping-method");
+        var readiness = await ReadinessAsync(furniture);
 
         Assert.DoesNotContain(code, methods.ShippingMethods.Select(method => method.Code));
         Assert.Equal(HttpStatusCode.BadRequest, ordered.StatusCode);
         Assert.Contains("shippingMethodCode", (await ordered.Content.ReadFromJsonAsync<ProblemView>(CancellationToken))!.Errors.Keys);
         Assert.DoesNotContain(rates, rate => rate.Service == "Own van by the parcel");
-        Assert.False(shipping.IsReady);
-        Assert.Contains("not offered at the checkout yet", shipping.Problem!, StringComparison.Ordinal);
+        Assert.Null(unpriced.DeliveryFrom);
+        Assert.True(readiness.Single(check => check.Check == "orders.shipping-method").IsReady);
     }
 
     [Fact]
@@ -438,6 +444,8 @@ public sealed class ParcelMethodTests(ShopForgeApiFactory factory)
     private sealed record SettingsView(int PackagingWeightGrams, int FillPercent, int LargestParcelOrder);
 
     private sealed record CheckoutMethodsView(List<CheckoutMethodView> ShippingMethods);
+
+    private sealed record StoreView(decimal? DeliveryFrom);
 
     private sealed record CheckoutMethodView(string Code);
 

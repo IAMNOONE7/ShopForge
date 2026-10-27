@@ -448,7 +448,9 @@ internal sealed record AdminOrderDetailResponse(
     // What came back, and where each refund stands (D-194).
     List<AdminOrderReturnResponse> Returns,
     List<DocumentResponse> Documents,
-    List<AdminOrderLineResponse> Lines)
+    List<AdminOrderLineResponse> Lines,
+    // The parcels the delivery was priced on and what goes in each: a suggestion, which booking starts from (D-220).
+    List<AdminOrderParcelResponse> Parcels)
 {
     public static AdminOrderDetailResponse From(
         Order order,
@@ -482,8 +484,21 @@ internal sealed record AdminOrderDetailResponse(
         unappliedPayments,
         returns,
         documents,
-        [.. order.Lines.Select(line => new AdminOrderLineResponse(line.ProductName, line.UnitPrice, line.VatRate, line.Quantity, line.LineTotal))]);
+        [.. order.Lines.Select(line => new AdminOrderLineResponse(line.ProductName, line.UnitPrice, line.VatRate, line.Quantity, line.LineTotal))],
+        [
+            .. order.Parcels.OrderBy(parcel => parcel.Number).Select(parcel => new AdminOrderParcelResponse(
+                parcel.Number,
+                parcel.GrossWeightGrams,
+                parcel.BandUpToGrams,
+                parcel.Price,
+                parcel.Alone,
+                [.. parcel.Contents.Select(item => new AdminOrderParcelItemResponse(item.VariantId, item.Sku, item.Quantity))])),
+        ]);
 }
+
+internal sealed record AdminOrderParcelResponse(int Number, int GrossWeightGrams, int BandUpToGrams, decimal Price, bool Alone, List<AdminOrderParcelItemResponse> Contents);
+
+internal sealed record AdminOrderParcelItemResponse(Guid VariantId, string Sku, int Quantity);
 
 internal sealed record AdminAddressResponse(string FullName, string Line1, string? Line2, string City, string PostalCode, string Country)
 {

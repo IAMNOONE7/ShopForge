@@ -6,7 +6,7 @@ namespace ShopForge.Orders.Shipping;
 
 // The store's own methods, as rates somebody else can publish. The price is flat per method (D-145), so each
 // method the store serves a country with is one rate in that country. A method priced by the parcel has no one price
-// to publish (V28f).
+// to publish, and a price published elsewhere is a promise (D-169, D-220); rates by item are V28j's.
 internal sealed class StoreShippingRates(DbContext dbContext) : IStoreShippingRates
 {
     public async Task<IReadOnlyList<ShippingRate>> FindAsync(CancellationToken cancellationToken)

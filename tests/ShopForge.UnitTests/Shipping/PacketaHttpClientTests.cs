@@ -33,6 +33,20 @@ public sealed class PacketaHttpClientTests
         Assert.Equal(System.Text.Encoding.UTF8.GetByteCount(question), handler.ContentLength);
     }
 
+    // A parcel estimated for a method priced by the parcel is asked about by its weight in kilograms and its sides in
+    // whole centimetres, the validator's own options, which Packeta takes in any order (D-220). One nobody estimated is
+    // asked about as before, without them.
+    [Fact]
+    public async Task A_parcel_is_asked_about_by_its_weight_and_its_sides()
+    {
+        const string question = """{"apiKey":"abcdef0123456789","point":{"id":"4321"},"options":{"country":"cz","vendors":[{"country":"cz","group":"zbox"}],"weight":2.25,"length":45,"width":40,"depth":9}}""";
+        var handler = new RecordingHandler(HttpStatusCode.OK, """{"isValid":true,"point":{"name":"Z-BOX"},"errors":[]}""");
+
+        await Client(handler).ValidatePointAsync(ApiKey, Choice with { WeightKg = 2.25m, LengthCm = 45, WidthCm = 40, DepthCm = 9 }, CancellationToken);
+
+        Assert.Equal(question, handler.Body!.ToJsonString());
+    }
+
     // Packeta's own example, accepted: the point as Packeta describes it, under the id that was asked about, which the
     // answer does not repeat. Its city carries a trailing space and its country is in lower case.
     [Fact]
