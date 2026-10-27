@@ -81,3 +81,7 @@ describe("LoginPage mutation state", () => {
   });
 
 });
+it("offers a fixed public staff-recovery destination without transferring entered credentials", () => {
+  render(<LoginPage expired={false} onLogin={() => {}} />);
+  expect(screen.getByRole("link", { name: "Forgot your staff password?" }).getAttribute("href")).toBe("/forgot-password");
+});

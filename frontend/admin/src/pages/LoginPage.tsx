@@ -98,6 +98,7 @@ export function LoginPage({
           ? <InlineMessage tone="error">{t("auth:invalidCode")}</InlineMessage>
           : error !== null && <RequestError error={error} operation="login" />}
       </form>
+      <p><a href={`${import.meta.env.BASE_URL}forgot-password`}>{t("auth:forgotPassword")}</a></p>
     </main>
   );
 }

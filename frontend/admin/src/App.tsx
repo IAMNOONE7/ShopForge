@@ -29,7 +29,10 @@ import { adminHomePath, safeAdminReturnPath } from "./routing";
 import { canManageCatalog, canManageStore, SessionContext } from "./session";
 import { isOperatorPath } from "./platform/routing";
 import type { InvitationEntry } from "./invitationEntry";
+import type { StaffRecoveryEntry } from "./staffRecoveryEntry";
 
+const ForgotStaffPasswordPage = lazy(() => import("./pages/StaffPasswordPages").then(pages => ({ default: pages.ForgotStaffPasswordPage })));
+const ResetStaffPasswordPage = lazy(() => import("./pages/StaffPasswordPages").then(pages => ({ default: pages.ResetStaffPasswordPage })));
 const ColleaguesPage = lazy(() => import("./pages/ColleaguesPage").then(pages => ({ default: pages.ColleaguesPage })));
 const InvitationAcceptancePage = lazy(() => import("./pages/InvitationAcceptancePage").then(pages => ({ default: pages.InvitationAcceptancePage })));
 
@@ -76,7 +79,12 @@ function currentReturnPath() {
   );
 }
 
-function App({ invitationEntry = null }: { invitationEntry?: InvitationEntry | null }) {
+function App({ invitationEntry = null, recoveryEntry = null }: { invitationEntry?: InvitationEntry | null; recoveryEntry?: StaffRecoveryEntry | null }) {
+  if (recoveryEntry) return <BrowserRouter basename={import.meta.env.BASE_URL}><Routes>
+    <Route path="forgot-password" element={<DeferredPage><ForgotStaffPasswordPage /></DeferredPage>} />
+    <Route path="reset-password" element={<DeferredPage><ResetStaffPasswordPage proof={recoveryEntry.kind === "reset" ? recoveryEntry.proof : null} /></DeferredPage>} />
+    <Route path="*" element={<NotFoundPage />} />
+  </Routes></BrowserRouter>;
   if (invitationEntry) return <BrowserRouter basename={import.meta.env.BASE_URL}><Routes>
     <Route path="invitations/accept" element={<DeferredPage><InvitationAcceptancePage entry={invitationEntry} /></DeferredPage>} />
   </Routes></BrowserRouter>;

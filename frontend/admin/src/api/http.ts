@@ -95,6 +95,11 @@ export async function requestNoContent(url: string, options: RequestOptions = {}
   if (response.status !== 204) throw invalidResponse(response);
 }
 
+export async function requestAccepted(url: string, options: RequestOptions = {}): Promise<void> {
+  const response = await send(url, options);
+  if (response.status !== 202 || (await response.text()).length !== 0) throw invalidResponse(response);
+}
+
 export async function requestBlob(
   url: string,
   fallbackFilename: string,

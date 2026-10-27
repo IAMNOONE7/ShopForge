@@ -7,7 +7,9 @@ import "./styles/base.css";
 import "./index.css";
 import App from "./App.tsx";
 import { captureInvitationEntry } from "./invitationEntry";
+import { captureStaffRecoveryEntry } from "./staffRecoveryEntry";
 
+const recoveryEntry = captureStaffRecoveryEntry();
 const invitationEntry = captureInvitationEntry();
 
 async function render() {
@@ -17,7 +19,7 @@ async function render() {
       <div className="utility-bar">
         <LanguageSwitcher />
       </div>
-      <App invitationEntry={invitationEntry} />
+      <App invitationEntry={invitationEntry} recoveryEntry={recoveryEntry} />
     </StrictMode>,
   );
 }
