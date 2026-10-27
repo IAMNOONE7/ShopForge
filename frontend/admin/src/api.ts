@@ -8,6 +8,7 @@ import { getStoreReadiness } from "./api/readiness";
 import { getStoreDomains, addStoreDomain, verifyStoreDomain, makeStoreDomainPrimary, removeStoreDomain, startStoreDomainZone } from "./api/domains";
 import { getOrders } from "./api/orders";
 import { changeOrder, getOrderDetails, refundOrder } from "./api/orderDetails";
+import { getAttributes, createAttribute, updateAttribute, addAttributeOption, renameAttributeOption, reorderAttributeOptions, removeAttribute, removeAttributeOption } from "./api/attributes";
 import { changeUnappliedPayment, getUnappliedPayments } from "./api/unappliedPayments";
 import { changeReturnMoney, decideReturn, getReturnDetails, getReturns } from "./api/returns";
 import { deleteProductImage, describeProductImage, getProductImages, reorderProductImages, uploadProductImage } from "./api/productMedia";
@@ -193,6 +194,8 @@ export type AttributeInput = {
   isVisibleOnProductPage: boolean;
   sortOrder: number;
   options: string[];
+  isInFeeds?: boolean;
+  isSearchable?: boolean;
 };
 
 export type AttributeUpdate = Pick<
@@ -565,31 +568,14 @@ export const api = {
       { categoryIds },
     ),
 
-  attributes: (storeId: string, signal?: AbortSignal) =>
-    request<AttributeDefinition[]>(
-      "GET",
-      `/api/admin/stores/${storeId}/attributes`,
-      undefined,
-      signal,
-    ),
-  createAttribute: (storeId: string, input: AttributeInput) =>
-    request<AttributeDefinition>(
-      "POST",
-      `/api/admin/stores/${storeId}/attributes`,
-      input,
-    ),
-  updateAttribute: (storeId: string, attributeId: string, input: AttributeUpdate) =>
-    request<AttributeDefinition>(
-      "PUT",
-      `/api/admin/stores/${storeId}/attributes/${attributeId}`,
-      input,
-    ),
-  addOption: (storeId: string, attributeId: string, name: string) =>
-    request<AttributeDefinition>(
-      "POST",
-      `/api/admin/stores/${storeId}/attributes/${attributeId}/options`,
-      { name },
-    ),
+  attributes: getAttributes,
+  createAttribute,
+  updateAttribute,
+  addOption: addAttributeOption,
+  renameOption: renameAttributeOption,
+  reorderOptions: reorderAttributeOptions,
+  removeAttribute,
+  removeOption: removeAttributeOption,
   assignCategoryAttributes: (
     storeId: string,
     categoryId: string,

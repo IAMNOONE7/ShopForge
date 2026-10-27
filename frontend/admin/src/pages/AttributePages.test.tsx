@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { api, type AdminStore, type AttributeDefinition, type AttributeType } from "../api";
-import { EditAttributeForm, NewAttributeForm } from "../components/AttributeForms";
-import { AttributeOptions } from "../components/AttributeOptions";
+import { NewAttributeForm } from "../components/AttributeForms";
+import { HttpError } from "../api/http";
 import { generatedCode, validateAttribute, validateOption, type AttributeDraft } from "../components/attributeValidation";
 import { i18n, initializeI18n } from "../i18n";
 import { SessionContext } from "../session";
@@ -29,7 +29,7 @@ afterAll(() => i18n.changeLanguage("en"));
 
 describe("attribute definitions", () => {
   it("validates generated codes, duplicate option codes, and sort order", () => {
-    const draft: AttributeDraft = { name: "Žlutá barva", code: "", type: "select", unit: "", isFilterable: true, isVisibleOnProductPage: true, sortOrder: "0", options: "Červená\nCervena" };
+    const draft: AttributeDraft = { name: "Žlutá barva", code: "", type: "select", unit: "", isFilterable: true, isVisibleOnProductPage: true, isInFeeds: false, isSearchable: false, sortOrder: "0", options: "Červená\nCervena" };
     expect(generatedCode(draft.name)).toBe("zluta-barva");
     expect(validateAttribute(draft, true).map((issue) => issue.key)).toEqual(["optionsDuplicate"]);
     expect(validateAttribute({ ...draft, options: "Blue", code: "Bad Code", sortOrder: "1.2" }, true).map((issue) => issue.field)).toEqual(["code", "sortOrder"]);
@@ -54,7 +54,7 @@ describe("attribute definitions", () => {
     vi.spyOn(api, "attributes").mockResolvedValue([definition]);
     render(<MemoryRouter initialEntries={["/stores/store-a/attributes/new"]}><Routes>
       <Route element={<Outlet context={{ store, reloadStores: () => undefined }} />}>
-        <Route path="/stores/:storeId/attributes/new" element={<NewAttributePage />} />
+        <Route path="/stores/:storeId/attributes/new" element={<SessionContext.Provider value={{ user: { id: "user-a", email: "owner@example.test", role: "Owner", tenantId: "tenant-a" }, logout: async () => undefined, logoutPending: false, logoutError: null }}><NewAttributePage /></SessionContext.Provider>} />
         <Route path="/stores/:storeId/attributes/:attributeId" element={<SessionContext.Provider value={{ user: { id: "user-a", email: "owner@example.test", role: "Owner", tenantId: "tenant-a" }, logout: async () => undefined, logoutPending: false, logoutError: null }}><AttributeDetailPage /></SessionContext.Provider>} />
       </Route>
     </Routes></MemoryRouter>);
@@ -67,17 +67,19 @@ describe("attribute definitions", () => {
 
   it("keeps edit identity fixed and preserves unrelated settings on update failure", async () => {
     const user = userEvent.setup();
-    const update = vi.spyOn(api, "updateAttribute").mockRejectedValue(new Error("offline"));
-    render(<EditAttributeForm storeId="store-a" definition={definition} reload={() => undefined} />);
+    const update = vi.spyOn(api, "updateAttribute").mockRejectedValue(new HttpError("http", 400));
+    vi.spyOn(api, "attributes").mockResolvedValue([definition]);
+    route("/attributes/attribute-a");
+    await user.click(await screen.findByRole("button", { name: "Edit definition" }));
     expect((screen.getByRole("textbox", { name: "Code" }) as HTMLInputElement).readOnly).toBe(true);
     expect((screen.getByRole("textbox", { name: "Type" }) as HTMLInputElement).readOnly).toBe(true);
     const name = screen.getByRole("textbox", { name: "Name" });
     await user.clear(name);
     await user.type(name, "Fabric");
     await user.click(screen.getByRole("button", { name: "Save changes" }));
-    await waitFor(() => expect(update).toHaveBeenCalledWith("store-a", "attribute-a", { name: "Fabric", unit: null, isFilterable: true, isVisibleOnProductPage: true, isInFeeds: true, isSearchable: false, sortOrder: 2 }));
+    await waitFor(() => expect(update).toHaveBeenCalledWith("store-a", "attribute-a", { name: "Fabric", unit: null, isFilterable: true, isVisibleOnProductPage: true, isInFeeds: true, isSearchable: false, sortOrder: 2 }, expect.any(AbortSignal)));
     expect((name as HTMLInputElement).value).toBe("Fabric");
-    expect(await screen.findByText(/could not be saved/i)).toBeTruthy();
+    expect(await screen.findByRole("alert")).toBeTruthy();
   });
 
   it.each([
@@ -86,12 +88,16 @@ describe("attribute definitions", () => {
   ])("preserves search and feed flags $isSearchable/$isInFeeds across a failed edit and retry", async (flags) => {
     const user = userEvent.setup();
     const text = { ...definition, ...flags, type: "text" as const, isFilterable: false, sortOrder: 0, options: [] };
-    const update = vi.spyOn(api, "updateAttribute").mockRejectedValueOnce(new Error("offline")).mockResolvedValue({ ...text, name: "Details" });
-    render(<EditAttributeForm storeId="store-a" definition={text} reload={() => undefined} />);
+    const read = vi.spyOn(api, "attributes").mockResolvedValue([text]);
+    const update = vi.spyOn(api, "updateAttribute").mockRejectedValueOnce(new HttpError("http", 400)).mockImplementation(async () => {
+      const updated = { ...text, name: "Details" }; read.mockResolvedValue([updated]); return updated;
+    });
+    route("/attributes/attribute-a");
+    await user.click(await screen.findByRole("button", { name: "Edit definition" }));
     const name = screen.getByRole("textbox", { name: "Name" });
     await user.clear(name); await user.type(name, "Details");
     await user.click(screen.getByRole("button", { name: "Save changes" }));
-    await screen.findByText(/could not be saved/i);
+    await screen.findByRole("alert");
     expect(name).toHaveProperty("value", "Details");
     await user.click(screen.getByRole("button", { name: "Save changes" }));
     await screen.findByText("Attribute saved.");
@@ -103,16 +109,19 @@ describe("attribute definitions", () => {
 
   it("keeps options visible while rejecting duplicate codes and failed option writes", async () => {
     const user = userEvent.setup();
-    const add = vi.spyOn(api, "addOption").mockRejectedValue(new Error("offline"));
-    render(<AttributeOptions storeId="store-a" definition={definition} allowed reload={() => undefined} />);
-    const field = screen.getByRole("textbox", { name: "New option" });
+    const add = vi.spyOn(api, "addOption").mockRejectedValue(new HttpError("http", 400));
+    vi.spyOn(api, "attributes").mockResolvedValue([definition]);
+    route("/attributes/attribute-a");
+    await user.click(await screen.findByRole("button", { name: "Add option" }));
+    const editing = within(screen.getByRole("region", { name: "Current attribute change" }));
+    const field = editing.getByRole("textbox", { name: "New option" });
     await user.type(field, "Cóttón");
-    await user.click(screen.getByRole("button", { name: "Add option" }));
+    await user.click(editing.getByRole("button", { name: "Add option" }));
     expect(add).not.toHaveBeenCalled();
     expect(screen.getByText(/unique code/)).toBeTruthy();
     await user.clear(field);
     await user.type(field, "Linen");
-    await user.click(screen.getByRole("button", { name: "Add option" }));
+    await user.click(editing.getByRole("button", { name: "Add option" }));
     await waitFor(() => expect(add).toHaveBeenCalledTimes(1));
     expect((field as HTMLInputElement).value).toBe("Linen");
     expect(screen.getByText("Cotton")).toBeTruthy();

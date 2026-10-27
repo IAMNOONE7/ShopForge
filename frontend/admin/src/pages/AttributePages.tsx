@@ -2,13 +2,14 @@ import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "react-router";
 import { api, type AttributeDefinition } from "../api";
 import { useSelectedStore } from "../adminContext";
-import { EditAttributeForm, NewAttributeForm } from "../components/AttributeForms";
-import { AttributeOptions } from "../components/AttributeOptions";
+import { NewAttributeForm } from "../components/AttributeForms";
+import { AttributeWorkspace } from "../components/AttributeWorkspace";
 import { EmptyState } from "../components/ui/EmptyState";
 import { LoadingState } from "../components/ui/LoadingState";
 import { RequestError } from "../components/ui/RequestError";
 import { canManageCatalog, useSession } from "../session";
 import { useRequest, type RequestState } from "../useRequest";
+import { ForbiddenPage } from "./RouteStatePage";
 
 function AttributesLoad({ state, reload }: { state: RequestState<AttributeDefinition[]>; reload: () => void }) {
   const { t } = useTranslation("attributes");
@@ -36,10 +37,10 @@ export function AttributesIndexPage() {
         <p className="hint">{t("count", { count: state.data.length })}</p>
         <table className="attribute-table"><thead><tr><th scope="col">{t("name")}</th><th scope="col">{t("code")}</th><th scope="col">{t("type")}</th><th scope="col">{t("filter")}</th><th scope="col">{t("shown")}</th><th scope="col">{t("sortOrder")}</th></tr></thead>
           <tbody>{state.data.map((item) => <tr key={item.id}>
-            <th scope="row"><Link to={item.id}>{item.name}</Link></th><td><code>{item.code}</code></td><td>{t(`types.${item.type}`)}</td><td>{t(item.isFilterable ? "yes" : "no")}</td><td>{t(item.isVisibleOnProductPage ? "yes" : "no")}</td><td>{item.sortOrder}</td>
+            <th scope="row"><Link to={encodeURIComponent(item.id)}>{item.name}</Link><span className="attribute-index-flags hint">{t("inFeeds")}: {t(item.isInFeeds ? "yes" : "no")} · {t("searchable")}: {t(item.isSearchable ? "yes" : "no")}</span></th><td><code>{item.code}</code></td><td>{t(`types.${item.type}`)}</td><td>{t(item.isFilterable ? "yes" : "no")}</td><td>{t(item.isVisibleOnProductPage ? "yes" : "no")}</td><td>{item.sortOrder}</td>
           </tr>)}</tbody></table>
         <ul className="attribute-cards">{state.data.map((item) => <li key={item.id}>
-          <Link to={item.id} className="attribute-card-link">{item.name}</Link>
+          <Link to={encodeURIComponent(item.id)} className="attribute-card-link">{item.name}</Link><p className="hint">{t("inFeeds")}: {t(item.isInFeeds ? "yes" : "no")} · {t("searchable")}: {t(item.isSearchable ? "yes" : "no")}</p>
           <dl><div><dt>{t("code")}</dt><dd><code>{item.code}</code></dd></div><div><dt>{t("type")}</dt><dd>{t(`types.${item.type}`)}</dd></div><div><dt>{t("filter")}</dt><dd>{t(item.isFilterable ? "yes" : "no")}</dd></div><div><dt>{t("shown")}</dt><dd>{t(item.isVisibleOnProductPage ? "yes" : "no")}</dd></div><div><dt>{t("sortOrder")}</dt><dd>{item.sortOrder}</dd></div></dl>
         </li>)}</ul>
       </>)}
@@ -48,29 +49,21 @@ export function AttributesIndexPage() {
 
 export function NewAttributePage() {
   const { t } = useTranslation("attributes");
-  const { store } = useSelectedStore();
+  const { user } = useSession();
+  const { store, storeRefreshing, storeRefreshError } = useSelectedStore();
   const navigate = useNavigate();
+  if (!canManageCatalog(user.role)) return <ForbiddenPage />;
   return <div className="attribute-detail-page"><Link to={`/stores/${store.id}/attributes`} className="physical-back-link">{t("backToAttributes")}</Link>
     <h1>{t("newTitle")}</h1><p className="hint">{t("contentHint")}</p>
-    <NewAttributeForm storeId={store.id} onCreated={(item) => void navigate(`/stores/${store.id}/attributes/${item.id}`)} />
+    <NewAttributeForm key={JSON.stringify([store, user.tenantId, user.id, user.role])} storeId={store.id} blocked={Boolean(storeRefreshing || storeRefreshError)} onCreated={(item) => void navigate(`/stores/${encodeURIComponent(store.id)}/attributes/${encodeURIComponent(item.id)}`)} />
   </div>;
 }
 
 export function AttributeDetailPage() {
-  const { t } = useTranslation("attributes");
   const { user } = useSession();
-  const { store } = useSelectedStore();
-  const { attributeId } = useParams();
-  const [state, reload] = useRequest(`attributes:${store.id}`, (signal) => api.attributes(store.id, signal));
-  const item = state.status === "ready" ? state.data.find((value) => value.id === attributeId) : undefined;
-  const allowed = canManageCatalog(user.role);
-  return <div className="attribute-detail-page"><Link to={`/stores/${store.id}/attributes`} className="physical-back-link">{t("backToAttributes")}</Link>
-    <h1>{item?.name ?? t("detailTitle")}</h1>
-    <AttributesLoad state={state} reload={reload} />
-    {state.status === "ready" && state.refreshError === null && (item ? <div className="attribute-detail-grid">
-      {allowed ? <EditAttributeForm key={`${item.id}:edit`} storeId={store.id} definition={item} reload={reload} /> :
-        <section className="physical-panel"><h2>{t("details")}</h2><dl className="attribute-readonly"><div><dt>{t("code")}</dt><dd><code>{item.code}</code></dd></div><div><dt>{t("type")}</dt><dd>{t(`types.${item.type}`)}</dd></div><div><dt>{t("unitOptional")}</dt><dd>{item.unit || "—"}</dd></div><div><dt>{t("filter")}</dt><dd>{t(item.isFilterable ? "yes" : "no")}</dd></div><div><dt>{t("shown")}</dt><dd>{t(item.isVisibleOnProductPage ? "yes" : "no")}</dd></div><div><dt>{t("sortOrder")}</dt><dd>{item.sortOrder}</dd></div></dl></section>}
-      <AttributeOptions key={`${item.id}:options`} storeId={store.id} definition={item} allowed={allowed} reload={reload} />
-    </div> : <EmptyState headingLevel={2} title={t("missingTitle")} action={<Link to={`/stores/${store.id}/attributes`}>{t("backToAttributes")}</Link>}>{t("missingBody")}</EmptyState>)}
-  </div>;
+  const { store, storeRefreshing, storeRefreshError } = useSelectedStore();
+  const { attributeId = "" } = useParams();
+  return <AttributeWorkspace key={JSON.stringify([user.tenantId, user.id, user.role, store, attributeId])}
+    storeId={store.id} storeName={store.name} attributeId={attributeId} allowed={canManageCatalog(user.role)}
+    storeStale={Boolean(storeRefreshing || storeRefreshError)} />;
 }

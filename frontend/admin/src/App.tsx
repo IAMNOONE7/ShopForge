@@ -15,7 +15,6 @@ import { ProductsPage } from "./pages/ProductsPage";
 import { NewPhysicalProductPage } from "./pages/NewPhysicalProductPage";
 import { PhysicalProductPage } from "./pages/PhysicalProductPage";
 import { StockPage } from "./pages/StockPage";
-import { AttributesIndexPage, AttributeDetailPage, NewAttributePage } from "./pages/AttributePages";
 import { ProductStockPage } from "./pages/ProductStockPage";
 import { ForbiddenPage, NotFoundPage } from "./pages/RouteStatePage";
 import { StoreIndexPage } from "./pages/StoreIndexPage";
@@ -56,6 +55,9 @@ const ContentPagesPage = lazy(() => import("./pages/ContentPagesPage").then(page
 const NewContentPage = lazy(() => import("./pages/ContentPagesPage").then(pages => ({ default: pages.NewContentPage })));
 const ContentPageDetailPage = lazy(() => import("./pages/ContentPagesPage").then(pages => ({ default: pages.ContentPageDetailPage })));
 const MetadataPage = lazy(() => import("./pages/MetadataPage").then(pages => ({ default: pages.MetadataPage })));
+const AttributesIndexPage = lazy(() => import("./pages/AttributePages").then(pages => ({ default: pages.AttributesIndexPage })));
+const AttributeDetailPage = lazy(() => import("./pages/AttributePages").then(pages => ({ default: pages.AttributeDetailPage })));
+const NewAttributePage = lazy(() => import("./pages/AttributePages").then(pages => ({ default: pages.NewAttributePage })));
 const StoreExportsPage = lazy(() => import("./pages/StoreExportsPage").then(pages => ({ default: pages.StoreExportsPage })));
 const StoreImportPage = lazy(() => import("./pages/StoreImportPage").then(pages => ({ default: pages.StoreImportPage })));
 const StoreShippingSettingsPage = lazy(() => import("./pages/StoreShippingSettingsPage").then(pages => ({ default: pages.StoreShippingSettingsPage })));
@@ -228,9 +230,9 @@ function MerchantApp() {
                   <Route path="categories" element={<DeferredPage><CategoriesPage /></DeferredPage>} />
                   <Route path="categories/new" element={<DeferredPage><NewCategoryPage /></DeferredPage>} />
                   <Route path="categories/:categoryId" element={<DeferredPage><CategoryDetailPage /></DeferredPage>} />
-                  <Route path="attributes" element={<AttributesIndexPage />} />
-                  <Route path="attributes/new" element={canManageCatalog(session.user.role) ? <NewAttributePage /> : <ForbiddenPage />} />
-                  <Route path="attributes/:attributeId" element={<AttributeDetailPage />} />
+                  <Route path="attributes" element={<DeferredPage><AttributesIndexPage /></DeferredPage>} />
+                  <Route path="attributes/new" element={canManageCatalog(session.user.role) ? <DeferredPage><NewAttributePage /></DeferredPage> : <ForbiddenPage />} />
+                  <Route path="attributes/:attributeId" element={<DeferredPage><AttributeDetailPage /></DeferredPage>} />
                   <Route path="exports" element={<DeferredPage><StoreExportsPage /></DeferredPage>} />
                   <Route path="import" element={<DeferredPage><StoreImportPage /></DeferredPage>} />
                   <Route path="methods" element={<StoreMethodsPage />} />

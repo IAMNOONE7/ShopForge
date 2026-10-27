@@ -11,6 +11,8 @@ export type AttributeDraft = {
   unit: string;
   isFilterable: boolean;
   isVisibleOnProductPage: boolean;
+  isInFeeds: boolean;
+  isSearchable: boolean;
   sortOrder: string;
   options: string;
 };

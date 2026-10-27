@@ -1,6 +1,8 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { api, type AttributeDefinition, type AttributeType } from "../api";
+import { Link } from "react-router";
+import { isHttpError } from "../api/http";
+import { api, type AttributeDefinition, type AttributeType, type AttributeUpdate } from "../api";
 import { useAction } from "../useAction";
 import {
   attributeTypes,
@@ -82,6 +84,7 @@ function Fields({
               update("type", type);
               if (type === "text") update("isFilterable", false);
               if (type !== "select" && type !== "multiSelect") update("options", "");
+              if (type !== "text") update("isSearchable", false);
             }}
           >
             {attributeTypes.map((type) => (
@@ -144,6 +147,12 @@ function Fields({
           />
           {t("showOnProduct")}
         </label>
+        <label><input name="isInFeeds" type="checkbox" checked={draft.isInFeeds}
+          onChange={event => update("isInFeeds", event.target.checked)} />{t("inFeeds")}</label>
+        <p className="hint">{t("feedsHint")}</p>
+        <label><input name="isSearchable" type="checkbox" checked={draft.isSearchable} disabled={draft.type !== "text"}
+          onChange={event => update("isSearchable", event.target.checked)} />{t("searchable")}</label>
+        <p className="hint">{t(draft.type === "text" ? "searchHint" : "onlyTextSearch")}</p>
       </fieldset>
       {creating && (draft.type === "select" || draft.type === "multiSelect") && (
         <div className="attribute-options-input">
@@ -172,6 +181,8 @@ const initial: AttributeDraft = {
   unit: "",
   isFilterable: true,
   isVisibleOnProductPage: true,
+  isInFeeds: false,
+  isSearchable: false,
   sortOrder: "0",
   options: "",
 };
@@ -179,20 +190,26 @@ const initial: AttributeDraft = {
 export function NewAttributeForm({
   storeId,
   onCreated,
+  blocked = false,
 }: {
   storeId: string;
   onCreated: (definition: AttributeDefinition) => void;
+  blocked?: boolean;
 }) {
   const { t } = useTranslation("attributes");
   const [draft, setDraft] = useState<AttributeDraft>(initial);
   const [issues, setIssues] = useState<AttributeIssue[]>([]);
-  const [error, run, pending] = useAction(() => undefined);
+  const [error, run, pending] = useAction(() => undefined, { manageControls: false });
+  const [uncertain, setUncertain] = useState(false);
+  const active = useRef(true), controller = useRef<AbortController | null>(null);
+  useEffect(() => { active.current = true; return () => { active.current = false; controller.current?.abort(); }; }, []);
   function update<K extends keyof AttributeDraft>(field: K, value: AttributeDraft[K]) {
     setDraft((current) => ({ ...current, [field]: value }));
     setIssues((current) => current.filter((issue) => issue.field !== field));
   }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (pending || uncertain || blocked) return;
     const nextIssues = validateAttribute(draft, true);
     setIssues(nextIssues);
     if (nextIssues.length) {
@@ -200,17 +217,26 @@ export function NewAttributeForm({
       return;
     }
     await run(async () => {
-      const definition = await api.createAttribute(storeId, {
-        code: draft.code.trim() || null,
-        name: draft.name.trim(),
-        type: draft.type,
-        unit: draft.unit.trim() || null,
-        isFilterable: draft.type !== "text" && draft.isFilterable,
-        isVisibleOnProductPage: draft.isVisibleOnProductPage,
-        sortOrder: Number(draft.sortOrder),
-        options: optionNames(draft.options),
-      });
-      onCreated(definition);
+      const request = new AbortController(); controller.current = request;
+      try {
+        const definition = await api.createAttribute(storeId, {
+          code: draft.code.trim() || null,
+          name: draft.name.trim(),
+          type: draft.type,
+          unit: draft.unit.trim() || null,
+          isFilterable: draft.type !== "text" && draft.isFilterable,
+          isVisibleOnProductPage: draft.isVisibleOnProductPage,
+          isInFeeds: draft.isInFeeds,
+          isSearchable: draft.type === "text" && draft.isSearchable,
+          sortOrder: Number(draft.sortOrder),
+          options: optionNames(draft.options),
+        }, request.signal);
+        if (active.current && !request.signal.aborted) onCreated(definition);
+      } catch (failure) {
+        if (!active.current || request.signal.aborted) return;
+        if (!isHttpError(failure) || failure.kind !== "http" || failure.status === null || failure.status >= 500) setUncertain(true);
+        throw failure;
+      }
     });
   }
   return (
@@ -218,82 +244,49 @@ export function NewAttributeForm({
       <h2>{t("createTitle")}</h2>
       <p className="hint">{t("contentHint")}</p>
       {issues.length > 0 && <InlineMessage tone="error">{t("checkFields")}</InlineMessage>}
-      <Fields draft={draft} issues={issues} creating update={update} />
-      <Button type="submit" busy={pending} busyLabel={t("creating")}>{t("create")}</Button>
+      <fieldset className="attribute-edit-fields" disabled={pending || uncertain || blocked}><legend className="sr-only">{t("createTitle")}</legend><Fields draft={draft} issues={issues} creating update={update} /></fieldset>
+      {uncertain && <InlineMessage tone="error"><p>{t("uncertainCreate")}</p><Link to={`/stores/${storeId}/attributes`}>{t("backToAttributes")}</Link></InlineMessage>}
+      <Button type="submit" disabled={uncertain || blocked} busy={pending} busyLabel={t("creating")}>{t("create")}</Button>
       {error !== null && <RequestError error={error} operation="write" />}
     </form>
   );
 }
 
-export function EditAttributeForm({
-  storeId,
-  definition,
-  reload,
-}: {
-  storeId: string;
+export function EditAttributeForm({ definition, disabled, pending, onSave, onCancel }: {
   definition: AttributeDefinition;
-  reload: () => void;
+  disabled: boolean;
+  pending: boolean;
+  onSave: (input: AttributeUpdate) => Promise<void>;
+  onCancel: () => void;
 }) {
   const { t } = useTranslation("attributes");
   const [draft, setDraft] = useState<AttributeDraft>({
-    name: definition.name,
-    code: definition.code,
-    type: definition.type,
-    unit: definition.unit ?? "",
-    isFilterable: definition.isFilterable,
-    isVisibleOnProductPage: definition.isVisibleOnProductPage,
-    sortOrder: String(definition.sortOrder),
-    options: "",
+    name: definition.name, code: definition.code, type: definition.type, unit: definition.unit ?? "",
+    isFilterable: definition.isFilterable, isVisibleOnProductPage: definition.isVisibleOnProductPage,
+    isInFeeds: definition.isInFeeds, isSearchable: definition.isSearchable, sortOrder: String(definition.sortOrder), options: "",
   });
   const [issues, setIssues] = useState<AttributeIssue[]>([]);
-  const [saved, setSaved] = useState(false);
-  const [error, run, pending] = useAction(reload);
+  useEffect(() => { document.getElementById("attribute-name")?.focus(); }, []);
   function update<K extends keyof AttributeDraft>(field: K, value: AttributeDraft[K]) {
-    setDraft((current) => ({ ...current, [field]: value }));
-    setIssues((current) => current.filter((issue) => issue.field !== field));
-    setSaved(false);
+    setDraft(current => ({ ...current, [field]: value }));
+    setIssues(current => current.filter(issue => issue.field !== field));
   }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const nextIssues = validateAttribute(draft, false);
-    setIssues(nextIssues);
-    setSaved(false);
-    if (nextIssues.length) {
-      document.getElementById(`attribute-${nextIssues[0].field === "sortOrder" ? "sort" : nextIssues[0].field}`)?.focus();
-      return;
-    }
-    await run(async () => {
-      const updated = await api.updateAttribute(storeId, definition.id, {
-        name: draft.name.trim(),
-        unit: draft.unit.trim() || null,
-        isFilterable: definition.type !== "text" && draft.isFilterable,
-        isVisibleOnProductPage: draft.isVisibleOnProductPage,
-        sortOrder: Number(draft.sortOrder),
-        isInFeeds: definition.isInFeeds,
-        isSearchable: definition.isSearchable,
-      });
-      setDraft({
-        name: updated.name,
-        code: updated.code,
-        type: updated.type,
-        unit: updated.unit ?? "",
-        isFilterable: updated.isFilterable,
-        isVisibleOnProductPage: updated.isVisibleOnProductPage,
-        sortOrder: String(updated.sortOrder),
-        options: "",
-      });
-      setSaved(true);
-    });
+    if (disabled) return;
+    const next = validateAttribute(draft, false); setIssues(next);
+    if (next.length) { document.getElementById(`attribute-${next[0].field === "sortOrder" ? "sort" : next[0].field}`)?.focus(); return; }
+    await onSave({ name: draft.name.trim(), unit: draft.unit.trim() || null,
+      isFilterable: definition.type !== "text" && draft.isFilterable, isVisibleOnProductPage: draft.isVisibleOnProductPage,
+      isInFeeds: draft.isInFeeds, isSearchable: definition.type === "text" && draft.isSearchable, sortOrder: Number(draft.sortOrder) });
   }
-  return (
-    <form className="physical-panel attribute-form" noValidate onSubmit={submit}>
-      <h2>{t("editTitle")}</h2>
-      <p className="hint">{t("editHint")}</p>
-      {issues.length > 0 && <InlineMessage tone="error">{t("checkFields")}</InlineMessage>}
+  return <form className="attribute-form" noValidate onSubmit={event => void submit(event)}>
+    {issues.length > 0 && <InlineMessage tone="error">{t("checkFields")}</InlineMessage>}
+    <fieldset className="attribute-edit-fields" disabled={disabled}>
+      <legend className="sr-only">{t("editTitle")}</legend>
       <Fields draft={draft} issues={issues} creating={false} update={update} />
-      <Button type="submit" busy={pending} busyLabel={t("saving")}>{t("save")}</Button>
-      {saved && <InlineMessage tone="success">{t("saved")}</InlineMessage>}
-      {error !== null && <RequestError error={error} operation="write" />}
-    </form>
-  );
+    </fieldset>
+    <div className="cluster"><Button type="submit" disabled={disabled}>{t("save")}</Button>
+      <Button type="button" variant="secondary" disabled={pending} onClick={onCancel}>{t("cancelEdit")}</Button></div>
+  </form>;
 }

@@ -1,0 +1,53 @@
+.attribute-detail-page,
+.attribute-active-editor,
+.attribute-server-detail,
+.attribute-feedback,
+.attribute-option-identity {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.attribute-detail-page .physical-panel { min-width: 0; }
+.attribute-detail-page { container-type: inline-size; }
+.attribute-detail-grid { grid-template-columns: minmax(0, 1fr); }
+.attribute-definition-panel,
+.attribute-active-editor,
+.attribute-delete-panel { display: grid; gap: var(--space-4); }
+.attribute-active-editor,
+.attribute-delete-panel { margin-top: var(--space-5); }
+.attribute-edit-fields { display: grid; gap: var(--space-4); border: 0; padding: 0; margin: 0; min-width: 0; }
+.attribute-option-identity { display: grid; gap: var(--space-1); }
+.attribute-option-list > li { min-width: 0; }
+.attribute-feedback:empty { display: none; }
+.attribute-feedback { margin-block: var(--space-4); }
+.attribute-server-detail { white-space: pre-wrap; }
+.attribute-detail-page button,
+.attribute-detail-page .button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.attribute-active-editor h2 { scroll-margin-top: var(--space-5); }
+@container (min-width: 56rem) {
+  .attribute-detail-grid { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
+}
+.attribute-detail-page .page-heading-row { flex-wrap: wrap; }
+
+.attribute-index-flags { display: block; overflow-wrap: anywhere; white-space: normal; font-weight: 400; }
+.attribute-page { container-type: inline-size; min-width: 0; }
+
+@container (max-width: 56rem) {
+  .attribute-table { display: none; }
+  .attribute-cards { display: grid; gap: var(--space-3); padding: 0; list-style: none; }
+  .attribute-cards li { min-width: 0; overflow-wrap: anywhere; padding: var(--space-4); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-panel); }
+  .attribute-card-link { font-weight: 700; }
+  .attribute-cards dl { display: grid; gap: var(--space-2); margin: var(--space-3) 0 0; }
+  .attribute-cards dl > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-3); }
+  .attribute-cards dt { color: var(--color-text-muted); }
+  .attribute-cards dd { min-width: 0; max-width: 100%; margin: 0; text-align: right; overflow-wrap: anywhere; }
+}
+
+@container (max-width: 26rem) {
+  .attribute-detail-page .physical-panel { padding: var(--space-2); }
+  .attribute-flags { padding: var(--space-1); }
+  .attribute-flags label { display: block; }
+  .attribute-flags input { margin-inline-end: var(--space-2); vertical-align: middle; }
+  .attribute-flags .hint { margin-inline-start: 0; }
+  .attribute-readonly > div { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
+  .attribute-readonly dd { text-align: start; }
+}
