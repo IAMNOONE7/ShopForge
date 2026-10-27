@@ -1,0 +1,20 @@
+.consents-workspace { min-width: 0; overflow-wrap: anywhere; }
+.consents-target { font-weight: 650; }
+.consent-record { margin-block: var(--space-6); padding-block: var(--space-4); border-block: 1px solid var(--color-border); }
+.consent-record h2 { font-size: var(--text-xl); }
+.consent-statement { margin-inline: 0; padding-inline-start: var(--space-4); border-inline-start: 3px solid var(--color-border-strong); white-space: pre-wrap; }
+.consent-facts { display: grid; gap: var(--space-4); }
+.consent-facts dt { font-weight: 650; }
+.consent-facts dd { margin: var(--space-1) 0 0; }
+.consent-record fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.consent-record legend { margin-bottom: var(--space-3); font-weight: 650; }
+.account-form .consent-option { display: flex; flex-direction: row; align-items: flex-start; gap: var(--space-3); margin-block: var(--space-3); font-weight: 400; }
+.consent-option input { flex-shrink: 0; margin-top: .2em; }
+.consents-actions, .consents-page .auth-footer { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.consents-workspace button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.consents-feedback { margin-block: var(--space-4); }
+@container (max-width: 26rem) {
+  .consents-page .auth-content { padding: var(--space-2); }
+  .account-form .consent-option { display: block; }
+  .consent-option input { margin-block: 0; margin-inline-end: var(--space-3); vertical-align: middle; }
+}
