@@ -49,3 +49,8 @@ it("drops successful secret responses after cancellation", async () => {
   const request = new AbortController(); request.abort(); vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(json(securityStaff)).mockResolvedValueOnce(json(twoFactorSetup)).mockResolvedValueOnce(json({ recoveryCodes })).mockResolvedValueOnce(new Response(null, { status: 204 })));
   for (const action of [() => staffTwoFactorApi.session(request.signal), () => staffTwoFactorApi.begin(securityStaff.email, request.signal), () => staffTwoFactorApi.confirm("012345", request.signal), () => staffTwoFactorApi.turnOff("raw password", request.signal)]) await expect(action()).rejects.toMatchObject({ name: "AbortError" });
 });
+
+it("refuses an operator issuer on the company enrollment contract", async () => {
+  const enrolmentUri = twoFactorSetup.enrolmentUri.replaceAll("ShopForge", "ShopForge%20Platform");
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ ...twoFactorSetup, enrolmentUri }))); await expect(staffTwoFactorApi.begin(securityStaff.email, signal())).rejects.toMatchObject({ kind: "invalid-response" });
+});

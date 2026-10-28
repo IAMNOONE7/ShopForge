@@ -15,16 +15,20 @@ import { operatorHomePath } from "./routing";
 import "./platform.css";
 
 const OperatorAccountPage = lazy(() => import("./OperatorAccountPage").then(pages => ({ default: pages.OperatorAccountPage })));
+const OperatorTwoFactorPage = lazy(() => import("./OperatorTwoFactorPage").then(pages => ({ default: pages.OperatorTwoFactorPage })));
 
 type Session = { status: "checking" } | { status: "error"; error: unknown } | { status: "signed-out"; expired: boolean } | { status: "signed-in"; user: PlatformUser };
 export default function PlatformApp() {
-  const { t, i18n } = useTranslation(["operator", "navigation"]);
+  const { t, i18n } = useTranslation(["operator", "navigation", "operatorTwoFactor"]);
   const location = useLocation();
   const [session, setSession] = useState<Session>({ status: "checking" }), [version, setVersion] = useState(0);
   const [logoutError, setLogoutError] = useState<unknown | null>(null), [logoutPending, setLogoutPending] = useState(false);
   const active = useRef(true), lock = useRef(false), boot = useRef<AbortController | null>(null);
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
-  useEffect(() => { document.title = session.status === "signed-in" && location.pathname.replace(/\/$/, "") === "/platform/account" ? `${t("accountSecurity")} · ${t("title")}` : t(session.status === "signed-in" ? "title" : "signInTitle"); }, [session.status, location.pathname, i18n.resolvedLanguage, t]);
+  useEffect(() => {
+    const path = location.pathname.replace(/\/$/, "");
+    document.title = session.status !== "signed-in" ? t("signInTitle") : path === "/platform/account/two-factor" ? `${t("operatorTwoFactor:title")} · ${t("title")}` : path === "/platform/account" ? `${t("accountSecurity")} · ${t("title")}` : t("title");
+  }, [session.status, location.pathname, i18n.resolvedLanguage, t]);
   useEffect(() => onUnauthorized(() => { boot.current?.abort(); setLogoutError(null); setSession({ status: "signed-out", expired: true }); }, "platform"), []);
   useEffect(() => {
     const controller = new AbortController(); boot.current = controller;
@@ -52,6 +56,7 @@ export default function PlatformApp() {
         {logoutError !== null && <div className="operator-session-error"><RequestError error={logoutError} operation="session" /><p>{t("logoutUnknown")}</p><Button type="button" onClick={checkSession}>{t("checkSession")}</Button></div>}
         <Routes><Route index element={<Navigate to="tenants" replace />} /><Route path="tenants" element={<TenantsPage key={session.user.id} userId={session.user.id} sessionStale={logoutPending || logoutError !== null} />} />
           <Route path="account" element={<DeferredPage><OperatorAccountPage user={session.user} sessionStale={logoutPending || logoutError !== null} /></DeferredPage>} />
+          <Route path="account/two-factor" element={<DeferredPage><OperatorTwoFactorPage user={session.user} sessionStale={logoutPending || logoutError !== null} /></DeferredPage>} />
           <Route path="*" element={<><h1>{t("notFound")}</h1><Link to="/platform/tenants">{t("companies")}</Link></>} /></Routes>
       </main>}
     <footer className="operator-footer container"><a href={adminHomePath()}>{t("companyAdmin")}</a><p>{t("separateSignIn")}</p></footer>

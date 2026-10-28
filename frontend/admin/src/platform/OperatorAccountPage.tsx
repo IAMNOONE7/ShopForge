@@ -8,7 +8,7 @@ export function OperatorAccountPage({ user, sessionStale }: { user: PlatformUser
   const { t } = useTranslation("operator");
   const context: AccountSecurityContext = {
     realm: "operator", scopeKey: JSON.stringify([user.id.toLowerCase(), user.email.trim().toLowerCase(), user.isTwoFactorEnabled]), email: user.email,
-    reloadPath: `${operatorPrefix()}/account`, recoveryPath: `${operatorPrefix()}/forgot-password`,
+    reloadPath: `${operatorPrefix()}/account`, recoveryPath: `${operatorPrefix()}/forgot-password`, twoFactorPath: "/platform/account/two-factor",
     check: async signal => sameOperatorAccount(user, await operatorAccountApi.session(signal)),
     password: operatorAccountApi.password, endOtherSessions: operatorAccountApi.endOtherSessions,
   };

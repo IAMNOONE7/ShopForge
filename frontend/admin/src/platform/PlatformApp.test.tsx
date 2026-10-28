@@ -8,6 +8,8 @@ import { api } from "../api";
 import { HttpError, onUnauthorized } from "../api/http";
 import { platformApi, type PlatformUser } from "../api/platform";
 import { operatorAccountApi } from "../api/operatorAccount";
+import { operatorTwoFactorApi } from "../api/operatorTwoFactor";
+import { twoFactorSetup, recoveryCodes } from "../test/operatorTwoFactorFixtures";
 import { i18n, initializeI18n } from "../i18n";
 import PlatformApp from "./PlatformApp";
 
@@ -131,5 +133,23 @@ it("keeps admin expiry separate and aborts a pending account command on platform
     await act(async () => { await requestJson("/api/admin/test").catch(() => undefined); }); expect(screen.getByRole("form", { name: "Change operator password" })).toBeTruthy();
     for (const label of ["Current password", "New password", "Confirm new password"]) await user.type(screen.getByLabelText(label), "new password"); fireEvent.submit(screen.getByRole("form")); await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     await act(async () => { await requestJson("/api/platform/test", { unauthorizedScope: "platform" }).catch(() => undefined); }); await screen.findByRole("heading", { name: "Operator sign-in" }); expect(save.mock.calls[0][2].aborted).toBe(true); await act(async () => held.resolve()); expect(screen.queryByRole("form", { name: "Change operator password" })).toBeNull();
+  } finally { vi.unstubAllGlobals(); }
+});
+it("gates a two-factor deep link before any operator setup read or command", async () => {
+  vi.mocked(platformApi.me).mockRejectedValueOnce(new HttpError("http", 401)); const read = vi.spyOn(operatorTwoFactorApi, "session").mockResolvedValue(operator), begin = vi.spyOn(operatorTwoFactorApi, "begin").mockResolvedValue(twoFactorSetup);
+  render(app("/platform/account/two-factor")); await screen.findByRole("heading", { name: "Operator sign-in" }); expect(read).not.toHaveBeenCalled(); expect(begin).not.toHaveBeenCalled(); expect(api.me).not.toHaveBeenCalled();
+});
+it("discards revealed setup material during a lost shell logout and reloads only checked status", async () => {
+  const member = { ...operator, isTwoFactorEnabled: false }; vi.mocked(platformApi.me).mockResolvedValue(member); vi.spyOn(operatorTwoFactorApi, "session").mockResolvedValue(member); const begin = vi.spyOn(operatorTwoFactorApi, "begin").mockResolvedValue(twoFactorSetup);
+  const held = deferred<void>(); vi.mocked(platformApi.logout).mockReturnValueOnce(held.promise); const user = userEvent.setup(); render(app("/platform/account/two-factor")); await user.click(await screen.findByRole("button", { name: "Set up an authenticator" })); await user.click(await screen.findByRole("button", { name: "Reveal setup key" })); expect(screen.getByLabelText("Setup key")).toHaveProperty("value", twoFactorSetup.secret);
+  await user.click(screen.getByRole("button", { name: "Sign out" })); expect(screen.queryByLabelText("Setup key")).toBeNull(); await act(async () => held.reject(new HttpError("network", null))); await user.click(screen.getByRole("button", { name: "Check operator session" })); await screen.findByRole("heading", { name: "Two-factor authentication is off" }); expect(screen.queryByRole("button", { name: "Reveal setup key" })).toBeNull(); expect(begin).toHaveBeenCalledTimes(1); expect(api.logout).not.toHaveBeenCalled();
+});
+it("preserves operator setup across admin expiry and discards a late confirmation on platform expiry", async () => {
+  const member = { ...operator, isTwoFactorEnabled: false }; vi.mocked(platformApi.me).mockResolvedValue(member); vi.spyOn(operatorTwoFactorApi, "session").mockResolvedValue(member); vi.spyOn(operatorTwoFactorApi, "begin").mockResolvedValue(twoFactorSetup);
+  const held = deferred<string[]>(), confirm = vi.spyOn(operatorTwoFactorApi, "confirm").mockReturnValueOnce(held.promise); const user = userEvent.setup(); render(app("/platform/account/two-factor")); await user.click(await screen.findByRole("button", { name: "Set up an authenticator" })); await screen.findByRole("form", { name: "Confirm authenticator setup" });
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 401 }))); const { requestJson } = await import("../api/http");
+  try {
+    await act(async () => { await requestJson("/api/admin/test").catch(() => undefined); }); expect(screen.getByRole("form", { name: "Confirm authenticator setup" })).toBeTruthy(); await user.click(screen.getByLabelText("I added this key to my authenticator.")); fireEvent.change(screen.getByLabelText("Six-digit authenticator code"), { target: { value: "012345" } }); fireEvent.submit(screen.getByRole("form")); await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+    await act(async () => { await requestJson("/api/platform/test", { unauthorizedScope: "platform" }).catch(() => undefined); }); await screen.findByRole("heading", { name: "Operator sign-in" }); expect(confirm.mock.calls[0][1].aborted).toBe(true); await act(async () => held.resolve(recoveryCodes)); expect(screen.queryByRole("button", { name: "Reveal recovery codes" })).toBeNull();
   } finally { vi.unstubAllGlobals(); }
 });

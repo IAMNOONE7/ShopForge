@@ -154,3 +154,7 @@ it("uses fixed operator-only recovery and reload destinations after an unknown p
   vi.mocked(operatorAccountApi.password).mockRejectedValueOnce(new HttpError("network", null)); render(<Shop />); await submit(); await screen.findByText(words("passwordUncertain"));
   expect(screen.getByRole("link", { name: words("recoverPassword") }).getAttribute("href")).toBe("/platform/forgot-password"); expect(screen.getByRole("link", { name: words("reload") }).getAttribute("href")).toBe("/platform/account");
 });
+
+it("links to operator two-factor management without starting enrollment", async () => {
+  render(<Shop />); await fill(); expect(screen.getByRole("link", { name: words("twoFactor") }).getAttribute("href")).toBe("/platform/account/two-factor"); expect(operatorAccountApi.password).not.toHaveBeenCalled();
+});
