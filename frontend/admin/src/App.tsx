@@ -37,6 +37,7 @@ const ColleaguesPage = lazy(() => import("./pages/ColleaguesPage").then(pages =>
 const StaffAccountPage = lazy(() => import("./pages/StaffAccountPage").then(pages => ({ default: pages.StaffAccountPage })));
 const StaffTwoFactorPage = lazy(() => import("./pages/StaffTwoFactorPage").then(pages => ({ default: pages.StaffTwoFactorPage })));
 const PlanUsagePage = lazy(() => import("./pages/PlanUsagePage").then(pages => ({ default: pages.PlanUsagePage })));
+const TenantAuditPage = lazy(() => import("./pages/TenantAuditPage").then(pages => ({ default: pages.TenantAuditPage })));
 const InvitationAcceptancePage = lazy(() => import("./pages/InvitationAcceptancePage").then(pages => ({ default: pages.InvitationAcceptancePage })));
 
 const PlatformApp = lazy(() => import("./platform/PlatformApp"));
@@ -217,6 +218,7 @@ function MerchantApp() {
                 <Route path="account" element={<DeferredPage><StaffAccountPage /></DeferredPage>} />
                 <Route path="account/two-factor" element={<DeferredPage><StaffTwoFactorPage /></DeferredPage>} />
                 <Route path="plan" element={<DeferredPage><PlanUsagePage /></DeferredPage>} />
+                <Route path="audit" element={canManageStore(session.user.role) ? <DeferredPage><TenantAuditPage /></DeferredPage> : <ForbiddenPage />} />
                 <Route path="stock" element={<StockPage />} />
                 <Route path="stock/:variantId" element={<ProductStockPage />} />
                 <Route path="stores" element={<StoreIndexPage />} />

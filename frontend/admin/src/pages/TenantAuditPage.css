@@ -1,0 +1,22 @@
+.tenant-audit-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); max-width: 62rem; overflow-wrap: anywhere; }
+.tenant-audit-page :is(h1, h2, h3, p, ul, dl, dd) { margin: 0; }
+.tenant-audit-heading, .tenant-audit-actions, .tenant-audit-record-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.tenant-audit-actions { justify-content: flex-start; }
+.tenant-audit-filters, .tenant-audit-results, .tenant-audit-records, .tenant-audit-feedback, .tenant-audit-record article { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); min-width: 0; }
+.tenant-audit-filters, .tenant-audit-record { padding: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-panel); background: var(--color-surface); }
+.tenant-audit-filter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: var(--space-4); }
+.tenant-audit-filters label { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); min-width: 0; }
+.tenant-audit-native-field { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--space-2); min-width: 0; }
+.tenant-audit-native-field > label { font-weight: 650; }
+.tenant-audit-size { max-width: 18rem; }
+.tenant-audit-feedback:empty { display: none; }
+.tenant-audit-page .tenant-audit-records { list-style: none; padding: 0; }
+.tenant-audit-results { margin: 0; }
+.tenant-audit-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); gap: var(--space-3); }
+.tenant-audit-facts > div { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
+.tenant-audit-facts dt { color: var(--color-text-muted); font-size: var(--text-sm); }
+.tenant-audit-record details { min-width: 0; }
+.tenant-audit-record details[open] > dl { margin-top: var(--space-3); }
+.tenant-audit-record pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; max-width: 100%; font: var(--text-sm) / 1.6 var(--font-mono); }
+.tenant-audit-page :is(input, select, button, a, code, time, summary) { min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.tenant-audit-feedback .link-button { text-align: start; }

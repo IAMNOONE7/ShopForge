@@ -117,4 +117,5 @@ it.each(["Owner", "Admin", "CatalogManager", "OrderManager", "Warehouse", "Suppo
   if (link) expect(link.getAttribute("href")).toBe("/users");
   expect(screen.getByRole("link", { name: "Account security" }).getAttribute("href")).toBe("/account");
   expect(screen.getByRole("link", { name: "Plan and usage" }).getAttribute("href")).toBe("/plan");
+  expect(screen.queryByRole("link", { name: "Company activity" }) !== null).toBe(["Owner", "Admin"].includes(role));
 });
