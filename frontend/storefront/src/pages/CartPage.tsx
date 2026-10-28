@@ -7,7 +7,7 @@ import { readCheckoutRecovery } from "../checkoutRecovery";
 import { CartLine } from "../components/cart/CartLine";
 import { CartSummary } from "../components/cart/CartSummary";
 import { DiscountField } from "../components/DiscountField";
-import { LoadingState } from "../components/ui/LoadingState";
+import { ShoppingPageLoading } from "../components/ShoppingPageLoading";
 import { RequestError } from "../components/ui/RequestError";
 import { ShoppingProgress } from "../components/ShoppingProgress";
 
@@ -51,12 +51,7 @@ export function CartPage() {
     );
   }
   if (!cart) {
-    return (
-      <section className="cart cart-load-state">
-        <h1>{t("navigation:cart")}</h1>
-        <LoadingState label={t("cart:loading")} lines={4} />
-      </section>
-    );
+    return <ShoppingPageLoading kind="cart" label={t("cart:loading")} />;
   }
 
   return (

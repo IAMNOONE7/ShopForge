@@ -68,7 +68,8 @@ export function RouteEffects({
       if (!document.head.querySelector('meta[data-shopforge-seo][name="robots"]')) {
         fallbackMetadata?.(); fallbackMetadata = installPageMetadata(null);
       }
-      const heading = main?.querySelector<HTMLElement>("h1");
+      const candidate = main?.querySelector<HTMLElement>("h1");
+      const heading = candidate?.closest('[aria-busy="true"]') ? null : candidate;
       const page = heading?.textContent?.trim() || fallbackTitle;
       if (!hasPageTitle()) document.title = location.pathname === "/" && page === store.name
         ? store.name
@@ -87,6 +88,8 @@ export function RouteEffects({
       childList: true,
       subtree: true,
       characterData: true,
+      attributes: true,
+      attributeFilter: ["aria-busy"],
     });
     observer.observe(document.head, { attributes: true, attributeFilter: ["data-shopforge-title"] });
     return () => { observer.disconnect(); fallbackMetadata?.(); };

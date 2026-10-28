@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { ShoppingPageLoading } from "../components/ShoppingPageLoading";
 import { Trans, useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router";
 import { statusOf } from "../api/errors";
@@ -32,7 +33,6 @@ import { CarrierMapPicker, type ChosenPoint } from "../components/checkout/Carri
 import { PickupPointSelect } from "../components/checkout/PickupPointSelect";
 import { Message } from "../components/Message";
 import { InlineMessage } from "../components/ui/InlineMessage";
-import { LoadingState } from "../components/ui/LoadingState";
 import { RequestError } from "../components/ui/RequestError";
 import { useCustomer } from "../customerContext";
 import type { Customer } from "../account";
@@ -62,12 +62,7 @@ export function CheckoutPage() {
   }
 
   if (!cartState.cart) {
-    return (
-      <section className="checkout-load-state">
-        <h1>{t("checkout:title")}</h1>
-        <LoadingState label={t("checkout:loadingCart")} lines={4} />
-      </section>
-    );
+    return <ShoppingPageLoading kind="checkout" label={t("checkout:loadingCart")} />;
   }
 
   if (cartState.cart.items.length === 0) {
@@ -80,12 +75,7 @@ export function CheckoutPage() {
   }
 
   if (customerState.status === "checking") {
-    return (
-      <section className="checkout-load-state">
-        <h1>{t("checkout:title")}</h1>
-        <LoadingState label={t("checkout:checkingCustomer")} lines={3} />
-      </section>
-    );
+    return <ShoppingPageLoading kind="checkout" label={t("checkout:checkingCustomer")} lines={3} />;
   }
 
   if (customerState.status === "error") {
