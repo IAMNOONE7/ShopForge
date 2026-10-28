@@ -11,6 +11,16 @@
   padding-block: 0;
   background: transparent;
   border-color: transparent;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.utility-bar .language-switcher {
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  overflow-wrap: anywhere;
 }
 
 .store-header {
@@ -299,13 +309,18 @@
 
 .discovery-action {
   display: inline-flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
   gap: var(--space-6);
+  row-gap: var(--space-2);
   min-height: 2.75rem;
   align-items: center;
   padding-block: var(--space-2);
   color: var(--color-text);
   font-weight: 650;
   text-decoration: none;
+  overflow-wrap: anywhere;
   border-bottom: 2px solid var(--color-text);
 }
 
@@ -345,6 +360,7 @@
   gap: var(--space-1) var(--space-3);
   padding-top: var(--space-3);
   font-size: var(--text-sm);
+  overflow-wrap: anywhere;
 }
 
 .discovery-product-caption strong {
@@ -364,6 +380,7 @@
 
 .discovery-section-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-4);
@@ -390,6 +407,8 @@
 
 .category-entry-title {
   display: flex;
+  min-width: 0;
+  max-width: 100%;
   min-height: 2.75rem;
   align-items: baseline;
   justify-content: space-between;
@@ -400,6 +419,11 @@
   font-weight: 650;
   letter-spacing: -0.035em;
   text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.category-entry-title > span {
+  flex: 0 0 auto;
 }
 
 .category-entry-title:hover {
@@ -419,6 +443,13 @@
   min-height: 2.75rem;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.category-entry-children li {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .catalog-heading {
@@ -442,6 +473,13 @@
   display: grid;
   gap: var(--space-6);
   justify-items: start;
+  min-width: 0;
+}
+
+.footer-brand,
+.footer-links a {
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .footer-top {
@@ -560,7 +598,7 @@
   }
 
   .discovery-intro {
-    padding: var(--space-6);
+    padding: clamp(var(--space-3), 4vw, var(--space-6));
   }
 
   .category-entry {
@@ -568,6 +606,7 @@
   }
 
   .store-footer-inner {
+    grid-template-columns: minmax(0, 1fr);
     column-gap: var(--space-4);
   }
 }

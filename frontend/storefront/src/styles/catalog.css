@@ -322,10 +322,12 @@
 
 .product-card-body {
   display: flex;
+  min-width: 0;
   flex: 1;
   flex-direction: column;
   gap: var(--space-2);
   padding-top: var(--space-4);
+  overflow-wrap: anywhere;
 }
 
 .product-card .product-name {
@@ -438,10 +440,14 @@ dialog.filter-dialog {
 }
 
 .filter-dialog-header {
+  position: static;
+  flex-wrap: wrap;
   padding: var(--space-4) var(--space-6);
 }
 
 .filter-dialog-header h2 {
+  flex: 1 1 12rem;
+  min-width: 0;
   font-size: var(--text-lg);
 }
 
@@ -482,6 +488,17 @@ dialog.filter-dialog {
 
 .filter-show-results {
   width: 100%;
+}
+
+@media (max-height: 36rem) {
+  dialog.filter-dialog {
+    display: block;
+    overflow-y: auto;
+  }
+
+  .filter-dialog-body {
+    overflow-y: visible;
+  }
 }
 
 @media (max-width: 60rem) {
