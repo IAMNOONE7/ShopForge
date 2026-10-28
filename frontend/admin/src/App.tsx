@@ -10,27 +10,26 @@ import { LoadingState } from "./components/ui/LoadingState";
 import { RequestError } from "./components/ui/RequestError";
 import { StoreLayout } from "./layouts/StoreLayout";
 import { LoginPage } from "./pages/LoginPage";
-import { NewStorePage } from "./pages/NewStorePage";
 import { ProductsPage } from "./pages/ProductsPage";
-import { NewPhysicalProductPage } from "./pages/NewPhysicalProductPage";
-import { PhysicalProductPage } from "./pages/PhysicalProductPage";
-import { StockPage } from "./pages/StockPage";
-import { ProductStockPage } from "./pages/ProductStockPage";
 import { ForbiddenPage, NotFoundPage } from "./pages/RouteStatePage";
 import { StoreIndexPage } from "./pages/StoreIndexPage";
 import { StoreOverviewPage } from "./pages/StoreOverviewPage";
-import {
-  StoreDiscountsPage,
-  StoreMethodsPage,
-  StoreReviewsPage,
-  StoreSettingsPage,
-} from "./pages/StorePage";
 import { adminHomePath, safeAdminReturnPath } from "./routing";
 import { canManageCatalog, canManageStore, SessionContext } from "./session";
 import { isOperatorPath } from "./platform/routing";
 import type { InvitationEntry } from "./invitationEntry";
 import type { StaffRecoveryEntry } from "./staffRecoveryEntry";
 import type { OperatorRecoveryEntry } from "./platform/operatorRecoveryEntry";
+
+const NewStorePage = lazy(() => import("./pages/NewStorePage").then(pages => ({ default: pages.NewStorePage })));
+const NewPhysicalProductPage = lazy(() => import("./pages/NewPhysicalProductPage").then(pages => ({ default: pages.NewPhysicalProductPage })));
+const PhysicalProductPage = lazy(() => import("./pages/PhysicalProductPage").then(pages => ({ default: pages.PhysicalProductPage })));
+const StockPage = lazy(() => import("./pages/StockPage").then(pages => ({ default: pages.StockPage })));
+const ProductStockPage = lazy(() => import("./pages/ProductStockPage").then(pages => ({ default: pages.ProductStockPage })));
+const StoreSettingsPage = lazy(() => import("./pages/StoreSettingsPage").then(pages => ({ default: pages.StoreSettingsPage })));
+const StoreMethodsPage = lazy(() => import("./pages/StoreMethodsPage").then(pages => ({ default: pages.StoreMethodsPage })));
+const StoreDiscountsPage = lazy(() => import("./pages/StoreDiscountsPage").then(pages => ({ default: pages.StoreDiscountsPage })));
+const StoreReviewsPage = lazy(() => import("./pages/StoreReviewsPage").then(pages => ({ default: pages.StoreReviewsPage })));
 
 const ForgotOperatorPasswordPage = lazy(() => import("./platform/OperatorPasswordPages").then(pages => ({ default: pages.ForgotOperatorPasswordPage })));
 const ResetOperatorPasswordPage = lazy(() => import("./platform/OperatorPasswordPages").then(pages => ({ default: pages.ResetOperatorPasswordPage })));
@@ -219,22 +218,22 @@ function MerchantApp() {
                 <Route index element={<Navigate to="/products" replace />} />
                 <Route path="products" element={<ProductsPage />} />
                 <Route path="products/new" element={
-                  canManageCatalog(session.user.role) ? <NewPhysicalProductPage /> : <ForbiddenPage />
+                  canManageCatalog(session.user.role) ? <DeferredPage><NewPhysicalProductPage /></DeferredPage> : <ForbiddenPage />
                 } />
-                <Route path="products/:productId" element={<PhysicalProductPage />} />
+                <Route path="products/:productId" element={<DeferredPage><PhysicalProductPage /></DeferredPage>} />
                 <Route path="users" element={canManageStore(session.user.role) ? <DeferredPage><ColleaguesPage /></DeferredPage> : <ForbiddenPage />} />
                 <Route path="account" element={<DeferredPage><StaffAccountPage /></DeferredPage>} />
                 <Route path="account/two-factor" element={<DeferredPage><StaffTwoFactorPage /></DeferredPage>} />
                 <Route path="plan" element={<DeferredPage><PlanUsagePage /></DeferredPage>} />
                 <Route path="audit" element={canManageStore(session.user.role) ? <DeferredPage><TenantAuditPage /></DeferredPage> : <ForbiddenPage />} />
-                <Route path="stock" element={<StockPage />} />
-                <Route path="stock/:variantId" element={<ProductStockPage />} />
+                <Route path="stock" element={<DeferredPage><StockPage /></DeferredPage>} />
+                <Route path="stock/:variantId" element={<DeferredPage><ProductStockPage /></DeferredPage>} />
                 <Route path="stores" element={<StoreIndexPage />} />
                 <Route
                   path="stores/new"
                   element={
                     canManageStore(session.user.role) ? (
-                      <NewStorePage />
+                      <DeferredPage><NewStorePage /></DeferredPage>
                     ) : (
                       <ForbiddenPage />
                     )
@@ -242,7 +241,7 @@ function MerchantApp() {
                 />
                 <Route path="stores/:storeId" element={<StoreLayout />}>
                   <Route index element={<StoreOverviewPage />} />
-                  <Route path="settings" element={<StoreSettingsPage />} />
+                  <Route path="settings" element={<DeferredPage><StoreSettingsPage /></DeferredPage>} />
                   <Route path="domains" element={canManageStore(session.user.role) ? <DeferredPage><StoreDomainsPage /></DeferredPage> : <ForbiddenPage />} />
                   <Route path="pages" element={canManageStore(session.user.role) ? <DeferredPage><ContentPagesPage /></DeferredPage> : <ForbiddenPage />} />
                   <Route path="pages/new" element={canManageStore(session.user.role) ? <DeferredPage><NewContentPage /></DeferredPage> : <ForbiddenPage />} />
@@ -264,15 +263,15 @@ function MerchantApp() {
                   <Route path="feeds/:feed" element={<DeferredPage><StoreFeedsPage /></DeferredPage>} />
                   <Route path="exports" element={<DeferredPage><StoreExportsPage /></DeferredPage>} />
                   <Route path="import" element={<DeferredPage><StoreImportPage /></DeferredPage>} />
-                  <Route path="methods" element={<StoreMethodsPage />} />
+                  <Route path="methods" element={<DeferredPage><StoreMethodsPage /></DeferredPage>} />
                   <Route path="shipping-settings" element={<DeferredPage><StoreShippingSettingsPage /></DeferredPage>} />
-                  <Route path="discounts" element={<StoreDiscountsPage />} />
+                  <Route path="discounts" element={<DeferredPage><StoreDiscountsPage /></DeferredPage>} />
                   <Route path="orders" element={<DeferredPage><StoreOrdersPage /></DeferredPage>} />
                   <Route path="orders/:number" element={<DeferredPage><StoreOrderPage /></DeferredPage>} />
                   <Route path="unapplied-payments" element={<DeferredPage><UnappliedPaymentsPage /></DeferredPage>} />
                   <Route path="returns" element={<DeferredPage><StoreReturnsPage /></DeferredPage>} />
                   <Route path="returns/:returnId" element={<DeferredPage><StoreReturnPage /></DeferredPage>} />
-                  <Route path="reviews" element={<StoreReviewsPage />} />
+                  <Route path="reviews" element={<DeferredPage><StoreReviewsPage /></DeferredPage>} />
                   <Route path="operations" element={<DeferredPage><StoreOperationsPage /></DeferredPage>} />
                   <Route path="setup" element={<DeferredPage><StoreSetupPage /></DeferredPage>} />
                   <Route path="email" element={<DeferredPage><StoreEmailPage /></DeferredPage>} />
