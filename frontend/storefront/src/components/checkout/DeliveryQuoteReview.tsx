@@ -1,17 +1,18 @@
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import { cartLineName, type Cart } from "../../cart";
 import type { ShippingQuote, UnavailableShippingMethod } from "../../shippingQuotes";
-import { formatPrice, useStore } from "../../storeContext";
+import { useStore } from "../../storeContext";
+import { CurrencyValue } from "../CurrencyValue";
 
 export function DeliveryQuoteReview({ quote, previousPrice }: { quote: ShippingQuote; previousPrice: number }) {
   const { t } = useTranslation("checkout");
   const store = useStore();
   return <div className="delivery-quote-review">
-    <p>{t("shippingPriceComparison", { previous: formatPrice(previousPrice, store), current: formatPrice(quote.total, store) })}</p>
+    <p><Trans t={t} i18nKey="shippingPriceComparison" components={{ previous: <CurrencyValue value={previousPrice} culture={store.culture} currency={store.currency} />, current: <CurrencyValue value={quote.total} culture={store.culture} currency={store.currency} /> }} /></p>
     {quote.parcels.length > 0 && <ul className="delivery-parcel-prices">
       {quote.parcels.map((parcel, index) => <li key={index}>
-        <span>{t("quotedParcel", { number: index + 1 })}</span> <strong>{formatPrice(parcel.price, store)}</strong>
+        <span>{t("quotedParcel", { number: index + 1 })}</span> <strong><CurrencyValue value={parcel.price} culture={store.culture} currency={store.currency} /></strong>
       </li>)}
     </ul>}
     <p>{t("shippingPriceReviewHint")}</p>

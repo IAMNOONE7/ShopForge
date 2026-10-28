@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent } from "react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import {
   cartLineKey,
@@ -10,7 +10,8 @@ import {
   type CartLine as CartLineModel,
 } from "../../cart";
 import { useCart } from "../../cartContext";
-import { formatPrice, useStore } from "../../storeContext";
+import { useStore } from "../../storeContext";
+import { CurrencyValue } from "../CurrencyValue";
 import { InlineMessage } from "../ui/InlineMessage";
 import { productPath } from "../../publicPages";
 
@@ -136,7 +137,7 @@ export function CartLine({
           </span>
         )}
         <span className="cart-unit-price">
-          {t("cart:unitPrice", { price: formatPrice(line.unitPrice, store) })}
+          <Trans t={t} i18nKey="cart:unitPrice" components={{ price: <CurrencyValue value={line.unitPrice} culture={store.culture} currency={store.currency} /> }} />
         </span>
       </div>
       <form
@@ -179,7 +180,7 @@ export function CartLine({
       </form>
       <div className="cart-line-total">
         <span>{t("cart:lineTotal")}</span>
-        <strong>{formatPrice(line.lineTotal, store)}</strong>
+        <strong><CurrencyValue value={line.lineTotal} culture={store.culture} currency={store.currency} /></strong>
       </div>
       <button
         type="button"

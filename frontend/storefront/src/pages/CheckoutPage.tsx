@@ -37,7 +37,8 @@ import { RequestError } from "../components/ui/RequestError";
 import { useCustomer } from "../customerContext";
 import type { Customer } from "../account";
 import { attemptFor, changedSince, inFlightWrite, uncertainWrite, type WriteAttempt } from "../idempotency";
-import { formatPrice, useStore } from "../storeContext";
+import { useStore } from "../storeContext";
+import { CurrencyValue } from "../components/CurrencyValue";
 import { useRequest, type RequestState } from "../useRequest";
 import { deliveryPriceChanged, readChangedShippingQuote, shippingMethodErrors, type ShippingQuote } from "../shippingQuotes";
 import { DeliveryQuoteReview, UnavailableDeliveryMethods } from "../components/checkout/DeliveryQuoteReview";
@@ -438,7 +439,7 @@ function CheckoutForm({
                   {refreshingCart || methodsRefreshing
                     ? t("checkout:refreshingOrder")
                     : currentPriceChange && chosenShipping
-                      ? t("checkout:reviewShippingPriceAction", { price: formatPrice(chosenShipping.price, store) })
+                      ? <Trans t={t} i18nKey="checkout:reviewShippingPriceAction" components={{ price: <CurrencyValue value={chosenShipping.price} culture={store.culture} currency={store.currency} /> }} />
                       : t(changedAfterUncertain || reviewKind === "mismatch" ? "checkout:newAttemptAction" : reviewKind === "inFlight" ? "checkout:retryReviewAction" : "checkout:reviewAction")}
                 </button>
               </InlineMessage>

@@ -4,7 +4,7 @@ import { Link } from "react-router";
 import { cartLineKey, type Cart } from "../../cart";
 import type { ShippingMethod } from "../../cart";
 import type { Store } from "../../store";
-import { formatPrice } from "../../storeContext";
+import { CurrencyValue } from "../CurrencyValue";
 import { productPath } from "../../publicPages";
 import { CartTotals } from "../cart/CartTotals";
 
@@ -27,7 +27,7 @@ export function CheckoutSummary({ cart, shipping, store, pending, children }: {
               {line.optionValues.length > 0 && <bdi className="checkout-line-options" lang={store.culture}>{line.optionValues.join(" / ")}</bdi>}
               <span className="hint">{t("cart:quantityLabel")}: {line.quantity}</span>
             </div>
-            <span>{formatPrice(line.lineTotal, store)}</span>
+            <span><CurrencyValue value={line.lineTotal} culture={store.culture} currency={store.currency} /></span>
           </li>
         ))}
       </ul>

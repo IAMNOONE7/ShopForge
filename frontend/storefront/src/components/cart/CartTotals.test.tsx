@@ -21,7 +21,7 @@ describe("shopping totals", () => {
     expect(screen.getByText("€120.00")).toBeTruthy();
     expect(screen.getByText("−€12.00")).toBeTruthy();
     expect(document.querySelector(".cart-total strong")?.textContent).toBe("€108.00");
-    expect(screen.getByText("Includes €18.00 VAT. Shipping is added at checkout.")).toBeTruthy();
+    expect(document.querySelector(".shopping-total-note")?.textContent).toBe("Includes €18.00 VAT. Shipping is added at checkout.");
   });
 
   it("keeps shipping separate and labels the preview when the discount contract cannot quote shipping savings", () => {

@@ -1012,7 +1012,7 @@ describe("cart-priced delivery at checkout", () => {
     mocks.placeOrder.mockRejectedValueOnce(priceConflict()).mockRejectedValue(new HttpError("http", 400));
     await user.click(screen.getByRole("button", { name: "Place order" }));
     expect(await screen.findByText("The delivery price has changed")).toBeTruthy();
-    expect(screen.getByText("Previously shown: €16.00. New quote: €20.00.")).toBeTruthy();
+    expect(document.querySelector(".delivery-quote-review > p")?.textContent).toBe("Previously shown: €16.00. New quote: €20.00.");
     expect(screen.getByText("Parcel 1")).toBeTruthy();
     expect(document.querySelector(".checkout-total strong")?.textContent).toBe("€140.00");
     await waitFor(() => expect(document.activeElement).toBe(document.querySelector(".checkout-review")));
@@ -1024,7 +1024,7 @@ describe("cart-priced delivery at checkout", () => {
     await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(2));
     expect(mocks.placeOrder.mock.calls[1][0].expectedShippingPrice).toBe(20);
     expect(mocks.placeOrder.mock.calls[1][1]).not.toBe(mocks.placeOrder.mock.calls[0][1]);
-    expect(screen.queryByText("Previously shown: €16.00. New quote: €20.00.")).toBeNull();
+    expect(document.querySelector(".delivery-quote-review")).toBeNull();
   });
 
   it("does not approve a changed quote while refreshing methods has failed", async () => {
@@ -1035,7 +1035,7 @@ describe("cart-priced delivery at checkout", () => {
     fireEvent.submit(document.querySelector("form.checkout")!);
     const review = await screen.findByRole("button", { name: "I reviewed delivery at €16.00" });
     await waitFor(() => expect(review).toHaveProperty("disabled", true));
-    expect(screen.getByText("Previously shown: €16.00. New quote: €20.00.")).toBeTruthy();
+    expect(document.querySelector(".delivery-quote-review > p")?.textContent).toBe("Previously shown: €16.00. New quote: €20.00.");
     fireEvent.submit(document.querySelector("form.checkout")!);
     expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
     expect(document.querySelector(".checkout-total strong")).toBeNull();
@@ -1048,7 +1048,7 @@ describe("cart-priced delivery at checkout", () => {
     offerMethods({ ...methods, shippingMethods: [{ ...parcelMethod, price: 22 }] });
     mocks.placeOrder.mockRejectedValueOnce(priceConflict()).mockRejectedValue(new HttpError("http", 400));
     await user.click(screen.getByRole("button", { name: "Place order" }));
-    await screen.findByText("Previously shown: €16.00. New quote: €20.00.");
+    await waitFor(() => expect(document.querySelector(".delivery-quote-review > p")?.textContent).toBe("Previously shown: €16.00. New quote: €20.00."));
     await waitFor(() => expect(document.querySelector(".checkout-total strong")?.textContent).toBe("€142.00"));
     const review = screen.getByRole("button", { name: "I reviewed delivery at €22.00" });
     await waitFor(() => expect(review).toHaveProperty("disabled", false));
@@ -1076,7 +1076,7 @@ describe("cart-priced delivery at checkout", () => {
     mocks.getCart.mockResolvedValue(cart);
     mocks.placeOrder.mockRejectedValue(priceConflict());
     fireEvent.submit(document.querySelector("form.checkout")!);
-    await screen.findByText("Previously shown: €16.00. New quote: €20.00.");
+    await waitFor(() => expect(document.querySelector(".delivery-quote-review > p")?.textContent).toBe("Previously shown: €16.00. New quote: €20.00."));
     fireEvent.change(document.querySelector('[name="billing.country"]')!, { target: { value: "CZ" } });
     await screen.findByRole("radio", { name: /Parcel delivery/ });
     expect(document.querySelector(".delivery-quote-review")).toBeNull();

@@ -139,7 +139,12 @@
 }
 
 .cart-count {
+  min-width: calc(3ch + var(--space-4));
   font-size: var(--text-xs);
+}
+
+.cart-count-empty {
+  visibility: hidden;
 }
 
 .store-category-bar {

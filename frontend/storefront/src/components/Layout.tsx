@@ -23,6 +23,7 @@ export function Layout() {
   const store = useStore();
   const location = useLocation();
   const { status: cartStatus, cart } = useCart();
+  const cartCount = cartStatus === "ready" && cart ? cart.count : 0;
   const { status: customerStatus, customer } = useCustomer();
   const categories = useRequest("categories", getCategories);
   const categoryList: Category[] =
@@ -66,9 +67,9 @@ export function Layout() {
               <path d="M8 8V6a4 4 0 0 1 8 0v2" />
             </svg>
             {t("cart")}
-            {cartStatus === "ready" && cart && cart.count > 0 && (
-              <span className="cart-count">{cart.count}</span>
-            )}
+            <span className={`cart-count${cartCount > 0 ? "" : " cart-count-empty"}`} aria-hidden={cartCount > 0 ? undefined : true}>
+              {cartCount > 0 ? cartCount : null}
+            </span>
           </NavLink>
           <MobileNavigation
             key={location.key}

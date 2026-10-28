@@ -69,6 +69,47 @@
   gap: var(--space-8) clamp(1.5rem, 5vw, 4rem);
 }
 
+.cart-load-state {
+  max-width: none;
+}
+
+.cart-loading-bar,
+.cart-loading-control,
+.cart-loading-block {
+  display: block;
+  border-radius: var(--radius-control);
+  background: var(--color-border);
+}
+
+.cart-loading-bar {
+  width: 100%;
+  min-height: 1.25rem;
+}
+
+.cart-loading-control {
+  min-height: var(--control-height);
+}
+
+.cart-loading-line .cart-line-total,
+.cart-loading-discount,
+.cart-loading-summary {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.cart-loading-line .cart-line-total {
+  width: 6rem;
+}
+
+.cart-loading-summary {
+  min-height: 22rem;
+  align-content: space-between;
+}
+
+.checkout-loading-fields {
+  min-height: 48rem;
+}
+
 .checkout-fields,
 .checkout-summary {
   grid-column: 1;
@@ -185,6 +226,22 @@
   box-shadow: none;
 }
 
+.currency-value {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: baseline;
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.currency-value-group {
+  display: inline-block;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
 .cart-summary h2,
 .checkout-summary h2,
 .checkout-final-review h2 {
@@ -202,8 +259,8 @@
 }
 
 .shopping-totals > div {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 6rem), 1fr));
+  display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: var(--space-3);
 }
@@ -221,7 +278,13 @@
   font-size: var(--text-xs);
 }
 
+.shopping-totals dt {
+  flex: 1 1 6rem;
+}
+
 .shopping-totals dd {
+  max-width: 100%;
+  margin-inline-start: auto;
   text-align: right;
   font-weight: 650;
   white-space: normal;
@@ -229,8 +292,8 @@
 
 .cart-total,
 .checkout-total {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 6rem), 1fr));
+  display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: var(--space-3);
   padding-top: var(--space-6);
@@ -240,6 +303,8 @@
 
 .cart-total strong,
 .checkout-total > strong:last-child {
+  max-width: 100%;
+  margin-inline-start: auto;
   font-size: var(--text-xl);
   white-space: normal;
   overflow-wrap: anywhere;
@@ -429,6 +494,7 @@ fieldset.checkout-fields {
 }
 
 .checkout-breakdown li {
+  flex-wrap: wrap;
   align-items: start;
   gap: var(--space-3);
   padding-bottom: var(--space-4);
@@ -438,12 +504,29 @@ fieldset.checkout-fields {
 
 .checkout-breakdown li > div {
   display: grid;
+  flex: 1 1 10rem;
   gap: var(--space-1);
 }
 
 .checkout-breakdown li > :last-child {
   flex: 0 1 auto;
   min-width: 0;
+  max-width: 100%;
+  margin-inline-start: auto;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@container (max-width: 26rem) {
+  .cart-summary,
+  .checkout-summary,
+  .cart-empty {
+    padding-inline: clamp(var(--space-2), 4vw, var(--space-6));
+  }
+}
+
+.cart-empty .button {
+  max-width: 100%;
   white-space: normal;
   overflow-wrap: anywhere;
 }
@@ -584,7 +667,8 @@ fieldset.checkout-fields {
 
   .cart-summary,
   .checkout-summary {
-    padding: var(--space-4);
+    padding-block: var(--space-4);
+    padding-inline: clamp(var(--space-2), 4vw, var(--space-4));
   }
 
   .checkout-address-grid {
