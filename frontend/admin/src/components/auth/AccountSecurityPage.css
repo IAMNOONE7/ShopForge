@@ -1,0 +1,11 @@
+.account-security-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); max-width: 44rem; overflow-wrap: anywhere; }
+.account-security-page :is(h1, h2, h3, p, ul) { margin: 0; }
+.account-security-panel, .account-security-confirm, .account-security-form, .account-security-feedback { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); min-width: 0; }
+.account-security-panel { margin: 0; padding: var(--space-6); border: 1px solid var(--color-border); border-radius: var(--radius-panel); background: var(--color-surface); }
+.account-security-feedback:empty { display: none; }
+.account-security-confirm { padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-control); }
+.account-security-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.account-security-page :is(input, button, a) { min-width: 0; max-width: 100%; }
+.account-security-page :is(button, a) { white-space: normal; overflow-wrap: anywhere; }
+.account-security-feedback .link-button { text-align: start; }
+@media (max-width: 40rem) { .account-security-panel { padding: var(--space-3); } }

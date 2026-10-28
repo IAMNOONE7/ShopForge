@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, Navigate, Route, Routes } from "react-router";
+import { Link, Navigate, NavLink, Route, Routes, useLocation } from "react-router";
 import { platformApi, type PlatformUser } from "../api/platform";
 import { statusOf } from "../api/errors";
 import { onUnauthorized } from "../api/http";
 import { Button } from "../components/ui/Button";
+import { DeferredPage } from "../components/DeferredPage";
 import { LoadingState } from "../components/ui/LoadingState";
 import { RequestError } from "../components/ui/RequestError";
 import { adminHomePath } from "../routing";
@@ -13,14 +14,17 @@ import { TenantsPage } from "./TenantsPage";
 import { operatorHomePath } from "./routing";
 import "./platform.css";
 
+const OperatorAccountPage = lazy(() => import("./OperatorAccountPage").then(pages => ({ default: pages.OperatorAccountPage })));
+
 type Session = { status: "checking" } | { status: "error"; error: unknown } | { status: "signed-out"; expired: boolean } | { status: "signed-in"; user: PlatformUser };
 export default function PlatformApp() {
   const { t, i18n } = useTranslation(["operator", "navigation"]);
+  const location = useLocation();
   const [session, setSession] = useState<Session>({ status: "checking" }), [version, setVersion] = useState(0);
   const [logoutError, setLogoutError] = useState<unknown | null>(null), [logoutPending, setLogoutPending] = useState(false);
   const active = useRef(true), lock = useRef(false), boot = useRef<AbortController | null>(null);
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
-  useEffect(() => { document.title = t(session.status === "signed-in" ? "title" : "signInTitle"); }, [session.status, i18n.resolvedLanguage, t]);
+  useEffect(() => { document.title = session.status === "signed-in" && location.pathname.replace(/\/$/, "") === "/platform/account" ? `${t("accountSecurity")} · ${t("title")}` : t(session.status === "signed-in" ? "title" : "signInTitle"); }, [session.status, location.pathname, i18n.resolvedLanguage, t]);
   useEffect(() => onUnauthorized(() => { boot.current?.abort(); setLogoutError(null); setSession({ status: "signed-out", expired: true }); }, "platform"), []);
   useEffect(() => {
     const controller = new AbortController(); boot.current = controller;
@@ -40,12 +44,14 @@ export default function PlatformApp() {
       {session.status === "signed-in" && <div className="admin-user"><span><strong>{session.user.email}</strong><span>{t("operatorRole")}</span></span>
         <Button type="button" busy={logoutPending} onClick={() => void logout()}>{t("navigation:signOut")}</Button></div>}
     </div></header>
+    {session.status === "signed-in" && <nav className="operator-navigation container" aria-label={t("navigationLabel")}><NavLink to="/platform/tenants">{t("companies")}</NavLink><NavLink to="/platform/account">{t("accountSecurity")}</NavLink></nav>}
     {session.status === "checking" ? <main id="operator-main" tabIndex={-1} className="app container app-boot"><LoadingState label={t("checking")} lines={3} /></main>
       : session.status === "error" ? <main id="operator-main" tabIndex={-1} className="app container"><h1>{t("sessionUnavailable")}</h1><RequestError error={session.error} operation="session" onRetry={checkSession} /></main>
       : session.status === "signed-out" ? <PlatformLogin expired={session.expired} onCheckSession={checkSession} onSignedIn={user => { setLogoutError(null); setSession({ status: "signed-in", user }); }} />
       : <main id="operator-main" className="app container operator-main" tabIndex={-1}>
         {logoutError !== null && <div className="operator-session-error"><RequestError error={logoutError} operation="session" /><p>{t("logoutUnknown")}</p><Button type="button" onClick={checkSession}>{t("checkSession")}</Button></div>}
         <Routes><Route index element={<Navigate to="tenants" replace />} /><Route path="tenants" element={<TenantsPage key={session.user.id} userId={session.user.id} sessionStale={logoutPending || logoutError !== null} />} />
+          <Route path="account" element={<DeferredPage><OperatorAccountPage user={session.user} sessionStale={logoutPending || logoutError !== null} /></DeferredPage>} />
           <Route path="*" element={<><h1>{t("notFound")}</h1><Link to="/platform/tenants">{t("companies")}</Link></>} /></Routes>
       </main>}
     <footer className="operator-footer container"><a href={adminHomePath()}>{t("companyAdmin")}</a><p>{t("separateSignIn")}</p></footer>

@@ -1,5 +1,8 @@
 .operator-frame { display: flex; flex-direction: column; min-height: calc(100vh - 2.75rem); }
 .operator-main, .operator-workspace, .operator-login { min-width: 0; overflow-wrap: anywhere; }
+.operator-navigation { display: flex; flex-wrap: wrap; gap: var(--space-3); padding-block: var(--space-3); overflow-wrap: anywhere; }
+.operator-navigation a { min-width: 0; max-width: 100%; padding: var(--space-2) var(--space-3); border-radius: var(--radius-control); }
+.operator-navigation a[aria-current="page"] { background: var(--color-surface); font-weight: 700; text-decoration-thickness: 0.15em; }
 .operator-login { margin-inline: auto; width: min(100% - 2rem, 32rem); padding: clamp(0.5rem, 4vw, 1.5rem); }
 .operator-login h1 { font-size: var(--text-xl); text-align: left; }
 .operator-login form, .operator-fields { display: grid; gap: var(--space-4); min-width: 0; }

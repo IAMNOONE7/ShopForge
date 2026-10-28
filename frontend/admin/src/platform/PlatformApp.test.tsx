@@ -7,6 +7,7 @@ import App from "../App";
 import { api } from "../api";
 import { HttpError, onUnauthorized } from "../api/http";
 import { platformApi, type PlatformUser } from "../api/platform";
+import { operatorAccountApi } from "../api/operatorAccount";
 import { i18n, initializeI18n } from "../i18n";
 import PlatformApp from "./PlatformApp";
 
@@ -109,4 +110,26 @@ it("ignores a departed operator's delayed session read", async () => {
   const held = deferred<PlatformUser>(); vi.mocked(platformApi.me).mockReturnValueOnce(held.promise); const view = render(app()); view.unmount();
   render(app()); await screen.findByRole("heading", { name: "Companies" }); await act(async () => held.resolve({ ...operator, email: "departed@example.test" }));
   expect(screen.queryByText("departed@example.test")).toBeNull();
+});
+it("keeps operator account reads behind its own anonymous deep-link gate", async () => {
+  vi.mocked(platformApi.me).mockRejectedValueOnce(new HttpError("http", 401)); const read = vi.spyOn(operatorAccountApi, "session").mockResolvedValue(operator);
+  const user = userEvent.setup(); render(app("/platform/account")); await screen.findByRole("heading", { name: "Operator sign-in" }); expect(read).not.toHaveBeenCalled();
+  fireEvent.submit(await credentials(user)); await screen.findByRole("form", { name: "Change operator password" }); await waitFor(() => expect(read).toHaveBeenCalledTimes(1)); expect(api.me).not.toHaveBeenCalled();
+});
+it("unmounts account controls on logout and requires a new checked session after a lost reply", async () => {
+  vi.spyOn(operatorAccountApi, "session").mockResolvedValue(operator); const save = vi.spyOn(operatorAccountApi, "password").mockResolvedValue();
+  const held = deferred<void>(); vi.mocked(platformApi.logout).mockReturnValueOnce(held.promise); const user = userEvent.setup(); render(app("/platform/account"));
+  const field = await screen.findByLabelText("Current password"); await waitFor(() => expect(field).toHaveProperty("disabled", false)); await user.type(field, "draft password"); await user.click(screen.getByRole("button", { name: "Sign out" })); expect(screen.queryByRole("form")).toBeNull();
+  await act(async () => held.reject(new HttpError("network", null))); expect(screen.queryByRole("form")).toBeNull(); await user.click(screen.getByRole("button", { name: "Check operator session" }));
+  await waitFor(() => expect(screen.getByLabelText("Current password")).toHaveProperty("disabled", false)); expect(screen.getByLabelText("Current password")).toHaveProperty("value", ""); expect(save).not.toHaveBeenCalled(); expect(platformApi.logout).toHaveBeenCalledTimes(1); expect(api.logout).not.toHaveBeenCalled();
+});
+it("keeps admin expiry separate and aborts a pending account command on platform expiry", async () => {
+  vi.spyOn(operatorAccountApi, "session").mockResolvedValue(operator); const held = deferred<void>(), save = vi.spyOn(operatorAccountApi, "password").mockReturnValueOnce(held.promise);
+  const user = userEvent.setup(); render(app("/platform/account")); await waitFor(() => expect(screen.getByLabelText("Current password")).toHaveProperty("disabled", false));
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 401 }))); const { requestJson } = await import("../api/http");
+  try {
+    await act(async () => { await requestJson("/api/admin/test").catch(() => undefined); }); expect(screen.getByRole("form", { name: "Change operator password" })).toBeTruthy();
+    for (const label of ["Current password", "New password", "Confirm new password"]) await user.type(screen.getByLabelText(label), "new password"); fireEvent.submit(screen.getByRole("form")); await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    await act(async () => { await requestJson("/api/platform/test", { unauthorizedScope: "platform" }).catch(() => undefined); }); await screen.findByRole("heading", { name: "Operator sign-in" }); expect(save.mock.calls[0][2].aborted).toBe(true); await act(async () => held.resolve()); expect(screen.queryByRole("form", { name: "Change operator password" })).toBeNull();
+  } finally { vi.unstubAllGlobals(); }
 });
