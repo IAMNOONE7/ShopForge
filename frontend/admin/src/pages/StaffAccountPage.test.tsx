@@ -40,6 +40,9 @@ afterEach(async () => { cleanup(); vi.restoreAllMocks(); window.history.replaceS
 it("checks the account on entry and never writes without an explicit action", async () => {
   render(<Shop />); await fill(); expect(staffAccountApi.session).toHaveBeenCalledTimes(1); expect(staffAccountApi.password).not.toHaveBeenCalled(); expect(staffAccountApi.endOtherSessions).not.toHaveBeenCalled(); expect(screen.queryByText(/two-factor:/i)).toBeNull();
 });
+it("links to the separate two-factor flow without creating setup material", async () => {
+  render(<Shop />); await fill(); expect(screen.getByRole("link", { name: i18n.t("staffAccount:twoFactor") }).getAttribute("href")).toBe("/account/two-factor"); expect(staffAccountApi.password).not.toHaveBeenCalled();
+});
 it.each(["Owner", "Admin", "CatalogManager", "OrderManager", "Warehouse", "Support", "FutureRole"])("opens the actual account route and navigation for %s without store-management permission", async role => {
   const user = { ...staff, role }; vi.spyOn(api, "me").mockResolvedValue(user); vi.spyOn(api, "stores").mockResolvedValue([]); vi.mocked(staffAccountApi.session).mockResolvedValue(user);
   window.history.replaceState(null, "", "/account"); render(<App />);

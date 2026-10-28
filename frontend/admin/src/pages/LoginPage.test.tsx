@@ -81,6 +81,15 @@ describe("LoginPage mutation state", () => {
   });
 
 });
+it("offers another recovery code after a used or invalid one is refused", async () => {
+  const user = userEvent.setup(); const account = { id: "staff-a", email: "staff@example.test", role: "Support", tenantId: "company-a" };
+  vi.spyOn(api, "login").mockResolvedValue({ twoFactorRequired: true, ticket: "fixture-challenge", user: null });
+  const complete = vi.spyOn(api, "completeTwoFactor").mockRejectedValueOnce(new HttpError("http", 401)).mockResolvedValueOnce({ twoFactorRequired: false, ticket: null, user: account });
+  const onLogin = vi.fn(); render(<LoginPage expired={false} onLogin={onLogin} />);
+  await user.type(screen.getByLabelText("E-mail"), account.email); await user.type(screen.getByLabelText("Password"), "fixture-password"); await user.click(screen.getByRole("button", { name: "Sign in" }));
+  const code = await screen.findByLabelText("Authentication or recovery code"); await user.type(code, "000001-ABCDEF"); await user.click(screen.getByRole("button", { name: "Verify and sign in" })); await screen.findByRole("alert"); expect(onLogin).not.toHaveBeenCalled(); expect(complete).toHaveBeenCalledTimes(1);
+  await user.clear(code); await user.type(code, "000002-ABCDEF"); await user.click(screen.getByRole("button", { name: "Verify and sign in" })); await waitFor(() => expect(onLogin).toHaveBeenCalledWith(account)); expect(complete).toHaveBeenLastCalledWith("fixture-challenge", "000002-ABCDEF");
+});
 it("offers a fixed public staff-recovery destination without transferring entered credentials", () => {
   render(<LoginPage expired={false} onLogin={() => {}} />);
   expect(screen.getByRole("link", { name: "Forgot your staff password?" }).getAttribute("href")).toBe("/forgot-password");

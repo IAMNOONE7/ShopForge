@@ -1,5 +1,6 @@
 import { useEffect, useEffectEvent, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router";
 import type { CurrentUser } from "../api";
 import { isHttpError } from "../api/http";
 import { sameStaffAccount, staffAccountApi } from "../api/staffAccount";
@@ -126,6 +127,7 @@ function StaffAccountForm({ user }: { user: CurrentUser }) {
   return <div className="staff-account-page">
     <h1>{t("title")}</h1>
     <p>{t("intro", { email: user.email })}</p>
+    <Link to="/account/two-factor">{t("twoFactor")}</Link>
     {view === "loading" && <p role="status">{t("checking")}</p>}
     <div ref={feedback} tabIndex={-1} className="staff-account-feedback">
       {issues.length > 0 && <div role="alert"><p>{t("checkFields")}</p><ul>{issues.map(issue => <li key={issue}><button type="button" className="link-button" onClick={() => document.getElementById(issue === "currentRequired" ? "account-current" : issue === "passwordInvalid" ? "account-password" : "account-confirmation")?.focus()}>{t(issue)}</button></li>)}</ul></div>}

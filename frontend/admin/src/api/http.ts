@@ -45,6 +45,7 @@ type RequestOptions = {
   body?: unknown;
   signal?: AbortSignal;
   cache?: RequestCache;
+  expectedStatus?: number;
   notifyUnauthorized?: boolean;
   unauthorizedScope?: "admin" | "platform";
   idempotencyKey?: string;
@@ -75,6 +76,7 @@ export async function requestJson<T>(
   options: RequestOptions = {},
 ): Promise<T> {
   const response = await send(url, options);
+  if (options.expectedStatus !== undefined && response.status !== options.expectedStatus) throw invalidResponse(response);
   if (response.status === 204 || response.status === 205) return undefined as T;
 
   const text = await response.text();
