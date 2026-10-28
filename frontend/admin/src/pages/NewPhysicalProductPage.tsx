@@ -13,6 +13,8 @@ import {
 import { Button } from "../components/ui/Button";
 import { Field } from "../components/ui/Field";
 import { RequestError } from "../components/ui/RequestError";
+import { PlanLimitNotice, PlanUsageHint } from "../components/PlanLimitNotice";
+import { planLimitRefusal } from "../api/planUsage";
 import { useAction } from "../useAction";
 
 export function NewPhysicalProductPage() {
@@ -67,6 +69,7 @@ export function NewPhysicalProductPage() {
       </Link>
       <h1>{t("newProduct")}</h1>
       <p className="hint">{t("newProductHint")}</p>
+      <PlanUsageHint resource="products" />
       <form className="physical-panel physical-form" noValidate onSubmit={create}>
         <ProductIssueSummary id="new-product-validation" issues={issues} />
         <Field
@@ -98,7 +101,8 @@ export function NewPhysicalProductPage() {
         >
           {t("addProduct")}
         </Button>
-        {error !== null && <RequestError error={error} operation="write" />}
+        <PlanLimitNotice error={error} resource="products" />
+        {error !== null && !planLimitRefusal(error, "products") && <RequestError error={error} operation="write" />}
       </form>
     </div>
   );

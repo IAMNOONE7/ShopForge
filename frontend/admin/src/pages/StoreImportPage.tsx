@@ -6,6 +6,7 @@ import { catalogImportApi, importCountFields, importFileProblem, type ImportRepo
 import { isHttpError, saveDownload } from "../api/http";
 import { Button } from "../components/ui/Button";
 import { RequestError } from "../components/ui/RequestError";
+import { PlanUsageHint } from "../components/PlanLimitNotice";
 import { canManageCatalog, useSession } from "../session";
 import { ForbiddenPage } from "./RouteStatePage";
 import "./StoreImportPage.css";
@@ -81,6 +82,7 @@ function ImportWorkspace() {
     </section>
     <section className="import-panel" aria-labelledby="import-upload">
       <h2 id="import-upload">{t("upload")}</h2><p>{t("writeHint")}</p>
+      <PlanUsageHint resource="import" />
       {storeStale && <p role="status">{t("storeStale")}</p>}
       {changed && <p role="status">{t("storeChanged")}</p>}
       <form onSubmit={event => void submit(event)} noValidate aria-busy={busy === "import" || undefined}>

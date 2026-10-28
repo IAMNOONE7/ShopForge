@@ -71,6 +71,12 @@ describe("store address syntax", () => {
 });
 
 describe("new store form", () => {
+  it.each(["en", "cs"])("keeps the draft and offers plan review after a store-cap refusal in %s", async language => {
+    await i18n.changeLanguage(language); const user = userEvent.setup(); const create = vi.spyOn(api, "createStore").mockRejectedValue(new HttpError("http", 409, { title: "This plan allows no more stores", detail: "untranslated-private-diagnostic" })); route();
+    fireEvent.change(screen.getByRole("textbox", { name: i18n.t("stores:name") }), { target: { value: "Wooden Home" } }); fireEvent.change(screen.getByRole("textbox", { name: i18n.t("stores:addressName") }), { target: { value: "wooden-home" } });
+    await user.click(screen.getByRole("button", { name: i18n.t("stores:create") })); await screen.findByText(i18n.t("planUsage:storesRefused"));
+    expect(screen.getByRole("textbox", { name: i18n.t("stores:addressName") })).toHaveProperty("value", "wooden-home"); expect(screen.getByRole("textbox", { name: i18n.t("stores:name") })).toHaveProperty("value", "Wooden Home"); expect(screen.getByRole("alert").textContent).not.toContain("untranslated-private"); expect(screen.getAllByRole("link", { name: i18n.t("planUsage:reviewPlan") }).every(link => link.getAttribute("href") === "/plan")).toBe(true); expect(document.activeElement).toBe(screen.getByRole("alert")); expect(create).toHaveBeenCalledTimes(1);
+  });
   it.each(["en", "cs"])("explains platform addresses and uses Czech launch defaults in %s", async (language) => {
     await i18n.changeLanguage(language); route();
     const address = screen.getByRole("textbox", { name: language === "en" ? "Address name" : "Název v adrese" });

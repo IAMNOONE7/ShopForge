@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -64,6 +64,12 @@ afterEach(async () => {
 afterAll(() => i18n.changeLanguage("en"));
 
 describe("physical products", () => {
+  it.each(["en", "cs"])("preserves the measured product draft after a product-cap refusal in %s", async language => {
+    await i18n.changeLanguage(language); const user = userEvent.setup(); const create = vi.spyOn(api, "createProduct").mockRejectedValue(new HttpError("http", 409, { title: "This plan allows no more products", detail: "untranslated-private-diagnostic" })); render(<MemoryRouter><NewPhysicalProductPage /></MemoryRouter>);
+    fireEvent.change(screen.getByRole("textbox", { name: i18n.t("products:sku") }), { target: { value: "PHYSICAL-1" } });
+    for (const [field, value] of [["weightGrams", "250"], ["lengthMm", "200"], ["widthMm", "150"], ["heightMm", "100"]] as const) fireEvent.change(screen.getByRole("textbox", { name: i18n.t(`products:${field}`) }), { target: { value } });
+    await user.click(screen.getByRole("button", { name: i18n.t("products:addProduct") })); await screen.findByText(i18n.t("planUsage:productsRefused")); expect(screen.getByRole("textbox", { name: i18n.t("products:sku") })).toHaveProperty("value", "PHYSICAL-1"); expect(screen.getByRole("textbox", { name: i18n.t("products:lengthMm") })).toHaveProperty("value", "200"); expect(screen.getByRole("alert").textContent).not.toContain("untranslated-private"); expect(document.activeElement).toBe(screen.getByRole("alert")); expect(screen.getAllByRole("link", { name: i18n.t("planUsage:reviewPlan") }).every(link => link.getAttribute("href") === "/plan")).toBe(true); expect(create).toHaveBeenCalledTimes(1);
+  });
   it.each(["en", "cs"])("requires measurements, focuses errors and retains the package after a server refusal in %s", async (language) => {
     await i18n.changeLanguage(language);
     const user = userEvent.setup();

@@ -18,6 +18,8 @@ import {
 import { Button } from "../components/ui/Button";
 import { Field } from "../components/ui/Field";
 import { RequestError } from "../components/ui/RequestError";
+import { PlanLimitNotice, PlanUsageHint } from "../components/PlanLimitNotice";
+import { planLimitRefusal } from "../api/planUsage";
 import { useAction } from "../useAction";
 
 type LayoutContext = { reloadStores: () => void };
@@ -90,6 +92,7 @@ export function NewStorePage() {
           <p className="hint">{t("stores:newHint")}</p>
         </div>
       </div>
+      <PlanUsageHint resource="stores" />
       <form className="new-store-form" noValidate onSubmit={create}>
         <StoreValidationSummary id="new-store-validation" issues={issues} />
         <div className="new-store-layout">
@@ -166,7 +169,8 @@ export function NewStorePage() {
             {t("stores:create")}
           </Button>
         </div>
-        {error !== null && <RequestError error={error} operation="write" fieldErrors={requestFields} />}
+        <PlanLimitNotice error={error} resource="stores" />
+        {error !== null && !planLimitRefusal(error, "stores") && <RequestError error={error} operation="write" fieldErrors={requestFields} />}
       </form>
     </div>
   );

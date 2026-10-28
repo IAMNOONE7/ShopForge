@@ -1,0 +1,13 @@
+.plan-usage-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); max-width: 58rem; overflow-wrap: anywhere; }
+.plan-usage-page :is(h1, h2, p, dl, dd) { margin: 0; }
+.plan-usage-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.plan-usage-panel, .plan-usage-feedback { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); min-width: 0; }
+.plan-usage-panel { margin: 0; padding: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-panel); background: var(--color-surface); }
+.plan-usage-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); gap: var(--space-4); }
+.plan-usage-facts { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+.plan-usage-facts > div { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: var(--space-2) var(--space-4); min-width: 0; }
+.plan-usage-facts dd { font-weight: 650; }
+.plan-cap-state { font-weight: 650; }
+.plan-cap-at, .plan-cap-over { color: var(--color-danger); }
+.plan-usage-feedback:empty { display: none; }
+.plan-usage-page :is(button, a, code) { max-width: 100%; min-width: 0; white-space: normal; overflow-wrap: anywhere; }

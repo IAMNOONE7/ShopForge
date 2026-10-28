@@ -45,6 +45,7 @@ export function AdminNavigation({
 
       {canManageStore(role) && <NavLink to="/users" onClick={onNavigate}>{t("navigation:colleagues")}</NavLink>}
       <NavLink to="/account" onClick={onNavigate}>{t("navigation:account")}</NavLink>
+      <NavLink to="/plan" onClick={onNavigate}>{t("navigation:planUsage")}</NavLink>
 
       <div className="store-selector">
         {stores.status === "loading" && (

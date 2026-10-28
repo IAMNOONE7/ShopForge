@@ -37,6 +37,10 @@ beforeEach(async () => {
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.mocked(saveDownload).mockClear(); window.history.replaceState(null, "", "/"); });
 describe("catalog import workspace", () => {
+  it("links to company plan usage and preserves the actual whole-workbook cap diagnostic", async () => {
+    const message = "Nothing was imported: the plan does not cover 2 more products."; vi.mocked(catalogImportApi.apply).mockResolvedValueOnce({ created: 0, updated: 0, skipped: 0, invalid: 0, failed: 2, ignoredColumns: [], issues: [{ row: 0, column: null, message }] }); const user = userEvent.setup(); route();
+    expect(screen.getByRole("link", { name: i18n.t("planUsage:reviewPlan") }).getAttribute("href")).toBe("/plan"); select(); await user.click(submit()); await screen.findByRole("heading", { name: i18n.t("import:reportTitle") }); expect(screen.getByText(message)).toBeTruthy(); expect(screen.getByText(i18n.t("import:wholeWorkbook"))).toBeTruthy(); expect(screen.getByText(i18n.t("planUsage:importHint"))).toBeTruthy(); expect(catalogImportApi.apply).toHaveBeenCalledTimes(1);
+  });
   it.each(["en", "cs"])("retains a selected file and imports only after explicit submit in %s", async language => {
     await i18n.changeLanguage(language); const user = userEvent.setup(); route(); select();
     expect(screen.getByText("catalog.xlsx")).toBeTruthy(); expect(catalogImportApi.apply).not.toHaveBeenCalled();
