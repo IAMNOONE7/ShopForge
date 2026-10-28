@@ -115,4 +115,5 @@ it.each(["Owner", "Admin", "CatalogManager", "OrderManager", "Warehouse", "Suppo
   const link = screen.queryByRole("link", { name: "Colleagues" });
   expect(link !== null).toBe(["Owner", "Admin"].includes(role));
   if (link) expect(link.getAttribute("href")).toBe("/users");
+  expect(screen.getByRole("link", { name: "Account security" }).getAttribute("href")).toBe("/account");
 });
