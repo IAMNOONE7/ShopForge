@@ -1,4 +1,4 @@
-export type StaffResetProof = { readonly id: number; available: () => boolean; take: () => string | null };
+export type StaffResetProof = { readonly realm: "staff"; readonly id: number; available: () => boolean; take: () => string | null };
 export type StaffRecoveryEntry = { kind: "forgot" } | { kind: "reset"; proof: StaffResetProof };
 
 let sequence = 0;
@@ -13,5 +13,5 @@ export function captureStaffRecoveryEntry(baseUrl = import.meta.env.BASE_URL): S
   // Capture before app reads; the credential stays in this one-use memory capsule.
   window.history.replaceState(null, "", window.location.pathname);
   if (path === `${root}/forgot-password`) return { kind: "forgot" };
-  return { kind: "reset", proof: { id: ++sequence, available: () => token !== null, take: () => { const value = token; token = null; return value; } } };
+  return { kind: "reset", proof: { realm: "staff", id: ++sequence, available: () => token !== null, take: () => { const value = token; token = null; return value; } } };
 }

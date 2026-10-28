@@ -27,6 +27,9 @@ beforeEach(async () => {
   vi.spyOn(api, "me"); vi.spyOn(api, "stores"); vi.spyOn(api, "logout");
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); window.history.replaceState(null, "", "/"); });
+it("offers a fixed public operator recovery link without passing entered credentials or signing in", async () => {
+  vi.mocked(platformApi.me).mockRejectedValueOnce(new HttpError("http", 401)); const user = userEvent.setup(); render(app()); await credentials(user); const link = screen.getByRole("link", { name: "Forgot your operator password?" }); expect(link.getAttribute("href")).toBe("/platform/forgot-password"); expect(link.getAttribute("href")).not.toContain("operator@example.test"); expect(platformApi.login).not.toHaveBeenCalled(); expect(api.me).not.toHaveBeenCalled();
+});
 
 it("boots the actual operator entry without mounting merchant session or store reads", async () => {
   render(<App />); await screen.findByText("No companies were returned.");

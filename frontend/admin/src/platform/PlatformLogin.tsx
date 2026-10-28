@@ -6,6 +6,7 @@ import { Button } from "../components/ui/Button";
 import { Field } from "../components/ui/Field";
 import { InlineMessage } from "../components/ui/InlineMessage";
 import { RequestError } from "../components/ui/RequestError";
+import { operatorPrefix } from "./routing";
 
 export function PlatformLogin({ expired, onSignedIn, onCheckSession }: { expired: boolean; onSignedIn: (user: PlatformUser) => void; onCheckSession: () => void }) {
   const { t } = useTranslation(["operator", "auth"]);
@@ -37,6 +38,7 @@ export function PlatformLogin({ expired, onSignedIn, onCheckSession }: { expired
       <div className="cluster"><Button type="submit" busy={pending} busyLabel={t(ticket ? "auth:verifying" : "auth:signingIn")}>{t(ticket ? "auth:verify" : "auth:signIn")}</Button>
         {ticket && <Button type="button" variant="secondary" disabled={pending} onClick={() => { setTicket(null); setPassword(""); setCode(""); setError(null); }}>{t("restart")}</Button>}</div>
     </form>
+    <p><a href={`${operatorPrefix()}/forgot-password`}>{t("forgotPassword")}</a></p>
     {error !== null && (ticket && isHttpError(error) && error.status === 401 ? <InlineMessage tone="error">{t("wrongCode")}</InlineMessage> : <RequestError error={error} operation="login" />)}
     {error !== null && <div><p>{t("checkSessionHint")}</p><Button type="button" variant="secondary" disabled={pending} onClick={onCheckSession}>{t("checkSession")}</Button></div>}
   </main>;

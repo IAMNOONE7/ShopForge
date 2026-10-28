@@ -30,7 +30,10 @@ import { canManageCatalog, canManageStore, SessionContext } from "./session";
 import { isOperatorPath } from "./platform/routing";
 import type { InvitationEntry } from "./invitationEntry";
 import type { StaffRecoveryEntry } from "./staffRecoveryEntry";
+import type { OperatorRecoveryEntry } from "./platform/operatorRecoveryEntry";
 
+const ForgotOperatorPasswordPage = lazy(() => import("./platform/OperatorPasswordPages").then(pages => ({ default: pages.ForgotOperatorPasswordPage })));
+const ResetOperatorPasswordPage = lazy(() => import("./platform/OperatorPasswordPages").then(pages => ({ default: pages.ResetOperatorPasswordPage })));
 const ForgotStaffPasswordPage = lazy(() => import("./pages/StaffPasswordPages").then(pages => ({ default: pages.ForgotStaffPasswordPage })));
 const ResetStaffPasswordPage = lazy(() => import("./pages/StaffPasswordPages").then(pages => ({ default: pages.ResetStaffPasswordPage })));
 const ColleaguesPage = lazy(() => import("./pages/ColleaguesPage").then(pages => ({ default: pages.ColleaguesPage })));
@@ -83,7 +86,12 @@ function currentReturnPath() {
   );
 }
 
-function App({ invitationEntry = null, recoveryEntry = null }: { invitationEntry?: InvitationEntry | null; recoveryEntry?: StaffRecoveryEntry | null }) {
+function App({ invitationEntry = null, recoveryEntry = null, operatorRecoveryEntry = null }: { invitationEntry?: InvitationEntry | null; recoveryEntry?: StaffRecoveryEntry | null; operatorRecoveryEntry?: OperatorRecoveryEntry | null }) {
+  if (operatorRecoveryEntry) return <BrowserRouter basename={import.meta.env.BASE_URL}><Routes>
+    <Route path="platform/forgot-password" element={<DeferredPage><ForgotOperatorPasswordPage /></DeferredPage>} />
+    <Route path="platform/reset-password" element={<DeferredPage><ResetOperatorPasswordPage proof={operatorRecoveryEntry.kind === "reset" ? operatorRecoveryEntry.proof : null} /></DeferredPage>} />
+    <Route path="*" element={<NotFoundPage />} />
+  </Routes></BrowserRouter>;
   if (recoveryEntry) return <BrowserRouter basename={import.meta.env.BASE_URL}><Routes>
     <Route path="forgot-password" element={<DeferredPage><ForgotStaffPasswordPage /></DeferredPage>} />
     <Route path="reset-password" element={<DeferredPage><ResetStaffPasswordPage proof={recoveryEntry.kind === "reset" ? recoveryEntry.proof : null} /></DeferredPage>} />

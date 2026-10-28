@@ -9,6 +9,7 @@ import { api } from "../api";
 import { staffRecoveryApi } from "../api/staffRecovery";
 import { HttpError } from "../api/http";
 import { captureStaffRecoveryEntry, type StaffResetProof } from "../staffRecoveryEntry";
+import { captureOperatorRecoveryEntry } from "../platform/operatorRecoveryEntry";
 import { i18n, initializeI18n } from "../i18n";
 import { ForgotStaffPasswordPage, ResetStaffPasswordPage } from "./StaffPasswordPages";
 const token = ["fixture", "staff", "proof"].join("-"), secret = " raw password ";
@@ -17,6 +18,13 @@ function Forgot() { return <MemoryRouter initialEntries={["/forgot-password"]}><
 function Reset({ entry }: { entry: StaffResetProof | null }) { return <MemoryRouter initialEntries={["/reset-password"]}><Routes><Route path="/reset-password" element={<ResetStaffPasswordPage proof={entry} />} /><Route path="/forgot-password" element={<ForgotStaffPasswordPage />} /></Routes></MemoryRouter>; }
 async function fill(user: ReturnType<typeof userEvent.setup>, value = secret) { await user.type(await screen.findByLabelText("New password"), value); await user.type(screen.getByLabelText("Repeat new password"), value); }
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(yes => { resolve = yes; }); return { promise, resolve }; }
+it("rejects an operator-purpose proof without consuming it or reading a staff session", async () => {
+  history.replaceState(null, "", "/platform/reset-password?token=operator-purpose-proof");
+  const entry = captureOperatorRecoveryEntry(); if (entry?.kind !== "reset") throw new Error("Expected operator proof");
+  render(<Reset entry={entry.proof as unknown as StaffResetProof} />);
+  await screen.findByRole("heading", { name: "Reset link unavailable" });
+  expect(entry.proof.available()).toBe(true); expect(staffRecoveryApi.session).not.toHaveBeenCalled(); expect(staffRecoveryApi.reset).not.toHaveBeenCalled();
+});
 beforeAll(initializeI18n);
 beforeEach(async () => {
   await i18n.changeLanguage("en"); vi.spyOn(staffRecoveryApi, "forgot").mockResolvedValue(); vi.spyOn(staffRecoveryApi, "reset").mockResolvedValue(); vi.spyOn(staffRecoveryApi, "session").mockResolvedValue(null); vi.spyOn(staffRecoveryApi, "signOut").mockResolvedValue();

@@ -8,7 +8,9 @@ import "./index.css";
 import App from "./App.tsx";
 import { captureInvitationEntry } from "./invitationEntry";
 import { captureStaffRecoveryEntry } from "./staffRecoveryEntry";
+import { captureOperatorRecoveryEntry } from "./platform/operatorRecoveryEntry";
 
+const operatorRecoveryEntry = captureOperatorRecoveryEntry();
 const recoveryEntry = captureStaffRecoveryEntry();
 const invitationEntry = captureInvitationEntry();
 
@@ -19,7 +21,7 @@ async function render() {
       <div className="utility-bar">
         <LanguageSwitcher />
       </div>
-      <App invitationEntry={invitationEntry} recoveryEntry={recoveryEntry} />
+      <App invitationEntry={invitationEntry} recoveryEntry={recoveryEntry} operatorRecoveryEntry={operatorRecoveryEntry} />
     </StrictMode>,
   );
 }
