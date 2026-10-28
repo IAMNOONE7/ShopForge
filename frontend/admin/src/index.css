@@ -12,14 +12,21 @@
 
 .language-switcher {
   display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
   gap: var(--space-2);
   align-items: center;
+  justify-content: flex-end;
   font-size: var(--text-sm);
   font-weight: 650;
+  overflow-wrap: anywhere;
 }
 
 .language-switcher select {
   width: auto;
+  min-width: 0;
+  max-width: 100%;
   min-height: 2.25rem;
   padding-block: var(--space-1);
 }
@@ -840,11 +847,19 @@ tbody tr:last-child td {
 }
 
 .settings-group legend {
+  float: left;
+  width: 100%;
   max-width: 100%;
-  padding-inline: var(--space-2);
+  margin-bottom: var(--space-3);
+  padding: 0;
   font-size: var(--text-lg);
   font-weight: 750;
+  line-height: 1.25;
   overflow-wrap: anywhere;
+}
+
+.settings-group > legend + * {
+  clear: both;
 }
 
 .settings-group > .hint {
@@ -1300,7 +1315,8 @@ input[readonly] {
 
   .store-settings-panel,
   .settings-group {
-    padding: var(--space-3);
+    padding-block: var(--space-3);
+    padding-inline: clamp(var(--space-1), 3vw, var(--space-3));
   }
 
   .settings-fields-two {
@@ -1353,6 +1369,21 @@ input[readonly] {
   display: table;
 }
 
+.physical-products-page,
+.stock-page,
+.stock-detail-page {
+  container-type: inline-size;
+  overflow-wrap: anywhere;
+}
+
+.physical-products-table th,
+.physical-products-table td,
+.stock-table th,
+.stock-table td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .physical-products-table th[scope="row"] {
   color: var(--color-text);
   font-size: inherit;
@@ -1362,6 +1393,49 @@ input[readonly] {
 
 .physical-products-cards {
   display: none;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.physical-products-cards li {
+  min-width: 0;
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+}
+
+.physical-products-cards a {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: space-between;
+  overflow-wrap: anywhere;
+}
+
+.physical-products-cards dl {
+  display: grid;
+  gap: var(--space-1);
+  margin: var(--space-3) 0 0;
+}
+
+.physical-products-cards dl > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: space-between;
+}
+
+.physical-products-cards dt {
+  color: var(--color-text-muted);
+}
+
+.physical-products-cards dd {
+  min-width: 0;
+  margin: 0;
+  text-align: right;
 }
 
 .physical-back-link {
@@ -1840,46 +1914,6 @@ input[readonly] {
 
   .physical-products-cards {
     display: grid;
-    gap: var(--space-3);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .physical-products-cards li {
-    min-width: 0;
-    padding: var(--space-4);
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-panel);
-  }
-
-  .physical-products-cards a {
-    display: flex;
-    gap: var(--space-3);
-    justify-content: space-between;
-    overflow-wrap: anywhere;
-  }
-
-  .physical-products-cards dl {
-    display: grid;
-    gap: var(--space-1);
-    margin: var(--space-3) 0 0;
-  }
-
-  .physical-products-cards dl > div {
-    display: flex;
-    gap: var(--space-3);
-    justify-content: space-between;
-  }
-
-  .physical-products-cards dt {
-    color: var(--color-text-muted);
-  }
-
-  .physical-products-cards dd {
-    margin: 0;
-    text-align: right;
   }
 
   .physical-fields-row,
@@ -1902,6 +1936,7 @@ input[readonly] {
 .stock-page .page-heading-row,
 .stock-section-heading {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-3);
   align-items: start;
   justify-content: space-between;
@@ -1919,6 +1954,7 @@ input[readonly] {
 
 .stock-page .page-heading-row > a {
   flex: 0 0 auto;
+  max-width: 100%;
 }
 
 .stock-table,
@@ -1986,6 +2022,55 @@ input[readonly] {
 .stock-cards,
 .stock-movement-cards {
   display: none;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stock-cards li,
+.stock-movement-cards li {
+  min-width: 0;
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+}
+
+.stock-card-link {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: space-between;
+  overflow-wrap: anywhere;
+}
+
+.stock-cards dl,
+.stock-movement-cards dl {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+}
+
+.stock-cards dl > div,
+.stock-movement-cards dl > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: space-between;
+}
+
+.stock-cards dt,
+.stock-movement-cards dt {
+  color: var(--color-text-muted);
+}
+
+.stock-cards dd,
+.stock-movement-cards dd {
+  min-width: 0;
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .stock-detail-page > .hint {
@@ -1998,7 +2083,7 @@ input[readonly] {
 
 .stock-quantities {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
   gap: var(--space-3);
   margin: 0;
 }
@@ -2022,12 +2107,14 @@ input[readonly] {
 
 .stock-adjustment-form {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-3);
   width: min(100%, 32rem);
 }
 
 .stock-adjustment-form > button {
   width: fit-content;
+  max-width: 100%;
 }
 
 .stock-movements-table td:first-child {
@@ -2048,6 +2135,20 @@ input[readonly] {
   color: var(--color-text-muted);
 }
 
+@container (max-width: 40rem) {
+  .physical-products-table,
+  .stock-table,
+  .stock-movements-table {
+    display: none;
+  }
+
+  .physical-products-cards,
+  .stock-cards,
+  .stock-movement-cards {
+    display: grid;
+  }
+}
+
 @media (max-width: 40rem) {
   .stock-page .page-heading-row {
     flex-direction: column;
@@ -2061,53 +2162,6 @@ input[readonly] {
   .stock-cards,
   .stock-movement-cards {
     display: grid;
-    gap: var(--space-3);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .stock-cards li,
-  .stock-movement-cards li {
-    min-width: 0;
-    padding: var(--space-4);
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-panel);
-  }
-
-  .stock-card-link {
-    display: flex;
-    gap: var(--space-3);
-    justify-content: space-between;
-    overflow-wrap: anywhere;
-  }
-
-  .stock-cards dl,
-  .stock-movement-cards dl {
-    display: grid;
-    gap: var(--space-2);
-    margin: var(--space-3) 0 0;
-  }
-
-  .stock-cards dl > div,
-  .stock-movement-cards dl > div {
-    display: flex;
-    gap: var(--space-3);
-    justify-content: space-between;
-  }
-
-  .stock-cards dt,
-  .stock-movement-cards dt {
-    color: var(--color-text-muted);
-  }
-
-  .stock-cards dd,
-  .stock-movement-cards dd {
-    min-width: 0;
-    margin: 0;
-    text-align: right;
-    overflow-wrap: anywhere;
   }
 
   .stock-quantities {

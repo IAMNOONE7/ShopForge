@@ -54,6 +54,29 @@ afterEach(() => {
 afterAll(() => i18n.changeLanguage("en"));
 
 describe("shared stock", () => {
+  it("keeps recorded and missing stock facts in both table and card views", async () => {
+    vi.spyOn(api, "products").mockResolvedValue([{
+      ...product,
+      optionNames: ["Size"],
+      variants: [
+        { ...product.variants[0], optionValues: ["Small"] },
+        { ...product.variants[0], id: "variant-b", sku: "UNTRACKED-2", optionValues: ["Large"] },
+      ],
+    }]);
+    vi.spyOn(api, "stock").mockResolvedValue([reserved]);
+    const { container } = renderAt("/stock");
+    const table = await screen.findByRole("table");
+    await within(table).findByText("Recorded");
+    expect(within(table).getByText("No stock record")).toBeTruthy();
+    const cards = container.querySelectorAll<HTMLElement>(".stock-cards > li");
+    expect(cards).toHaveLength(2);
+    expect(within(cards[0]).getByText("Stock record").nextElementSibling?.textContent).toBe("Recorded");
+    expect(within(cards[1]).getByText("Stock record").nextElementSibling?.textContent).toBe("No stock record");
+    expect(within(cards[0]).getByText("8")).toBeTruthy();
+    expect(within(cards[0]).getByText("3")).toBeTruthy();
+    expect(within(cards[0]).getByText("5")).toBeTruthy();
+  });
+
   it("pages through older movements, exposes totals, and permits returning after a failed page read", async () => {
     const user = userEvent.setup();
     vi.spyOn(api, "products").mockResolvedValue([product]);

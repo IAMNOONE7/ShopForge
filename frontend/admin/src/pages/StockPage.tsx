@@ -115,8 +115,8 @@ export function StockPage() {
                         <div><dt>{t("stock:onHand")}</dt><dd>{quantity(item, "onHand")}</dd></div>
                         <div><dt>{t("stock:reserved")}</dt><dd>{quantity(item, "reserved")}</dd></div>
                         <div><dt>{t("stock:available")}</dt><dd>{quantity(item, "available")}</dd></div>
+                        <div><dt>{t("stock:record")}</dt><dd>{values ? t(item ? "stock:recorded" : "stock:notRecorded") : "—"}</dd></div>
                       </dl>
-                      {values && !item && <p className="hint">{t("stock:notRecorded")}</p>}
                     </li>
                   );
                 })}
