@@ -57,7 +57,10 @@ export type AdminStore = {
   primaryHostName: string | null;
   returnWindowDays: number;
   company: Company | null;
+  freeShipping?: FreeShippingSettings;
 };
+
+export type FreeShippingSettings = { isOn: boolean; threshold: number | null };
 
 export type Company = {
   legalName: string;
@@ -76,6 +79,7 @@ export type StoreSettings = {
   returnWindowDays?: number;
   theme: StoreTheme;
   company?: Company | null;
+  freeShipping?: FreeShippingSettings;
 };
 
 export type NewStore = StoreSettings & { hostName: string };
@@ -498,8 +502,8 @@ export const api = {
     request<AdminStore[]>("GET", "/api/admin/stores", undefined, signal),
   createStore: (input: NewStore) =>
     request<AdminStore>("POST", "/api/admin/stores", input),
-  updateStore: (storeId: string, input: StoreSettings) =>
-    request<AdminStore>("PUT", `/api/admin/stores/${storeId}`, input),
+  updateStore: (storeId: string, input: StoreSettings, signal?: AbortSignal) =>
+    request<AdminStore>("PUT", `/api/admin/stores/${encodeURIComponent(storeId)}`, input, signal),
   storeReadiness: getStoreReadiness,
   storeDomains: getStoreDomains,
   addStoreDomain,

@@ -21,8 +21,12 @@ export function StoreSettingsPage() {
           storeRefreshError={storeRefreshError}
         />
         <StoreSettingsSection
+          key={[user.tenantId, user.id, user.role, store.id].join(":")}
           store={store}
           reloadStores={reloadStores}
+          canManage={canManageStore(user.role)}
+          storeRefreshing={storeRefreshing}
+          storeRefreshError={storeRefreshError}
           canManageDomains={canManageStore(user.role)}
         />
         <StoreLogoSection

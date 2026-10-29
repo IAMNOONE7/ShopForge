@@ -1,7 +1,11 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
 import { api, type AdminStore, type StoreSettings } from "../api";
+import { checkedSettingsSave, storeSettingsVersion, validFreeShipping } from "../api/storeSettings";
+import { isHttpError } from "../api/http";
+import { fieldIssues } from "../api/errors";
+import { bulkPrice, bulkPriceDecimals } from "../utils/bulkListings";
 import { useAction } from "../useAction";
 import { StoreThemeEditor } from "./StoreThemeEditor";
 import { StoreValidationSummary } from "./StoreValidationSummary";
@@ -19,25 +23,55 @@ import { Field } from "./ui/Field";
 import { InlineMessage } from "./ui/InlineMessage";
 import { RequestError } from "./ui/RequestError";
 
-export function StoreSettingsSection({
-  store,
-  reloadStores,
-  canManageDomains = false,
-}: {
+type Props = {
   store: AdminStore;
   reloadStores: () => void;
   canManageDomains?: boolean;
-}) {
-  const { t } = useTranslation(["stores", "metadata"]);
-  const [draft, setDraft] = useState<StoreSettingsDraft>(() =>
-    settingsDraft(store),
-  );
+  canManage?: boolean;
+  storeRefreshing?: boolean;
+  storeRefreshError?: unknown | null;
+};
+type Failure = { error: unknown; uncertain: boolean; review: boolean; observed: AdminStore };
+
+export function StoreSettingsSection(props: Props) {
+  return <StoreSettingsEditor key={props.store.id} {...props} />;
+}
+
+function StoreSettingsEditor({ store, reloadStores, canManageDomains = false, canManage = true,
+  storeRefreshing = false, storeRefreshError = null }: Props) {
+  const { t } = useTranslation(["stores", "metadata", "validation"]);
+  const [baseline, setBaseline] = useState({ source: store, observed: store });
+  const source = baseline.source;
+  const [draft, setDraft] = useState<StoreSettingsDraft>(() => settingsDraft(store));
+  const [freeDraft, setFreeDraft] = useState(() => freeShippingDraft(store));
   const [issues, setIssues] = useState<StoreIssue[]>([]);
   const [saved, setSaved] = useState(false);
-  const [error, run, pending] = useAction(reloadStores);
+  const [failure, setFailure] = useState<Failure | null>(null);
+  const [, run, pending] = useAction(() => undefined, { manageControls: false });
+  const active = useRef(false), controller = useRef<AbortController | null>(null);
+  const outcome = useRef<HTMLDivElement>(null), heading = useRef<HTMLHeadingElement>(null), latest = useRef(store);
+  useLayoutEffect(() => { latest.current = store; }, [store]);
+  useEffect(() => { active.current = true; return () => { active.current = false; controller.current?.abort(); }; }, []);
+  useEffect(() => { if (failure) outcome.current?.focus(); }, [failure]);
+  const current = !storeRefreshing && storeRefreshError === null;
+  const changed = store !== baseline.observed && storeSettingsVersion(source) !== storeSettingsVersion(store);
+  const denied = failure && isHttpError(failure.error) && [401, 403, 404].includes(failure.error.status ?? 0);
+  const disabled = !canManage || pending || !current || changed || !!failure?.review || !!denied;
+  const currency = source.status === "published" ? source.currency : draft.currency.trim().toUpperCase();
+  const thresholdMessages = failure && isHttpError(failure.error) ? Object.entries(failure.error.problem?.errors ?? {})
+    .filter(([field]) => field.toLowerCase() === "freeshipping.threshold")
+    .flatMap(([, values]) => Array.isArray(values) ? values.filter(value => typeof value === "string" && value.trim()) : []) : [];
+  const thresholdError = thresholdMessages.join(" ") || issueText(issues, "freeShipping.threshold", t);
+
+  function reviewCurrent() {
+    if (!canManage || pending || !current || denied || failure?.review && store === failure.observed) return;
+    setBaseline({ source: store, observed: store }); setDraft(settingsDraft(store)); setFreeDraft(freeShippingDraft(store));
+    setIssues([]); setFailure(null); setSaved(false); heading.current?.focus();
+  }
 
   function update(field: keyof StoreSettingsDraft, value: string) {
     setSaved(false);
+    if (!failure?.review) setFailure(null);
     setDraft((current) => ({ ...current, [field]: value }));
     setIssues((current) =>
       current.filter((issue) => issue.field !== field),
@@ -46,31 +80,42 @@ export function StoreSettingsSection({
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (disabled) return;
     setSaved(false);
     const nextIssues = validateStoreSettings(draft);
+    const threshold = freeDraft?.threshold.trim() ? bulkPrice(freeDraft.threshold, currency) : null;
+    if (freeDraft && (freeDraft.isOn && threshold === null || freeDraft.threshold.trim() && (threshold === null || threshold <= 0)))
+      nextIssues.push({ field: "freeShipping.threshold", key: "freeShippingThresholdInvalid" });
     setIssues(nextIssues);
     if (nextIssues.length > 0) {
-      window.requestAnimationFrame(() =>
-        document.getElementById("store-settings-validation")?.focus(),
-      );
+      window.requestAnimationFrame(() => document.getElementById("store-settings-validation")?.focus());
       return;
     }
-
+    const freeShipping = freeDraft ? { isOn: freeDraft.isOn, threshold } : undefined;
     const input: StoreSettings = {
-      name: draft.name.trim(),
-      currency:
-        store.status === "published"
-          ? store.currency
-          : draft.currency.trim().toUpperCase(),
-      culture: draft.culture.trim(),
-      returnWindowDays: Number(draft.returnWindowDays),
-      theme: normalizedTheme(draft),
-      company: companyFromDraft(draft),
+      name: draft.name.trim(), currency, culture: draft.culture.trim(), returnWindowDays: Number(draft.returnWindowDays),
+      theme: normalizedTheme(draft), company: companyFromDraft(draft),
+      ...(freeShipping && (freeShipping.isOn !== source.freeShipping?.isOn || freeShipping.threshold !== source.freeShipping?.threshold) ? { freeShipping } : {}),
     };
     await run(async () => {
-      const updated = await api.updateStore(store.id, input);
-      setDraft(settingsDraft(updated));
-      setSaved(true);
+      setFailure(null);
+      const request = new AbortController(); controller.current = request;
+      try {
+        const updated = checkedSettingsSave(await api.updateStore(store.id, input, request.signal), source, input);
+        if (!active.current || request.signal.aborted) return;
+        if (storeSettingsVersion(latest.current) !== storeSettingsVersion(store)) {
+          setFailure({ error: new Error("Store settings changed during the save."), uncertain: true, review: true, observed: latest.current });
+        } else {
+          setBaseline({ source: updated, observed: latest.current }); setDraft(settingsDraft(updated)); setFreeDraft(freeShippingDraft(updated)); setSaved(true); heading.current?.focus();
+        }
+        reloadStores();
+      } catch (error) {
+        if (!active.current || request.signal.aborted) return;
+        const refused = isHttpError(error) && error.kind === "http" && [400, 401, 403, 404, 409, 429].includes(error.status ?? 0);
+        const review = !refused || isHttpError(error) && error.status === 409;
+        setFailure({ error, uncertain: !refused, review, observed: latest.current });
+        if (review) reloadStores();
+      } finally { if (active.current && !request.signal.aborted) controller.current = null; }
     });
   }
 
@@ -78,17 +123,24 @@ export function StoreSettingsSection({
     <section className="store-settings-panel" aria-labelledby="store-details-title">
       <div className="section-heading">
         <div>
-          <h2 id="store-details-title">{t("storeDetails")}</h2>
+          <h2 id="store-details-title" ref={heading} tabIndex={-1}>{t("storeDetails")}</h2>
           <p className="hint">{t("storeDetailsHint")}</p>
         </div>
         {canManageDomains && !pending && <Link to={`/stores/${store.id}/metadata`}>{t("metadata:open")}</Link>}
       </div>
-      <form className="store-settings-form" noValidate onSubmit={save}>
+      {!current && <p role="status">{t("settingsStale")}</p>}
+      {changed && <p role="status">{t("settingsChanged")}</p>}
+      {(!current || changed || failure?.review) && <div className="cluster">
+        <Button type="button" variant="secondary" data-read-action disabled={pending || storeRefreshing} onClick={reloadStores}>{t("refreshSettings")}</Button>
+        <Button type="button" variant="secondary" disabled={pending || !current || !!denied || !!failure?.review && store === failure.observed} onClick={reviewCurrent}>{t("reviewSettings")}</Button>
+      </div>}
+      <form className="store-settings-form" noValidate aria-busy={pending || undefined} onSubmit={save}>
         <StoreValidationSummary
           id="store-settings-validation"
           issues={issues}
         />
-        <div className="store-settings-groups">
+        <fieldset className="store-settings-groups" disabled={disabled}>
+          <legend className="sr-only">{t("storeDetails")}</legend>
           <fieldset className="settings-group">
             <legend>{t("identityAndFormatting")}</legend>
             <div className="settings-fields">
@@ -222,6 +274,21 @@ export function StoreSettingsSection({
           </fieldset>
 
           <fieldset className="settings-group">
+            <legend>{t("freeShippingTitle")}</legend>
+            {freeDraft ? <div className="settings-fields">
+              <label className="listing-check settings-free-shipping-toggle"><input type="checkbox" name="freeShipping.isOn" checked={freeDraft.isOn} onChange={event => {
+                setFreeDraft({ ...freeDraft, isOn: event.target.checked }); setSaved(false); setFailure(null); setIssues(current => current.filter(issue => issue.field !== "freeShipping.threshold"));
+              }} />{t("freeShippingEnable")}</label>
+              <Field id="freeShipping.threshold" name="freeShipping.threshold" inputMode="decimal" required={freeDraft.isOn}
+                label={t("freeShippingThreshold", { currency })} hint={t("freeShippingHint", { currency, decimals: bulkPriceDecimals(currency) })}
+                value={freeDraft.threshold} error={thresholdError} onChange={event => {
+                  setFreeDraft({ ...freeDraft, threshold: event.target.value }); setSaved(false); setFailure(null); setIssues(current => current.filter(issue => issue.field !== "freeShipping.threshold"));
+                }} />
+              <p className="hint">{t("freeShippingOffHint")}</p>
+            </div> : <p role="status">{t("freeShippingUnknown")}</p>}
+          </fieldset>
+
+          <fieldset className="settings-group">
             <legend>{t("theme")}</legend>
             <p className="hint">{t("themeHint")}</p>
             <StoreThemeEditor
@@ -233,21 +300,28 @@ export function StoreSettingsSection({
               }
             />
           </fieldset>
-        </div>
+        </fieldset>
 
         <div className="settings-actions">
           <Button
             type="submit"
+            disabled={disabled}
             busy={pending}
             busyLabel={t("savingSettings")}
           >
             {t("saveSettings")}
           </Button>
         </div>
-        {saved && (
+        {saved && !changed && current && (
           <InlineMessage tone="success">{t("settingsSaved")}</InlineMessage>
         )}
-        {error !== null && <RequestError error={error} operation="write" />}
+        {failure && <div ref={outcome} tabIndex={-1}>
+          {failure.review && <p role="status">{t(failure.uncertain ? "settingsUncertain" : "settingsReviewRequired")}</p>}
+          <RequestError error={failure.error} operation="write" fieldErrors={fieldIssues(failure.error).map(issue => ({
+            field: issue.target.toLowerCase() === "freeshipping.threshold" ? "freeShipping.threshold" : issue.target,
+            message: issue.target.toLowerCase() === "freeshipping.threshold" && thresholdMessages.length ? thresholdMessages.join(" ") : t(`validation:${issue.key}`),
+          }))} />
+        </div>}
       </form>
     </section>
   );
@@ -270,4 +344,10 @@ function settingsDraft(store: AdminStore): StoreSettingsDraft {
     registrationNumber: store.company?.registrationNumber ?? "",
     vatNumber: store.company?.vatNumber ?? "",
   };
+}
+
+function freeShippingDraft(store: AdminStore) {
+  return validFreeShipping(store.freeShipping, store.currency)
+    ? { isOn: store.freeShipping.isOn, threshold: store.freeShipping.threshold === null ? "" : String(store.freeShipping.threshold) }
+    : null;
 }

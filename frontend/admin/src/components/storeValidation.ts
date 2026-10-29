@@ -39,13 +39,14 @@ export type StoreIssueKey =
   | "colorInvalid"
   | "radiusInvalid"
   | "returnWindowInvalid"
+  | "freeShippingThresholdInvalid"
   | "companyIncomplete"
   | "countryInvalid"
   | "fileTypeInvalid"
   | "fileSizeInvalid"
   | "fileEmpty";
 
-export type StoreField = keyof StoreSettingsDraft | keyof CreateStoreDraft | "logo";
+export type StoreField = keyof StoreSettingsDraft | keyof CreateStoreDraft | "logo" | "freeShipping.threshold";
 
 export type StoreIssue = {
   field: StoreField;
