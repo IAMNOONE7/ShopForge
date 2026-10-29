@@ -16,13 +16,17 @@ namespace ShopForge.Orders.Shipping;
 // few queries.
 internal sealed class ShippingQuotes(DbContext dbContext, ICurrentStoreSettings storeSettings, IEnumerable<IShippingProvider> providers)
 {
+    // `goods` is what the cart's goods come to as the shopper pays for them, for the free-delivery threshold (D-221);
+    // nothing where there is no cart to count.
     public async Task<ShippingQuote> QuoteAsync(
         ShippingMethod method,
         IReadOnlyList<QuotedItem> items,
         string? destinationCountry,
+        decimal? goods,
         CancellationToken cancellationToken)
     {
-        var currency = (await storeSettings.GetAsync(cancellationToken)).Currency;
+        var settings = await storeSettings.GetAsync(cancellationToken);
+        var currency = settings.Currency;
         var destination = string.IsNullOrWhiteSpace(destinationCountry) ? null : destinationCountry.Trim().ToUpperInvariant();
         ShippingQuote quote;
 
@@ -37,7 +41,12 @@ internal sealed class ShippingQuotes(DbContext dbContext, ICurrentStoreSettings 
             quote = Quoting.PerParcel(method, service, packing, items, destination, currency);
         }
 
-        return quote.Unavailable is null ? await AskTheCarrierAsync(method, quote, items, destination, currency, cancellationToken) : quote;
+        if (quote.Unavailable is null)
+        {
+            quote = await AskTheCarrierAsync(method, quote, items, destination, currency, cancellationToken);
+        }
+
+        return FreeShipping.Apply(quote, settings.FreeShippingThreshold, goods);
     }
 
     // What a carrier is told about the parcel when a point is checked or its map opened (D-220). For a method priced by
@@ -205,10 +214,18 @@ internal static class Quoting
 
 internal sealed record QuotedItem(SellableVariant Variant, int Quantity);
 
-// The total is the parcels' prices added up, each already in the currency's own decimals, so nothing is rounded.
+// The total is the parcels' prices added up, each already in the currency's own decimals, so nothing is rounded. It is
+// what delivery costs; what the shopper pays is that less what the free-delivery threshold takes off (D-221).
 internal sealed record ShippingQuote(string Currency, decimal Total, IReadOnlyList<QuotedParcel> Parcels, QuoteRefusal? Unavailable)
 {
     public bool IsAvailable => Unavailable is null;
+
+    public decimal ShippingDiscount { get; init; }
+
+    // The threshold that made delivery free, or nothing.
+    public decimal? FreeShippingThreshold { get; init; }
+
+    public decimal Charged => Total - ShippingDiscount;
 
     public static ShippingQuote Refused(Currency currency, QuoteRefusalReason reason, string detail, Guid? variantId = null) =>
         new(currency.Code, 0m, [], new QuoteRefusal(reason, detail, variantId));

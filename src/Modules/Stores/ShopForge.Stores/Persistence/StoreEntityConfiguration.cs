@@ -12,6 +12,9 @@ internal sealed class StoreEntityConfiguration : IEntityTypeConfiguration<Store>
         {
             table.HasCheckConstraint("ck_stores_currency", "currency ~ '^[A-Z]{3}$'");
             table.HasCheckConstraint("ck_stores_return_window_days", "return_window_days >= 0");
+            table.HasCheckConstraint(
+                "ck_stores_free_shipping",
+                "(free_shipping_threshold IS NULL OR free_shipping_threshold > 0) AND (NOT free_shipping_is_on OR free_shipping_threshold IS NOT NULL)");
         });
 
         builder.Property(store => store.Name).HasMaxLength(200);
@@ -25,6 +28,7 @@ internal sealed class StoreEntityConfiguration : IEntityTypeConfiguration<Store>
         builder.Property(store => store.SeoSocialImageUrl).HasMaxLength(2000);
         builder.Property(store => store.LogoPath).HasMaxLength(300);
         builder.Property(store => store.ReturnWindowDays).HasDefaultValue(Domain.Store.DefaultReturnWindowDays);
+        builder.Property(store => store.FreeShippingThreshold).HasPrecision(12, 2);
         builder.Property(store => store.Status).HasConversion<string>().HasMaxLength(20);
         builder.ComplexProperty(store => store.Theme, theme => theme.ToJson());
 

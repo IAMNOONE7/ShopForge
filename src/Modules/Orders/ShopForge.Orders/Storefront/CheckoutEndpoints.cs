@@ -79,7 +79,9 @@ internal static class CheckoutEndpoints
 
         var carts = new Carts(httpContext, dbContext, storeContext, products, stock, discounts, storeSettings, taxRates, clock);
         var cart = await carts.FindAsync(cancellationToken);
-        IReadOnlyList<QuotedItem> items = cart is null ? [] : Quoted(await carts.ContentsAsync(cart, cancellationToken));
+        var contents = cart is null ? null : await carts.ContentsAsync(cart, cancellationToken);
+        IReadOnlyList<QuotedItem> items = contents is null ? [] : Quoted(contents);
+        var goods = contents?.ItemsTotal ?? 0m;
         var carriers = await UsableProvidersAsync(shippingProviders, connections, cancellationToken);
         var methods = await dbContext.Set<ShippingMethod>()
             .AsNoTracking()
@@ -102,7 +104,7 @@ internal static class CheckoutEndpoints
                 continue;
             }
 
-            var quote = await quotes.QuoteAsync(method, items, destination, cancellationToken);
+            var quote = await quotes.QuoteAsync(method, items, destination, goods, cancellationToken);
 
             if (quote.Unavailable is { } refusal)
             {
@@ -118,16 +120,25 @@ internal static class CheckoutEndpoints
             shipping.Add(new ShippingMethodResponse(
                 method.Code,
                 method.Name,
-                quote.Total,
+                quote.Charged,
                 method.RequiresPickupPoint,
                 Choice(method, shippingProviders),
                 method.Pricing,
                 method.Pricing == ShippingPricing.PerParcel ? quote.Parcels.Count : null,
-                MapParcel(ShippingQuotes.ForPoint(quote, items, destination))));
+                MapParcel(ShippingQuotes.ForPoint(quote, items, destination)),
+                quote.Total));
         }
 
+        // Without a cart there is no cart's settings read to borrow the threshold from, so it is asked for here.
+        var threshold = contents is null ? (await storeSettings.GetAsync(cancellationToken)).FreeShippingThreshold : contents.FreeShippingThreshold;
+
         // Cheapest first, as before; a method priced by the parcel takes its place by what this cart costs.
-        return TypedResults.Ok(new CheckoutMethodsResponse(payment, [.. shipping.OrderBy(method => method.Price)], destination, unavailable));
+        return TypedResults.Ok(new CheckoutMethodsResponse(
+            payment,
+            [.. shipping.OrderBy(method => method.Price)],
+            destination,
+            unavailable,
+            FreeShippingResponse.For(threshold, goods)));
     }
 
     private static async Task<Results<Ok<List<PickupPointResponse>>, NotFound>> GetPickupPointsAsync(
@@ -202,7 +213,7 @@ internal static class CheckoutEndpoints
         // the method read above and the cart as it stands now.
         var destinationCountry = (request.ShippingAddress ?? request.BillingAddress)?.Country?.Trim().ToUpperInvariant();
         IReadOnlyList<QuotedItem> items = contents is null ? [] : Quoted(contents);
-        var quote = shipping is null || items.Count == 0 ? null : await quotes.QuoteAsync(shipping, items, destinationCountry, cancellationToken);
+        var quote = shipping is null || items.Count == 0 ? null : await quotes.QuoteAsync(shipping, items, destinationCountry, contents!.ItemsTotal, cancellationToken);
         var chosenPoint = carrier is not null && quote is { IsAvailable: true } && shipping!.RequiresPickupPoint && !string.IsNullOrWhiteSpace(request.PickupPointCode)
             ? await AskAboutPointAsync(carrier, request.PickupPointCode, ShippingQuotes.ForPoint(quote, items, destinationCountry), loggerFactory, cancellationToken)
             : new PickupPointAnswer(null, Answered: true);
@@ -274,13 +285,15 @@ internal static class CheckoutEndpoints
             return errors.ToProblem();
         }
 
-        // Never a quietly different price: one that moved since the page showed it is refused with the new quote.
-        if (request.ExpectedShippingPrice is { } expected && expected != quote!.Total)
+        // Never a quietly different price: one that moved since the page showed it is refused with the new quote. The
+        // shopper was shown what they pay, so that is what is compared: nothing, when the goods reached the free-delivery
+        // threshold (D-221).
+        if (request.ExpectedShippingPrice is { } expected && expected != quote!.Charged)
         {
             return TypedResults.Problem(
                 statusCode: StatusCodes.Status409Conflict,
                 title: "The delivery price has changed",
-                detail: $"Delivery now costs {quote.Total} {quote.Currency}. Please check it before ordering again.",
+                detail: $"Delivery now costs {quote.Charged} {quote.Currency}. Please check it before ordering again.",
                 extensions: new Dictionary<string, object?> { ["shippingQuote"] = quote });
         }
 
@@ -327,7 +340,7 @@ internal static class CheckoutEndpoints
 
         if (discount is not null)
         {
-            var refused = await discounts.FindProblemAsync(discount, contents.Items.Sum(item => item.LineTotal), email, cancellationToken);
+            var refused = await discounts.FindProblemAsync(discount, contents.Items.Sum(item => item.LineTotal), settings.FreeShippingThreshold, email, cancellationToken);
 
             if (refused is not null || !await discounts.TryRedeemAsync(discount, cancellationToken))
             {
@@ -403,6 +416,11 @@ internal static class CheckoutEndpoints
                 order.Email,
                 allocation.Total,
                 placedAt));
+        }
+
+        if (quote.FreeShippingThreshold is { } freeFrom)
+        {
+            order.MakeDeliveryFree(freeFrom);
         }
 
         dbContext.Add(order);
@@ -640,15 +658,17 @@ internal sealed record CheckoutMethodsResponse(
     List<PaymentMethodResponse> PaymentMethods,
     List<ShippingMethodResponse> ShippingMethods,
     string? DestinationCountry,
-    List<UnavailableShippingResponse> UnavailableShippingMethods);
+    List<UnavailableShippingResponse> UnavailableShippingMethods,
+    FreeShippingResponse? FreeShipping);
 
 internal sealed record PaymentMethodResponse(string Code, string Name);
 
 // `PickupPointChoice` tells the shop which way to ask: nowhere, our own list of points, or the carrier's map
 // opened in the shopper's browser. Without it an empty list of points is indistinguishable from a store that
 // configured none (D-158).
-// `Price` is the quote's total for this cart, the flat price for a flat method; `Parcels` is how many parcels a method
+// `Price` is what the shopper pays for this cart, the flat price for a flat method; `Parcels` is how many parcels a method
 // priced by the parcel estimates, and `MapParcel` what the carrier's map is told about the heaviest of them (D-220).
+// `FullPrice` is the delivery's price before free delivery took it off, and `Price` when it did not (D-221).
 internal sealed record ShippingMethodResponse(
     string Code,
     string Name,
@@ -657,7 +677,8 @@ internal sealed record ShippingMethodResponse(
     string PickupPointChoice,
     ShippingPricing Pricing,
     int? Parcels,
-    MapParcelResponse? MapParcel);
+    MapParcelResponse? MapParcel,
+    decimal FullPrice);
 
 // A method that cannot take this cart, and why: notToCountry, tooHeavy, tooLarge, missingData or tooManyParcels, and the
 // form to blame where there is one.
@@ -690,7 +711,9 @@ internal sealed record OrderResponse(
     // When the payment was confirmed, which a status of Paid or later only implies, and where any money given back
     // stands (D-204).
     DateTimeOffset? PaidAt,
-    List<CustomerRefundResponse> Refunds)
+    List<CustomerRefundResponse> Refunds,
+    // The threshold the goods reached when that is what made delivery free (D-221).
+    decimal? FreeShippingThreshold)
 {
     public static OrderResponse From(Order order, List<DocumentResponse> documents, List<CustomerRefundResponse> refunds) => new(
         order.Number,
@@ -710,7 +733,8 @@ internal sealed record OrderResponse(
         documents,
         [.. order.Lines.Select(line => new OrderLineResponse(line.ProductName, line.UnitPrice, line.VatRate, line.Quantity, line.LineTotal))],
         order.PaidAt,
-        refunds);
+        refunds,
+        order.FreeShippingThreshold);
 }
 
 internal sealed record ShipmentResponse(string Carrier, string TrackingNumber, string? TrackingUrl);

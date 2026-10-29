@@ -467,7 +467,9 @@ internal sealed record AdminOrderDetailResponse(
     List<DocumentResponse> Documents,
     List<AdminOrderLineResponse> Lines,
     // The parcels the delivery was priced on and what goes in each: a suggestion, which booking starts from (D-220).
-    List<AdminOrderParcelResponse> Parcels)
+    List<AdminOrderParcelResponse> Parcels,
+    // The threshold the goods reached when that is what made delivery free (D-221).
+    decimal? FreeShippingThreshold)
 {
     public static AdminOrderDetailResponse From(
         Order order,
@@ -503,7 +505,8 @@ internal sealed record AdminOrderDetailResponse(
         returns,
         documents,
         [.. order.Lines.Select(line => new AdminOrderLineResponse(line.ProductName, line.UnitPrice, line.VatRate, line.Quantity, line.LineTotal))],
-        parcels);
+        parcels,
+        order.FreeShippingThreshold);
 }
 
 internal sealed record AdminOrderParcelResponse(int Number, int GrossWeightGrams, int BandUpToGrams, decimal Price, bool Alone, List<AdminOrderParcelItemResponse> Contents);

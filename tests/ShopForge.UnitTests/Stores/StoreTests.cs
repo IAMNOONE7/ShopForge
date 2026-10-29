@@ -58,6 +58,24 @@ public sealed class StoreTests
         Assert.Throws<ArgumentException>(() => store.AddPlatformDomain(Hosts, label, DateTimeOffset.UtcNow));
     }
 
+    // Switched on it needs a threshold, and a threshold is more than nothing in the store's currency (D-221). Switched
+    // off, the threshold is kept for the next time.
+    [Fact]
+    public void Free_delivery_needs_a_threshold_the_currency_can_hold_and_keeps_it_when_off()
+    {
+        var store = new Store(Guid.NewGuid(), "Wooden Home", "CZK", "cs-CZ", Theme);
+
+        Assert.Throws<ArgumentException>(() => store.SetFreeShipping(true, null));
+        Assert.Throws<ArgumentOutOfRangeException>(() => store.SetFreeShipping(false, 0m));
+        Assert.Throws<ArgumentOutOfRangeException>(() => store.SetFreeShipping(true, 999.999m));
+        Assert.Equal((false, (decimal?)null), (store.FreeShippingIsOn, store.FreeShippingThreshold));
+
+        store.SetFreeShipping(true, 1_500m);
+        store.SetFreeShipping(false, 1_500m);
+
+        Assert.Equal((false, (decimal?)1_500m), (store.FreeShippingIsOn, store.FreeShippingThreshold));
+    }
+
     [Fact]
     public void Same_domain_cannot_be_added_twice()
     {

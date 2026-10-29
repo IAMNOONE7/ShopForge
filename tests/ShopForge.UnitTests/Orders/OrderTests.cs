@@ -64,6 +64,42 @@ public sealed class OrderTests
         Assert.Equal((OrderStatus.Shipped, "PKG-1"), (paid.Status, paid.Shipment!.TrackingNumber));
     }
 
+    // Kept as a free-shipping code is, but never counted as one (D-221).
+    [Fact]
+    public void Free_delivery_keeps_the_price_and_charges_nothing_for_it()
+    {
+        var order = Place();
+        order.AddLine(Guid.NewGuid(), Guid.NewGuid(), "Oak Chair", 121m, 21m, 2);
+
+        order.MakeDeliveryFree(200m);
+
+        Assert.Equal((4.90m, 4.90m, 0m), (order.ShippingPrice, order.ShippingDiscount, order.ShippingCharged));
+        Assert.Equal((242m, 42m), (order.GrandTotal, order.VatTotal));
+        Assert.Equal((200m, 0m, (string?)null), (order.FreeShippingThreshold, order.DiscountTotal, order.DiscountCode));
+    }
+
+    [Fact]
+    public void Free_delivery_beside_a_code_off_the_goods_is_not_the_codes()
+    {
+        var order = Place();
+        order.AddLine(Guid.NewGuid(), Guid.NewGuid(), "Oak Chair", 121m, 21m, 2, discount: 24.20m);
+        order.ApplyDiscount("TEN", "Ten off", shippingDiscount: 0m);
+
+        order.MakeDeliveryFree(200m);
+
+        Assert.Equal((24.20m, 4.90m, 217.80m), (order.DiscountTotal, order.ShippingDiscount, order.GrandTotal));
+    }
+
+    [Fact]
+    public void A_code_that_took_delivery_off_leaves_nothing_for_the_threshold()
+    {
+        var order = Place();
+        order.ApplyDiscount("SHIPFREE", "Free delivery", shippingDiscount: 4.90m);
+
+        Assert.Throws<InvalidOperationException>(() => order.MakeDeliveryFree(200m));
+        Assert.Null(order.FreeShippingThreshold);
+    }
+
     private static readonly ShipmentDetails Parcel = new("Courier", "PKG-1", null);
 
     private static Order Place() => new(

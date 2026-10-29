@@ -23,6 +23,7 @@ internal sealed class CurrentStoreSettings(DbContext dbContext, IStoreContext st
                     .Select(domain => domain.HostName)
                     .FirstOrDefault(),
                 store.Culture,
+                FreeShippingThreshold = store.FreeShippingIsOn ? store.FreeShippingThreshold : null,
                 Settings = new StoreSettings(
                 store.Name,
                 store.Currency,
@@ -51,6 +52,7 @@ internal sealed class CurrentStoreSettings(DbContext dbContext, IStoreContext st
         {
             Branding = found.Settings.Branding with { LogoUrl = found.LogoPath is null ? null : address?.Logo },
             Address = address,
+            FreeShippingThreshold = found.FreeShippingThreshold,
         };
     }
 

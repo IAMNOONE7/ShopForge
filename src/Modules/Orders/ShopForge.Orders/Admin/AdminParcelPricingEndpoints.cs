@@ -102,6 +102,7 @@ internal static class AdminParcelPricingEndpoints
 
         var listings = await products.FindAsync([.. lines.Select(line => line.StoreProductId).Distinct()], cancellationToken);
         var items = new List<QuotedItem>();
+        var goods = 0m;
 
         foreach (var (line, number) in lines.Select((line, index) => (line, index + 1)))
         {
@@ -111,9 +112,11 @@ internal static class AdminParcelPricingEndpoints
             }
 
             items.Add(new QuotedItem(variant, line.Quantity));
+            goods += listings.Single(listing => listing.StoreProductId == line.StoreProductId).Price * line.Quantity;
         }
 
-        return TypedResults.Ok(await quotes.QuoteAsync(method, items, request.Country, cancellationToken));
+        // At the listings' prices, as a cart with no code would be counted for free delivery (D-221).
+        return TypedResults.Ok(await quotes.QuoteAsync(method, items, request.Country, goods, cancellationToken));
     }
 
     private static object Card(ShippingMethod method) =>

@@ -52,6 +52,12 @@ internal sealed class Store : ITenantOwned
     // How long after a delivery the store takes goods back.
     public int ReturnWindowDays { get; private set; } = DefaultReturnWindowDays;
 
+    // Delivery costs nothing once the goods come to the threshold, while this is on (D-221). The threshold is kept
+    // when it is switched off, so switching it on again does not lose the number.
+    public bool FreeShippingIsOn { get; private set; }
+
+    public decimal? FreeShippingThreshold { get; private set; }
+
     // What the store says about its pages when a page says nothing of its own, and a switch for a shop that is
     // not ready to be found at all (D-165). Typed columns rather than a blob, because these decide behaviour
     // rather than describe presentation (D-021).
@@ -134,6 +140,23 @@ internal sealed class Store : ITenantOwned
         Culture = CultureInfo.GetCultureInfo(culture, predefinedOnly: true).Name;
         Theme = theme;
         ReturnWindowDays = returnWindowDays;
+    }
+
+    // Switched on, it needs a threshold; either way a threshold is more than nothing and in the store's currency.
+    public void SetFreeShipping(bool isOn, decimal? threshold)
+    {
+        if (isOn && threshold is null)
+        {
+            throw new ArgumentException("Free delivery switched on needs a threshold.", nameof(threshold));
+        }
+
+        if (threshold is { } amount && (amount <= 0 || !Currency.Holds(amount)))
+        {
+            throw new ArgumentOutOfRangeException(nameof(threshold), $"A threshold is more than nothing, in {Currency.Code}.");
+        }
+
+        FreeShippingIsOn = isOn;
+        FreeShippingThreshold = threshold;
     }
 
     public void Publish() => Status = StoreStatus.Published;

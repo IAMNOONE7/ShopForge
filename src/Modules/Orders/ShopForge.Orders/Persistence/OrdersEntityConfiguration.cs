@@ -47,6 +47,7 @@ internal sealed class OrderEntityConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(order => order.ShippingMethodName).HasMaxLength(100);
         builder.Property(order => order.ShippingPrice).HasPrecision(12, 2);
         builder.Property(order => order.ShippingDiscount).HasPrecision(12, 2);
+        builder.Property(order => order.FreeShippingThreshold).HasPrecision(12, 2);
         builder.Property(order => order.DiscountTotal).HasPrecision(12, 2);
         builder.Property(order => order.RefundedTotal).HasPrecision(12, 2);
         builder.Property(order => order.DiscountCode).HasMaxLength(40);

@@ -44,7 +44,9 @@ internal static class StorefrontStoreEndpoint
             [.. (await connections.PublishedKeysAsync(cancellationToken))
                 .Select(published => new StorefrontProviderKeyResponse(published.Provider, published.Key))],
             // What delivery costs at the least, for "delivery from" on a product page and in the cart (D-220).
-            await deliveryPrices.CheapestAsync(cancellationToken)));
+            await deliveryPrices.CheapestAsync(cancellationToken),
+            // What the goods must come to for delivery to cost nothing, while the store has it on (D-221).
+            store.FreeShippingIsOn ? store.FreeShippingThreshold : null));
     }
 }
 
@@ -57,7 +59,8 @@ internal sealed record StorefrontStoreResponse(
     int ReturnWindowDays,
     StorefrontThemeResponse Theme,
     IReadOnlyList<StorefrontProviderKeyResponse> ProviderKeys,
-    decimal? DeliveryFrom);
+    decimal? DeliveryFrom,
+    decimal? FreeShippingFrom);
 
 internal sealed record StorefrontProviderKeyResponse(string Provider, string Key);
 

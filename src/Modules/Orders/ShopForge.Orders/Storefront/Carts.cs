@@ -125,9 +125,9 @@ internal sealed class Carts(
         // Nowhere in particular yet: a cart is priced in the shop's own market until a destination is typed,
         // and the checkout works the tax out again for wherever the parcel is actually going (D-187).
         var rates = await taxRates.ForAsync(destinationCountry: null, settings.Seller?.Country, cancellationToken);
-        var (discount, problem) = await DiscountForAsync(cart, items, currency, cancellationToken);
+        var (discount, problem) = await DiscountForAsync(cart, items, currency, settings.FreeShippingThreshold, cancellationToken);
 
-        return new CartContents(items, currency, rates, changed, shortNames, discount, problem);
+        return new CartContents(items, currency, rates, changed, shortNames, discount, problem, settings.FreeShippingThreshold);
     }
 
     // A code can stop applying while it sits in the cart — it expires, it is used up, the cart drops below its
@@ -136,6 +136,7 @@ internal sealed class Carts(
         Cart cart,
         IReadOnlyList<CartItem> items,
         Currency currency,
+        decimal? freeShippingThreshold,
         CancellationToken cancellationToken)
     {
         if (cart.DiscountCode is not { Length: > 0 } code || items.Count == 0)
@@ -150,7 +151,7 @@ internal sealed class Carts(
             return (null, DiscountProblem.Unknown);
         }
 
-        if (await discounts.FindProblemAsync(discount, items.Sum(item => item.LineTotal), email: null, cancellationToken) is { } problem)
+        if (await discounts.FindProblemAsync(discount, items.Sum(item => item.LineTotal), freeShippingThreshold, email: null, cancellationToken) is { } problem)
         {
             return (null, problem);
         }
@@ -175,8 +176,10 @@ internal sealed record CartContents(
     bool Changed,
     IReadOnlyList<string> ShortNames,
     AppliedDiscount? Discount = null,
-    DiscountProblem? DiscountProblem = null)
+    DiscountProblem? DiscountProblem = null,
+    decimal? FreeShippingThreshold = null)
 {
+    // What the goods come to as the shopper pays for them, which is also what the free-delivery threshold counts (D-221).
     public decimal ItemsTotal => Items.Sum(item => item.LineTotal) - DiscountTotal;
 
     public decimal DiscountTotal => Discount?.Result.LineDiscounts.Sum() ?? 0m;

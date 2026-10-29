@@ -2643,6 +2643,11 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(254)")
                         .HasColumnName("email");
 
+                    b.Property<decimal?>("FreeShippingThreshold")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("free_shipping_threshold");
+
                     b.Property<string>("Number")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -3964,6 +3969,15 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                         .HasColumnName("currency")
                         .IsFixedLength();
 
+                    b.Property<bool>("FreeShippingIsOn")
+                        .HasColumnType("boolean")
+                        .HasColumnName("free_shipping_is_on");
+
+                    b.Property<decimal?>("FreeShippingThreshold")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("free_shipping_threshold");
+
                     b.Property<string>("LogoPath")
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)")
@@ -4036,6 +4050,8 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                     b.ToTable("stores", "stores", t =>
                         {
                             t.HasCheckConstraint("ck_stores_currency", "currency ~ '^[A-Z]{3}$'");
+
+                            t.HasCheckConstraint("ck_stores_free_shipping", "(free_shipping_threshold IS NULL OR free_shipping_threshold > 0) AND (NOT free_shipping_is_on OR free_shipping_threshold IS NOT NULL)");
 
                             t.HasCheckConstraint("ck_stores_return_window_days", "return_window_days >= 0");
                         });

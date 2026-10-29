@@ -74,14 +74,17 @@ internal sealed class Discount : IStoreOwned
         IsActive = isActive;
     }
 
-    // Everything a code can be refused for except the counted ones, which only checkout can settle (D-086).
-    public DiscountProblem? FindProblem(decimal itemsTotal, DateTimeOffset now) => this switch
+    // Everything a code can be refused for except the counted ones, which only checkout can settle (D-086). A code that
+    // only takes delivery off is refused when delivery is already free, so a code that can be used once is not spent
+    // for nothing (D-221).
+    public DiscountProblem? FindProblem(decimal itemsTotal, DateTimeOffset now, bool deliveryIsFree = false) => this switch
     {
         { IsActive: false } => DiscountProblem.NotAvailable,
         _ when StartsAt is { } startsAt && now < startsAt => DiscountProblem.NotStarted,
         _ when EndsAt is { } endsAt && now >= endsAt => DiscountProblem.Expired,
         _ when MinimumOrderAmount is { } minimum && itemsTotal < minimum => DiscountProblem.BelowMinimum,
         _ when MaxRedemptions is { } maximum && Redemptions >= maximum => DiscountProblem.UsedUp,
+        { Kind: DiscountKind.FreeShipping } when deliveryIsFree => DiscountProblem.DeliveryAlreadyFree,
         _ => null,
     };
 }
@@ -109,6 +112,7 @@ internal enum DiscountProblem
     BelowMinimum,
     UsedUp,
     AlreadyUsed,
+    DeliveryAlreadyFree,
 }
 
 // One row per order that used a code: what the per-customer limit is counted against, and the audit trail.

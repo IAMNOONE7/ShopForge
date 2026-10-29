@@ -133,6 +133,9 @@ internal sealed class Order : IStoreOwned
 
     public decimal ShippingDiscount { get; private set; }
 
+    // The free-delivery threshold the goods reached, which is what took the delivery off when it was not a code (D-221).
+    public decimal? FreeShippingThreshold { get; private set; }
+
     // What has gone back to the customer so far, across every return of this order.
     public decimal RefundedTotal { get; private set; }
 
@@ -152,6 +155,20 @@ internal sealed class Order : IStoreOwned
         DiscountName = name;
         ShippingDiscount = shippingDiscount;
         DiscountTotal = _lines.Sum(line => line.Discount) + shippingDiscount;
+    }
+
+    // Kept the way a free-shipping code is: the delivery's price, and a discount of all of it, but marked as the
+    // threshold's, so it is never counted as something a code took off (D-221). A code that took delivery off already
+    // was refused before the order got here, so the two never meet.
+    public void MakeDeliveryFree(decimal threshold)
+    {
+        if (ShippingDiscount != 0)
+        {
+            throw new InvalidOperationException("A code has already taken the delivery off.");
+        }
+
+        ShippingDiscount = ShippingPrice;
+        FreeShippingThreshold = threshold;
     }
 
     public void AssignTo(Guid storeCustomerId) => StoreCustomerId = storeCustomerId;

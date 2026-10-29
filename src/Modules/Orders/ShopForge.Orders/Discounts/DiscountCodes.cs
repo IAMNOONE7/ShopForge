@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Orders.Domain;
+using ShopForge.Orders.Shipping;
 
 namespace ShopForge.Orders.Discounts;
 
@@ -12,10 +13,17 @@ internal sealed class DiscountCodes(DbContext dbContext, TimeProvider clock)
         return dbContext.Set<Discount>().SingleOrDefaultAsync(discount => discount.Code == normalized, cancellationToken);
     }
 
-    // What the cart can tell the shopper before checkout; the counted limits are settled at placement (D-086).
-    public async Task<DiscountProblem?> FindProblemAsync(Discount discount, decimal itemsTotal, string? email, CancellationToken cancellationToken)
+    // What the cart can tell the shopper before checkout; the counted limits are settled at placement (D-086). The
+    // threshold is the store's free delivery, against goods that no line discount has touched, since a code that only
+    // takes delivery off takes nothing off the goods (D-221).
+    public async Task<DiscountProblem?> FindProblemAsync(
+        Discount discount,
+        decimal itemsTotal,
+        decimal? freeShippingThreshold,
+        string? email,
+        CancellationToken cancellationToken)
     {
-        if (discount.FindProblem(itemsTotal, clock.GetUtcNow()) is { } problem)
+        if (discount.FindProblem(itemsTotal, clock.GetUtcNow(), FreeShipping.Applies(freeShippingThreshold, itemsTotal)) is { } problem)
         {
             return problem;
         }
@@ -59,6 +67,7 @@ internal sealed class DiscountCodes(DbContext dbContext, TimeProvider clock)
         DiscountProblem.BelowMinimum => "Your order is below the minimum for this code.",
         DiscountProblem.UsedUp => "This code has been used up.",
         DiscountProblem.AlreadyUsed => "You have already used this code.",
+        DiscountProblem.DeliveryAlreadyFree => "Delivery is already free for this order, so this code would add nothing.",
         _ => "This code cannot be used.",
     };
 }

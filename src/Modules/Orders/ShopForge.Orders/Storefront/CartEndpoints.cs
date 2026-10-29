@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Orders.Discounts;
 using ShopForge.Orders.Domain;
+using ShopForge.Orders.Shipping;
 using ShopForge.Shared.Catalog;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Inventory;
@@ -191,7 +192,7 @@ internal static class CartEndpoints
         var discount = string.IsNullOrWhiteSpace(request.Code) ? null : await discounts.FindAsync(request.Code, cancellationToken);
         var problem = discount is null
             ? DiscountProblem.Unknown
-            : await discounts.FindProblemAsync(discount, contents.Items.Sum(item => item.LineTotal), email: null, cancellationToken);
+            : await discounts.FindProblemAsync(discount, contents.Items.Sum(item => item.LineTotal), contents.FreeShippingThreshold, email: null, cancellationToken);
 
         if (problem is { } refused)
         {
@@ -271,7 +272,8 @@ internal sealed record CartResponse(
     decimal VatTotal,
     bool Changed,
     CartDiscountResponse? Discount,
-    string? DiscountProblem)
+    string? DiscountProblem,
+    FreeShippingResponse? FreeShipping = null)
 {
     public static readonly CartResponse Empty = new([], 0, 0m, 0m, false, null, null);
 
@@ -296,7 +298,16 @@ internal sealed record CartResponse(
         contents.Discount is null
             ? null
             : new CartDiscountResponse(contents.Discount.Discount.Code, contents.Discount.Discount.Name, contents.DiscountTotal),
-        contents.DiscountProblem is { } problem ? DiscountCodes.Explain(problem) : null);
+        contents.DiscountProblem is { } problem ? DiscountCodes.Explain(problem) : null,
+        FreeShippingResponse.For(contents.FreeShippingThreshold, contents.ItemsTotal));
+}
+
+// While the store has free delivery on: the threshold, and how much more in goods would reach it, nothing once it is
+// reached (D-221).
+internal sealed record FreeShippingResponse(decimal Threshold, decimal Remaining)
+{
+    public static FreeShippingResponse? For(decimal? threshold, decimal goods) =>
+        threshold is { } reached ? new FreeShippingResponse(reached, FreeShipping.Remaining(reached, goods)!.Value) : null;
 }
 
 internal sealed record CartDiscountResponse(string Code, string Name, decimal Amount);

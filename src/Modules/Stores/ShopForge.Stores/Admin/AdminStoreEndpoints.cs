@@ -39,7 +39,8 @@ internal static class AdminStoreEndpoints
                         store.Company.Country,
                         store.Company.RegistrationNumber,
                         store.Company.VatNumber),
-                new AdminSeoResponse(store.SeoTitleSuffix, store.SeoDescription, store.SeoSocialImageUrl, store.SeoNoIndex)))
+                new AdminSeoResponse(store.SeoTitleSuffix, store.SeoDescription, store.SeoSocialImageUrl, store.SeoNoIndex),
+                new AdminFreeShippingResponse(store.FreeShippingIsOn, store.FreeShippingThreshold)))
             .ToListAsync(cancellationToken);
 
         return TypedResults.Ok(stores);
@@ -57,7 +58,8 @@ internal sealed record AdminStoreResponse(
     string? PrimaryHostName,
     int ReturnWindowDays,
     AdminCompanyResponse? Company,
-    AdminSeoResponse Seo)
+    AdminSeoResponse Seo,
+    AdminFreeShippingResponse FreeShipping)
 {
     public static AdminStoreResponse From(Store store, string? primaryHostName) => new(
         store.Id,
@@ -79,8 +81,12 @@ internal sealed record AdminStoreResponse(
                 store.Company.Country,
                 store.Company.RegistrationNumber,
                 store.Company.VatNumber),
-        new AdminSeoResponse(store.SeoTitleSuffix, store.SeoDescription, store.SeoSocialImageUrl, store.SeoNoIndex));
+        new AdminSeoResponse(store.SeoTitleSuffix, store.SeoDescription, store.SeoSocialImageUrl, store.SeoNoIndex),
+        new AdminFreeShippingResponse(store.FreeShippingIsOn, store.FreeShippingThreshold));
 }
+
+// Free delivery once the goods come to the threshold, and the threshold even while it is off (D-221).
+internal sealed record AdminFreeShippingResponse(bool IsOn, decimal? Threshold);
 
 // What the store says about its pages when a page says nothing of its own (D-165).
 internal sealed record AdminSeoResponse(string? TitleSuffix, string? Description, string? SocialImageUrl, bool NoIndex);

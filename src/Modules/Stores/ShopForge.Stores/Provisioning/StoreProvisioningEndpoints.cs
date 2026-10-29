@@ -103,6 +103,7 @@ internal static class StoreProvisioningEndpoints
         UpdateStoreRequest request,
         DbContext dbContext,
         IStoreContext storeContext,
+        IAuditLog audit,
         CancellationToken cancellationToken)
     {
         var company = request.Company?.ToCompany();
@@ -111,7 +112,9 @@ internal static class StoreProvisioningEndpoints
             .Check(request.Company is null || company is not null, "company", "Legal name, address and registration number are required.")
             .Check(request.Seo?.TitleSuffix is null || request.Seo.TitleSuffix.Trim().Length <= 200, "seo.titleSuffix", "A title suffix can be up to 200 characters.")
             .Check(request.Seo?.Description is null || request.Seo.Description.Trim().Length <= 500, "seo.description", "A description can be up to 500 characters.")
-            .Check(IsAnAddressOrNothing(request.Seo?.SocialImageUrl), "seo.socialImageUrl", "A social image must be an absolute http or https address.");
+            .Check(IsAnAddressOrNothing(request.Seo?.SocialImageUrl), "seo.socialImageUrl", "A social image must be an absolute http or https address.")
+            .Check(request.FreeShipping is not { IsOn: true, Threshold: null }, "freeShipping.threshold", "Say what the goods must come to for delivery to be free.")
+            .Check(request.FreeShipping?.Threshold is null or > 0, "freeShipping.threshold", "A threshold is more than nothing.");
 
         if (errors.Any)
         {
@@ -119,6 +122,19 @@ internal static class StoreProvisioningEndpoints
         }
 
         var store = await CurrentStoreAsync(dbContext, storeContext, cancellationToken);
+
+        // In the currency the store will have once this is saved, which the request may be changing.
+        var currency = request.Currency is { } code ? Currency.Of(code) : store.Currency;
+        var threshold = request.FreeShipping is { } sent ? sent.Threshold : store.FreeShippingThreshold;
+
+        if (threshold is { } amount && !currency.Holds(amount))
+        {
+            return new RequestErrors()
+                .Check(false, "freeShipping.threshold", $"A threshold has at most {currency.Decimals} decimals in {currency.Code}.")
+                .ToProblem();
+        }
+
+        var freeShippingBefore = new { IsOn = store.FreeShippingIsOn, Threshold = store.FreeShippingThreshold };
 
         try
         {
@@ -140,10 +156,25 @@ internal static class StoreProvisioningEndpoints
             {
                 store.DescribeToSearchEngines(seo.TitleSuffix, seo.Description, seo.SocialImageUrl, seo.NoIndex);
             }
+
+            // Absent leaves free delivery as it is; present replaces both, so a threshold survives being switched off
+            // only when it is sent (D-221).
+            if (request.FreeShipping is { } freeShipping)
+            {
+                store.SetFreeShipping(freeShipping.IsOn, freeShipping.Threshold);
+            }
         }
         catch (InvalidOperationException exception)
         {
             return TypedResults.Problem(statusCode: StatusCodes.Status409Conflict, title: exception.Message);
+        }
+
+        var freeShippingAfter = new { IsOn = store.FreeShippingIsOn, Threshold = store.FreeShippingThreshold };
+
+        // A commercial term every quote and order follows, so who changed it, and from what, is kept.
+        if (!freeShippingAfter.Equals(freeShippingBefore))
+        {
+            audit.Record("store.free-shipping-changed", store.Name, new { Before = freeShippingBefore, After = freeShippingAfter });
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -294,7 +325,10 @@ internal sealed record UpdateStoreRequest(
     ThemeRequest? Theme,
     int? ReturnWindowDays,
     CompanyRequest? Company,
-    SeoRequest? Seo);
+    SeoRequest? Seo,
+    FreeShippingRequest? FreeShipping = null);
+
+internal sealed record FreeShippingRequest(bool IsOn, decimal? Threshold);
 
 internal sealed record SeoRequest(string? TitleSuffix, string? Description, string? SocialImageUrl, bool NoIndex);
 
