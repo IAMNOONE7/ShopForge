@@ -109,12 +109,11 @@ function CategoryBranch({ node: { category, children }, depth, contentLanguage, 
     <div className="category-branch-row">
       <NavLink className="category-branch-link" to={categoryPath(category.slug)} lang={contentLanguage} onClick={onNavigate}>
         {category.name}
-        {children.length === 0 && <span aria-hidden="true">↗</span>}
       </NavLink>
       {children.length > 0 && <button type="button" className="category-branch-toggle"
         aria-label={t(expanded ? "hideSubcategories" : "showSubcategories", { name: category.name })}
         aria-expanded={expanded} aria-controls={controls} onClick={() => setExpanded(current => !current)}>
-        <span aria-hidden="true">⌄</span>
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
       </button>}
     </div>
     {children.length > 0 && <div className="category-branch-children" id={controls} hidden={!expanded}>
@@ -180,7 +179,6 @@ function CategoryMenu({ node, overflow = [], contentLanguage }: {
         {node && <NavLink to={categoryPath(node.category.slug)} className="category-menu-all" onClick={close}>
           {t("allInCategory", { name: node.category.name })}
         </NavLink>}
-        <p className="category-navigation-hint">{t("categoryNavigationHint")}</p>
         <CategoryLinks nodes={node?.children ?? overflow} contentLanguage={contentLanguage} onNavigate={close} />
       </div>
     </details>

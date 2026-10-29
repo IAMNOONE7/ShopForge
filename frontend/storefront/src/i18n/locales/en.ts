@@ -51,7 +51,6 @@ const resources = {
     showSubcategories: "Show subcategories of {{name}}",
     hideSubcategories: "Hide subcategories of {{name}}",
     subcategoriesOf: "Subcategories of {{name}}",
-    categoryNavigationHint: "Open a category by name, or use its arrow to browse subcategories.",
   },
   discovery: {
     shop: "The shop",
