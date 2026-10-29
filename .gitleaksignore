@@ -15,3 +15,7 @@ d9394ef1b3ca44fb6add7e767a26ffc703fd12f7:tests/ShopForge.IntegrationTests/Paymen
 bc81b04749b83377397e346f6af5b7026724cbc0:tests/ShopForge.UnitTests/Shipping/PacketaHttpClientTests.cs:generic-api-key:13
 bc81b04749b83377397e346f6af5b7026724cbc0:tests/ShopForge.UnitTests/Shipping/PacketaHttpClientTests.cs:generic-api-key:25
 95ce20675552b1daaf79a8a25a4bafec307ea2fc:tests/ShopForge.UnitTests/Shipping/PacketaHttpClientTests.cs:generic-api-key:42
+
+# A made-up reset token ("fixture+proof/=") in the operator and staff password recovery API tests' expected requests.
+31b98ad0d5f10efe0b962dd9b0648630330d1bc5:frontend/admin/src/api/operatorRecovery.test.ts:generic-api-key:19
+8eba78df939351ff747120b474e7569359608e7c:frontend/admin/src/api/staffRecovery.test.ts:generic-api-key:12
