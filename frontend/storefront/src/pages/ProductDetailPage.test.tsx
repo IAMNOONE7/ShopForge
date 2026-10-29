@@ -74,7 +74,7 @@ describe("product purchase page", () => {
     expect(parent.getAttribute("href")).toBe("/c/chairs");
     expect(parent.closest("li")?.className).toBe("product-breadcrumb-parent");
     expect(within(trail).getByText("Oak chair").getAttribute("aria-current")).toBe("page");
-    expect(screen.getByText("649,00 Kč", { exact: false })).toBeTruthy();
+    expect(document.querySelector(".product-summary .product-price")?.textContent).toBe("649,00\u00a0Kč");
     const information = screen.getByRole("navigation", { name: "Product information" });
     expect(within(information).getByRole("link", { name: "Description" }).getAttribute("href")).toBe("#product-description-heading");
     expect(screen.getByText("<script>merchant text</script>")).toBeTruthy();

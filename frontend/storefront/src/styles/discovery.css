@@ -131,6 +131,21 @@
   overflow-wrap: anywhere;
 }
 
+.account-link-label {
+  display: grid;
+  min-width: min-content;
+  overflow-wrap: anywhere;
+}
+
+.account-link-label > span {
+  grid-area: 1 / 1;
+}
+
+.account-label-reservation {
+  visibility: hidden;
+  white-space: nowrap;
+}
+
 .account-link svg,
 .cart-link svg {
   width: 1.5rem;

@@ -375,6 +375,36 @@
   aspect-ratio: 1;
 }
 
+.product-detail-loading {
+  min-height: 48rem;
+}
+
+.product-breadcrumb-skeleton {
+  display: flex;
+  align-items: center;
+  min-height: 2.75rem;
+}
+
+.product-breadcrumb-skeleton::after {
+  content: "";
+  width: min(100%, 12rem);
+  height: 1rem;
+  background: var(--color-border);
+  border-radius: var(--radius-control);
+}
+
+.product-info-skeleton span:last-child {
+  width: 62%;
+  height: 1.25rem;
+}
+
+.product-purchase-skeleton span {
+  display: block;
+  height: 2.75rem;
+  background: var(--color-border);
+  border-radius: var(--radius-control);
+}
+
 dialog.product-image-viewer {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);

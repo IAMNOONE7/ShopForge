@@ -37,6 +37,7 @@ export function ProductGallery({ images, productName, contentLanguage }: {
     event.preventDefault();
     setSelectedUrl(images[next].url);
     controls[next].focus();
+    controls[next].scrollIntoView?.({ block: "nearest", inline: "nearest" });
   }
 
   return (

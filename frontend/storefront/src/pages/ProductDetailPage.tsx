@@ -4,12 +4,13 @@ import { getProduct } from "../api";
 import { Message } from "../components/Message";
 import { ProductReviews } from "../components/ProductReviews";
 import { Stars } from "../components/Stars";
+import { CurrencyValue } from "../components/CurrencyValue";
 import { ProductAttributes } from "../components/product/ProductAttributes";
 import { ProductDetailLoading } from "../components/product/ProductDetailLoading";
 import { ProductGallery } from "../components/product/ProductGallery";
 import { ProductPurchase } from "../components/product/ProductPurchase";
 import { RequestError } from "../components/ui/RequestError";
-import { formatPrice, useStore } from "../storeContext";
+import { useStore } from "../storeContext";
 import { useRequest } from "../useRequest";
 import { categoryPath } from "../publicPages";
 import { useCurrentSlug, usePageMetadata } from "../usePageMetadata";
@@ -86,7 +87,7 @@ export function ProductDetailPage() {
             <div className="product-detail">
               <header className="product-summary">
                 <h1 lang={store.culture}>{name}</h1>
-                <p className="product-price">{formatPrice(price, store)}</p>
+                <p className="product-price"><CurrencyValue value={price} culture={store.culture} currency={store.currency} /></p>
                 {reviewCount > 0 ? (
                   <a className="product-review-link" href="#product-reviews-heading">
                     <Stars rating={rating} count={reviewCount} />
