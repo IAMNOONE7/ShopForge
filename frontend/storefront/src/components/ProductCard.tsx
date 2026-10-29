@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import type { ProductSummary } from "../api";
-import { formatPrice, useStore } from "../storeContext";
+import { useStore } from "../storeContext";
+import { CurrencyValue } from "./CurrencyValue";
 import { Stars } from "./Stars";
 import { productPath } from "../publicPages";
 
@@ -16,7 +17,9 @@ export function ProductCard({ product, priority = false }: { product: ProductSum
       </div>
       <div className="product-card-body">
         <span className="product-name" lang={store.culture}>{product.name}</span>
-        <span className="product-price">{formatPrice(product.price, store)}</span>
+        <span className="product-price">
+          <CurrencyValue value={product.price} culture={store.culture} currency={store.currency} />
+        </span>
         {product.reviewCount > 0 && <Stars rating={product.rating} count={product.reviewCount} />}
         <span className={`product-card-availability ${product.available > 0 ? "available" : "unavailable"}`}>
           <span>{t(product.available > 0 ? "inStock" : "outOfStock")}</span>

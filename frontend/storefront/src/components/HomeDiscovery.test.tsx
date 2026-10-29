@@ -5,7 +5,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { Category, ProductSummary } from "../api";
 import { i18n, initializeI18n } from "../i18n";
 import type { Store } from "../store";
-import { StoreContext } from "../storeContext";
+import { formatPrice, StoreContext } from "../storeContext";
 import { HomeDiscovery } from "./HomeDiscovery";
 import { StoreBrand } from "./StoreBrand";
 
@@ -86,6 +86,44 @@ describe("store discovery", () => {
     expect(screen.getByRole("heading", { name: "Procházet podle kategorií" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Kitchen" }).getAttribute("lang")).toBe("cs-CZ");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(store.name);
+  });
+
+  it.each([
+    ["en", "cs-CZ", "CZK", 123456789.12],
+    ["cs", "en-US", "USD", 123456789.12],
+    ["en", "en-KW", "KWD", 123456789.123],
+    ["cs", "ja-JP", "JPY", 123456789],
+    ["cs", "cs-CZ", "CZK", 0],
+  ])("preserves the featured price with %s UI and %s/%s store formatting", async (language, culture, currency, price) => {
+    await i18n.changeLanguage(language);
+    const brand = { ...store, culture, currency };
+    render(<MemoryRouter><StoreContext value={brand}>
+      <HomeDiscovery categories={categories} product={{ ...product, price }} />
+    </StoreContext></MemoryRouter>);
+    const link = screen.getByRole("link", { name: /Oak Table/ });
+    const value = link.querySelector("strong .currency-value")!;
+    expect(value.textContent).toBe(formatPrice(price, brand));
+    expect(value.getAttribute("lang")).toBe(culture);
+    expect(link.getAttribute("href")).toBe("/p/oak-table");
+  });
+
+  it("adds only returned imagery, resets a failed image on a new URL and removes an absent feature", () => {
+    const discovery = (item?: ProductSummary) => <MemoryRouter><StoreContext value={store}>
+      <HomeDiscovery categories={categories} product={item} />
+    </StoreContext></MemoryRouter>;
+    const view = render(discovery());
+    expect(document.querySelector(".discovery-product")).toBeNull();
+    view.rerender(discovery(product));
+    const image = document.querySelector(".discovery-product img")!;
+    expect(image.getAttribute("src")).toBe(product.imageUrl);
+    fireEvent.error(image);
+    expect(screen.getByText("Image unavailable")).toBeTruthy();
+    view.rerender(discovery({ ...product, imageUrl: "/replacement-photo" }));
+    expect(document.querySelector(".discovery-product img")?.getAttribute("src")).toBe("/replacement-photo");
+    expect(screen.queryByText("Image unavailable")).toBeNull();
+    view.rerender(discovery());
+    expect(document.querySelector(".discovery-product")).toBeNull();
+    expect(screen.getByRole("link", { name: "Explore products" }).getAttribute("href")).toBe("#shop-products");
   });
 });
 

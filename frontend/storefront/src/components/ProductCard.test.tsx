@@ -5,7 +5,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { ProductSummary } from "../api";
 import { i18n, initializeI18n } from "../i18n";
 import type { Store } from "../store";
-import { StoreContext } from "../storeContext";
+import { formatPrice, StoreContext } from "../storeContext";
 import { ProductCard } from "./ProductCard";
 
 const store: Store = {
@@ -29,7 +29,7 @@ describe("product discovery cards", () => {
   it("shows the real price and aggregate stock without an unreviewed rating claim", () => {
     render(card(product));
     expect(screen.getByRole("link", { name: /Oak Table/ }).getAttribute("href")).toBe("/p/oak-table");
-    expect(screen.getByText("649,00 Kč", { exact: false })).toBeTruthy();
+    expect(document.querySelector(".product-price")?.textContent).toBe(formatPrice(product.price, store));
     expect(screen.getByText("In stock")).toBeTruthy();
     expect(document.querySelector(".stars")).toBeNull();
     expect(screen.getByText("Oak Table").getAttribute("lang")).toBe("cs-CZ");
@@ -66,5 +66,17 @@ describe("product discovery cards", () => {
     expect(screen.getByText("Vyprodáno")).toBeTruthy();
     expect(screen.getByText("€14.90")).toBeTruthy();
     expect(screen.getByText("Obrázek není dostupný")).toBeTruthy();
+  });
+
+  it("updates the complete price and content language when the store format or listing changes", () => {
+    const view = render(card(product));
+    const brand = { ...store, culture: "en-KW", currency: "KWD" };
+    const item = { ...product, price: 123456789.123 };
+    view.rerender(card(item, false, brand));
+    const value = document.querySelector(".product-price .currency-value")!;
+    expect(value.textContent).toBe(formatPrice(item.price, brand));
+    expect(value.getAttribute("lang")).toBe(brand.culture);
+    expect(screen.getByRole("link", { name: /Oak Table/ }).getAttribute("href")).toBe("/p/oak-table");
+    expect(screen.getByText("In stock")).toBeTruthy();
   });
 });

@@ -3,8 +3,9 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import type { Category, ProductSummary } from "../api";
 import { productPath } from "../publicPages";
-import { formatPrice, useStore } from "../storeContext";
+import { useStore } from "../storeContext";
 import { CategoryDirectory } from "./CategoryDirectory";
+import { CurrencyValue } from "./CurrencyValue";
 
 export function HomeDiscovery({
   categories,
@@ -66,7 +67,9 @@ function DiscoveryProduct({ product, imageUrl }: {
       </div>
       <span className="discovery-product-caption">
         <span lang={store.culture}>{product.name}</span>
-        <strong>{formatPrice(product.price, store)}</strong>
+        <strong>
+          <CurrencyValue value={product.price} culture={store.culture} currency={store.currency} />
+        </strong>
         <span aria-hidden="true">↗</span>
       </span>
     </Link>
