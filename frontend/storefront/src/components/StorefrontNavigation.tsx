@@ -25,11 +25,27 @@ export function CategoryNavigation({
 }) {
   const { t } = useTranslation("navigation");
   const roots = state.status === "ready" ? categoryTree(state.categories) : [];
+  const allProducts = <NavLink to="/" end onClick={onNavigate}>{t("allProducts")}</NavLink>;
   return (
     <nav className={className} aria-label={t("categories")}>
-      <NavLink to="/" end onClick={onNavigate}>
-        {t("allProducts")}
-      </NavLink>
+      {variant !== "desktop" && allProducts}
+      {variant === "desktop" && (
+        <ul className="desktop-category-list">
+          <li>{allProducts}</li>
+          {roots.slice(0, 5).map((node) => (
+            <li key={node.category.slug}>
+              {node.children.length > 0 ? (
+                <CategoryMenu node={node} contentLanguage={contentLanguage} />
+              ) : (
+                <NavLink to={categoryPath(node.category.slug)} lang={contentLanguage} onClick={onNavigate}>
+                  {node.category.name}
+                </NavLink>
+              )}
+            </li>
+          ))}
+          {roots.length > 5 && <li><CategoryMenu overflow={roots.slice(5)} contentLanguage={contentLanguage} /></li>}
+        </ul>
+      )}
       {state.status === "loading" && (
         <span className="navigation-status" role="status">
           {t("categoriesLoading")}
@@ -50,26 +66,9 @@ export function CategoryNavigation({
       {state.status === "ready" && state.categories.length === 0 && (
         <span className="navigation-status">{t("categoriesEmpty")}</span>
       )}
-      {state.status === "ready" && (variant === "desktop" ? (
-        <ul className="desktop-category-list">
-          {roots.slice(0, 5).map((node) => (
-            <li key={node.category.slug}>
-              {node.children.length > 0 ? (
-                <CategoryMenu node={node} contentLanguage={contentLanguage} />
-              ) : (
-                <NavLink to={categoryPath(node.category.slug)} lang={contentLanguage} onClick={onNavigate}>
-                  {node.category.name}
-                </NavLink>
-              )}
-            </li>
-          ))}
-          {roots.length > 5 && (
-            <li><CategoryMenu overflow={roots.slice(5)} contentLanguage={contentLanguage} /></li>
-          )}
-        </ul>
-      ) : (
+      {state.status === "ready" && variant !== "desktop" && (
         <CategoryLinks nodes={roots} contentLanguage={contentLanguage} onNavigate={onNavigate} />
-      ))}
+      )}
     </nav>
   );
 }

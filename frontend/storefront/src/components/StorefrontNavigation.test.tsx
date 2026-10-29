@@ -69,7 +69,7 @@ describe("storefront category navigation", () => {
     render(<MemoryRouter><CategoryNavigation variant="desktop" state={{ status: "ready", categories: many }} contentLanguage="en-IE" /></MemoryRouter>);
     const summary = screen.getByText("More categories");
     expect(summary.closest("details")?.open).toBe(false);
-    expect(document.querySelectorAll(".desktop-category-list > li")).toHaveLength(6);
+    expect(document.querySelectorAll(".desktop-category-list > li")).toHaveLength(7);
     await user.click(summary);
     expect(summary.closest("details")?.open).toBe(true);
     expect(screen.getByRole("link", { name: "Category 7" }).getAttribute("href")).toBe("/c/category-7");

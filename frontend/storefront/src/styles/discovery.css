@@ -185,8 +185,23 @@
 .desktop-category-list {
   display: flex;
   flex-wrap: wrap;
+  align-items: stretch;
   gap: 0 var(--space-8);
   min-width: 0;
+}
+
+.desktop-category-list > li {
+  display: flex;
+  min-width: 0;
+}
+
+.desktop-category-list > li > a,
+.desktop-category-menu > summary {
+  display: flex;
+  align-items: center;
+  min-height: 3.5rem;
+  height: 100%;
+  max-width: 13rem;
 }
 
 .desktop-category-panel.align-end {
@@ -196,6 +211,10 @@
 
 .desktop-category-menu {
   position: relative;
+}
+
+.desktop-category-menu:not([open]) > .desktop-category-panel {
+  display: none;
 }
 
 .desktop-category-menu summary {
@@ -222,6 +241,7 @@
 
 .store-nav a:hover,
 .store-nav a.active,
+.desktop-category-menu > summary:hover,
 .account-link.active,
 .cart-link.active {
   border-bottom-color: var(--color-text);
