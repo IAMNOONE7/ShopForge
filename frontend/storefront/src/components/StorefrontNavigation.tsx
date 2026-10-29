@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { NavLink } from "react-router";
+import { NavLink, useLocation } from "react-router";
 import type { Category } from "../api";
 import { categoryPath } from "../publicPages";
 import { categoryTree, type CategoryNode } from "./categoryTree";
@@ -73,25 +73,54 @@ export function CategoryNavigation({
   );
 }
 
-function CategoryLinks({ nodes, contentLanguage, onNavigate }: {
+function CategoryLinks({ nodes, contentLanguage, onNavigate, depth = 0, label }: {
   nodes: CategoryNode[];
   contentLanguage: string;
   onNavigate?: () => void;
+  depth?: number;
+  label?: string;
 }) {
   return (
-    <ul className="category-tree-links">
-      {nodes.map(({ category, children }) => (
-        <li key={category.slug}>
-          <NavLink to={categoryPath(category.slug)} lang={contentLanguage} onClick={onNavigate}>
-            {category.name}
-          </NavLink>
-          {children.length > 0 && (
-            <CategoryLinks nodes={children} contentLanguage={contentLanguage} onNavigate={onNavigate} />
-          )}
-        </li>
-      ))}
+    <ul className="category-tree-links" aria-label={label}>
+      {nodes.map(node => <CategoryBranch key={node.category.slug} node={node} depth={depth}
+        contentLanguage={contentLanguage} onNavigate={onNavigate} />)}
     </ul>
   );
+}
+
+function containsPath(nodes: CategoryNode[], pathname: string): boolean {
+  return nodes.some(node => categoryPath(node.category.slug) === pathname || containsPath(node.children, pathname));
+}
+
+function CategoryBranch({ node: { category, children }, depth, contentLanguage, onNavigate }: {
+  node: CategoryNode;
+  depth: number;
+  contentLanguage: string;
+  onNavigate?: () => void;
+}) {
+  const { t } = useTranslation("navigation");
+  const { pathname } = useLocation();
+  const activeChild = containsPath(children, pathname);
+  const [expanded, setExpanded] = useState(depth === 0 || activeChild);
+  const controls = useId();
+  useEffect(() => { if (activeChild) setExpanded(true); }, [activeChild, pathname]);
+  return <li className={`category-branch${children.length ? " category-branch-parent" : ""}`}>
+    <div className="category-branch-row">
+      <NavLink className="category-branch-link" to={categoryPath(category.slug)} lang={contentLanguage} onClick={onNavigate}>
+        {category.name}
+        {children.length === 0 && <span aria-hidden="true">↗</span>}
+      </NavLink>
+      {children.length > 0 && <button type="button" className="category-branch-toggle"
+        aria-label={t(expanded ? "hideSubcategories" : "showSubcategories", { name: category.name })}
+        aria-expanded={expanded} aria-controls={controls} onClick={() => setExpanded(current => !current)}>
+        <span aria-hidden="true">⌄</span>
+      </button>}
+    </div>
+    {children.length > 0 && <div className="category-branch-children" id={controls} hidden={!expanded}>
+      <CategoryLinks nodes={children} depth={depth + 1} contentLanguage={contentLanguage} onNavigate={onNavigate}
+        label={t("subcategoriesOf", { name: category.name })} />
+    </div>}
+  </li>;
 }
 
 function CategoryMenu({ node, overflow = [], contentLanguage }: {
@@ -102,12 +131,12 @@ function CategoryMenu({ node, overflow = [], contentLanguage }: {
   const { t } = useTranslation("navigation");
   const menu = useRef<HTMLDetailsElement>(null);
   const summary = useRef<HTMLElement>(null);
-  const panel = useRef<HTMLDivElement>(null);
 
-  function alignPanel() {
-    if (!menu.current?.open || !summary.current || !panel.current) return;
-    const space = document.documentElement.clientWidth - summary.current.getBoundingClientRect().left;
-    panel.current.classList.toggle("align-end", space < panel.current.offsetWidth + 16);
+  function opened() {
+    if (!menu.current?.open) return;
+    menu.current.closest("nav")?.querySelectorAll<HTMLDetailsElement>(".desktop-category-menu[open]").forEach(other => {
+      if (other !== menu.current) other.open = false;
+    });
   }
 
   useEffect(() => {
@@ -118,10 +147,8 @@ function CategoryMenu({ node, overflow = [], contentLanguage }: {
       }
     }
     document.addEventListener("pointerdown", dismiss);
-    window.addEventListener("resize", alignPanel);
     return () => {
       document.removeEventListener("pointerdown", dismiss);
-      window.removeEventListener("resize", alignPanel);
     };
   }, []);
 
@@ -133,7 +160,7 @@ function CategoryMenu({ node, overflow = [], contentLanguage }: {
     <details
       ref={menu}
       className="desktop-category-menu"
-      onToggle={alignPanel}
+      onToggle={opened}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) close();
       }}
@@ -148,10 +175,11 @@ function CategoryMenu({ node, overflow = [], contentLanguage }: {
       <summary ref={summary} lang={node ? contentLanguage : undefined}>
         {node ? node.category.name : t("moreCategories")}<span aria-hidden="true">⌄</span>
       </summary>
-      <div ref={panel} className="desktop-category-panel">
+      <div className="desktop-category-panel">
         {node && <NavLink to={categoryPath(node.category.slug)} className="category-menu-all" onClick={close}>
           {t("allInCategory", { name: node.category.name })}
         </NavLink>}
+        <p className="category-navigation-hint">{t("categoryNavigationHint")}</p>
         <CategoryLinks nodes={node?.children ?? overflow} contentLanguage={contentLanguage} onNavigate={close} />
       </div>
     </details>

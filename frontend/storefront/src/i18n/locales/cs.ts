@@ -45,6 +45,10 @@ const resources = {
     shopping: "Nakupování",
     allInCategory: "Vše z kategorie {{name}}",
     moreCategories: "Další kategorie",
+    showSubcategories: "Zobrazit podkategorie: {{name}}",
+    hideSubcategories: "Skrýt podkategorie: {{name}}",
+    subcategoriesOf: "Podkategorie: {{name}}",
+    categoryNavigationHint: "Název otevře kategorii, šipka zobrazí její podkategorie.",
   },
   discovery: {
     shop: "Obchod",

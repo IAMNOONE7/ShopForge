@@ -38,11 +38,44 @@ describe("storefront category navigation", () => {
     ];
     render(<MemoryRouter><MobileNavigation state={{ status: "ready", categories: tree }} contentLanguage="en-IE" /></MemoryRouter>);
     await user.click(screen.getByRole("button", { name: "Categories" }));
+    for (const name of ["Tables", "Oak", "Dining"])
+      await user.click(screen.getByRole("button", { name: `Show subcategories of ${name}` }));
     const small = screen.getByRole("link", { name: "Small" });
     expect(small.getAttribute("href")).toBe("/c/small");
-    expect(small.closest("ul")?.parentElement?.querySelector("a")?.textContent).toBe("Dining");
+    expect(small.closest(".category-branch-children")?.previousElementSibling?.querySelector("a")?.textContent).toBe("Dining");
     await user.click(small);
     expect(screen.getByRole("button", { name: "Categories" }).getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("keeps parent products independent of expanding a named nested branch", async () => {
+    const user = userEvent.setup();
+    render(<MemoryRouter><CategoryNavigation variant="desktop" state={{ status: "ready", categories: [categories[0],
+      { name: "Tables", slug: "tables", parentSlug: "living-room" },
+      { name: "Oak", slug: "oak", parentSlug: "tables" },
+    ] }} contentLanguage="en-IE" /></MemoryRouter>);
+    await user.click(screen.getByText("Living room"));
+    const parent = screen.getByRole("link", { name: "Tables" });
+    expect(parent.getAttribute("href")).toBe("/c/tables");
+    const toggle = screen.getByRole("button", { name: "Hide subcategories of Tables" });
+    expect(toggle.getAttribute("aria-controls")).toBeTruthy();
+    expect(screen.getByRole("list", { name: "Subcategories of Tables" })).toBeTruthy();
+    await user.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("link", { name: "Oak" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Tables" })).toBe(parent);
+    await user.keyboard(" ");
+    expect(screen.getByRole("link", { name: "Oak" }).getAttribute("href")).toBe("/c/oak");
+  });
+
+  it("reveals the current category through otherwise collapsed ancestors on mobile", async () => {
+    const user = userEvent.setup();
+    render(<MemoryRouter initialEntries={["/c/oak"]}><MobileNavigation state={{ status: "ready", categories: [categories[0],
+      { name: "Tables", slug: "tables", parentSlug: "living-room" },
+      { name: "Oak", slug: "oak", parentSlug: "tables" },
+    ] }} contentLanguage="en-IE" /></MemoryRouter>);
+    await user.click(screen.getByRole("button", { name: "Categories" }));
+    expect(screen.getByRole("link", { name: "Oak" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("button", { name: "Hide subcategories of Tables" }).getAttribute("aria-expanded")).toBe("true");
   });
 
   it("exposes parent and child destinations on desktop and restores summary focus on Escape", async () => {

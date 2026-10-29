@@ -45,6 +45,10 @@ const resources = {
     shopping: "Shopping",
     allInCategory: "All {{name}}",
     moreCategories: "More categories",
+    showSubcategories: "Show subcategories of {{name}}",
+    hideSubcategories: "Hide subcategories of {{name}}",
+    subcategoriesOf: "Subcategories of {{name}}",
+    categoryNavigationHint: "Open a category by name, or use its arrow to browse subcategories.",
   },
   discovery: {
     shop: "The shop",
