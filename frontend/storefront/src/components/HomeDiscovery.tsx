@@ -2,9 +2,9 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import type { Category, ProductSummary } from "../api";
-import { categoryPath, productPath } from "../publicPages";
+import { productPath } from "../publicPages";
 import { formatPrice, useStore } from "../storeContext";
-import { categoryTree } from "./categoryTree";
+import { CategoryDirectory } from "./CategoryDirectory";
 
 export function HomeDiscovery({
   categories,
@@ -15,7 +15,6 @@ export function HomeDiscovery({
 }) {
   const { t } = useTranslation("discovery");
   const store = useStore();
-  const roots = categoryTree(categories);
 
   return (
     <div className="home-discovery">
@@ -37,41 +36,7 @@ export function HomeDiscovery({
           />
         )}
       </section>
-      {roots.length > 0 && (
-        <section className="category-directory" aria-labelledby="category-directory-title">
-          <div className="discovery-section-heading">
-            <h2 id="category-directory-title">{t("browseCategories")}</h2>
-            <span className="eyebrow" aria-hidden="true">
-              {String(roots.length).padStart(2, "0")}
-            </span>
-          </div>
-          <ul className="category-directory-grid">
-            {roots.map(({ category, children }) => (
-              <li key={category.slug} className="category-entry">
-                <Link
-                  className="category-entry-title"
-                  to={categoryPath(category.slug)}
-                  lang={store.culture}
-                >
-                  {category.name}
-                  <span aria-hidden="true">↗</span>
-                </Link>
-                {children.length > 0 && (
-                  <ul className="category-entry-children">
-                    {children.map(({ category: child }) => (
-                      <li key={child.slug}>
-                        <Link to={categoryPath(child.slug)} lang={store.culture}>
-                          {child.name}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      <CategoryDirectory categories={categories} />
     </div>
   );
 }

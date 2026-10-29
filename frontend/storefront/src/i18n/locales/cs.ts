@@ -54,6 +54,8 @@ const resources = {
     shop: "Obchod",
     exploreProducts: "Prohlédnout produkty",
     browseCategories: "Procházet podle kategorií",
+    browseProducts: "Prohlédnout produkty",
+    browseCategory: "Prohlédnout produkty: {{name}}",
     imageUnavailable: "Obrázek není dostupný",
   },
   validation: {

@@ -54,6 +54,8 @@ const resources = {
     shop: "The shop",
     exploreProducts: "Explore products",
     browseCategories: "Browse by category",
+    browseProducts: "Browse products",
+    browseCategory: "Browse products in {{name}}",
     imageUnavailable: "Image unavailable",
   },
   validation: {

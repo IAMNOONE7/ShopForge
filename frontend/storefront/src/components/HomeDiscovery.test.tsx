@@ -53,6 +53,16 @@ describe("store discovery", () => {
     expect(document.querySelector(".discovery-product")).toBeNull();
   });
 
+  it("gives each root a heading, names its immediate children and gives leaf categories a real browse action", () => {
+    renderDiscovery([...categories, { name: "Dining tables", slug: "dining", parentSlug: "tables" }]);
+    expect(screen.getByRole("heading", { level: 3, name: "Furniture" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 3, name: "Kitchen" })).toBeTruthy();
+    const children = screen.getByRole("list", { name: "Subcategories of Furniture" });
+    expect(within(children).getByRole("link", { name: "Tables" }).getAttribute("href")).toBe("/c/tables");
+    expect(within(children).queryByRole("link", { name: "Dining tables" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Browse products in Kitchen" }).getAttribute("href")).toBe("/c/kitchen");
+  });
+
   it("renders an actual catalog image and keeps the product link and media frame after an image failure", () => {
     renderDiscovery(categories, product);
     const link = screen.getByRole("link", { name: /Oak Table/ });
