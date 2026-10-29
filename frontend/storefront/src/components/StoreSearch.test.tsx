@@ -43,7 +43,7 @@ function Shell() {
     <header><StoreSearch /></header>
     <button onClick={() => navigate(-1)}>Back</button>
     <output data-testid="location">{location.pathname + location.search}</output>
-    <main id="main-content"><Outlet context={[]} /></main>
+    <main id="main-content"><Outlet context={{ status: "ready", categories: [] }} /></main>
   </StoreContext>;
 }
 function renderShop(url = "/") {

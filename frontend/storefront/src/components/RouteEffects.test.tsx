@@ -8,6 +8,8 @@ import { i18n, initializeI18n } from "../i18n";
 import type { Store } from "../store";
 import { RouteEffects } from "./RouteEffects";
 import { ShoppingPageLoading } from "./ShoppingPageLoading";
+import { HomeEntry } from "./HomeEntry";
+import { StoreContext } from "../storeContext";
 
 const store: Store = {
   id: "store-a",
@@ -114,6 +116,33 @@ describe("route effects", () => {
     const heading = screen.getByRole("heading", { name: "Ready to shop" });
     await waitFor(() => expect(document.activeElement).toBe(heading));
     expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("waits for the real home welcome heading after navigation", async () => {
+    function Home() {
+      const [ready, setReady] = useState(false);
+      return <StoreContext value={store}>
+        <HomeEntry categories={[]} productsPending={!ready} productsReady={ready} categoriesPending={!ready}>
+          <h2 id="shop-products" tabIndex={-1}>All products</h2>
+        </HomeEntry>
+        {!ready && <button onClick={() => setReady(true)}>Finish home loading</button>}
+      </StoreContext>;
+    }
+    const user = userEvent.setup();
+    render(<MemoryRouter initialEntries={["/cart"]}><RouteEffects store={store} categories={[]} />
+      <Link to="/">Open home</Link><main id="main-content"><Routes>
+        <Route path="/cart" element={<h1>Your cart</h1>} />
+        <Route path="/" element={<Home />} />
+      </Routes></main></MemoryRouter>);
+    await user.click(screen.getByRole("link", { name: "Open home" }));
+    const pending = screen.getByRole("heading", { level: 1 });
+    expect(pending.closest('[aria-busy="true"]')).toBeTruthy();
+    expect(document.activeElement).not.toBe(pending);
+    await user.click(screen.getByRole("button", { name: "Finish home loading" }));
+    const ready = screen.getByRole("heading", { level: 1 });
+    await waitFor(() => expect(document.activeElement).toBe(ready));
+    expect(ready.closest('[aria-busy="true"]')).toBeNull();
+    expect(document.title).toBe(store.name);
   });
 
   it("focuses a retained heading when only its busy ancestor becomes ready", async () => {

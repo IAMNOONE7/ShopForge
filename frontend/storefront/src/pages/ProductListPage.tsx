@@ -1,7 +1,8 @@
-import { useId } from "react";
+import { useId, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useOutletContext, useParams, useSearchParams } from "react-router";
-import { getProducts, type Category, type Facet } from "../api";
+import { getProducts, type Facet } from "../api";
+import type { CategoryState } from "../components/StorefrontNavigation";
 import { statusOf } from "../api/errors";
 import { ActiveFilters } from "../components/filters/ActiveFilters";
 import { FilterPanel } from "../components/filters/FilterPanel";
@@ -19,7 +20,7 @@ import { CatalogLoading } from "../components/catalog/CatalogLoading";
 import { CatalogHeader } from "../components/catalog/CatalogHeader";
 import { Pagination } from "../components/catalog/Pagination";
 import { ProductCard } from "../components/ProductCard";
-import { HomeDiscovery } from "../components/HomeDiscovery";
+import { HomeEntry } from "../components/HomeEntry";
 import { EmptyState } from "../components/ui/EmptyState";
 import { InlineMessage } from "../components/ui/InlineMessage";
 import { RequestError } from "../components/ui/RequestError";
@@ -32,7 +33,8 @@ export function ProductListPage() {
   const { t } = useTranslation(["catalog", "errors", "navigation"]);
   const store = useStore();
   const { slug } = useParams();
-  const categories = useOutletContext<Category[]>();
+  const categoryState = useOutletContext<CategoryState>();
+  const categories = categoryState.status === "ready" ? categoryState.categories : [];
   const [searchParams, setSearchParams] = useSearchParams();
   const sortId = useId();
   const categorySlug = slug ?? searchParams.get("category") ?? undefined;
@@ -61,9 +63,6 @@ export function ProductListPage() {
     : query ? t("catalog:searchResults", { query }) : t("navigation:allProducts");
   const pageHeading = (
     <>
-      {showDiscovery && (
-        <HomeDiscovery categories={categories} product={currentData?.items.find((product) => product.imageUrl)} />
-      )}
       <CatalogHeader
         title={displayTitle}
         category={Boolean(categorySlug)}
@@ -77,6 +76,16 @@ export function ProductListPage() {
       {rawQuery.length > searchMaximum && <p className="catalog-query-notice" role="status">{t("catalog:searchTruncated")}</p>}
     </>
   );
+
+  function entry(content: ReactNode) {
+    return showDiscovery ? (
+      <HomeEntry key={store.id} categories={categories} categoriesPending={categoryState.status === "loading"}
+        productsPending={products.status === "loading" && currentData === null} productsReady={currentData !== null}
+        product={currentData?.items.find((product) => product.imageUrl)}>
+        {content}
+      </HomeEntry>
+    ) : content;
+  }
 
   function changeFilter(code: string, value: string | null) {
     setSearchParams(withParam(searchParams, filterKey(code), value));
@@ -116,7 +125,7 @@ export function ProductListPage() {
   }
 
   if (moved || products.status === "loading" && retainedData === null) {
-    return (
+    return entry(
       <>
         {pageHeading}
         <CatalogLoading label={t("catalog:loadingProducts")} />
@@ -137,7 +146,7 @@ export function ProductListPage() {
 
   if (products.status === "error") {
     const invalidQuery = statusOf(products.error) === 400;
-    return (
+    return entry(
       <>
         {pageHeading}
         {invalidQuery && (
@@ -173,7 +182,7 @@ export function ProductListPage() {
   const outOfRange = data.page > pageCount && data.page > 1;
   const filtered = hasFilters(searchParams);
 
-  return (
+  return entry(
     <>
       {pageHeading}
       {refreshError !== null && (

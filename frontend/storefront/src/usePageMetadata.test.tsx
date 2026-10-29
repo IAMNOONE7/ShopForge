@@ -24,7 +24,7 @@ function Shell() {
   return <StoreContext value={store}><RouteEffects store={store} categories={[]} />
     <nav><Link to="/pages/terms">Terms route</Link><Link to="/pages/missing">Missing route</Link><Link to="/pages/other">Other route</Link><Link to="/cart">Cart route</Link><button onClick={() => void navigate(-1)}>Back</button></nav>
     <output data-testid="location">{location.pathname + location.search + location.hash}</output>
-    <main id="main-content"><Outlet context={[]} /></main>
+    <main id="main-content"><Outlet context={{ status: "ready", categories: [] }} /></main>
   </StoreContext>;
 }
 function route(path: string, elements = <Route path="pages/:slug" element={<ContentPage />} />) {

@@ -24,6 +24,7 @@ import type { RequestState } from "../useRequest";
 import { ProductListPage } from "./ProductListPage";
 import { StoreContext } from "../storeContext";
 import type { Store } from "../store";
+import type { CategoryState } from "../components/StorefrontNavigation";
 
 const store: Store = {
   id: "store-a", name: "Test Store", currency: "CZK", culture: "cs-CZ",
@@ -33,6 +34,7 @@ const store: Store = {
 
 const request = vi.hoisted(() => ({
   state: null as RequestState<ProductPage> | null,
+  categories: { status: "ready", categories: [] } as CategoryState,
 }));
 
 vi.mock("../useRequest", () => ({
@@ -43,11 +45,15 @@ beforeAll(async () => {
   await initializeI18n();
   await i18n.changeLanguage("en");
 });
-afterEach(async () => { cleanup(); await i18n.changeLanguage("en"); });
+afterEach(async () => {
+  cleanup();
+  request.categories = { status: "ready", categories: [] };
+  await i18n.changeLanguage("en");
+});
 afterAll(() => i18n.changeLanguage("en"));
 
 function CatalogLayout() {
-  return <StoreContext value={store}><Outlet context={[]} /></StoreContext>;
+  return <StoreContext value={store}><Outlet context={request.categories} /></StoreContext>;
 }
 
 function Location() {
@@ -77,6 +83,41 @@ function renderPage(url: string) {
 }
 
 describe("ProductListPage recovery", () => {
+  it("lets shoppers open available results while categories are still pending", async () => {
+    const user = userEvent.setup();
+    request.categories = { status: "loading" };
+    request.state = { status: "ready", data: { items: [{ id: "listing", slug: "table", name: "Table", price: 100,
+      available: 1, rating: 0, reviewCount: 0, imageUrl: "/photo" }], totalCount: 1, page: 1, pageSize: 24, filters: [],
+      path: [], children: [], pageText: null }, refreshing: false, refreshError: null, reload: vi.fn() };
+    renderPage("/");
+    expect(screen.getByRole("link", { name: "Explore products" }).getAttribute("href")).toBe("#shop-products");
+    expect(within(document.querySelector(".discovery-loading")!).getByRole("status").textContent).toBe("Loading categories…");
+    expect(screen.queryByRole("combobox")).toBeNull();
+    await user.click(screen.getByRole("link", { name: "Explore products" }));
+    expect(screen.getByRole("heading", { level: 2, name: "All products" }).id).toBe("shop-products");
+    expect(screen.getByRole("combobox", { name: i18n.t("catalog:sortBy") })).toBeTruthy();
+  });
+
+  it("announces initial home loading once without exposing unfinished catalog sections", () => {
+    request.categories = { status: "ready", categories: [{ name: "Furniture", slug: "furniture", parentSlug: null }] };
+    request.state = { status: "loading", reload: vi.fn() };
+    renderPage("/");
+    const home = within(document.querySelector(".discovery-loading")!);
+    expect(home.getAllByRole("status")).toHaveLength(1);
+    expect(home.getByRole("status").textContent).toBe("Loading products…");
+    expect(screen.queryByRole("link", { name: "Furniture" })).toBeNull();
+    expect(screen.getByRole("heading", { level: 1 }).closest('[aria-busy="true"]')).toBeTruthy();
+  });
+
+  it("shows product-read recovery without leaving a category-loading region ahead of it", () => {
+    request.categories = { status: "loading" };
+    request.state = { status: "error", error: new HttpError("http", 503), reload: vi.fn() };
+    renderPage("/");
+    expect(document.querySelector(".request-error")).toBeTruthy();
+    expect(within(document.querySelector(".home-discovery")!).queryByRole("status")).toBeNull();
+    expect(screen.getByRole("link", { name: "Explore products" })).toBeTruthy();
+  });
+
   it("uses server ancestry, direct children and plain category text even when the shell list is unavailable", async () => {
     const user = userEvent.setup();
     request.state = { status: "ready", data: {

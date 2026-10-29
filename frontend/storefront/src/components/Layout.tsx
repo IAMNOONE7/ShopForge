@@ -108,7 +108,7 @@ export function Layout() {
             />
           </div>
         )}
-        <RouteContent><Outlet context={categoryList} /></RouteContent>
+        <RouteContent><Outlet context={categoryState} /></RouteContent>
       </main>
       <footer className="store-footer">
         <div className="store-footer-inner container">
