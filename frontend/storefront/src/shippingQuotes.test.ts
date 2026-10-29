@@ -16,6 +16,22 @@ describe("changed delivery price", () => {
   it("keeps the server's parcels and total when they account for the whole cart", () => {
     expect(readChangedShippingQuote(changed(quote), "EUR", cart, method)).toEqual(quote);
   });
+  it.each(["flat", "perParcel"])("keeps the %s cost distinct from the charged zero price", pricing => {
+    const value = { ...quote, charged: 0, shippingDiscount: 16, freeShippingThreshold: 100,
+      parcels: pricing === "flat" ? [] : quote.parcels };
+    expect(readChangedShippingQuote(changed(value), "EUR", cart, { ...method, pricing: pricing as "flat" | "perParcel" })).toEqual(value);
+    const paid = { ...value, charged: 16, shippingDiscount: 0, freeShippingThreshold: null };
+    expect(readChangedShippingQuote(changed(paid), "EUR", cart, { ...method, pricing: pricing as "flat" | "perParcel" })).toEqual(paid);
+  });
+  it.each([
+    { charged: -1 }, { charged: "0" }, { charged: null }, { charged: Infinity }, { charged: 17 },
+    { shippingDiscount: -1 }, { shippingDiscount: 17 }, { shippingDiscount: 0 },
+    { freeShippingThreshold: 0 }, { freeShippingThreshold: -1 }, { freeShippingThreshold: "100" },
+    { charged: undefined }, { shippingDiscount: undefined }, { freeShippingThreshold: undefined },
+  ])("rejects malformed or inconsistent discount facts %j", invalid => {
+    const value = { ...quote, charged: 0, shippingDiscount: 16, freeShippingThreshold: 100, ...invalid };
+    expect(() => readChangedShippingQuote(changed(value), "EUR", cart, method)).toThrow(HttpError);
+  });
   it("accepts a zero new total and legitimate floating-point addition", () => {
     expect(readChangedShippingQuote(changed({ ...quote, total: 0, parcels: quote.parcels.map(p => ({ ...p, price: 0 })) }), "EUR", cart, method)?.total).toBe(0);
     expect(readChangedShippingQuote(changed({ ...quote, total: 0.3, parcels: [{ ...quote.parcels[0], price: 0.1 }, { ...quote.parcels[1], price: 0.2 }] }), "EUR", cart, method)?.total).toBe(0.3);

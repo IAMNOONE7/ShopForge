@@ -475,6 +475,19 @@ fieldset.checkout-fields {
   white-space: normal;
 }
 
+.shipping-price {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+}
+
+.shipping-price del {
+  color: var(--color-text-muted);
+  font-weight: 400;
+  font-size: 0.875em;
+}
+
 .checkout-option > span {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -696,6 +709,7 @@ fieldset.checkout-fields {
 }
 
 .checkout-review button {
+  display: inline-block;
   max-width: 100%;
   white-space: normal;
   overflow-wrap: anywhere;

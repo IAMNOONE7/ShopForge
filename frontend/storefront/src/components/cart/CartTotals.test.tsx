@@ -35,6 +35,14 @@ describe("shopping totals", () => {
     expect(screen.queryByText("−€0.00")).toBeNull();
   });
 
+  it("adds only the server's charged delivery price to the discounted goods total", () => {
+    render(<StoreContext value={store}><CartTotals cart={cart}
+      shipping={{ code: "courier", name: "Courier", price: 0, fullPrice: 20, requiresPickupPoint: false, pickupPointChoice: "none" }} /></StoreContext>);
+    expect(document.querySelector(".shopping-totals del .currency-value")?.textContent).toBe("€20.00");
+    expect(document.querySelector(".shipping-price > span > .currency-value")?.textContent).toBe("€0.00");
+    expect(document.querySelector(".checkout-total strong")?.textContent).toBe("€108.00");
+  });
+
   it("translates labels into Czech while retaining the store's EUR formatting", async () => {
     await i18n.changeLanguage("cs");
     render(<StoreContext value={store}><CartTotals cart={cart} /></StoreContext>);

@@ -120,6 +120,18 @@ describe("read-only cart previews", () => {
     expect(parcelShippingApi.quote).toHaveBeenCalledExactlyOnceWith(metadataStore.id, parcelMethod, "CZK", parcelInput, expect.any(AbortSignal)); expect(screen.getByText(i18n.t("parcelShipping:alone"))).toBeTruthy();
     fireEvent.change(screen.getByLabelText(i18n.t("parcelShipping:lineQuantity", { number: 1 })), { target: { value: "1" } }); expect(screen.queryByRole("heading", { name: i18n.t("parcelShipping:quoteResult") })).toBeNull();
   });
+  it.each(["en", "cs"])("separates the charged zero, discount, threshold and original parcel cost in %s", async language => {
+    await i18n.changeLanguage(language); const user = userEvent.setup();
+    vi.mocked(parcelShippingApi.quote).mockResolvedValueOnce({ ...parcelQuote, charged: 0, shippingDiscount: 158, freeShippingThreshold: 1000 });
+    render(panel()); await chooseLine(user); await user.click(screen.getByRole("button", { name: i18n.t("parcelShipping:quote") }));
+    const result = await screen.findByRole("heading", { name: i18n.t("parcelShipping:quoteResult") });
+    const region = result.closest(".quote-result")!;
+    expect(within(region as HTMLElement).getByRole("status").textContent).toBe(i18n.t("parcelShipping:charged") + ": " + money().format(0));
+    for (const [key, amount] of [["costBeforeDiscount", 158], ["shippingDiscount", 158], ["freeShippingThreshold", 1000]] as const)
+      expect(within(region as HTMLElement).getByText(i18n.t(`parcelShipping:${key}`) + ":").textContent).toContain(money().format(amount));
+    expect(region.querySelectorAll(".quoted-parcels > li")).toHaveLength(2);
+    expect(parcelShippingApi.rates).not.toHaveBeenCalled(); expect(api.updateShippingMethod).not.toHaveBeenCalled();
+  });
   it("requires a selected exact form and quantities within 1–99, without choosing the first form implicitly", async () => {
     const user = userEvent.setup(); render(panel()); await user.click(await screen.findByRole("button", { name: "Choose Žlutá židle" })); await screen.findByRole("option", { name: "CHAIR-L · L" }); expect(screen.getByLabelText("Product form")).toHaveProperty("value", ""); expect(screen.getByRole("button", { name: "Add form to preview cart" })).toHaveProperty("disabled", true);
     await user.selectOptions(screen.getByLabelText("Product form"), parcelOtherVariantId); fireEvent.change(screen.getByLabelText("Quantity to add"), { target: { value: "100" } }); expect(screen.getByRole("button", { name: "Add form to preview cart" })).toHaveProperty("disabled", true); expect(parcelShippingApi.quote).not.toHaveBeenCalled();

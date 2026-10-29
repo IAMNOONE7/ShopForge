@@ -45,6 +45,22 @@ describe("parcel shipping contracts", () => {
   it.each([null, {}, { ...parcelQuote, currency: "EUR" }, { ...parcelQuote, isAvailable: false }, { ...parcelQuote, parcels: [] }, { ...parcelQuote, total: 159 }, { ...parcelQuote, total: -1 },
     { ...parcelQuote, parcels: [{ ...parcelQuote.parcels[0], contents: [{ variantId: parcelMethod.code, sku: "FOREIGN", quantity: 2 }] }] }, { ...parcelQuote, parcels: [parcelQuote.parcels[0]] },
     { ...parcelQuote, parcels: [{ ...parcelQuote.parcels[0], grossWeightGrams: 2001 }] }])("rejects a foreign, incomplete or inconsistent quote %j", value => expect(() => checkedQuote(value, "CZK", parcelInput, true)).toThrow());
+  it.each([true, false])("preserves zero charged delivery independently from cost and parcels (perParcel: %s)", perParcel => {
+    const value = { ...parcelQuote, charged: 0, shippingDiscount: parcelQuote.total, freeShippingThreshold: 1000,
+      parcels: perParcel ? parcelQuote.parcels : [] };
+    expect(checkedQuote(value, "CZK", parcelInput, perParcel)).toEqual(value);
+    const paid = { ...value, charged: parcelQuote.total, shippingDiscount: 0, freeShippingThreshold: null };
+    expect(checkedQuote(paid, "CZK", parcelInput, perParcel)).toEqual(paid);
+  });
+  it.each([
+    { charged: -1 }, { charged: "0" }, { charged: null }, { charged: Infinity }, { charged: 159 },
+    { shippingDiscount: -1 }, { shippingDiscount: 159 }, { shippingDiscount: 0 },
+    { freeShippingThreshold: 0 }, { freeShippingThreshold: -1 }, { freeShippingThreshold: "1000" },
+    { charged: undefined }, { shippingDiscount: undefined }, { freeShippingThreshold: undefined },
+    { charged: 0.001, shippingDiscount: 157.999 },
+  ])("rejects an inconsistent or invalid customer charge %j", invalid => {
+    expect(() => checkedQuote({ ...parcelQuote, charged: 0, shippingDiscount: 158, freeShippingThreshold: 1000, ...invalid }, "CZK", parcelInput, true)).toThrow();
+  });
   it("keeps a flat quote’s total distinct from a parcel breakdown", () => { expect(checkedQuote({ ...parcelQuote, total: 0, parcels: [] }, "CZK", parcelInput, false).total).toBe(0); });
   it("checks the real company catalog form collection without inventing a detail endpoint", async () => {
     const fetch = vi.fn().mockResolvedValue(response(parcelForms)); vi.stubGlobal("fetch", fetch); expect(await parcelShippingApi.forms()).toEqual(parcelForms); expect(fetch.mock.calls[0][0]).toBe("/api/admin/products");

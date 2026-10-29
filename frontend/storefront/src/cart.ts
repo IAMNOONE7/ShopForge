@@ -48,6 +48,7 @@ export type ShippingMethod = {
   code: string;
   name: string;
   price: number;
+  fullPrice?: number;
   requiresPickupPoint: boolean;
   // Where the shopper chooses the point: nowhere, a list this shop can produce, or the carrier's own map.
   pickupPointChoice: "none" | "list" | "carrier-map";

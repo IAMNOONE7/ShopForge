@@ -9,7 +9,8 @@ export function DeliveryQuoteReview({ quote, previousPrice }: { quote: ShippingQ
   const { t } = useTranslation("checkout");
   const store = useStore();
   return <div className="delivery-quote-review">
-    <p><Trans t={t} i18nKey="shippingPriceComparison" components={{ previous: <CurrencyValue value={previousPrice} culture={store.culture} currency={store.currency} />, current: <CurrencyValue value={quote.total} culture={store.culture} currency={store.currency} /> }} /></p>
+    <p><Trans t={t} i18nKey="shippingPriceComparison" components={{ previous: <CurrencyValue value={previousPrice} culture={store.culture} currency={store.currency} />, current: <CurrencyValue value={quote.charged ?? quote.total} culture={store.culture} currency={store.currency} /> }} /></p>
+    {quote.parcels.length > 0 && quote.charged !== undefined && quote.charged < quote.total && <p>{t("parcelPricesBeforeDiscount")}</p>}
     {quote.parcels.length > 0 && <ul className="delivery-parcel-prices">
       {quote.parcels.map((parcel, index) => <li key={index}>
         <span>{t("quotedParcel", { number: index + 1 })}</span> <strong><CurrencyValue value={parcel.price} culture={store.culture} currency={store.currency} /></strong>

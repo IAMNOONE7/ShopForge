@@ -10,7 +10,7 @@ export type CarrierService = { key: string; providerKey: string; name: string; k
 export type QuoteLine = { storeProductId: string; variantId: string; quantity: number };
 export type QuoteInput = { country: string | null; lines: QuoteLine[] };
 export const quoteReasons = ["notServed", "tooHeavy", "missingWeight", "missingSize", "itemTooLarge", "itemTooHeavy", "tooManyParcels", "aboveHighestBand", "noRates", "serviceUnavailable", "carrierRefused"] as const;
-export type Quote = { isAvailable: boolean; currency: string; total: number; parcels: { contents: { variantId: string; sku: string; quantity: number }[]; grossWeightGrams: number; bandUpToGrams: number; price: number; alone: boolean }[]; unavailable: { reason: typeof quoteReasons[number]; detail: string; variantId: string | null } | null };
+export type Quote = { isAvailable: boolean; currency: string; total: number; charged?: number; shippingDiscount?: number; freeShippingThreshold?: number | null; parcels: { contents: { variantId: string; sku: string; quantity: number }[]; grossWeightGrams: number; bandUpToGrams: number; price: number; alone: boolean }[]; unavailable: { reason: typeof quoteReasons[number]; detail: string; variantId: string | null } | null };
 export type QuoteForm = { id: string; sku: string; optionValues: string[] };
 export const uuid = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value);
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
@@ -24,6 +24,10 @@ const methodPath = (storeId: string, code: string) => root(storeId) + "/shipping
 export function checkedQuote(value: unknown, currency: string, input: QuoteInput, perParcel: boolean): Quote {
   const amount = (value: unknown): value is number => typeof value === "number" && bulkPrice(String(value), currency) === value;
   if (!record(value) || typeof value.isAvailable !== "boolean" || value.currency !== currency || !amount(value.total) || !Array.isArray(value.parcels)) throw invalid();
+  if ([value.charged, value.shippingDiscount, value.freeShippingThreshold].some(field => field !== undefined) &&
+    (!amount(value.charged) || !amount(value.shippingDiscount) || value.charged > value.total || value.shippingDiscount > value.total ||
+      Math.abs(value.charged + value.shippingDiscount - value.total) > 0.000001 ||
+      !(value.freeShippingThreshold === null || amount(value.freeShippingThreshold) && value.freeShippingThreshold > 0))) throw invalid();
   if (!value.isAvailable) {
     const refusedVariant = record(value.unavailable) ? value.unavailable.variantId : undefined;
     if (!record(value.unavailable) || !quoteReasons.includes(value.unavailable.reason as typeof quoteReasons[number]) || !text(value.unavailable.detail)

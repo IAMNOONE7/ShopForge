@@ -85,3 +85,13 @@ it.each([null, {}, [null], [{ code: "no", name: "No", reason: "future", variantI
   serve({ ...methods, unavailableShippingMethods });
   await expect(getCheckoutMethods("CZ")).rejects.toMatchObject({ kind: "invalid-response" });
 });
+
+it.each(["flat", "perParcel"])("preserves %s full delivery cost independently of a charged zero", async pricing => {
+  const method = pricing === "perParcel" ? parcelMethod : { ...methods.shippingMethods[0], pricing, parcels: null, mapParcel: null };
+  const value = { ...methods, shippingMethods: [{ ...method, price: 0, fullPrice: 20 }] };
+  serve(value); expect(await getCheckoutMethods("CZ")).toEqual(value);
+});
+it.each([null, -1, "20", 9, Number.MAX_VALUE * 2])("refuses an invalid full delivery cost %j", async fullPrice => {
+  serve({ ...methods, shippingMethods: [{ ...methods.shippingMethods[0], fullPrice }] });
+  await expect(getCheckoutMethods("CZ")).rejects.toMatchObject({ kind: "invalid-response" });
+});

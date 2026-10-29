@@ -2,6 +2,7 @@ import { Trans, useTranslation } from "react-i18next";
 import type { Cart, ShippingMethod } from "../../cart";
 import { useStore } from "../../storeContext";
 import { CurrencyValue } from "../CurrencyValue";
+import { ShippingPrice } from "../checkout/ShippingPrice";
 
 export function CartTotals({ cart, shipping }: { cart: Cart; shipping?: ShippingMethod }) {
   const { t } = useTranslation(["cart", "checkout"]);
@@ -24,7 +25,7 @@ export function CartTotals({ cart, shipping }: { cart: Cart; shipping?: Shipping
         {shipping && (
           <div>
             <dt>{t("checkout:shipping")} <bdi lang={store.culture}>{shipping.name}</bdi></dt>
-            <dd>{money(shipping.price)}</dd>
+            <dd><ShippingPrice price={shipping.price} fullPrice={shipping.fullPrice} /></dd>
           </div>
         )}
       </dl>

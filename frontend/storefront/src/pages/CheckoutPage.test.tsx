@@ -1027,6 +1027,56 @@ describe("cart-priced delivery at checkout", () => {
     expect(document.querySelector(".delivery-quote-review")).toBeNull();
   });
 
+  it.each(["flat", "perParcel"])("reviews paid-to-free %s delivery without mistaking parcel cost for the new price", async pricing => {
+    const user = userEvent.setup();
+    const initial = { ...parcelMethod, pricing: pricing as "flat" | "perParcel", fullPrice: 16 };
+    offerMethods({ ...methods, shippingMethods: [initial] });
+    renderCheckout(); await screen.findByRole("radio", { name: /Parcel delivery/ }); fillFast();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Place order" }).getAttribute("aria-disabled")).toBeNull());
+    mocks.getCart.mockResolvedValue(cart);
+    offerMethods({ ...methods, shippingMethods: [{ ...initial, price: 0, fullPrice: 20, parcels: pricing === "perParcel" ? 1 : null }] });
+    mocks.placeOrder.mockRejectedValueOnce(priceConflict({ ...replacementQuote, charged: 0, shippingDiscount: 20,
+      freeShippingThreshold: 100, parcels: pricing === "perParcel" ? replacementQuote.parcels : [] }))
+      .mockRejectedValue(new HttpError("http", 400));
+    await user.click(screen.getByRole("button", { name: "Place order" }));
+    await waitFor(() => expect(document.querySelector(".delivery-quote-review > p")?.textContent).toBe("Previously shown: €16.00. New quote: €0.00."));
+    await waitFor(() => expect(document.querySelector(".checkout-total strong")?.textContent).toBe("€120.00"));
+    expect(document.querySelector(".checkout-option del .currency-value")?.textContent).toBe("€20.00");
+    if (pricing === "perParcel") {
+      expect(document.querySelector(".delivery-parcel-prices strong")?.textContent).toBe("€20.00");
+      expect(screen.getByText(/Parcel prices below show delivery costs before/)).toBeTruthy();
+    }
+    fireEvent.submit(document.querySelector("form.checkout")!); expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: "I reviewed delivery at €0.00" }));
+    expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: "Place order" }));
+    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(2));
+    expect(mocks.placeOrder.mock.calls[1][0].expectedShippingPrice).toBe(0);
+    expect(mocks.placeOrder.mock.calls[1][1]).not.toBe(mocks.placeOrder.mock.calls[0][1]);
+  });
+
+  it("requires explicit review when previously free delivery becomes payable", async () => {
+    const user = userEvent.setup();
+    offerMethods({ ...methods, shippingMethods: [{ ...parcelMethod, price: 0, fullPrice: 16 }] });
+    renderCheckout(); await screen.findByRole("radio", { name: /Parcel delivery/ }); fillFast();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Place order" }).getAttribute("aria-disabled")).toBeNull());
+    mocks.getCart.mockResolvedValue(cart);
+    offerMethods({ ...methods, shippingMethods: [{ ...parcelMethod, price: 20, fullPrice: 20 }] });
+    mocks.placeOrder.mockRejectedValueOnce(priceConflict({ ...replacementQuote, charged: 20, shippingDiscount: 0,
+      freeShippingThreshold: null })).mockRejectedValue(new HttpError("http", 400));
+    await user.click(screen.getByRole("button", { name: "Place order" }));
+    await waitFor(() => expect(document.querySelector(".delivery-quote-review > p")?.textContent).toBe("Previously shown: €0.00. New quote: €20.00."));
+    await waitFor(() => expect(document.querySelector(".checkout-total strong")?.textContent).toBe("€140.00"));
+    expect(document.querySelector(".checkout-option del")).toBeNull();
+    expect(mocks.placeOrder.mock.calls[0][0].expectedShippingPrice).toBe(0);
+    fireEvent.submit(document.querySelector("form.checkout")!); expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: "I reviewed delivery at €20.00" }));
+    await user.click(screen.getByRole("button", { name: "Place order" }));
+    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(2));
+    expect(mocks.placeOrder.mock.calls[1][0].expectedShippingPrice).toBe(20);
+    expect(mocks.placeOrder.mock.calls[1][1]).not.toBe(mocks.placeOrder.mock.calls[0][1]);
+  });
+
   it("does not approve a changed quote while refreshing methods has failed", async () => {
     await readyParcelCheckout();
     mocks.getCart.mockResolvedValue(cart);

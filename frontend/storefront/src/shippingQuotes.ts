@@ -17,7 +17,8 @@ export type QuotedParcel = {
   price: number;
   alone: boolean;
 };
-export type ShippingQuote = { currency: string; total: number; parcels: QuotedParcel[]; isAvailable: true; unavailable: null };
+export type ShippingQuote = { currency: string; total: number; charged?: number; shippingDiscount?: number;
+  freeShippingThreshold?: number | null; parcels: QuotedParcel[]; isAvailable: true; unavailable: null };
 
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -34,6 +35,7 @@ export function validMapParcel(value: unknown): value is MapParcel {
 
 export function validShippingTerms(value: unknown) {
   if (!record(value)) return false;
+  if (value.fullPrice !== undefined && (!money(value.fullPrice) || !money(value.price) || value.fullPrice < value.price)) return false;
   // Older flat offers have none of the additive terms; a partial new offer is not a usable quote.
   if (value.pricing === undefined && value.parcels === undefined && value.mapParcel === undefined) return true;
   if (value.pricing === "flat") return value.parcels === null && value.mapParcel === null;
@@ -63,6 +65,10 @@ export function readChangedShippingQuote(error: unknown, currency: string, cart:
   const value = error.problem?.shippingQuote;
   if (!record(value) || value.currency !== currency || !money(value.total) || value.isAvailable !== true ||
     value.unavailable !== null || !Array.isArray(value.parcels) || !value.parcels.every(validParcel)) invalid();
+  if ([value.charged, value.shippingDiscount, value.freeShippingThreshold].some(field => field !== undefined) &&
+    (!money(value.charged) || !money(value.shippingDiscount) || value.charged > value.total || value.shippingDiscount > value.total ||
+      Math.abs(value.charged + value.shippingDiscount - value.total) > 0.000001 ||
+      !(value.freeShippingThreshold === null || money(value.freeShippingThreshold) && value.freeShippingThreshold > 0))) invalid();
   const parcels = value.parcels as QuotedParcel[];
   if (method.pricing === "perParcel") {
     if (parcels.length === 0 || Math.abs(parcels.reduce((sum, parcel) => sum + parcel.price, 0) - value.total) > 0.000001) invalid();
@@ -72,7 +78,7 @@ export function readChangedShippingQuote(error: unknown, currency: string, cart:
     for (const parcel of parcels) for (const item of parcel.contents) actual.set(item.variantId, (actual.get(item.variantId) ?? 0) + item.quantity);
     if (expected.size !== actual.size || [...expected].some(([id, count]) => actual.get(id) !== count)) invalid();
   } else if (parcels.length !== 0) invalid();
-  return { currency, total: value.total, parcels, isAvailable: true, unavailable: null };
+  return value as ShippingQuote;
 }
 
 function invalid(): never { throw new HttpError("invalid-response", 409); }

@@ -82,7 +82,11 @@ export function ShippingQuotePanel({ storeId, method, money, stale, onClose }: {
 function QuoteResult({ quote, money }: { quote: Quote; money: Intl.NumberFormat }) {
   const { t } = useTranslation("parcelShipping");
   return <div className="quote-result"><h4>{t("quoteResult")}</h4>{quote.unavailable ? <><p role="status">{t(`reasons.${quote.unavailable.reason}`)}</p><p>{quote.unavailable.detail}</p>{quote.unavailable.variantId && <p>{t("variant")}: <code>{quote.unavailable.variantId}</code></p>}</> : <>
-    <p role="status">{t("total")}: <strong>{money.format(quote.total)}</strong></p>{quote.parcels.length === 0 && <p>{t("flatQuote")}</p>}
+    <p role={quote.charged === undefined ? "status" : undefined}>{t(quote.shippingDiscount ? "costBeforeDiscount" : "total")}: <strong>{money.format(quote.total)}</strong></p>
+    {quote.shippingDiscount !== undefined && quote.shippingDiscount > 0 && <p>{t("shippingDiscount")}: <strong>{money.format(quote.shippingDiscount)}</strong></p>}
+    {quote.freeShippingThreshold != null && <p>{t("freeShippingThreshold")}: <strong>{money.format(quote.freeShippingThreshold)}</strong></p>}
+    {quote.charged !== undefined && <p role="status">{t("charged")}: <strong>{money.format(quote.charged)}</strong></p>}
+    {quote.parcels.length === 0 && <p>{t("flatQuote")}</p>}
     <ol className="quoted-parcels">{quote.parcels.map((parcel, index) => <li key={index}><h5>{t("parcel", { number: index + 1 })}</h5><p>{parcel.grossWeightGrams} g · {t("bandUpTo", { grams: parcel.bandUpToGrams })} · {money.format(parcel.price)}</p><p>{t(parcel.alone ? "alone" : "together")}</p><ul>{parcel.contents.map((item, at) => <li key={at}>{item.sku} × {item.quantity}</li>)}</ul></li>)}</ol>
   </>}</div>;
 }

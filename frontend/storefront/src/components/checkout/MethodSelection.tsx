@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import type { PaymentMethod, ShippingMethod } from "../../cart";
 import type { Store } from "../../store";
 import { useStore } from "../../storeContext";
-import { CurrencyValue } from "../CurrencyValue";
+import { ShippingPrice } from "./ShippingPrice";
 
 export function ShippingMethodSelection({
   methods,
@@ -43,7 +43,7 @@ export function ShippingMethodSelection({
             />
             <span className="checkout-option-copy">
               <span lang={store.culture}>{method.name}</span>
-              <strong><CurrencyValue value={method.price} culture={store.culture} currency={store.currency} /></strong>
+              <strong><ShippingPrice price={method.price} fullPrice={method.fullPrice} /></strong>
               {method.pricing === "perParcel" && <span className="hint">{t("parcelCount", { count: method.parcels ?? 0 })}</span>}
             </span>
           </label>
