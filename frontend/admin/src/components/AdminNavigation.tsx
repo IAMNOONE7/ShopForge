@@ -158,6 +158,7 @@ export function AdminNavigation({
           >
             {t("navigation:orders")}
           </NavLink>
+          {canManageStore(role) && <NavLink to={`/stores/${selectedStore.id}/reconciliation`} onClick={onNavigate}>{t("navigation:reconciliation")}</NavLink>}
           <NavLink
             to={`/stores/${selectedStore.id}/unapplied-payments`}
             onClick={onNavigate}

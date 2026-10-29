@@ -51,6 +51,7 @@ const StoreDomainsPage = lazy(() => import("./pages/StoreDomainsPage").then((pag
 const StoreEmailPage = lazy(() => import("./pages/StoreEmailPage").then(pages => ({ default: pages.StoreEmailPage })));
 const StoreOrdersPage = lazy(() => import("./pages/OrderPages").then((pages) => ({ default: pages.StoreOrdersPage })));
 const StoreOrderPage = lazy(() => import("./pages/OrderPages").then((pages) => ({ default: pages.StoreOrderPage })));
+const StoreReconciliationPage = lazy(() => import("./pages/StoreReconciliationPage").then(pages => ({ default: pages.StoreReconciliationPage })));
 const UnappliedPaymentsPage = lazy(() => import("./pages/UnappliedPaymentsPage").then((pages) => ({ default: pages.UnappliedPaymentsPage })));
 const StoreReturnsPage = lazy(() => import("./pages/ReturnPages").then((pages) => ({ default: pages.StoreReturnsPage })));
 const StoreReturnPage = lazy(() => import("./pages/ReturnPages").then((pages) => ({ default: pages.StoreReturnPage })));
@@ -268,6 +269,7 @@ function MerchantApp() {
                   <Route path="discounts" element={<DeferredPage><StoreDiscountsPage /></DeferredPage>} />
                   <Route path="orders" element={<DeferredPage><StoreOrdersPage /></DeferredPage>} />
                   <Route path="orders/:number" element={<DeferredPage><StoreOrderPage /></DeferredPage>} />
+                  <Route path="reconciliation" element={canManageStore(session.user.role) ? <DeferredPage><StoreReconciliationPage /></DeferredPage> : <ForbiddenPage />} />
                   <Route path="unapplied-payments" element={<DeferredPage><UnappliedPaymentsPage /></DeferredPage>} />
                   <Route path="returns" element={<DeferredPage><StoreReturnsPage /></DeferredPage>} />
                   <Route path="returns/:returnId" element={<DeferredPage><StoreReturnPage /></DeferredPage>} />
