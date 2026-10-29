@@ -10,6 +10,7 @@ import { RouteEffects } from "./RouteEffects";
 import { RouteContent } from "./RouteContent";
 import { StoreBrand } from "./StoreBrand";
 import { StoreSearch } from "./StoreSearch";
+import { StoreInformationLinks } from "./StoreInformationLinks";
 import { categoryTree } from "./categoryTree";
 import { categoryPath } from "../publicPages";
 import {
@@ -82,12 +83,10 @@ export function Layout() {
           />
         </div>
         <div className="store-category-bar desktop-navigation">
-          <CategoryNavigation
-            state={categoryState}
-            className="store-nav container"
-            variant="desktop"
-            contentLanguage={store.culture}
-          />
+          <div className="store-navigation-row container">
+            <CategoryNavigation state={categoryState} className="store-nav" variant="desktop" contentLanguage={store.culture} />
+            <StoreInformationLinks />
+          </div>
         </div>
       </header>
       <main id="main-content" className="app container" tabIndex={-1}>
@@ -133,6 +132,7 @@ export function Layout() {
             <Link to={accountTo}>{accountLabel}</Link>
             <Link to="/cart">{t("cart")}</Link>
           </nav>
+          <StoreInformationLinks className="footer-links" heading />
         </div>
       </footer>
     </div>

@@ -18,3 +18,8 @@ export const productPath = (slug: string) => `/${product}/${encodeURIComponent(s
 export const categoryPath = (slug: string) => `/${category}/${encodeURIComponent(slug)}`;
 
 export const contentPagePath = (slug: string) => `/${contentPage}/${encodeURIComponent(slug)}`;
+
+export const storeInformationPages = [
+  { slug: "kontakt", path: contentPagePath("kontakt"), label: "contact" },
+  { slug: "o-obchodu", path: contentPagePath("o-obchodu"), label: "about" },
+] as const;

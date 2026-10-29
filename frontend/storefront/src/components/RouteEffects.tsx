@@ -5,6 +5,7 @@ import type { Category } from "../api";
 import type { Store } from "../store";
 import { searchTerm } from "../search";
 import { hasPageTitle, installPageMetadata } from "../pageMetadata";
+import { storeInformationPages } from "../publicPages";
 
 export function RouteEffects({
   store,
@@ -32,6 +33,10 @@ export function RouteEffects({
       .filter(Boolean)
       .map(decodeURIComponent);
     if (segments.length === 0) return query ? t("catalog:searchResults", { query }) : t("navigation:allProducts");
+    if (segments[0] === "pages" && segments.length === 2) {
+      const information = storeInformationPages.find(page => page.slug === segments[1]);
+      if (information) return t(information.label === "contact" ? "navigation:contact" : "navigation:about");
+    }
     if (segments[0] === "c") {
       return (
         categories.find((category) => category.slug === segments[1])?.name ??

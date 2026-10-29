@@ -37,14 +37,14 @@ describe("storefront category navigation", () => {
       { name: "Small", slug: "small", parentSlug: "dining" },
     ];
     render(<MemoryRouter><MobileNavigation state={{ status: "ready", categories: tree }} contentLanguage="en-IE" /></MemoryRouter>);
-    await user.click(screen.getByRole("button", { name: "Categories" }));
+    await user.click(screen.getByRole("button", { name: "Menu" }));
     for (const name of ["Tables", "Oak", "Dining"])
       await user.click(screen.getByRole("button", { name: `Show subcategories of ${name}` }));
     const small = screen.getByRole("link", { name: "Small" });
     expect(small.getAttribute("href")).toBe("/c/small");
     expect(small.closest(".category-branch-children")?.previousElementSibling?.querySelector("a")?.textContent).toBe("Dining");
     await user.click(small);
-    expect(screen.getByRole("button", { name: "Categories" }).getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByRole("button", { name: "Menu" }).getAttribute("aria-expanded")).toBe("false");
   });
 
   it("keeps parent products independent of expanding a named nested branch", async () => {
@@ -73,7 +73,7 @@ describe("storefront category navigation", () => {
       { name: "Tables", slug: "tables", parentSlug: "living-room" },
       { name: "Oak", slug: "oak", parentSlug: "tables" },
     ] }} contentLanguage="en-IE" /></MemoryRouter>);
-    await user.click(screen.getByRole("button", { name: "Categories" }));
+    await user.click(screen.getByRole("button", { name: "Menu" }));
     expect(screen.getByRole("link", { name: "Oak" }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("button", { name: "Hide subcategories of Tables" }).getAttribute("aria-expanded")).toBe("true");
   });
@@ -119,7 +119,7 @@ describe("storefront category navigation", () => {
       </MemoryRouter>,
     );
 
-    const trigger = screen.getByRole("button", { name: "Categories" });
+    const trigger = screen.getByRole("button", { name: "Menu" });
     await user.click(trigger);
 
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
@@ -127,7 +127,7 @@ describe("storefront category navigation", () => {
     expect(screen.getByRole("link", { name: "Kitchen" })).toBeTruthy();
     await waitFor(() =>
       expect(document.activeElement).toBe(
-        screen.getByRole("link", { name: "All products" }),
+        screen.getByRole("link", { name: "Contact" }),
       ),
     );
 

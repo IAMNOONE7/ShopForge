@@ -50,6 +50,14 @@ function Shell() {
 }
 
 describe("route effects", () => {
+  it.each([["kontakt", "Contact"], ["o-obchodu", "About the store"]])("titles the known %s page while its content is still loading", async (slug, title) => {
+    render(<MemoryRouter initialEntries={[`/pages/${slug}`]}><RouteEffects store={store} categories={[]} />
+      <main id="main-content"><section aria-busy="true"><h1>Loading replacement</h1></section></main>
+    </MemoryRouter>);
+    await waitFor(() => expect(document.title).toBe(`${title} · Test Store`));
+    expect(document.activeElement).not.toBe(screen.getByRole("heading"));
+  });
+
   it("uses the store name once for the discovery home title", async () => {
     render(<MemoryRouter><RouteEffects store={store} categories={[]} />
       <main id="main-content"><h1>{store.name}</h1></main>

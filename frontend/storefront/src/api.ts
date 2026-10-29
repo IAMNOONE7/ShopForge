@@ -1,4 +1,4 @@
-import { requestJson } from "./api/http";
+import { HttpError, requestJson } from "./api/http";
 import type { PublicMetadata } from "./pageMetadata";
 
 export type Category = {
@@ -94,11 +94,14 @@ export type ContentPage = {
   seo: { title: string; description: string | null; socialImageUrl?: string | null; noIndex: boolean; canonical: string | null };
 };
 
-export function getContentPage(slug: string, signal: AbortSignal) {
-  return requestJson<ContentPage>(
+export async function getContentPage(slug: string, signal: AbortSignal) {
+  const page = await requestJson<ContentPage>(
     `/api/storefront/pages/${encodeURIComponent(slug)}`,
     { signal },
   );
+  if (!page || Array.isArray(page) || page.slug !== slug || typeof page.title !== "string" ||
+    !page.title.trim() || typeof page.body !== "string") throw new HttpError("invalid-response", 200);
+  return page;
 }
 
 export function getCategories(signal: AbortSignal) {

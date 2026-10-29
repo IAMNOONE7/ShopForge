@@ -4,6 +4,7 @@ import { NavLink, useLocation } from "react-router";
 import type { Category } from "../api";
 import { categoryPath } from "../publicPages";
 import { categoryTree, type CategoryNode } from "./categoryTree";
+import { StoreInformationLinks } from "./StoreInformationLinks";
 
 type CategoryState =
   | { status: "loading" }
@@ -233,6 +234,7 @@ export function MobileNavigation({
           id="store-category-menu"
           className="mobile-navigation-panel"
         >
+          <StoreInformationLinks onNavigate={() => setOpen(false)} />
           <CategoryNavigation
             state={state}
             className="mobile-category-links"

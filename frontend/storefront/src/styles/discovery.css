@@ -166,8 +166,59 @@
   border-top: 1px solid var(--color-border);
 }
 
-.store-nav {
+.store-navigation-row {
   position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0 var(--space-8);
+}
+
+.store-navigation-row > .store-nav {
+  flex: 1 1 36rem;
+}
+
+.store-information-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-6);
+  min-width: 0;
+}
+
+.store-information-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  max-width: 100%;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  border-bottom: 2px solid transparent;
+}
+
+.store-information-links a:hover,
+.store-information-links a.active {
+  color: var(--color-text);
+  border-bottom-color: var(--color-text);
+}
+
+.store-navigation-row > .store-information-links {
+  margin-inline-start: auto;
+}
+
+.store-navigation-row > .store-information-links a {
+  min-height: 3.5rem;
+}
+
+.mobile-navigation-panel > .store-information-links {
+  padding: 0 var(--space-3) var(--space-3);
+  margin-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.store-nav {
   gap: var(--space-8);
   overflow: visible;
   min-height: 3.5rem;
@@ -664,7 +715,7 @@
 
 .store-footer-inner {
   display: grid;
-  grid-template-columns: minmax(0, 1.5fr) repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr));
   align-items: start;
   gap: var(--space-8);
   padding-block: clamp(2rem, 4vw, 4rem);

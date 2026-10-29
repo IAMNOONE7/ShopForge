@@ -3,8 +3,8 @@ import { test, expect } from "../support/fixtures.ts";
 test("boots two independent store hosts with the selected language and responsive shopping controls", async ({ page, context, environment }, testInfo) => {
   const language = testInfo.project.name.split("-")[0];
   const labels = language === "cs"
-    ? { search: "Hledat produkty", cart: "Košík", account: "Přihlásit se", menu: "Kategorie" }
-    : { search: "Search products", cart: "Cart", account: "Sign in", menu: "Categories" };
+    ? { search: "Hledat produkty", cart: "Košík", account: "Přihlásit se", menu: "Nabídka" }
+    : { search: "Search products", cart: "Cart", account: "Sign in", menu: "Menu" };
   const pages = [page, await context.newPage()];
   for (const [index, target] of environment.stores.entries()) {
     const current = pages[index];
