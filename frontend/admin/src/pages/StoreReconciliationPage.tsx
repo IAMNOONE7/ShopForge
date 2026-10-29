@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useSelectedStore } from "../adminContext";
@@ -71,8 +71,41 @@ function ReportRead({ storeId, range, onApply, locale, focusOnResult }: { storeI
       {report.differences.length === 0 && <p role="status">{t("empty")}</p>}
       <DifferenceGroup report={report} explained={false} storeId={storeId} locale={locale} />
       <DifferenceGroup report={report} explained storeId={storeId} locale={locale} />
+      <DailyActivity days={report.days} locale={locale} onApply={onApply} />
     </section>}
   </>;
+}
+function DailyActivity({ days, locale, onApply }: {
+  days: ReadonlyArray<Pick<ReconciliationReport["days"][number], "date" | "paid" | "unexplained">>;
+  locale: string;
+  onApply: (range: ReportRange) => void;
+}) {
+  const { t } = useTranslation("reconciliation"), number = new Intl.NumberFormat(locale);
+  return <section className="reconciliation-daily" aria-labelledby="reconciliation-daily-title" aria-describedby="reconciliation-daily-hint">
+    <h3 id="reconciliation-daily-title">{t("dailyTitle")}</h3>
+    <p id="reconciliation-daily-hint" className="hint">{t("dailyHint")}</p>
+    <ul>{days.map(day => <li key={day.date}>
+      <h4><time dateTime={day.date}>{reportDate(day.date, locale)}</time></h4>
+      <dl>
+        <div><dt>{t("recordedPaid")}</dt><dd><ActivityCount value={day.paid} number={number} /></dd></div>
+        <div><dt>{t("unexplained")}</dt><dd><ActivityCount value={day.unexplained} number={number} /></dd></div>
+      </dl>
+      <Button type="button" variant="secondary" aria-label={t("reviewDay", { date: reportDate(day.date, locale) })}
+        onClick={() => onApply({ from: day.date, to: day.date })}>{t("viewDay")}</Button>
+    </li>)}</ul>
+  </section>;
+}
+function ActivityCount({ value, number }: { value: number; number: Intl.NumberFormat }) {
+  const groups: string[] = [];
+  let group = "";
+  for (const part of number.formatToParts(value)) {
+    group += part.value;
+    if (part.type === "group") { groups.push(group); group = ""; }
+  }
+  if (group) groups.push(group);
+  return <bdi>{groups.map((text, index) => <Fragment key={index}>
+    {index > 0 && <wbr />}<span className="reconciliation-count-group">{text}</span>
+  </Fragment>)}</bdi>;
 }
 function RangeForm({ initial, onApply }: { initial: ReportRange | null; onApply: (range: ReportRange) => void }) {
   const { t } = useTranslation("reconciliation");

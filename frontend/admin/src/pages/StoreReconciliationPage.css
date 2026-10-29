@@ -15,3 +15,20 @@
 .reconciliation-detail { white-space: pre-line; }
 
 #reconciliation-from, #reconciliation-to { padding-inline: min(var(--space-3), 3vw); }
+
+.reconciliation-daily { display: grid; gap: var(--space-3); container-type: inline-size; }
+.reconciliation-daily > .hint { font-size: var(--text-sm); }
+.reconciliation-daily > ul { display: grid; margin: 0; padding: 0; list-style: none; }
+.reconciliation-daily li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto; gap: var(--space-3); align-items: center; padding-block: var(--space-3); border-top: 1px solid var(--color-border); }
+.reconciliation-daily h4 { margin: 0; font-size: var(--text-base); }
+.reconciliation-daily dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.reconciliation-daily dt { color: var(--color-text-muted); font-size: var(--text-sm); }
+.reconciliation-daily dd { font-weight: 650; }
+.reconciliation-count-group { display: inline-block; white-space: nowrap; }
+.reconciliation-daily button { justify-self: start; }
+@container (max-width: 34rem) {
+  .reconciliation-daily li { grid-template-columns: minmax(0, 1fr); }
+}
+@container (max-width: 18rem) {
+  .reconciliation-daily dl { grid-template-columns: minmax(0, 1fr); }
+}

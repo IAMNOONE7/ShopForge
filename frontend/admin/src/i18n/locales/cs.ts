@@ -346,6 +346,11 @@ const resources = {
     "checkoutWait": "Pokladna oceňuje dopravu po balících pro aktuální košík a cílovou zemi. Aktivní doprava potřebuje také funkční nastavení poskytovatele, skutečný ceník a vyhovující balíky."
   },
   reconciliation: {
+    "dailyTitle": "Evidované platby po dnech",
+    "dailyHint": "Evidované živé platby a hlášené problémy podle dne poskytovatele. Počty nepotvrzují vypořádání.",
+    "recordedPaid": "Evidováno jako uhrazené",
+    "viewDay": "Detail dne",
+    "reviewDay": "Zobrazit přehled za {{date}}",
     "previous": "Předchozí položky",
     "next": "Další položky",
     "showing": "{{from}}–{{to}} z {{total}}",

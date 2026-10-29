@@ -1,17 +1,18 @@
 // @vitest-environment jsdom
 import { useState } from "react";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Outlet, Route, Routes, useLocation, useNavigate } from "react-router";
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import App from "../App";
 import { api } from "../api";
 import { HttpError } from "../api/http";
-import { reconciliationApi, type ReconciliationReport } from "../api/reconciliation";
+import { reconciliationApi, reportDate, type ReconciliationReport } from "../api/reconciliation";
 import { initializeI18n, i18n } from "../i18n";
 import { SessionContext } from "../session";
 import { metadataStore } from "../test/metadataFixtures";
 import { reconciliationFixture } from "../test/reconciliationFixtures";
+import { uiLocale } from "../utils/format";
 import { StoreReconciliationPage } from "./StoreReconciliationPage";
 
 const account = (role = "Owner") => ({ id: "owner", tenantId: "tenant", role, email: "owner@example.test" });
@@ -55,6 +56,55 @@ it("applies only ISO date fields, focuses results, retains range through history
   await user.click(screen.getByRole("button", { name: "Default period" })); await waitFor(() => expect(reconciliationApi.read).toHaveBeenLastCalledWith(metadataStore.id, null, expect.any(AbortSignal), undefined));
   await user.click(screen.getByRole("button", { name: "Back" })); await waitFor(() => expect(screen.getByLabelText("From")).toHaveProperty("value", "2026-10-25"));
 });
+it.each(["en", "cs"])("shows exact daily recorded counts, including zero and large counts, in %s", async language => {
+  await i18n.changeLanguage(language);
+  const data = reconciliationFixture(); data.days[0]!.paid = 0; data.days[1]!.paid = 1234567;
+  vi.mocked(reconciliationApi.read).mockResolvedValue(data); route();
+  const daily = await screen.findByRole("region", { name: i18n.t("reconciliation:dailyTitle") });
+  const rows = within(daily).getAllByRole("listitem"); expect(rows).toHaveLength(14);
+  const locale = uiLocale(language), first = within(rows[0]!), second = within(rows[1]!);
+  expect(first.getByRole("heading").textContent).toBe(reportDate(data.from, locale));
+  expect(first.getAllByRole("definition").map(value => value.textContent)).toEqual(["0", "7"]);
+  expect(second.getAllByRole("definition").map(value => value.textContent)).toEqual([new Intl.NumberFormat(locale).format(1234567), "0"]);
+  expect(within(daily).getAllByText(i18n.t("reconciliation:recordedPaid"))).toHaveLength(14);
+  expect(within(daily).getByText(i18n.t("reconciliation:dailyHint"))).toBeTruthy();
+  expect(daily.textContent).not.toMatch(/98.?765|EUR|CZK/);
+  expect(reconciliationApi.read).toHaveBeenCalledTimes(1);
+});
+it.each(["en", "cs"])("reviews one day by keyboard and restores the period through history in %s", async language => {
+  await i18n.changeLanguage(language); const user = userEvent.setup(); route();
+  const daily = await screen.findByRole("region", { name: i18n.t("reconciliation:dailyTitle") });
+  within(daily).getByRole("button", { name: i18n.t("reconciliation:reviewDay", { date: reportDate("2026-10-10", uiLocale(language)) }) }).focus();
+  await user.keyboard("{Enter}");
+  await waitFor(() => expect(reconciliationApi.read).toHaveBeenLastCalledWith(metadataStore.id, { from: "2026-10-10", to: "2026-10-10" }, expect.any(AbortSignal), undefined));
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("heading", { name: i18n.t("reconciliation:source") })));
+  expect(screen.getByRole("status").textContent).toBe("?from=2026-10-10&to=2026-10-10");
+  expect(within(screen.getByRole("region", { name: i18n.t("reconciliation:dailyTitle") })).getAllByRole("listitem")).toHaveLength(1);
+  await user.click(screen.getByRole("button", { name: "Back" }));
+  await waitFor(() => expect(within(screen.getByRole("region", { name: i18n.t("reconciliation:dailyTitle") })).getAllByRole("listitem")).toHaveLength(14));
+});
+it("retains all 31 calendar dates across the provider's daylight-saving boundary", async () => {
+  route("Owner", "?from=2026-10-01&to=2026-10-31");
+  const daily = await screen.findByRole("region", { name: "Recorded payments by day" });
+  expect(Array.from(daily.querySelectorAll("time")).map(time => time.dateTime)).toEqual(Array.from({ length: 31 }, (_, index) => `2026-10-${String(index + 1).padStart(2, "0")}`));
+  expect(reconciliationApi.read).toHaveBeenCalledExactlyOnceWith(metadataStore.id, { from: "2026-10-01", to: "2026-10-31" }, expect.any(AbortSignal), undefined);
+});
+it("keeps recorded zero counts distinct from unavailable statement coverage", async () => {
+  const data = reconciliationFixture(); data.statementsThrough = null; data.unexplained = 0; data.differences = [];
+  data.days.forEach(day => { day.paid = 0; day.unexplained = 0; });
+  vi.mocked(reconciliationApi.read).mockResolvedValue(data); route();
+  const daily = await screen.findByRole("region", { name: "Recorded payments by day" });
+  expect(within(daily).getAllByRole("definition").every(value => value.textContent === "0")).toBe(true);
+  expect(screen.getByText("Not available")).toBeTruthy(); expect(screen.getByText(i18n.t("reconciliation:coverage"))).toBeTruthy();
+});
+it("can revalidate a day from an explicitly stale snapshot without replaying any action", async () => {
+  const user = userEvent.setup(); route(); await screen.findByRole("heading", { name: "Statement data" });
+  vi.mocked(reconciliationApi.read).mockRejectedValueOnce(new HttpError("http", 503));
+  await user.click(screen.getByRole("button", { name: "Refresh statement view" })); await screen.findByText(i18n.t("reconciliation:stale"));
+  await user.click(screen.getByRole("button", { name: "Review 5 Oct 2026" }));
+  await waitFor(() => expect(reconciliationApi.read).toHaveBeenLastCalledWith(metadataStore.id, { from: "2026-10-05", to: "2026-10-05" }, expect.any(AbortSignal), undefined));
+  await waitFor(() => expect(screen.queryByRole("alert")).toBeNull()); expect(reconciliationApi.read).toHaveBeenCalledTimes(3);
+});
 it("blocks invalid URL periods without a read and lets the user recover", async () => {
   const user = userEvent.setup(); route("Owner", "?from=2026-10-31&to=2026-10-01");
   await screen.findByRole("alert"); expect(reconciliationApi.read).not.toHaveBeenCalled();
@@ -96,6 +146,7 @@ it("bounds large exception groups and keeps every entry reachable without extra 
 it.each([403, 404])("removes retained financial references when refresh returns %s", async status => {
   const user = userEvent.setup(); route(); await screen.findByRole("heading", { name: "Statement data" }); vi.mocked(reconciliationApi.read).mockRejectedValueOnce(new HttpError("http", status));
   await user.click(screen.getByRole("button", { name: "Refresh statement view" })); await screen.findByRole("alert"); expect(screen.queryByText("TX-0")).toBeNull(); expect(screen.queryByRole("heading", { name: "Statement data" })).toBeNull();
+  expect(screen.queryByRole("region", { name: "Recorded payments by day" })).toBeNull();
 });
 it("marks a retained snapshot stale after a read failure and retries only explicitly", async () => {
   const user = userEvent.setup(); route(); await screen.findByRole("heading", { name: "Statement data" }); vi.mocked(reconciliationApi.read).mockRejectedValueOnce(new HttpError("network", null));

@@ -345,6 +345,11 @@ const resources = {
     "checkoutWait": "Checkout quotes per-parcel delivery for the current cart and destination. Active methods also need usable provider settings, a real rate card and parcels that fit."
   },
   reconciliation: {
+    "dailyTitle": "Recorded payments by day",
+    "dailyHint": "Recorded live payments and reported issues, by provider-local day. Counts do not confirm settlement.",
+    "recordedPaid": "Recorded as paid",
+    "viewDay": "View day",
+    "reviewDay": "Review {{date}}",
     "previous": "Previous entries",
     "next": "Next entries",
     "showing": "{{from}}–{{to}} of {{total}}",
