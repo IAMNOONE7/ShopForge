@@ -253,3 +253,11 @@ scripts/                      a release's steps and its smoke tests
 ## Status
 
 Early development. Multi-store support, the product catalog, attribute-based filtering, bulk import, store provisioning, guest checkout, stock reservations, customer accounts, card payments, shipping, background processing, telemetry, an Azure deployment (written, not yet run), invoicing, discount codes, reviews, wishlists, returns, platform administration, plan caps, staff invitations, password management, two-factor sign-in, idempotent public writes, customer self-service, an audit trail, data export and erasure, retention sweeps, consent records and transactional e-mail with a real provider are in place.
+
+## License
+
+Thanks for stopping by! This repository is shared for reference and as a showcase of my work. You're welcome to browse the code and see how the project is built.
+
+Please don't copy, reuse, modify or redistribute the code, or incorporate it into personal or commercial projects. This is not an open-source project, and no license or permission to reuse the code is granted.
+
+Thanks for understanding and respecting my work!
