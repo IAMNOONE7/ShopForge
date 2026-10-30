@@ -1,3 +1,4 @@
+import { validFreeShipping, type FreeShipping } from "./freeShipping";
 import { HttpError, requestJson } from "./api/http";
 import { withOrderFacts, type CustomerRefund } from "./refundFacts";
 import { validShippingTerms, validUnavailableMethod, type MapParcel, type UnavailableShippingMethod } from "./shippingQuotes";
@@ -37,6 +38,7 @@ export type Cart = {
   changed: boolean;
   discount: CartDiscount | null;
   discountProblem: string | null;
+  freeShipping?: FreeShipping | null;
 };
 
 export type PaymentMethod = {
@@ -71,6 +73,7 @@ export type CheckoutMethods = {
   paymentMethods: PaymentMethod[];
   shippingMethods: ShippingMethod[];
   unavailableShippingMethods?: UnavailableShippingMethod[];
+  freeShipping?: FreeShipping | null;
 };
 
 export type Address = {
@@ -147,40 +150,50 @@ export type Order = {
   refunds: CustomerRefund[];
 };
 
+function checkedCart(cart: Cart): Cart {
+  if (!cart || typeof cart !== "object" || Array.isArray(cart) || !validFreeShipping(cart.freeShipping) ||
+    cart.discountProblem !== undefined && cart.discountProblem !== null && typeof cart.discountProblem !== "string")
+    throw new HttpError("invalid-response", null);
+  return cart;
+}
+
 export const getCart = (signal?: AbortSignal) =>
-  requestJson<Cart>("/api/storefront/cart", { signal });
+  requestJson<Cart>("/api/storefront/cart", { signal }).then(checkedCart);
 
 export const addToCart = (storeProductId: string, variantId: string, quantity: number) =>
   requestJson<Cart>("/api/storefront/cart/items", {
     method: "POST",
     body: { storeProductId, variantId, quantity },
-  });
+  }).then(checkedCart);
 
 export const setCartQuantity = (storeProductId: string, variantId: string, quantity: number) =>
   requestJson<Cart>(`/api/storefront/cart/items/${encodeURIComponent(storeProductId)}?variantId=${encodeURIComponent(variantId)}`, {
     method: "PUT",
     body: { quantity },
-  });
+  }).then(checkedCart);
 
 export const removeFromCart = (storeProductId: string, variantId: string) =>
   requestJson<Cart>(`/api/storefront/cart/items/${encodeURIComponent(storeProductId)}?variantId=${encodeURIComponent(variantId)}`, {
     method: "DELETE",
-  });
+  }).then(checkedCart);
 
 export const applyDiscount = (code: string) =>
   requestJson<Cart>("/api/storefront/cart/discount", {
     method: "PUT",
     body: { code },
-  });
+  }).then(checkedCart);
 
 export const removeDiscount = () =>
-  requestJson<Cart>("/api/storefront/cart/discount", { method: "DELETE" });
+  requestJson<Cart>("/api/storefront/cart/discount", { method: "DELETE" }).then(checkedCart).then(cart => {
+    if (cart.discount !== null || cart.discountProblem !== null) throw new HttpError("invalid-response", null);
+    return cart;
+  });
 
 export async function getCheckoutMethods(country: string | null, signal?: AbortSignal) {
   const destinationCountry = country?.trim().toUpperCase() || null;
   const query = destinationCountry ? "?country=" + encodeURIComponent(destinationCountry) : "";
   const result = await requestJson<CheckoutMethods>("/api/storefront/checkout/methods" + query, { signal });
-  if (!result || result.destinationCountry !== destinationCountry ||
+  if (!result || result.destinationCountry !== destinationCountry || !validFreeShipping(result.freeShipping) ||
     !Array.isArray(result.paymentMethods) || !Array.isArray(result.shippingMethods) ||
     !result.paymentMethods.every(validPaymentMethod) ||
     !result.shippingMethods.every(method => validPaymentMethod(method) &&

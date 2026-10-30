@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import type { Cart } from "../../cart";
+import { FreeShippingProgress } from "./FreeShippingProgress";
 import { CartTotals } from "./CartTotals";
 
 export function CartSummary({ cart, pending }: { cart: Cart; pending: boolean }) {
@@ -13,6 +14,7 @@ export function CartSummary({ cart, pending }: { cart: Cart; pending: boolean })
       aria-busy={pending || undefined}
     >
       <h2 id="cart-summary-heading">{t("summary")}</h2>
+      <FreeShippingProgress value={cart.freeShipping} pending={pending} />
       <CartTotals cart={cart} />
       {pending && (
         <p className="cart-updating" role="status">

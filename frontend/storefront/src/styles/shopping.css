@@ -329,6 +329,8 @@
 }
 
 .cart-discount {
+  min-width: 0;
+  overflow-wrap: anywhere;
   border-top: 1px solid var(--color-border);
   padding-top: var(--space-6);
 }
@@ -471,12 +473,15 @@ fieldset.checkout-fields {
 }
 
 .checkout-option-copy strong {
+  flex: 0 1 auto;
+  max-width: 100%;
   margin-left: auto;
   white-space: normal;
 }
 
 .shipping-price {
   display: inline-flex;
+  max-width: 100%;
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--space-1) var(--space-2);
@@ -735,4 +740,42 @@ fieldset.checkout-fields {
   .checkout-review > div {
     padding-inline: var(--space-2);
   }
+}
+
+.free-shipping-progress {
+  min-width: 0;
+  padding-block: var(--space-4);
+  border-block: 1px solid var(--color-border);
+  overflow-wrap: anywhere;
+}
+
+.free-shipping-progress h3 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-base);
+}
+
+.free-shipping-progress p {
+  margin: var(--space-2) 0 0;
+}
+
+.checkout-fields > .cart-discount {
+  min-width: 0;
+  padding-block: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.checkout-fields > .cart-discount h2 {
+  font-size: var(--text-xl);
+}
+
+.checkout-fields > .cart-discount:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: var(--space-2);
+}
+
+.cart-discount .discount-status,
+.cart-discount .discount-status button {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }

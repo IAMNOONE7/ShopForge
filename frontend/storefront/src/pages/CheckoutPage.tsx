@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { DiscountField } from "../components/DiscountField";
 import { ShoppingPageLoading } from "../components/ShoppingPageLoading";
 import { Trans, useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router";
@@ -271,6 +272,8 @@ function CheckoutForm({
   const changedAfterUncertain = failed !== null && (uncertainWrite(failed) || inFlightWrite(failed)) &&
     changedSince(attempt, requestBody);
   const mustReview = reviewKind !== null || adjusted || changedAfterUncertain;
+  const discountBlocked = Boolean(cart.discountProblem);
+  const discountLocked = attempt !== null && (failed === null || uncertainWrite(failed) || inFlightWrite(failed));
   useEffect(() => {
     if (mustReview && !pending) reviewNotice.current?.focus();
   }, [mustReview, pending]);
@@ -279,6 +282,7 @@ function CheckoutForm({
   const canSubmit =
     issues.length === 0 &&
     !mustReview &&
+    !discountBlocked &&
     !pending &&
     !cartPending &&
     !pickupUnavailable &&
@@ -306,7 +310,10 @@ function CheckoutForm({
     if (fromOurList) pickupPoints.reload();
     try {
       const current = await getCart(controller.signal);
-      if (alive.current && !controller.signal.aborted) applyCart(current);
+      if (alive.current && !controller.signal.aborted) {
+        applyCart(current);
+        window.requestAnimationFrame(() => { if (alive.current) reviewNotice.current?.focus(); });
+      }
     } catch (error) {
       if (alive.current && !controller.signal.aborted) setRefreshFailure(error);
     } finally {
@@ -314,8 +321,13 @@ function CheckoutForm({
     }
   }
 
+  function discountRemoved() {
+    setReviewKind("cart"); setFailed(null); setPriceChange(null); setShippingRefusal(null);
+    window.requestAnimationFrame(() => { if (alive.current) reviewNotice.current?.focus(); });
+  }
+
   function reviewChanges() {
-    if (refreshingCart || !methodsReady || refreshFailure !== null) return;
+    if (refreshingCart || !methodsReady || refreshFailure !== null || discountBlocked) return;
     if (reviewKind !== "inFlight" || changedAfterUncertain) setAttempt(null);
     acknowledgeAdjustment();
     setReviewKind(null);
@@ -431,9 +443,10 @@ function CheckoutForm({
               <InlineMessage title={t(changedAfterUncertain ? "checkout:uncertainChangedTitle" : currentPriceChange ? "checkout:shippingPriceChangedTitle" : reviewKind === "inFlight" ? "checkout:inFlightTitle" : reviewKind === "mismatch" ? "checkout:keyMismatchTitle" : "checkout:reviewTitle")}>
                 {!currentPriceChange && <p>{t(changedAfterUncertain ? "checkout:uncertainChangedBody" : reviewKind === "inFlight" ? "checkout:inFlightBody" : reviewKind === "mismatch" ? "checkout:keyMismatchBody" : "checkout:reviewBody")}</p>}
                 {currentPriceChange && <DeliveryQuoteReview quote={currentPriceChange.quote} previousPrice={currentPriceChange.previousPrice} />}
+                {discountBlocked && <p><a href="#checkout-discount">{t("cart:discountNeedsRemoval")}</a></p>}
                 <button
                   type="button"
-                  disabled={refreshingCart || !methodsReady || refreshFailure !== null}
+                  disabled={refreshingCart || !methodsReady || refreshFailure !== null || discountBlocked}
                   onClick={reviewChanges}
                 >
                   {refreshingCart || methodsRefreshing
@@ -621,6 +634,9 @@ function CheckoutForm({
             disabled={pending || !methodsReady}
             onChange={setPaymentCode}
           />
+          <DiscountField id="checkout-discount" removalOnly disabled={pending || refreshingCart || refreshFailure !== null || discountLocked}
+            onRemoved={discountRemoved} onRemovalFailed={() => { setReviewKind("cart"); void refreshAfterConflict(); }} />
+          {discountLocked && (cart.discount || discountBlocked) && <p className="hint">{t("checkout:discountOrderPending")}</p>}
           <CheckoutReview request={requestBody} shippingName={chosenShipping?.name ?? ""} paymentName={chosenPayment?.name ?? ""}
             complete={issues.length === 0 && methodsReady}
             pickupLabel={pickupLabel} />
@@ -631,6 +647,7 @@ function CheckoutForm({
           shipping={methodsReady ? chosenShipping : undefined}
           store={store}
           pending={pending}
+          freeShipping={methodsReady && !cartPending && !refreshingCart ? methods.freeShipping : undefined}
         >
           <div className="checkout-actions">
             <button
@@ -651,7 +668,7 @@ function CheckoutForm({
             </button>
             {!canSubmit && !pending && !mustReview && (
               <p id="checkout-submit-hint" className="hint">
-                {t(cartPending ? "cart:updatingCart" : "checkout:completeOrder")}
+                {t(cartPending ? "cart:updatingCart" : discountBlocked ? "cart:discountNeedsRemoval" : "checkout:completeOrder")}
               </p>
             )}
           </div>

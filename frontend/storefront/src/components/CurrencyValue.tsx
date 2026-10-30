@@ -10,12 +10,18 @@ export function CurrencyValue({ value, culture, currency, prefix = "" }: {
   const groups: string[] = [];
   let group = prefix;
   let hasNumber = false;
+  let leadingCurrency = false;
   for (const part of parts) {
+    if (part.type === "integer" && !hasNumber && leadingCurrency && /\s$/u.test(group)) {
+      groups.push(group);
+      group = "";
+    }
     if (part.type === "currency" && hasNumber) {
       groups.push(group);
       group = "";
     }
     group += part.value;
+    if (part.type === "currency" && !hasNumber) leadingCurrency = true;
     if (part.type === "integer") hasNumber = true;
     if (part.type === "group") {
       groups.push(group);

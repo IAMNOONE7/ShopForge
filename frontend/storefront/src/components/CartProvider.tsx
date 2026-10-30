@@ -28,6 +28,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
     adjusted: readAdjustment(),
   }));
   const pending = useRef(false);
+  const active = useRef(false);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -81,11 +83,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setState((current) => ({ ...current, adjusted: false }));
   }, []);
   const mutate = useCallback(async (change: () => Promise<Cart>) => {
-    if (pending.current) return null;
+    if (pending.current || !active.current) return null;
     pending.current = true;
     setState((current) => ({ ...current, pending: true, error: null }));
     try {
       const cart = await change();
+      if (!active.current) return null;
       rememberAdjustment(cart);
       setState((current) => ({
         status: "ready",
@@ -96,7 +99,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       }));
       return cart;
     } catch (error) {
-      setState((current) => ({ ...current, error, pending: false }));
+      if (active.current) setState((current) => ({ ...current, error, pending: false }));
       return null;
     } finally {
       pending.current = false;

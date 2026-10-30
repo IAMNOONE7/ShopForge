@@ -372,6 +372,14 @@ const resources = {
     wishlistOff: "♡ Uložit na později",
   },
   cart: {
+    freeShippingHeading: "K dopravě zdarma zbývá",
+    freeShippingReached: "Částka pro dopravu zdarma dosažena",
+    freeShippingRemaining: "Přidejte zboží za dalších <remaining/> po slevách a dosáhnete částky <threshold/> pro dopravu zdarma.",
+    freeShippingReachedBody: "Cena zboží po slevách dosáhla částky <threshold/> pro dopravu zdarma.",
+    freeShippingAvailability: "Dostupné způsoby dopravy a jejich konečné ceny se ověřují v pokladně.",
+    discountNeedsRemoval: "Odeberte kód, který už nelze použít, a před odesláním zkontrolujte objednávku.",
+    discountRefreshCart: "Obnovit aktuální košík",
+
     continueShopping: "Pokračovat v nákupu",
     items: "Položky košíku",
     subtotal: "Zboží ({{count}})",
@@ -380,7 +388,7 @@ const resources = {
     discountApplying: "Používání…",
     discountApplied: "Kód {{code}} byl použit.",
     discountRemoved: "Slevový kód byl odebrán.",
-    discountRemoveFailed: "Slevový kód se nepodařilo odebrat. Zkuste to prosím znovu.",
+    discountRemoveFailed: "Odebrání kódu se nepodařilo potvrdit. Před dalším pokusem obnovte aktuální košík.",
     loading: "Načítání košíku…",
     emptyTitle: "Košík je prázdný",
     emptyBody: "Přidejte produkt a začněte objednávku.",
@@ -433,6 +441,7 @@ const resources = {
     orderRecoveryAction: "Zobrazit objednávku",
   },
   checkout: {
+    discountOrderPending: "Před změnou slevového kódu vyřešte předchozí pokus o objednávku.",
     parcelCount_one: "{{count}} balík · celková cena dopravy",
     parcelCount_few: "{{count}} balíky · celková cena dopravy",
     parcelCount_many: "{{count}} balíku · celková cena dopravy",

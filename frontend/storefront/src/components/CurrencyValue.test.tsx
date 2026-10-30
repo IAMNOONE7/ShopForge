@@ -11,7 +11,7 @@ describe("currency values", () => {
     ["cs-CZ", "CZK"], ["en-IE", "EUR"], ["en-US", "USD"], ["cs-CZ", "USD"],
     ["ja-JP", "JPY"], ["en-KW", "KWD"], ["ar-KW", "KWD"], ["en-GB", "GBP"],
   ])("preserves %s/%s formatting and keeps currency and fractional digits intact", (culture, currency) => {
-    for (const value of [-1234567.891, -0, 0, 1.2, 1234567890.123]) {
+    for (const value of [-1234567.891, -0, 0, 1.2, 240, 1234567890.123]) {
       const view = render(<CurrencyValue value={value} culture={culture} currency={currency} />);
       expect(view.container.textContent).toBe(formatCurrency(value, culture, currency));
       expect(view.container.querySelector("bdi")?.lang).toBe(culture);

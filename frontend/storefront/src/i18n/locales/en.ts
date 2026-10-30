@@ -372,6 +372,14 @@ const resources = {
     wishlistOff: "♡ Save for later",
   },
   cart: {
+    freeShippingHeading: "Towards free delivery",
+    freeShippingReached: "Free-delivery threshold reached",
+    freeShippingRemaining: "Add <remaining/> more in goods after discounts to reach the store’s <threshold/> free-delivery threshold.",
+    freeShippingReachedBody: "Your goods total after discounts meets the store’s free-delivery threshold of <threshold/>.",
+    freeShippingAvailability: "Available delivery methods and their final prices are checked at checkout.",
+    discountNeedsRemoval: "Remove the code that can no longer be used, then review your order before placing it.",
+    discountRefreshCart: "Refresh the current cart",
+
     continueShopping: "Continue shopping",
     items: "Cart items",
     subtotal: "Products ({{count}})",
@@ -380,7 +388,7 @@ const resources = {
     discountApplying: "Applying…",
     discountApplied: "Code {{code}} applied.",
     discountRemoved: "Discount code removed.",
-    discountRemoveFailed: "The discount code could not be removed. Please try again.",
+    discountRemoveFailed: "Removing the code could not be confirmed. Refresh the current cart before trying again.",
     loading: "Loading cart…",
     emptyTitle: "Your cart is empty",
     emptyBody: "Add a product to start an order.",
@@ -433,6 +441,7 @@ const resources = {
     orderRecoveryAction: "View your order",
   },
   checkout: {
+    discountOrderPending: "Resolve the previous order attempt before changing its discount code.",
     parcelCount_one: "{{count}} parcel · total delivery price",
     parcelCount_few: "{{count}} parcels · total delivery price",
     parcelCount_many: "{{count}} parcels · total delivery price",

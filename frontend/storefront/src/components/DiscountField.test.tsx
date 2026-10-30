@@ -3,6 +3,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { HttpError } from "../api/http";
 import type { Cart } from "../cart";
 import { CartContext, type CartState } from "../cartContext";
 import { i18n, initializeI18n } from "../i18n";
@@ -18,11 +19,12 @@ const cart: Cart = { items: [], count: 0, itemsTotal: 0, vatTotal: 0, changed: f
 function Field({ initial = cart }: { initial?: Cart }) {
   const [current, setCurrent] = useState(initial);
   const [pending, setPending] = useState(false);
-  const state: CartState = { status: "ready", cart: current, error: null, pending, adjusted: false,
+  const [error, setError] = useState<unknown | null>(null);
+  const state: CartState = { status: "ready", cart: current, error, pending, adjusted: false,
     acknowledgeAdjustment: vi.fn(), apply: setCurrent, reload: vi.fn(), mutate: async change => {
-      setPending(true);
+      setPending(true); setError(null);
       try { const result = await change(); setCurrent(result); return result; }
-      catch { return null; }
+      catch (error) { setError(error); return null; }
       finally { setPending(false); }
     } };
   return <StoreContext value={store}><CartContext value={state}><DiscountField /></CartContext></StoreContext>;
@@ -64,14 +66,23 @@ describe("discount entry", () => {
     mocks.removeDiscount.mockRejectedValueOnce(new Error("offline")).mockResolvedValue(cart);
     const view = render(<Field initial={{ ...cart, discount: { code: "SAVE", name: "Savings", amount: 12 } }} />);
     await user.click(screen.getByRole("button", { name: "Remove code" }));
-    expect(await screen.findByText("The discount code could not be removed. Please try again.")).toBeTruthy();
+    expect(await screen.findByText("Removing the code could not be confirmed. Refresh the current cart before trying again.")).toBeTruthy();
     expect(screen.getByText("SAVE")).toBeTruthy();
     view.unmount();
     render(<Field initial={{ ...cart, discountProblem: "A backend explanation" }} />);
-    expect(screen.queryByText("A backend explanation")).toBeNull();
+    expect(screen.getByText("A backend explanation")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Remove code" }));
     await waitFor(() => expect(screen.queryByText("This discount code could not be applied.")).toBeNull());
     expect(screen.getByText("Discount code removed.")).toBeTruthy();
     expect(mocks.removeDiscount).toHaveBeenCalledTimes(2);
   });
+});
+
+it("retains an unaccepted code and the literal code-field explanation", async () => {
+  const user = userEvent.setup(); mocks.applyDiscount.mockRejectedValueOnce(new HttpError("http", 400, { errors: { code: ["Delivery is already free. <b>literal</b>"] } }));
+  render(<Field />); await user.type(screen.getByRole("textbox", { name: "Discount code" }), "FREESHIP");
+  await user.click(screen.getByRole("button", { name: "Apply" }));
+  expect(await screen.findByText("Delivery is already free. <b>literal</b>")).toBeTruthy();
+  expect(document.querySelector(".discount-status b")).toBeNull(); expect(screen.getByRole("textbox", { name: "Discount code" })).toHaveProperty("value", "FREESHIP");
+  expect(mocks.applyDiscount).toHaveBeenCalledOnce();
 });
