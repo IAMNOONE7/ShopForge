@@ -40,33 +40,38 @@ beforeEach(async () => {
 });
 afterEach(async () => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); await i18n.changeLanguage("en"); });
 
-it("explicitly edits search/feed flags and preserves immutable identity and other settings", async () => {
-  const user = userEvent.setup(); route("CatalogManager", saved[1]);
+it.each(["text", "select", "multiSelect"] as const)("explicitly edits %s search/feed flags and preserves immutable identity and other settings", async type => {
+  const index = type === "text" ? 1 : 0;
+  const original = { ...saved[index], type, isSearchable: true }; saved[index] = original;
+  const user = userEvent.setup(); route("CatalogManager", original);
   await user.click(await screen.findByRole("button", { name: "Edit definition" }));
   expect(edit().getByRole("textbox", { name: "Code" })).toHaveProperty("readOnly", true);
   expect(edit().getByRole("textbox", { name: "Type" })).toHaveProperty("readOnly", true);
   await user.click(edit().getByRole("checkbox", { name: "Include in feeds" }));
-  await user.click(edit().getByRole("checkbox", { name: "Include text in search" }));
+  await user.click(edit().getByRole("checkbox", { name: "Include in product search" }));
   await user.click(edit().getByRole("button", { name: "Save changes" }));
   await screen.findByText("Attribute saved.");
-  expect(api.updateAttribute).toHaveBeenCalledWith("store-a", textAttribute.id, {
-    name: "Care", unit: null, sortOrder: 2, isFilterable: false, isVisibleOnProductPage: true, isInFeeds: false, isSearchable: false,
+  expect(api.updateAttribute).toHaveBeenCalledWith("store-a", original.id, {
+    name: original.name, unit: null, sortOrder: 2, isFilterable: original.isFilterable, isVisibleOnProductPage: true, isInFeeds: false, isSearchable: false,
   }, expect.any(AbortSignal));
+  expect(saved[index].options).toEqual(original.options);
 });
 
-it("keeps search disabled on non-text definitions", async () => {
+it.each(["integer", "decimal", "boolean", "date"] as const)("keeps search disabled on %s definitions", async type => {
+  saved[0] = { ...saved[0], type, options: [] };
   const user = userEvent.setup(); route(); await user.click(await screen.findByRole("button", { name: "Edit definition" }));
-  expect(edit().getByRole("checkbox", { name: "Include text in search" })).toHaveProperty("disabled", true);
+  expect(edit().getByRole("checkbox", { name: "Include in product search" })).toHaveProperty("disabled", true);
   expect(edit().getByRole("checkbox", { name: "Include in feeds" })).toHaveProperty("checked", true);
 });
 
 it.each(["Beech", "---"])("renames an option to %j without slug validation or changing any code", async name => {
+  saved[0].isSearchable = true;
   const user = userEvent.setup(); route(); await user.click(await screen.findByRole("button", { name: "Rename Oak" }));
   const field = edit().getByRole("textbox", { name: "Option name" }); await user.clear(field); await user.type(field, name);
   await user.click(edit().getByRole("button", { name: "Save changes" }));
   await screen.findByText("Option renamed; its code is unchanged.");
   expect(api.renameOption).toHaveBeenCalledWith("store-a", attributeDefinition.id, attributeDefinition.options[0].id, name, expect.any(AbortSignal));
-  expect(saved[0].options[0].code).toBe("oak"); expect(saved[0].isInFeeds).toBe(true);
+  expect(saved[0].options[0].code).toBe("oak"); expect(saved[0].isInFeeds).toBe(true); expect(saved[0].isSearchable).toBe(true);
 });
 
 it("moves options locally and sends one complete order only on explicit save", async () => {
@@ -159,13 +164,71 @@ it.each(["Owner", "Admin", "CatalogManager", "OrderManager", "Warehouse", "Suppo
   expect(screen.queryByRole("button", { name: "Rename Oak" }) !== null).toBe(allowed);
 });
 
-it("clears search eligibility when creation switches away from text, while retaining the explicit feed choice", async () => {
+it.each(["integer", "decimal", "boolean", "date"] as const)("clears search eligibility when creation switches to %s, while retaining the explicit feed choice", async type => {
   const user = userEvent.setup(); const create = vi.spyOn(api, "createAttribute").mockResolvedValue(attributeDefinition);
   render(<MemoryRouter><NewAttributeForm storeId="store-a" onCreated={vi.fn()} /></MemoryRouter>);
   await user.type(screen.getByRole("textbox", { name: "Name" }), "Dimensions"); await user.selectOptions(screen.getByRole("combobox", { name: "Type" }), "text");
-  await user.click(screen.getByRole("checkbox", { name: "Include text in search" })); await user.click(screen.getByRole("checkbox", { name: "Include in feeds" }));
-  await user.selectOptions(screen.getByRole("combobox", { name: "Type" }), "integer"); await user.click(screen.getByRole("button", { name: "Create attribute" }));
-  expect(create.mock.calls[0][1]).toMatchObject({ type: "integer", isSearchable: false, isInFeeds: true });
+  await user.click(screen.getByRole("checkbox", { name: "Include in product search" })); await user.click(screen.getByRole("checkbox", { name: "Include in feeds" }));
+  await user.selectOptions(screen.getByRole("combobox", { name: "Type" }), type); await user.click(screen.getByRole("button", { name: "Create attribute" }));
+  expect(create.mock.calls[0][1]).toMatchObject({ type, isSearchable: false, isInFeeds: true });
+});
+
+it.each((["select", "multiSelect"] as const).flatMap(type => [true, false].map(isSearchable => ({ type, isSearchable }))))(
+  "creates $type with explicit search eligibility $isSearchable and independent filter/feed flags", async ({ type, isSearchable }) => {
+    const user = userEvent.setup(); const create = vi.spyOn(api, "createAttribute").mockResolvedValue(attributeDefinition);
+    render(<MemoryRouter><NewAttributeForm storeId="store-a" onCreated={vi.fn()} /></MemoryRouter>);
+    await user.type(screen.getByRole("textbox", { name: "Name" }), "Tip");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Type" }), type);
+    const search = screen.getByRole("checkbox", { name: "Include in product search" });
+    expect(search).toHaveProperty("disabled", false);
+    if (isSearchable) await user.click(search);
+    await user.click(screen.getByRole("checkbox", { name: "Filter" }));
+    await user.type(screen.getByRole("textbox", { name: "Initial options" }), "Torx\nPhillips");
+    await user.click(screen.getByRole("button", { name: "Create attribute" }));
+    expect(create).toHaveBeenCalledExactlyOnceWith("store-a", {
+      name: "Tip", code: null, type, unit: null, sortOrder: 0, options: ["Torx", "Phillips"],
+      isFilterable: false, isVisibleOnProductPage: true, isInFeeds: false, isSearchable,
+    }, expect.any(AbortSignal));
+  },
+);
+
+it("retains a search choice between text and option types without turning it on after an unsupported type", async () => {
+  const user = userEvent.setup(); render(<MemoryRouter><NewAttributeForm storeId="store-a" onCreated={vi.fn()} /></MemoryRouter>);
+  const type = screen.getByRole("combobox", { name: "Type" });
+  const search = screen.getByRole("checkbox", { name: "Include in product search" });
+  await user.click(search);
+  await user.type(screen.getByRole("textbox", { name: "Initial options" }), "Torx");
+  await user.selectOptions(type, "multiSelect");
+  expect(search).toHaveProperty("checked", true);
+  expect(screen.getByRole("textbox", { name: "Initial options" })).toHaveProperty("value", "Torx");
+  await user.selectOptions(type, "text"); expect(search).toHaveProperty("checked", true);
+  await user.selectOptions(type, "select"); expect(search).toHaveProperty("checked", true);
+  expect(screen.getByRole("textbox", { name: "Initial options" })).toHaveProperty("value", "");
+  await user.selectOptions(type, "integer"); expect(search).toHaveProperty("checked", false);
+  await user.selectOptions(type, "multiSelect"); expect(search).toHaveProperty("checked", false);
+});
+
+it("keeps an option draft after an older API refuses its search flag and retries only after an explicit change", async () => {
+  const user = userEvent.setup(); const onCreated = vi.fn();
+  const create = vi.spyOn(api, "createAttribute").mockRejectedValueOnce(new HttpError("http", 400, {
+    errors: { isSearchable: ["Only text attributes can contribute words to search."] },
+  })).mockResolvedValue(attributeDefinition);
+  render(<MemoryRouter><NewAttributeForm storeId="store-a" onCreated={onCreated} /></MemoryRouter>);
+  await user.type(screen.getByRole("textbox", { name: "Name" }), "Tip");
+  const search = screen.getByRole("checkbox", { name: "Include in product search" });
+  await user.click(search);
+  await user.type(screen.getByRole("textbox", { name: "Initial options" }), "Torx");
+  await user.click(screen.getByRole("button", { name: "Create attribute" })); await screen.findByRole("alert");
+  expect(create).toHaveBeenCalledTimes(1); expect(onCreated).not.toHaveBeenCalled();
+  expect(screen.getByRole("textbox", { name: "Name" })).toHaveProperty("value", "Tip");
+  expect(screen.getByRole("textbox", { name: "Initial options" })).toHaveProperty("value", "Torx");
+  expect(search).toHaveProperty("checked", true);
+  await user.click(search); await user.click(screen.getByRole("button", { name: "Create attribute" }));
+  await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
+  expect(create.mock.calls.map(([, input]) => input)).toEqual([
+    { name: "Tip", code: null, type: "select", unit: null, sortOrder: 0, options: ["Torx"], isFilterable: true, isVisibleOnProductPage: true, isInFeeds: false, isSearchable: true },
+    { name: "Tip", code: null, type: "select", unit: null, sortOrder: 0, options: ["Torx"], isFilterable: true, isVisibleOnProductPage: true, isInFeeds: false, isSearchable: false },
+  ]);
 });
 
 it("retains an uncertain creation without offering another POST and links to actual definitions for recovery", async () => {

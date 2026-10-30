@@ -82,15 +82,15 @@ describe("attribute definitions", () => {
     expect(await screen.findByRole("alert")).toBeTruthy();
   });
 
-  it.each([
+  it.each((["text", "select", "multiSelect"] as const).flatMap(type => [
     { isInFeeds: true, isSearchable: true },
     { isInFeeds: false, isSearchable: false },
-  ])("preserves search and feed flags $isSearchable/$isInFeeds across a failed edit and retry", async (flags) => {
+  ].map(flags => ({ type, flags }))))("preserves $type search and feed flags $flags across a failed edit and retry", async ({ type, flags }) => {
     const user = userEvent.setup();
-    const text = { ...definition, ...flags, type: "text" as const, isFilterable: false, sortOrder: 0, options: [] };
-    const read = vi.spyOn(api, "attributes").mockResolvedValue([text]);
+    const current = { ...definition, ...flags, type, isFilterable: false, sortOrder: 0, options: type === "text" ? [] : definition.options };
+    const read = vi.spyOn(api, "attributes").mockResolvedValue([current]);
     const update = vi.spyOn(api, "updateAttribute").mockRejectedValueOnce(new HttpError("http", 400)).mockImplementation(async () => {
-      const updated = { ...text, name: "Details" }; read.mockResolvedValue([updated]); return updated;
+      const updated = { ...current, name: "Details" }; read.mockResolvedValue([updated]); return updated;
     });
     route("/attributes/attribute-a");
     await user.click(await screen.findByRole("button", { name: "Edit definition" }));
@@ -99,6 +99,8 @@ describe("attribute definitions", () => {
     await user.click(screen.getByRole("button", { name: "Save changes" }));
     await screen.findByRole("alert");
     expect(name).toHaveProperty("value", "Details");
+    expect(screen.getByRole("checkbox", { name: "Include in product search" })).toHaveProperty("checked", flags.isSearchable);
+    expect(screen.getByRole("checkbox", { name: "Include in product search" })).toHaveProperty("disabled", false);
     await user.click(screen.getByRole("button", { name: "Save changes" }));
     await screen.findByText("Attribute saved.");
     expect(update.mock.calls.map(([, , input]) => input)).toEqual([

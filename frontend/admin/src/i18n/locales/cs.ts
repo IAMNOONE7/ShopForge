@@ -1858,10 +1858,11 @@ const resources = {
   },
   attributes: {
     inFeeds: "Zahrnout do feedů",
-    searchable: "Zahrnout text do vyhledávání",
+    searchable: "Zahrnout do vyhledávání zboží",
     feedsHint: "Povolí použití vlastnosti v podporovaných feedech. O exportu dále rozhoduje nastavení feedu a povinné údaje zboží.",
     searchHint: "Zahrne uložené textové hodnoty do vyhledávání zboží v tomto obchodě.",
-    onlyTextSearch: "Slova do vyhledávání mohou přidávat pouze textové vlastnosti.",
+    optionSearchHint: "Zahrne názvy možností uložených u zboží do vyhledávání v tomto obchodě. Kódy možností se nemění.",
+    onlySearchableTypes: "Slova do vyhledávání mohou přidávat pouze textové a výběrové vlastnosti.",
     editDefinition: "Upravit definici",
     cancelEdit: "Zrušit",
     refresh: "Obnovit vlastnosti",

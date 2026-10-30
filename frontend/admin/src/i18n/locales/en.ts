@@ -1856,10 +1856,11 @@ const resources = {
   },
   attributes: {
     inFeeds: "Include in feeds",
-    searchable: "Include text in search",
+    searchable: "Include in product search",
     feedsHint: "Make this attribute eligible for supported feeds. Feed configuration and required product data still decide what is exported.",
     searchHint: "Include saved text values in product search for this store.",
-    onlyTextSearch: "Only text attributes can contribute words to search.",
+    optionSearchHint: "Include the names of options saved on products in search for this store. Option codes stay unchanged.",
+    onlySearchableTypes: "Only text and option attributes can contribute words to search.",
     editDefinition: "Edit definition",
     cancelEdit: "Cancel",
     refresh: "Refresh attributes",

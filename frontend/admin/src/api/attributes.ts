@@ -6,11 +6,13 @@ const object = (value: unknown): value is Record<string, unknown> => value !== n
 const text = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0;
 const code = (value: unknown): value is string => typeof value === "string" && value.length <= 120 && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
 
+export const isSearchableAttributeType = (type: unknown) => type === "text" || type === "select" || type === "multiSelect";
+
 function definition(value: unknown): value is AttributeDefinition {
   return object(value) && text(value.id) && code(value.code) && text(value.name) && types.includes(value.type as string) &&
     (value.unit === null || typeof value.unit === "string") &&
     ["isFilterable", "isVisibleOnProductPage", "isSearchable", "isInFeeds"].every(key => typeof value[key] === "boolean") &&
-    !(value.type === "text" && value.isFilterable) && !(value.type !== "text" && value.isSearchable) &&
+    !(value.type === "text" && value.isFilterable) && (!value.isSearchable || isSearchableAttributeType(value.type)) &&
     Number.isInteger(value.sortOrder) && Number(value.sortOrder) >= -2147483648 && Number(value.sortOrder) <= 2147483647 &&
     Array.isArray(value.options) && value.options.every(option => object(option) && text(option.id) && code(option.code) && text(option.name)) &&
     new Set(value.options.map(option => option.id)).size === value.options.length &&

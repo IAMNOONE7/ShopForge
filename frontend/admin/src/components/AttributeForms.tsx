@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import { isHttpError } from "../api/http";
+import { isSearchableAttributeType } from "../api/attributes";
 import { api, type AttributeDefinition, type AttributeType, type AttributeUpdate } from "../api";
 import { useAction } from "../useAction";
 import {
@@ -84,7 +85,7 @@ function Fields({
               update("type", type);
               if (type === "text") update("isFilterable", false);
               if (type !== "select" && type !== "multiSelect") update("options", "");
-              if (type !== "text") update("isSearchable", false);
+              if (!isSearchableAttributeType(type)) update("isSearchable", false);
             }}
           >
             {attributeTypes.map((type) => (
@@ -150,9 +151,9 @@ function Fields({
         <label><input name="isInFeeds" type="checkbox" checked={draft.isInFeeds}
           onChange={event => update("isInFeeds", event.target.checked)} />{t("inFeeds")}</label>
         <p className="hint">{t("feedsHint")}</p>
-        <label><input name="isSearchable" type="checkbox" checked={draft.isSearchable} disabled={draft.type !== "text"}
+        <label><input name="isSearchable" type="checkbox" aria-describedby="attribute-search-hint" checked={draft.isSearchable} disabled={!isSearchableAttributeType(draft.type)}
           onChange={event => update("isSearchable", event.target.checked)} />{t("searchable")}</label>
-        <p className="hint">{t(draft.type === "text" ? "searchHint" : "onlyTextSearch")}</p>
+        <p id="attribute-search-hint" className="hint">{t(draft.type === "text" ? "searchHint" : isSearchableAttributeType(draft.type) ? "optionSearchHint" : "onlySearchableTypes")}</p>
       </fieldset>
       {creating && (draft.type === "select" || draft.type === "multiSelect") && (
         <div className="attribute-options-input">
@@ -227,7 +228,7 @@ export function NewAttributeForm({
           isFilterable: draft.type !== "text" && draft.isFilterable,
           isVisibleOnProductPage: draft.isVisibleOnProductPage,
           isInFeeds: draft.isInFeeds,
-          isSearchable: draft.type === "text" && draft.isSearchable,
+          isSearchable: isSearchableAttributeType(draft.type) && draft.isSearchable,
           sortOrder: Number(draft.sortOrder),
           options: optionNames(draft.options),
         }, request.signal);
@@ -278,7 +279,7 @@ export function EditAttributeForm({ definition, disabled, pending, onSave, onCan
     if (next.length) { document.getElementById(`attribute-${next[0].field === "sortOrder" ? "sort" : next[0].field}`)?.focus(); return; }
     await onSave({ name: draft.name.trim(), unit: draft.unit.trim() || null,
       isFilterable: definition.type !== "text" && draft.isFilterable, isVisibleOnProductPage: draft.isVisibleOnProductPage,
-      isInFeeds: draft.isInFeeds, isSearchable: definition.type === "text" && draft.isSearchable, sortOrder: Number(draft.sortOrder) });
+      isInFeeds: draft.isInFeeds, isSearchable: isSearchableAttributeType(definition.type) && draft.isSearchable, sortOrder: Number(draft.sortOrder) });
   }
   return <form className="attribute-form" noValidate onSubmit={event => void submit(event)}>
     {issues.length > 0 && <InlineMessage tone="error">{t("checkFields")}</InlineMessage>}

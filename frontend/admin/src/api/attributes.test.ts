@@ -18,13 +18,30 @@ describe("attribute lifecycle contracts", () => {
     expect(fetch.mock.calls[0][1].signal).toBe(signal);
   });
   it.each([null, {}, [null], [definition, definition], [{ ...definition, isInFeeds: undefined }],
-    [{ ...definition, isSearchable: true }], [{ ...textAttribute, isFilterable: true }], [{ ...textAttribute, options: definition.options }],
+    ...["integer", "decimal", "boolean", "date"].map(type => [{ ...definition, type, options: [], isSearchable: true }]),
+    [{ ...textAttribute, isFilterable: true }], [{ ...textAttribute, options: definition.options }],
     [{ ...definition, type: "future" }], [{ ...definition, sortOrder: 2.5 }], [{ ...definition, options: null }],
     [{ ...definition, options: [definition.options[0], definition.options[0]] }],
     [{ ...definition, options: [{ ...definition.options[0], code: "Bad Code" }] }],
-  ])("rejects an incomplete or ambiguous collection %j", async value => {
+  ].map(value => ({ value })))("rejects an incomplete or ambiguous collection $value", async ({ value }) => {
     serve(value); await expect(api.attributes("store")).rejects.toMatchObject({ kind: "invalid-response" });
   });
+  it.each((["text", "select", "multiSelect"] as const).flatMap(type => [true, false].map(isSearchable => ({ type, isSearchable }))))(
+    "round-trips $type search eligibility $isSearchable without changing other flags or options", async ({ type, isSearchable }) => {
+      const current = { ...definition, type, isFilterable: false, isSearchable, options: type === "text" ? [] : definition.options };
+      serve([current]); expect(await api.attributes("store")).toEqual([current]);
+      const input: AttributeInput = { code: current.code, name: current.name, type, unit: current.unit, sortOrder: current.sortOrder,
+        isFilterable: false, isVisibleOnProductPage: current.isVisibleOnProductPage, isInFeeds: current.isInFeeds,
+        isSearchable, options: current.options.map(option => option.name) };
+      const created = serve(current);
+      expect(await api.createAttribute("store", input)).toEqual(current);
+      expect(JSON.parse(created.mock.calls[0][1].body)).toEqual(input);
+      const changed = { ...settings, isFilterable: false, isSearchable: !isSearchable };
+      const updated = serve({ ...current, ...changed });
+      expect(await api.updateAttribute("store", current.id, changed)).toEqual({ ...current, ...changed });
+      expect(JSON.parse(updated.mock.calls[0][1].body)).toEqual(changed);
+    },
+  );
   it("creates with explicit search/feed settings and saves the complete permitted settings only", async () => {
     const input: AttributeInput = { code: "care", name: "Care", type: "text", unit: null, isFilterable: false, isVisibleOnProductPage: true,
       sortOrder: 2, isInFeeds: true, isSearchable: true, options: [] };
@@ -36,13 +53,14 @@ describe("attribute lifecycle contracts", () => {
     expect(JSON.parse(updated.mock.calls[0][1].body)).toEqual(settings);
     expect(updated.mock.calls[0][0]).toBe(`/api/admin/stores/store%2Fa/attributes/${definition.id}`);
   });
-  it.each([{ ...definition, name: "Other" }, { ...definition, ...settings, isInFeeds: true }, { ...definition, ...settings, id: "other" }])("does not acknowledge a mismatched settings answer %j", async value => {
+  it.each([{ ...definition, name: "Other" }, { ...definition, ...settings, isInFeeds: true }, { ...definition, ...settings, isSearchable: true }, { ...definition, ...settings, id: "other" }])("does not acknowledge a mismatched settings answer %j", async value => {
     serve(value); await expect(api.updateAttribute("store", definition.id, settings)).rejects.toMatchObject({ kind: "invalid-response" });
   });
   it("renames only words and accepts a duplicate label or punctuation while retaining the code", async () => {
-    const value = { ...definition, options: definition.options.map((option, index) => index === 0 ? { ...option, name: "Beech" } : option) };
+    const before = { ...definition, isSearchable: true };
+    const value = { ...before, options: definition.options.map((option, index) => index === 0 ? { ...option, name: "Beech" } : option) };
     const fetch = serve(value); const signal = new AbortController().signal;
-    await changeAttribute("store", definition, { kind: "rename", optionId: definition.options[0].id, name: "Beech" }, signal);
+    await changeAttribute("store", before, { kind: "rename", optionId: definition.options[0].id, name: "Beech" }, signal);
     expect(fetch.mock.calls[0][0]).toBe(`/api/admin/stores/store/attributes/${definition.id}/options/${definition.options[0].id}`);
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ name: "Beech" });
     expect(fetch.mock.calls[0][1].signal).toBe(signal);
