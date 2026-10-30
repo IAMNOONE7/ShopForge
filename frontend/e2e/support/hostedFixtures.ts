@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadHostedEnvironment, hostedStoreOrigin, allowedHostedWrite, adminPolicy, storefrontPolicy, type HostedEnvironment } from "./hostedEnvironment.ts";
 import { parseMarker, parseRun, parseRunOwner, type IsolatedRun } from "./isolatedEnvironment.ts";
+import { observeHostedAssets } from "./hostedAssets.ts";
 import en from "../../admin/src/i18n/locales/en.ts";
 import cs from "../../admin/src/i18n/locales/cs.ts";
 
@@ -33,10 +34,7 @@ export function expectPageHeaders(response: APIResponse, app: App) {
   expect(response.headers()["content-security-policy"]).toBe(app === "admin" ? adminPolicy : storefrontPolicy);
   expect(response.headers()["referrer-policy"]).toBe(app === "admin" ? "no-referrer" : "strict-origin-when-cross-origin");
 }
-export function expectAssetHeaders(headers: Record<string, string>, path: string) {
-  expect(headers["cache-control"]).toBe("public, max-age=31536000, immutable");
-  expect(headers["content-type"]).toMatch(path.endsWith(".css") ? /^text\/css\b/ : /^(?:text|application)\/javascript\b/);
-}
+export { expectAssetHeaders } from "./hostedAssets.ts";
 
 export const test = base.extend<{ hosted: HostedSession; hostedBrowser: void }>({
   hosted: async ({ request }, use, testInfo) => {
@@ -109,25 +107,20 @@ export const test = base.extend<{ hosted: HostedSession; hostedBrowser: void }>(
       });
     }, testInfo.project.name.split("-")[0]);
     context.on("page", page => {
+      observeHostedAssets(page, { assets, failures: assetFailures, checks }, path => {
+        const app = path.startsWith("/admin/") ? "admin" : "storefront";
+        return buildFile(app, app === "admin" ? path.slice(7) : path.slice(1));
+      });
       page.on("pageerror", error => pageErrors.push(error.message));
       page.on("console", message => { if (message.type() === "error") consoleErrors.push(message.text()); });
       page.on("requestfailed", request => {
         const path = new URL(request.url()).pathname;
-        if (/\.(?:js|css)$/.test(path)) assetFailures.push(path);
         if (path.startsWith("/api/") && request.failure()?.errorText !== "net::ERR_ABORTED") readFailures.push(`${request.method()} ${path}`);
       });
       page.on("response", response => {
-        const url = new URL(response.url()), path = url.pathname;
+        const path = new URL(response.url()).pathname;
         if (path.startsWith("/api/") && response.status() >= 400 && !(response.status() === 401 && response.request().method() === "GET"
           && ["/api/admin/auth/me", "/api/platform/auth/me", "/api/storefront/account/me"].includes(path))) apiErrors.push(`${response.status()} ${path}`);
-        if (!/^(?:\/admin)?\/assets\/[^/]+\.(?:js|css)$/.test(path)) return;
-        checks.push((async () => {
-          try {
-            expect(response.status()).toBe(200); expectAssetHeaders(response.headers(), path);
-            const app = path.startsWith("/admin/") ? "admin" : "storefront", file = app === "admin" ? path.slice(7) : path.slice(1);
-            const sha256 = digest(await response.body()); expect(sha256).toBe(digest(buildFile(app, file))); assets.push({ path, sha256 });
-          } catch { assetFailures.push(path); }
-        })());
       });
     });
     await context.route("**/*", async route => {
