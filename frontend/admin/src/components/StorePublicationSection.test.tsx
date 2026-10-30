@@ -41,6 +41,20 @@ beforeEach(async () => { await i18n.changeLanguage("en"); vi.stubGlobal("CSS", {
 afterEach(async () => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); window.history.replaceState(null, "", "/"); await i18n.changeLanguage("en"); });
 
 describe("server publication readiness", () => {
+  it.each(["en", "cs"])("links a new store's missing delivery check to method setup in %s", async language => {
+    await i18n.changeLanguage(language);
+    const problem = "The store has no active shipping method. A new store starts with none: add Packeta, or a delivery of the store's own.";
+    vi.spyOn(api, "storeReadiness").mockResolvedValue(failed("orders.shipping-method", problem));
+    const publish = vi.spyOn(api, "publishStore"), add = vi.spyOn(api, "createShippingMethod");
+    render(view());
+    const help = await screen.findByText(i18n.t("stores:readinessHelp.shipping"));
+    const check = within(help.closest("li")!);
+    expect(check.getByRole("link", { name: i18n.t("stores:fixCheck") }).getAttribute("href")).toBe("/stores/store-a/methods");
+    expect(check.getByText(problem)).toBeTruthy();
+    expect(screen.getByRole("button", { name: i18n.t("stores:reviewPublication") })).toHaveProperty("disabled", true);
+    expect(publish).not.toHaveBeenCalled(); expect(add).not.toHaveBeenCalled();
+  });
+
   it.each(["en", "cs"])("labels required parcel-method readiness and preserves its numerical reason in %s", async language => {
     await i18n.changeLanguage(language);
     const problem = '"Locker" sends parcels of at most 2000 g, and packaging weighs 3000 g.';

@@ -1519,7 +1519,7 @@ const resources = {
       product: "Zobrazte zákazníkům alespoň jedno zařazení produktu v obchodě.",
       shippingData: "U každé varianty viditelného produktu doplňte ve společném fyzickém katalogu hmotnost nejméně 1 g a délku, šířku a výšku balení.",
       payment: "Nabídněte alespoň jednu aktivní platební metodu.",
-      shipping: "Zapněte dopravu. Pokladna ověřuje nastavení poskytovatele, cílovou zemi a košík; doprava po balících potřebuje také skutečný ceník a vyhovující balíky.",
+      shipping: "Nový obchod nemá nastavenou dopravu. Přidejte a zapněte ji v části Způsoby objednávky. Pokladna ověřuje nastavení poskytovatele, cílovou zemi a košík; doprava po balících potřebuje také skutečný ceník a vyhovující balíky.",
       parcelMethods: "Zkontrolujte uvedenou službu dopravce, limity balíku i ceny. Po odečtení obalu musí zbýt hmotnost pro zboží; aktivní doprava potřebuje skutečný ceník dopravce nebo vlastní ceny. Upravte nastavení balíků a dopravy nebo ji vypněte.",
       paymentConnected: "Aktivní poskytovatelé plateb musí být nabízeni platformou a mít použitelné přihlašovací údaje účtu. Nastavte účet nebo vypněte dotčenou metodu.",
       shippingConnected: "Aktivní poskytovatelé dopravy musí být nabízeni platformou a mít použitelné přihlašovací údaje účtu. Nastavte účet nebo vypněte dotčenou metodu.",

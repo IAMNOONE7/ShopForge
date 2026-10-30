@@ -1517,7 +1517,7 @@ const resources = {
       product: "Make at least one store listing visible to shoppers.",
       shippingData: "For every variant of each visible product, add a weight of at least 1 g and its packed length, width and height in the shared physical catalog.",
       payment: "Offer at least one active payment method.",
-      shipping: "Offer an active shipping method. Checkout checks provider settings, destination and cart; per-parcel delivery also needs a real rate card and parcels that fit.",
+      shipping: "New stores start without a delivery method. Add and activate one in Checkout methods. Checkout checks provider settings, destination and cart; per-parcel delivery also needs a real rate card and parcels that fit.",
       parcelMethods: "Review the reported carrier service, parcel limits and prices. Packaging must leave weight capacity for goods; active methods need a real carrier or own rate card. Check parcel settings and the method, or deactivate it.",
       paymentConnected: "Active payment providers must be offered by the platform and have usable account credentials. Configure the account or deactivate the affected method.",
       shippingConnected: "Active delivery providers must be offered by the platform and have usable account credentials. Configure the account or deactivate the affected method.",

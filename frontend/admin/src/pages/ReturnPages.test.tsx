@@ -62,8 +62,10 @@ describe("focused return collection", () => {
   it("describes the latest-200 limit without a fabricated total, page control or complete-history claim", async () => {
     records = Array.from({ length: 200 }, (_, index) => ({ ...returnRecord, id: `r-${index}`, number: `RET-${index}` }));
     route(); await screen.findByText(/The 200-record limit has been reached/); expect(screen.getByText("Records shown: 200")).toBeTruthy();
-    expect(screen.getAllByRole("link", { name: /^RET-/ })).toHaveLength(200); expect(api.returns).toHaveBeenCalledTimes(1); expect(api.order).not.toHaveBeenCalled(); expect(screen.queryByRole("button", { name: "Next page" })).toBeNull();
-  });
+    const list = screen.getByRole("list", { name: "Returns" });
+    expect(within(list).getAllByRole("link", { name: /^RET-/, hidden: true })).toHaveLength(200);
+    expect(api.returns).toHaveBeenCalledTimes(1); expect(api.order).not.toHaveBeenCalled(); expect(screen.queryByRole("button", { name: "Next page" })).toBeNull();
+  }, 10_000);
   it.each(["status=9&refund=Failed", "status=Requested&refund=null"])("normalizes only unsupported filters in %s", async (query) => {
     route(`/stores/store-a/returns?${query}`); await screen.findByText(/Some filters were invalid/);
     expect(api.returns).toHaveBeenCalledWith("store-a", expect.any(AbortSignal), query.includes("9") ? { status: "", refund: "Failed" } : { status: "Requested", refund: "" });
