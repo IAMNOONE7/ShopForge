@@ -6,15 +6,14 @@ using ShopForge.Shared.Tenancy;
 
 namespace ShopForge.Orders.Publishing;
 
-// A new store starts with methods it can actually use; the admin renames, prices or deactivates them.
+// A new store starts with the payment method that needs no account, which the admin renames or deactivates. It starts
+// with no delivery method. Delivery is Packeta or the store's own, at prices the merchant sets; a free personal pickup
+// nobody offers made "delivery from" say delivery costs nothing. Readiness refuses to publish a store without one (D-223).
 internal sealed class DefaultStoreMethods(DbContext dbContext, IStoreContext storeContext) : IStoreInitializer
 {
     public Task InitializeAsync(NewStore store, CancellationToken cancellationToken)
     {
-        var storeId = storeContext.StoreId!.Value;
-
-        dbContext.Add(new PaymentMethod(storeId, "bank-transfer", "Bank transfer", ManualPaymentProvider.ProviderKey));
-        dbContext.Add(new ShippingMethod(storeId, "personal-pickup", "Personal pickup", ManualPaymentProvider.ProviderKey, price: 0m, vatRate: 21m, store.Currency));
+        dbContext.Add(new PaymentMethod(storeContext.StoreId!.Value, "bank-transfer", "Bank transfer", ManualPaymentProvider.ProviderKey));
 
         return Task.CompletedTask;
     }

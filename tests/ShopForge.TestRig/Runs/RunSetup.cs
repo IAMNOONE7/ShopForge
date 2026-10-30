@@ -130,6 +130,14 @@ internal sealed class RunSetup(RigOptions options, FakeComgate comgate, FakeMail
         await admin.PutAsync($"{path}/provider-connections/comgate/secret", new { secret }, HttpStatusCode.NoContent, cancellationToken);
         await admin.PostAsync($"{path}/payment-methods", new { name = "Comgate", providerKey = "comgate", isActive = true }, HttpStatusCode.Created, cancellationToken);
 
+        // A store starts with no delivery method (D-223). The journeys collect from the store, so the rig sets that up as a
+        // merchant would, under the code they choose it by.
+        await admin.PostAsync(
+            $"{path}/shipping-methods",
+            new { name = "Personal pickup", providerKey = "manual", price = 0m, vatRate = 21m, isActive = true, requiresPickupPoint = false },
+            HttpStatusCode.Created,
+            cancellationToken);
+
         return new RunStore(id, name, store.GetProperty("primaryHostName").GetString()!);
     }
 

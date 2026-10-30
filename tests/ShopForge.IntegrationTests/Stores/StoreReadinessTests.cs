@@ -164,6 +164,24 @@ public sealed class StoreReadinessTests : IDisposable
         Assert.Contains("Spade", Assert.Single(problems), StringComparison.Ordinal);
     }
 
+    // Delivery is Packeta or the store's own, at prices the merchant sets, so a new store starts with none and readiness
+    // says what to add (D-223).
+    [Fact]
+    public async Task A_new_store_starts_with_no_delivery_method_and_readiness_says_what_to_add()
+    {
+        var (existing, _) = await TestStores.CreateTwoStoresOfOneTenantAsync(_factory.Services);
+        using var admin = await TestUsers.LoginAsync(_withGateway, await TestUsers.CreateAsync(_factory.Services, existing.TenantId));
+        var created = await NewDraftAsync(admin);
+
+        var methods = await admin.GetFromJsonAsync<List<MethodView>>($"/api/admin/stores/{created}/shipping-methods", CancellationToken);
+        var readiness = await ReadinessAsync(new ReadinessWorld(admin, created, Guid.Empty));
+
+        Assert.Empty(methods!);
+        var delivery = Assert.Single(readiness.Checks, check => check.Check == "orders.shipping-method");
+        Assert.False(delivery.IsReady);
+        Assert.Contains("add Packeta", delivery.Problem!, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Every_check_is_named_and_the_draft_store_reports_what_it_is_missing()
     {
@@ -208,6 +226,8 @@ public sealed class StoreReadinessTests : IDisposable
         await UploadLogoAsync(admin, storeId);
         await ProvisioningTests.SetCompanyAsync(admin, storeId);
         var listingId = await admin.ListProductAsync(storeId, await admin.CreateProductAsync(), "Spade", 19.90m);
+
+        await ProvisioningTests.AddDeliveryAsync(admin, storeId);
 
         return new ReadinessWorld(admin, storeId, listingId);
     }
@@ -272,6 +292,8 @@ public sealed class StoreReadinessTests : IDisposable
     private sealed record ReadinessWorld(HttpClient Admin, Guid StoreId, Guid ListingId);
 
     private sealed record CreatedStore(Guid Id);
+
+    private sealed record MethodView(string Code);
 
     private sealed record Readiness(bool IsReady, List<ReadinessCheck> Checks);
 

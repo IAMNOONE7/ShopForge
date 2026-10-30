@@ -35,6 +35,11 @@ public static class DevelopmentOrders
             if (!await dbContext.Set<PaymentMethod>().AnyAsync(cancellationToken))
             {
                 await scope.ServiceProvider.GetRequiredService<IStoreInitializer>().InitializeAsync(new NewStore(settings.Currency), cancellationToken);
+
+                // A store starts with no delivery method (D-223). A development shop gets a priced delivery of its own,
+                // which needs no account, so its checkout works without Packeta's.
+                var price = settings.Currency.Code == "CZK" ? 99m : 4.90m;
+                dbContext.Add(new ShippingMethod(storeId, "own-delivery", "Own delivery", "manual", settings.Currency.Round(price), vatRate: 21m, settings.Currency));
             }
 
             foreach (var (code, name, service, toAPoint) in ParcelMethods)

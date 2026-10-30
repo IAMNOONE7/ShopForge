@@ -65,7 +65,7 @@ internal sealed class OrdersPublishCheck(
                 : StoreReadiness.NotReady("orders.payment-method", "The store has no active payment method."),
             shipping.Count > 0
                 ? StoreReadiness.Ready("orders.shipping-method")
-                : StoreReadiness.NotReady("orders.shipping-method", "The store has no active shipping method."),
+                : StoreReadiness.NotReady("orders.shipping-method", "The store has no active shipping method. A new store starts with none: add Packeta, or a delivery of the store's own."),
             await ConnectedAsync("orders.payment-connected", [.. payment.Select(method => (method.Name, method.ProviderKey))], needsConnection, offered, [], cancellationToken),
             await ConnectedAsync(
                 "orders.shipping-connected",

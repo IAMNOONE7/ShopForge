@@ -30,8 +30,9 @@ public sealed class ProvisioningTests(ShopForgeApiFactory factory)
         Assert.Equal(HttpStatusCode.NotFound, storefront.StatusCode);
     }
 
+    // A store starts with no delivery method (D-223), so going live also waits for one.
     [Fact]
-    public async Task A_store_goes_live_only_once_it_has_branding_and_products()
+    public async Task A_store_goes_live_only_once_it_has_branding_products_and_delivery()
     {
         var (existing, _) = await TestStores.CreateTwoStoresOfOneTenantAsync(factory.Services);
         using var owner = await TestUsers.LoginAsync(factory, await TestUsers.CreateAsync(factory.Services, existing.TenantId));
@@ -44,12 +45,18 @@ public sealed class ProvisioningTests(ShopForgeApiFactory factory)
         await UploadLogoAsync(owner, store.Id);
         await owner.ListProductAsync(store.Id, await owner.CreateProductAsync(), "Spade", 19.90m);
         await SetCompanyAsync(owner, store.Id);
+        await AddDeliveryAsync(owner, store.Id);
         using var published = await owner.PostAsync($"/api/admin/stores/{store.Id}/publish", null, CancellationToken);
         using var storefront = await GetStorefrontAsync(hostName);
 
         Assert.Equal(HttpStatusCode.Conflict, tooEarly.StatusCode);
         Assert.Equal(
-            ["The store has no company details.", "The store has no logo.", "The store has no visible products."],
+            [
+                "The store has no active shipping method. A new store starts with none: add Packeta, or a delivery of the store's own.",
+                "The store has no company details.",
+                "The store has no logo.",
+                "The store has no visible products.",
+            ],
             problems.Order());
         Assert.Equal(HttpStatusCode.OK, published.StatusCode);
         Assert.Equal(HttpStatusCode.OK, storefront.StatusCode);
@@ -296,6 +303,7 @@ public sealed class ProvisioningTests(ShopForgeApiFactory factory)
         await UploadLogoAsync(owner, store.Id);
         await owner.ListProductAsync(store.Id, await owner.CreateProductAsync(), "Spade", 19.90m);
         await SetCompanyAsync(owner, store.Id);
+        await AddDeliveryAsync(owner, store.Id);
         using var publish = await owner.PostAsync($"/api/admin/stores/{store.Id}/publish", null, CancellationToken);
         using var publishedChange = await owner.PutAsJsonAsync(
             $"/api/admin/stores/{store.Id}",
@@ -360,6 +368,17 @@ public sealed class ProvisioningTests(ShopForgeApiFactory factory)
 
     private static CreateStore NewStore(string name, string hostName) =>
         new(name, hostName, "EUR", "en-IE", new Theme("#123456", "#FFFFFF", 6));
+
+    // A delivery of the store's own, which a new store has to be given before it can go live (D-223).
+    internal static async Task AddDeliveryAsync(HttpClient owner, Guid storeId)
+    {
+        using var response = await owner.PostAsJsonAsync(
+            $"/api/admin/stores/{storeId}/shipping-methods",
+            new { Name = "Own delivery", ProviderKey = "manual", Price = 99m, VatRate = 21m, IsActive = true, RequiresPickupPoint = false },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
 
     internal static async Task SetCompanyAsync(HttpClient owner, Guid storeId, string name = "Garden Tools")
     {
