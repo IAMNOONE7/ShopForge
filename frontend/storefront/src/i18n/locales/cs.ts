@@ -223,7 +223,7 @@ const resources = {
     searchPlaceholder: "Co hledáte?",
     searchAction: "Hledat",
     searchLength: "Zadejte 2–200 znaků, nebo nechte pole prázdné pro všechny produkty.",
-    searchTruncated: "Vyhledává se pouze prvních 200 znaků.",
+    searchTruncated: "Vyhledává se pouze začátek dotazu (nejvýše 200 znaků).",
     searchResults: "Výsledky hledání pro „{{query}}“",
     clearSearch: "Zrušit hledání",
     changeSearch: "Změnit hledání",

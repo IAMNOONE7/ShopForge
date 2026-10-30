@@ -223,7 +223,7 @@ const resources = {
     searchPlaceholder: "What are you looking for?",
     searchAction: "Search",
     searchLength: "Use 2–200 characters, or leave empty to browse all products.",
-    searchTruncated: "Only the first 200 characters are searched.",
+    searchTruncated: "Only the beginning of this query is searched (up to 200 characters).",
     searchResults: "Search results for “{{query}}”",
     clearSearch: "Clear search",
     changeSearch: "Change search",

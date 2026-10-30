@@ -1,7 +1,7 @@
 import { useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router";
-import { searchMaximum, searchMinimum } from "../search";
+import { normalizeSearch, searchMaximum, searchMinimum } from "../search";
 
 export function StoreSearch() {
   const location = useLocation();
@@ -15,12 +15,14 @@ function SearchForm({ query }: { query: string }) {
   const navigate = useNavigate();
   const location = useLocation();
   const input = useRef<HTMLInputElement>(null);
+  const composing = useRef(false);
   const [draft, setDraft] = useState(query);
   const [invalid, setInvalid] = useState(false);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const term = draft.trim();
+    if (composing.current) return;
+    const term = normalizeSearch(draft);
     if (term && (term.length < searchMinimum || term.length > searchMaximum)) {
       setInvalid(true);
       input.current?.focus();
@@ -50,10 +52,11 @@ function SearchForm({ query }: { query: string }) {
           type="search"
           placeholder={t("searchPlaceholder")}
           minLength={searchMinimum}
-          maxLength={searchMaximum}
           aria-describedby={invalid ? "store-search-error" : "store-search-hint"}
           aria-invalid={invalid || undefined}
           value={draft}
+          onCompositionStart={() => { composing.current = true; }}
+          onCompositionEnd={() => { composing.current = false; }}
           onChange={(event) => { setDraft(event.target.value); setInvalid(false); }}
         />
         {draft && <button type="button" className="store-search-clear" aria-label={t("clearSearch")} onClick={clear}>

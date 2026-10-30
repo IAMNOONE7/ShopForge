@@ -26,7 +26,7 @@ import { InlineMessage } from "../components/ui/InlineMessage";
 import { RequestError } from "../components/ui/RequestError";
 import { useRequest } from "../useRequest";
 import { useStore } from "../storeContext";
-import { searchTerm, searchMaximum, searchMinimum } from "../search";
+import { normalizeSearch, searchTerm, searchMaximum, searchMinimum } from "../search";
 import { useCurrentSlug, usePageMetadata } from "../usePageMetadata";
 
 export function ProductListPage() {
@@ -38,7 +38,7 @@ export function ProductListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const sortId = useId();
   const categorySlug = slug ?? searchParams.get("category") ?? undefined;
-  const rawQuery = searchParams.get("q")?.trim() ?? "";
+  const rawQuery = normalizeSearch(searchParams.get("q"));
   const query = searchTerm(rawQuery);
   const scope = JSON.stringify([categorySlug ?? "", query]);
   const products = useRequest(

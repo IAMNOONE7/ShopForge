@@ -64,6 +64,62 @@ beforeEach(async () => {
 afterEach(async () => { cleanup(); await i18n.changeLanguage("en"); });
 
 describe("shopper search", () => {
+  it.each(["cs", "en"])("preserves composition while typing and submits composed accents in %s", async language => {
+    await i18n.changeLanguage(language);
+    renderShop(); await screen.findByRole("link", { name: /Dubový stůl/ });
+    const raw = "s\u030croubova\u0301k";
+    const reads = api.getProducts.mock.calls.length;
+    fireEvent.compositionStart(searchInput());
+    fireEvent.change(searchInput(), { target: { value: raw } });
+    expect(searchInput().value).toBe(raw);
+    fireEvent.submit(screen.getByRole("search"));
+    expect(location()).toBe("/");
+    expect(api.getProducts).toHaveBeenCalledTimes(reads);
+    fireEvent.compositionEnd(searchInput(), { data: raw });
+    fireEvent.submit(screen.getByRole("search"));
+    await screen.findByRole("heading", { level: 1, name: i18n.t("catalog:searchResults", { query: "šroubovák" }) });
+    expect(new URLSearchParams(location().split("?")[1]).get("q")).toBe("šroubovák");
+    expect(api.getProducts.mock.lastCall?.[1].get("q")).toBe("šroubovák");
+  });
+
+  it.each([
+    ["e\u0301", false], ["e\u0301".repeat(200), true], ["e\u0301".repeat(201), false],
+    ["x".repeat(198) + "😀", true], ["x".repeat(199) + "😀", false],
+  ])("validates the complete normalized draft without a native partial cut (%j)", async (raw, valid) => {
+    renderShop("/?sort=price"); await screen.findByRole("link", { name: /Dubový stůl/ });
+    const reads = api.getProducts.mock.calls.length;
+    fireEvent.change(searchInput(), { target: { value: raw } });
+    expect(searchInput().value).toBe(raw);
+    fireEvent.submit(screen.getByRole("search"));
+    if (valid) {
+      const normalized = raw.normalize("NFC");
+      await screen.findByRole("heading", { level: 1, name: i18n.t("catalog:searchResults", { query: normalized }) });
+      expect(new URLSearchParams(location().split("?")[1]).get("q")).toBe(normalized);
+      expect(api.getProducts.mock.lastCall?.[1].get("q")).toBe(normalized);
+    } else {
+      expect(location()).toBe("/?sort=price");
+      expect(searchInput().value).toBe(raw);
+      expect(document.activeElement).toBe(searchInput());
+      expect(screen.getByRole("alert").textContent).toContain("2–200");
+      expect(api.getProducts).toHaveBeenCalledTimes(reads);
+    }
+  });
+
+  it.each([
+    ["x".repeat(199) + "e\u0301", "x".repeat(199) + "é", false],
+    ["x".repeat(199) + "😀", "x".repeat(199), true],
+    ["x".repeat(198) + "😀z", "x".repeat(198) + "😀", true],
+  ])("presents direct-URL bounds without altering the original URL or server request (%j)", async (raw, effective, truncated) => {
+    const url = "/?" + new URLSearchParams({ q: raw, sort: "price" });
+    renderShop(url); await screen.findByRole("link", { name: /Dubový stůl/ });
+    expect(screen.getByRole("heading", { level: 1, name: i18n.t("catalog:searchResults", { query: effective }) })).toBeTruthy();
+    expect(document.title).toBe(i18n.t("catalog:searchResults", { query: effective }) + " · Test store");
+    expect(location()).toBe(url);
+    expect(searchInput().value).toBe(raw);
+    expect(api.getProducts.mock.lastCall?.[1].get("q")).toBe(raw);
+    expect(Boolean(screen.queryByText(i18n.t("catalog:searchTruncated")))).toBe(truncated);
+  });
+
   it("submits a trimmed, encoded global query with Enter and discards the old category, facets, sort and page", async () => {
     const user = userEvent.setup();
     renderShop("/c/tables?category=tables&f.material=oak&sort=price&page=4");
@@ -87,7 +143,7 @@ describe("shopper search", () => {
     renderShop("/?sort=price");
     await screen.findByRole("link", { name: /Dubový stůl/ });
     expect(searchInput().minLength).toBe(2);
-    expect(searchInput().maxLength).toBe(200);
+    expect(searchInput().hasAttribute("maxlength")).toBe(false);
     for (const term of [" a ", "a".repeat(201)]) {
       fireEvent.change(searchInput(), { target: { value: term } });
       fireEvent.submit(screen.getByRole("search"));
@@ -256,7 +312,7 @@ describe("shopper search", () => {
     renderShop(`/?q=${long}`);
     await screen.findByRole("link", { name: /Dubový stůl/ });
     expect(screen.getByRole("heading", { name: `Search results for “${long.slice(0, 200)}”` })).toBeTruthy();
-    expect(screen.getByText("Only the first 200 characters are searched.")).toBeTruthy();
+    expect(screen.getByText(i18n.t("catalog:searchTruncated"))).toBeTruthy();
     cleanup();
     api.getProducts.mockResolvedValue(page({ path: [{ name: "Stoly", slug: "tables", parentSlug: null }] }));
     renderShop("/c/tables?q=oak");
