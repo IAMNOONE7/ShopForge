@@ -56,5 +56,9 @@ internal static class SearchConfigurations
     // For codes, which are words in no language: never stemmed, and folded like everything else.
     public static string FoldedWithoutStemming { get; } = FoldedOf(NoStemming);
 
+    // Czech, which PostgreSQL cannot stem, has its word forms found by the query instead (D-225).
+    public static bool ReadsCzechForms(string? culture) =>
+        !string.IsNullOrWhiteSpace(culture) && culture.Split('-')[0].Equals("cs", StringComparison.OrdinalIgnoreCase);
+
     private static string FoldedOf(string configuration) => $"catalog.{configuration}_folded";
 }

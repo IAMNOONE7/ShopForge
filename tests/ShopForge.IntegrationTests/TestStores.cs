@@ -26,8 +26,8 @@ internal static class TestStores
     internal static PlatformHosts Hosts { get; } = new() { Suffix = PlatformSuffix };
 
     // A shop that charges in something other than euros, for the money that does not have two decimals (D-186).
-    public static Task<TestStore> CreateInCurrencyAsync(IServiceProvider services, string currency) =>
-        CreateAsync(services, new Tenant("Test tenant"), $"{currency} store", addTenant: true, currency);
+    public static Task<TestStore> CreateInCurrencyAsync(IServiceProvider services, string currency, string culture = "en-IE") =>
+        CreateAsync(services, new Tenant("Test tenant"), $"{currency} store", addTenant: true, currency, culture);
 
     public static async Task<(TestStore A, TestStore B)> CreateTwoStoresOfOneTenantAsync(IServiceProvider services, string culture = "en-IE")
     {

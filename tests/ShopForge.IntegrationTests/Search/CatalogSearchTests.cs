@@ -33,6 +33,17 @@ public sealed class CatalogSearchTests(ShopForgeApiFactory factory)
         Assert.Equal(["oak-chair"], found.Items.Select(item => item.Slug));
     }
 
+    // A word typed in part finds what it begins, in a language PostgreSQL stems as much as in Czech (D-225).
+    [Fact]
+    public async Task A_word_typed_in_part_finds_what_begins_with_it()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+
+        var found = await SearchAsync(furniture, "walnu");
+
+        Assert.Equal(["walnut-chair"], found.Items.Select(item => item.Slug));
+    }
+
     // A code is not a word in any language, so it is indexed as typed and found as typed.
     [Fact]
     public async Task A_product_is_found_by_its_code()

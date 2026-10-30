@@ -42,12 +42,12 @@ internal sealed class ProductQuery(
         _ => products.OrderBy(product => product.SortOrder).ThenBy(product => product.Name).ThenBy(product => product.Id),
     };
 
-    // Ranked by how well each listing answers what was typed, with the shop's own order breaking ties so that
-    // two equally good answers do not swap places between pages.
+    // Ranked by why each listing answers and then how well (D-225), with the shop's own order breaking ties so
+    // that two equally good answers do not swap places between pages.
     private IQueryable<StoreProduct> ByRelevance(IQueryable<StoreProduct> products, SearchTerms typed) =>
         from product in products
         join hit in typed.Ranked() on product.Id equals hit.Id
-        orderby hit.Rank descending, product.SortOrder, product.Id
+        orderby hit.Tier, hit.Rank descending, product.SortOrder, product.Id
         select product;
 
     // A left join lets PostgreSQL sort with hash joins instead of a correlated lookup per product

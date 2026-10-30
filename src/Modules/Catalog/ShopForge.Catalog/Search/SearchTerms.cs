@@ -16,22 +16,55 @@ internal sealed class SearchTerms
     public const int Shortest = 2;
     public const int Longest = 200;
 
+    // One question asked of the folded vector: a template whose words `format` quotes into place (D-225). Wrapped in
+    // a subquery so it is worked out once for the statement, rather than once for every listing it reads.
+    private const string Question = "(SELECT to_tsquery({1}::regconfig, format({template}, VARIADIC {words}::text[])))";
+
+    private const string Matched = """
+        SELECT * FROM catalog.store_products AS listing
+        WHERE listing.store_id = {0} AND listing.search_vector_folded @@ @@found@@
+        """;
+
+    // The tiers say why a listing answers (D-225): its whole code typed, then every word in its name exactly, by its
+    // forms, or only as a beginning, then anywhere else. `ts_rank` orders a tier, and the shop's own order and the id
+    // break what is left, so pages never swap answers. The code is looked up for each listing found, through the
+    // index on its product, rather than among every variant of every company on the platform.
+    private const string Ranking = """
+        SELECT listing.id AS "id",
+            CASE
+                WHEN EXISTS (
+                    SELECT 1 FROM catalog.product_variants AS variant
+                    WHERE variant.product_id = listing.product_id AND lower(variant.sku) = lower({2}))
+                    THEN 1
+                WHEN listing.search_vector_folded @@ @@exact@@ THEN 2
+                WHEN listing.search_vector_folded @@ @@forms@@ THEN 3
+                WHEN listing.search_vector_folded @@ @@beginnings@@ THEN 4
+                ELSE 5
+            END AS "tier",
+            ts_rank(listing.search_vector_folded, @@found@@) AS "rank"
+        FROM catalog.store_products AS listing
+        WHERE listing.store_id = {0} AND listing.search_vector_folded @@ @@found@@
+        """;
+
     private readonly DbContext _dbContext;
     private readonly string _configuration;
     private readonly Guid _storeId;
+    private readonly SearchMatch _match;
 
-    private SearchTerms(DbContext dbContext, string configuration, Guid storeId, string typed)
+    private SearchTerms(DbContext dbContext, string configuration, Guid storeId, string typed, SearchMatch match)
     {
         _dbContext = dbContext;
         _configuration = configuration;
         _storeId = storeId;
+        _match = match;
         Typed = typed;
     }
 
     public string Typed { get; }
 
     // Null when there is nothing worth searching for, which is how a page with no `q` and a page with `q=`
-    // are the same page.
+    // are the same page. Words that are all excluded are not a search either: they say what is not wanted, and
+    // nothing about what is.
     public static SearchTerms? Of(DbContext dbContext, IStoreContext storeContext, StoreSettings settings, string? typed)
     {
         // Composed first: a letter typed as a base and a separate accent, as some keyboards and pasted text send
@@ -50,31 +83,67 @@ internal sealed class SearchTerms
             terms = terms[..(char.IsHighSurrogate(terms[Longest - 1]) ? Longest - 1 : Longest)];
         }
 
+        var tokens = SearchTokens.Read(terms);
+
+        if (tokens.Count > 0 && tokens.All(token => token.Kind == SearchTokenKind.Excluded))
+        {
+            return null;
+        }
+
         return new SearchTerms(
             dbContext,
             SearchConfigurations.Folded(settings.Culture),
             storeContext.StoreId ?? Guid.Empty,
-            terms);
+            terms,
+            SearchMatch.For(tokens, SearchConfigurations.ReadsCzechForms(settings.Culture)));
     }
 
-    // `websearch_to_tsquery` is the forgiving one: it takes what a person types — bare words, "a phrase", or
-    // -excluded — and never throws on punctuation, which `to_tsquery` does. It reads them in the folded
-    // configuration the folded vector was written in, so both sides lose their accents the same way (D-224).
-    //
     // The store is named in the statement as a second guard and for the planner's sake, not as the only one:
     // EF applies the tenancy filter around a composed query, so the entity match is scoped whether this
     // clause is here or not — removing it fails no test, which is how I know. The keyless ranking query is
     // not filtered by EF, and it is joined against this one, so neither can widen what the page returns.
+    //
+    // Something typed with no word in it, only punctuation or emoji, is a search that finds nothing.
     public IQueryable<StoreProduct> Matching() =>
-        _dbContext.Set<StoreProduct>().FromSql(
-            $"SELECT * FROM catalog.store_products AS listing WHERE listing.store_id = {_storeId} AND listing.search_vector_folded @@ websearch_to_tsquery({_configuration}::regconfig, {Typed})");
+        _match.FindsNothing
+            ? _dbContext.Set<StoreProduct>().Where(_ => false)
+            : _dbContext.Set<StoreProduct>().FromSqlRaw(Statement(Matched, out var parameters), parameters);
 
     // How well each one answers, for the order a shopper means by "best first". The column names are the ones
     // the context's snake-case convention expects of a raw projection: EF asks for `id`, not for `Id`.
     public IQueryable<SearchHit> Ranked() =>
-        _dbContext.Database.SqlQuery<SearchHit>(
-            $"SELECT listing.id AS \"id\", ts_rank(listing.search_vector_folded, websearch_to_tsquery({_configuration}::regconfig, {Typed})) AS \"rank\" FROM catalog.store_products AS listing WHERE listing.store_id = {_storeId} AND listing.search_vector_folded @@ websearch_to_tsquery({_configuration}::regconfig, {Typed})");
+        _match.FindsNothing
+            ? _dbContext.Database.SqlQueryRaw<SearchHit>("""SELECT NULL::uuid AS "id", 0 AS "tier", 0::real AS "rank" WHERE FALSE""")
+            : _dbContext.Database.SqlQueryRaw<SearchHit>(Statement(Ranking, out var parameters), parameters);
+
+    // The statement's own text, with every question written out and numbered; what was typed only ever travels as a
+    // parameter. The configuration comes from a fixed table of names, never from a request (D-178).
+    private string Statement(string sql, out object[] parameters)
+    {
+        var values = new List<object> { _storeId, _configuration, Typed };
+        var questions = new Dictionary<string, SearchQueryText>
+        {
+            ["found"] = _match.Found,
+            ["exact"] = _match.ExactInName,
+            ["forms"] = _match.FormsInName,
+            ["beginnings"] = _match.BeginningsInName,
+        };
+
+        foreach (var (name, question) in questions.Where(question => sql.Contains($"@@{question.Key}@@", StringComparison.Ordinal)))
+        {
+            var asked = Question
+                .Replace("{template}", "{" + values.Count + "}", StringComparison.Ordinal)
+                .Replace("{words}", "{" + (values.Count + 1) + "}", StringComparison.Ordinal);
+            values.Add(question.Template);
+            values.Add(question.Words.ToArray());
+            sql = sql.Replace($"@@{name}@@", asked, StringComparison.Ordinal);
+        }
+
+        parameters = [.. values];
+
+        return sql;
+    }
 }
 
-// One listing that answers, and how well.
-internal sealed record SearchHit(Guid Id, float Rank);
+// One listing that answers, the tier that says why, and how well within it.
+internal sealed record SearchHit(Guid Id, int Tier, float Rank);

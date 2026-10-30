@@ -34,6 +34,18 @@ public sealed class SearchConfigurationsTests
         Assert.Equal(16, SearchConfigurations.AllFolded.Count);
     }
 
+    // Czech, which PostgreSQL cannot stem, has its forms found by the query; Slovak, close as it is, is not Czech.
+    [Theory]
+    [InlineData("cs-CZ", true)]
+    [InlineData("cs", true)]
+    [InlineData("CS-cz", true)]
+    [InlineData("sk-SK", false)]
+    [InlineData("en-IE", false)]
+    [InlineData(null, false)]
+    [InlineData(" ", false)]
+    public void Only_czech_has_its_forms_found_by_the_query(string? culture, bool czech) =>
+        Assert.Equal(czech, SearchConfigurations.ReadsCzechForms(culture));
+
     [Fact]
     public void Codes_are_read_folded_and_never_stemmed() =>
         Assert.Equal("catalog.simple_folded", SearchConfigurations.FoldedWithoutStemming);

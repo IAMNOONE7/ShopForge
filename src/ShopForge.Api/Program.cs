@@ -290,7 +290,8 @@ if (app.Environment.IsDevelopment())
     await app.Services.SeedDevelopmentUsersAsync(demo.TenantId);
     await app.Services.SeedDevelopmentPlatformUsersAsync();
     await app.Services.SeedDevelopmentCatalogAsync(demo.TenantId, demo.WoodenHomeStoreId, demo.VoltElectronicsStoreId);
-    await app.Services.SeedDevelopmentMethodsAsync(demo.TenantId, [demo.WoodenHomeStoreId, demo.VoltElectronicsStoreId]);
+    await app.Services.SeedDevelopmentToolShopAsync(demo.TenantId, demo.ToolShopStoreId);
+    await app.Services.SeedDevelopmentMethodsAsync(demo.TenantId, [demo.WoodenHomeStoreId, demo.VoltElectronicsStoreId, demo.ToolShopStoreId]);
 }
 else if (app.Environment.IsEndToEnd())
 {
