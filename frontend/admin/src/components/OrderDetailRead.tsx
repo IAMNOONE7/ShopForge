@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import { api, type AdminAddress, type AdminOrderDetail } from "../api";
-import { currencyFormatter, formatDateTime, formatNumber } from "../utils/format";
+import { currencyFormatter, formatDateTime, formatNumber, uiLocale } from "../utils/format";
+import { CurrencyValue } from "./CurrencyValue";
 import { safeTrackingUrl } from "./orderDetailFacts";
 import { returnReviewPath } from "../utils/returnQuery";
 import { DownloadButton } from "./ui/DownloadButton";
@@ -117,8 +118,10 @@ export function OrderItems({ order }: { order: AdminOrderDetail }) {
         {order.discount && <Fact label={`${t("discount")} · ${order.discount.name} (${order.discount.code})`}>−{money.format(order.discount.amount)}</Fact>}
         <Fact label={t("shippingPrice")}>{money.format(order.shippingPrice)}</Fact>
         <Fact label={t("vatIncluded")}>{money.format(order.vatTotal)}</Fact>
-        <Fact label={t("orders:total")}>{money.format(order.grandTotal)}</Fact>
+        <Fact label={t("orders:total")}><CurrencyValue value={order.grandTotal} culture={uiLocale(i18n.resolvedLanguage)} currency={order.currency} /></Fact>
       </dl>
+      {typeof order.freeShippingThreshold === "number" && Number.isFinite(order.freeShippingThreshold) && order.freeShippingThreshold > 0 && order.shippingPrice === 0 &&
+        <p className="hint order-free-delivery"><Trans t={t} i18nKey="freeShippingRecorded" components={{ amount: <CurrencyValue value={order.freeShippingThreshold} culture={uiLocale(i18n.resolvedLanguage)} currency={order.currency} /> }} /></p>}
     </section>;
 }
 

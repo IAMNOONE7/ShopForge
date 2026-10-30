@@ -10,6 +10,27 @@ function responses(...values: unknown[]) {
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe("order detail contracts", () => {
+  it.each([undefined, null, 123.456])("preserves the order's recorded threshold on reads (%s)", async freeShippingThreshold => {
+    const value = { ...orderDetail, shippingPrice: 0, freeShippingThreshold };
+    responses(value); expect((await api.order("store-a", value.number)).freeShippingThreshold).toBe(freeShippingThreshold);
+  });
+
+  it.each([{ freeShippingThreshold: 0 }, { freeShippingThreshold: -1 }, { freeShippingThreshold: "200" },
+    { freeShippingThreshold: 200, shippingPrice: 4.9 }])("rejects invalid or inconsistent threshold facts %j", async facts => {
+    responses({ ...orderDetail, ...facts }); await expect(api.order("store-a", orderDetail.number)).rejects.toMatchObject({ kind: "invalid-response" });
+  });
+
+  it.each(["payment", "cancel", "shipment", "refund"] as const)("retains the recorded threshold after %s", async action => {
+    const status = { payment: "Paid", cancel: "Cancelled", shipment: "Shipped", refund: "Refunded" }[action];
+    const shipment = { carrier: "manual", trackingNumber: "TRACK", trackingUrl: null, shippedAt: orderDetail.placedAt };
+    responses({ ...orderDetail, shippingPrice: 0, freeShippingThreshold: 123.456, status, shipment: action === "shipment" ? shipment : null });
+    const result = action === "payment" ? await api.confirmOrderPayment("store-a", orderDetail.number)
+      : action === "cancel" ? await api.cancelOrder("store-a", orderDetail.number)
+        : action === "shipment" ? await api.createShipment("store-a", orderDetail.number, "TRACK")
+          : await api.refundOrder("store-a", orderDetail.number, "delivery-review");
+    expect(result.freeShippingThreshold).toBe(123.456);
+  });
+
   it("keeps recorded payment facts and every attempt/related record in its returned currency", async () => {
     const value = { ...orderDetail, paymentReference: "recorded-reference", paidAt: "2026-10-15T12:00:00Z",
       unappliedPayments: [unappliedPayment], returns: [returnedOrder], paymentAttempts: [orderDetail.paymentAttempts[0], orderDetail.paymentAttempts[0]] };

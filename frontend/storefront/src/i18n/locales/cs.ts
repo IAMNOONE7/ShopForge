@@ -53,6 +53,8 @@ const resources = {
     subcategoriesOf: "Podkategorie: {{name}}",
   },
   discovery: {
+    freeShippingFrom: "Doprava zdarma od <amount/> za zboží po slevách.",
+    deliveryAvailability: "Dostupné způsoby dopravy se ověří v pokladně podle košíku a adresy.",
     shop: "Obchod",
     exploreProducts: "Prohlédnout produkty",
     browseCategories: "Procházet podle kategorií",
@@ -548,6 +550,7 @@ const resources = {
     countryExample: "CZ",
   },
   orders: {
+    freeShippingRecorded: "Doprava byla zdarma: cena zboží po slevách dosáhla tehdy platné částky <amount/>",
     receipt: "Vaše objednávka",
     navigation: "Části objednávky",
     checkingUpdates: "Zde budeme kontrolovat změny platby, vrácení peněz a dokladů.",

@@ -2423,6 +2423,7 @@ const resources = {
     variantId: "Variant ID",
   },
   orderDetails: {
+      freeShippingRecorded: "Delivery was free: the goods total after discounts reached the recorded threshold of <amount/>",
       "paymentTitle": "Recorded payment",
       "paymentHint": "These are the payment facts recorded on this order. An attempt below can have a different outcome.",
       "paymentMethod": "Payment method",

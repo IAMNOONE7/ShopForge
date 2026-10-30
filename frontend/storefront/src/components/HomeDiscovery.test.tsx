@@ -35,6 +35,22 @@ function renderDiscovery(items = categories, item?: ProductSummary) {
 }
 
 describe("store discovery", () => {
+  it.each(["cs", "en"])("shows the current store threshold with qualified availability in %s", async language => {
+    await i18n.changeLanguage(language);
+    const view = render(<MemoryRouter><StoreContext value={{ ...store, freeShippingFrom: 1234.56 }}><HomeDiscovery categories={[]} /></StoreContext></MemoryRouter>);
+    const note = document.querySelector(".discovery-delivery")!;
+    expect(note.querySelector(".currency-value")?.textContent).toBe(formatPrice(1234.56, store));
+    expect(note.textContent).toContain(i18n.t("discovery:deliveryAvailability"));
+    expect(screen.getByRole("link", { name: i18n.t("discovery:exploreProducts") }).getAttribute("href")).toBe("#shop-products");
+    view.rerender(<MemoryRouter><StoreContext value={{ ...store, freeShippingFrom: null }}><HomeDiscovery categories={[]} /></StoreContext></MemoryRouter>);
+    expect(document.querySelector(".discovery-delivery")).toBeNull();
+  });
+
+  it.each([undefined, null, 0, -1, Infinity, NaN])("does not advertise an unavailable or malformed threshold %s", freeShippingFrom => {
+    render(<MemoryRouter><StoreContext value={{ ...store, freeShippingFrom }}><HomeDiscovery categories={[]} /></StoreContext></MemoryRouter>);
+    expect(document.querySelector(".discovery-delivery")).toBeNull();
+  });
+
   it("uses the real brand and links children within their own category, without promotional claims", () => {
     renderDiscovery();
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Wooden Home");

@@ -138,6 +138,7 @@ export type Order = {
   paymentMethod: string;
   shippingMethod: string;
   shippingPrice: number;
+  freeShippingThreshold?: number | null;
   itemsTotal: number;
   vatTotal: number;
   grandTotal: number;

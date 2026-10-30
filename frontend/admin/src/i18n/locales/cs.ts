@@ -2425,6 +2425,7 @@ const resources = {
     variantId: "ID varianty",
   },
   orderDetails: {
+      freeShippingRecorded: "Doprava byla zdarma: cena zboží po slevách dosáhla tehdy platné částky <amount/>",
       "paymentTitle": "Zaznamenaná platba",
       "paymentHint": "Toto jsou platební údaje zaznamenané u objednávky. Jednotlivé pokusy níže mohou mít jiný výsledek.",
       "paymentMethod": "Platební metoda",

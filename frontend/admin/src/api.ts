@@ -306,6 +306,7 @@ export type AdminOrderDetail = {
   carrier: string | null;
   phone: string | null;
   shippingPrice: number;
+  freeShippingThreshold?: number | null;
   itemsTotal: number;
   vatTotal: number;
   grandTotal: number;

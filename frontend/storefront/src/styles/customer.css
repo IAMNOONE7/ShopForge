@@ -228,6 +228,11 @@
   letter-spacing: -0.025em;
 }
 
+.order-free-delivery {
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
 .order-details {
   padding-top: var(--space-6);
   border-top: 1px solid var(--color-border);

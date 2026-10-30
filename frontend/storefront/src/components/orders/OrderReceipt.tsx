@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
+import { isFreeShippingThreshold } from "../../freeShipping";
+import { CurrencyValue } from "../CurrencyValue";
 import type { Order, OrderDocument } from "../../cart";
 import type { Store } from "../../store";
 import { recordedDate } from "../../refundFacts";
@@ -131,8 +133,11 @@ export function OrderReceipt({
           <dl className="order-totals">
             <div><dt>{t("orders:items")}</dt><dd>{money(order.itemsTotal)}</dd></div>
             <div><dt lang={store.culture}>{order.shippingMethod}</dt><dd>{money(order.shippingPrice)}</dd></div>
-            <div className="order-grand-total"><dt>{t("orders:total")}</dt><dd>{money(order.grandTotal)}</dd></div>
+            <div className="order-grand-total"><dt>{t("orders:total")}</dt><dd><CurrencyValue value={order.grandTotal} culture={store.culture} currency={order.currency} /></dd></div>
           </dl>
+          {isFreeShippingThreshold(order.freeShippingThreshold) && order.shippingPrice === 0 && <p className="order-free-delivery">
+            <Trans t={t} i18nKey="orders:freeShippingRecorded" components={{ amount: <CurrencyValue value={order.freeShippingThreshold} culture={store.culture} currency={order.currency} /> }} />
+          </p>}
           {order.discount && (
             <p className="order-discount-note">
               {t(order.discount.amount > 0 ? "orders:discountApplied" : "orders:discountRecorded", {

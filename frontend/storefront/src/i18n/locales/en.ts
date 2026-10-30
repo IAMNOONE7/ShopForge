@@ -53,6 +53,8 @@ const resources = {
     subcategoriesOf: "Subcategories of {{name}}",
   },
   discovery: {
+    freeShippingFrom: "Free delivery from <amount/> in goods after discounts.",
+    deliveryAvailability: "Available methods are checked at checkout for your cart and address.",
     shop: "The shop",
     exploreProducts: "Explore products",
     browseCategories: "Browse by category",
@@ -548,6 +550,7 @@ const resources = {
     countryExample: "IE",
   },
   orders: {
+    freeShippingRecorded: "Delivery was free: the goods total after discounts reached the recorded threshold of <amount/>",
     receipt: "Your order",
     navigation: "Order sections",
     checkingUpdates: "We’ll check for payment, refund and document updates here.",

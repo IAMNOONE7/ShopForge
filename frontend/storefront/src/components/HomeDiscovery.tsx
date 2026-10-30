@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
+import { isFreeShippingThreshold } from "../freeShipping";
 import { Link } from "react-router";
 import type { Category, ProductSummary } from "../api";
 import { productPath } from "../publicPages";
@@ -28,6 +29,10 @@ export function HomeDiscovery({
           <a className="discovery-action" href="#shop-products">
             {t("exploreProducts")} <span aria-hidden="true">↗</span>
           </a>
+          {isFreeShippingThreshold(store.freeShippingFrom) && <div className="discovery-delivery">
+            <p><Trans t={t} i18nKey="freeShippingFrom" components={{ amount: <CurrencyValue value={store.freeShippingFrom} culture={store.culture} currency={store.currency} /> }} /></p>
+            <p className="hint">{t("deliveryAvailability")}</p>
+          </div>}
         </div>
         {product?.imageUrl && (
           <DiscoveryProduct

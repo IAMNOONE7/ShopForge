@@ -27,6 +27,7 @@ function validOrder(value: unknown): value is AdminOrderDetail {
   return text(item.number) && date(item.placedAt) && string(item.status) && string(item.email) && nullableString(item.phone) && currency(item.currency)
     && string(item.paymentMethod) && string(item.shippingMethod) && nullableString(item.carrier)
     && ["shippingPrice", "itemsTotal", "vatTotal", "grandTotal"].every((key) => amount(item[key]))
+    && (item.freeShippingThreshold == null || amount(item.freeShippingThreshold) && Number(item.freeShippingThreshold) > 0 && item.shippingPrice === 0)
     && (item.discount === null || (discount !== null && string(discount.code) && string(discount.name) && amount(discount.amount)))
     && address(item.billingAddress) && address(item.shippingAddress) && nullableString(item.pickupPoint)
     && (item.shipment === null || (shipment !== null && string(shipment.carrier) && string(shipment.trackingNumber) && nullableString(shipment.trackingUrl) && date(shipment.shippedAt)))

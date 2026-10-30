@@ -1,6 +1,7 @@
 import type { Returns } from "./account";
 import { HttpError } from "./api/http";
 import type { Order } from "./cart";
+import { isFreeShippingThreshold } from "./freeShipping";
 
 export type CustomerRefund = {
   returnNumber: string;
@@ -19,6 +20,8 @@ export function recordedDate(value: unknown): string | null {
 
 export function withOrderFacts(order: Order): Order {
   if (!order || typeof order !== "object") throw new HttpError("invalid-response", 200);
+  if (order.freeShippingThreshold != null && (!isFreeShippingThreshold(order.freeShippingThreshold) || order.shippingPrice !== 0))
+    throw new HttpError("invalid-response", 200);
   // Older responses have no settlement facts; their credit status remains unconfirmed.
   const refunds: unknown = order.refunds === undefined ? [] : order.refunds;
   if (!Array.isArray(refunds)) throw new HttpError("invalid-response", 200);

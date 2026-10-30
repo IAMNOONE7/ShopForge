@@ -25,6 +25,28 @@ beforeAll(initializeI18n);
 afterEach(async () => { cleanup(); await i18n.changeLanguage("en"); });
 
 describe("order receipt", () => {
+  it.each(["cs", "en"])("explains the saved free-delivery threshold without using current settings in %s", async language => {
+    await i18n.changeLanguage(language);
+    const saved = { ...order, currency: "KWD", shippingPrice: 0, freeShippingThreshold: 123.456, itemsTotal: 300, grandTotal: 300 };
+    const brand = { ...store, freeShippingFrom: 9999 };
+    const show = (value: Order, currentStore: Store) => <MemoryRouter><OrderReceipt order={value} store={currentStore} heading="Saved order" introduction={null}
+      refresh={{ waiting: false, refreshing: false, error: null, timedOut: false, onRefresh: vi.fn() }} downloadDocument={vi.fn()} /></MemoryRouter>;
+    const view = render(show(saved, brand));
+    const money = new Intl.NumberFormat(store.culture, { style: "currency", currency: saved.currency });
+    expect(document.querySelector(".order-free-delivery .currency-value")?.textContent).toBe(money.format(123.456));
+    expect(document.querySelector(".order-grand-total dd")?.textContent).toBe(money.format(300));
+    expect(document.querySelector(".order-free-delivery")?.textContent).not.toContain("9999");
+    view.rerender(show(saved, { ...brand, freeShippingFrom: null }));
+    expect(document.querySelector(".order-free-delivery .currency-value")?.textContent).toBe(money.format(123.456));
+    view.rerender(show(order, brand));
+    expect(document.querySelector(".order-free-delivery")).toBeNull();
+  });
+
+  it.each([undefined, null, 0, -1, NaN])("does not infer a threshold from zero delivery or a discount code (%s)", freeShippingThreshold => {
+    render(receipt({ ...order, shippingPrice: 0, freeShippingThreshold, discount: { code: "SHIP", name: "Free delivery code", amount: 0 } }));
+    expect(document.querySelector(".order-free-delivery")).toBeNull();
+  });
+
   it.each(["en", "cs"])("shows each public refund separately from saved totals in %s", async language => {
     await i18n.changeLanguage(language);
     const settledAt = "2026-10-08T11:00:00Z", paidAt = "2026-10-07T09:40:00Z";

@@ -1,0 +1,8 @@
+.currency-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.currency-value-group {
+  display: inline-block;
+  white-space: nowrap;
+}

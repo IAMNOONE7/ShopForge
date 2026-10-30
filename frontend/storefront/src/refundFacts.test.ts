@@ -20,6 +20,18 @@ function serve(body: unknown) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("public payment and refund reads", () => {
+  it.each([undefined, null, 123.456])("preserves saved delivery thresholds through both public order routes (%s)", async freeShippingThreshold => {
+    const value = { ...order, freeShippingThreshold };
+    serve(value); expect((await getAccountOrder(order.number)).freeShippingThreshold).toBe(freeShippingThreshold);
+    serve(value); expect((await getOrder(order.number, "test-order-link", new AbortController().signal)).freeShippingThreshold).toBe(freeShippingThreshold);
+  });
+
+  it.each([{ freeShippingThreshold: 0 }, { freeShippingThreshold: -1 }, { freeShippingThreshold: "200" },
+    { freeShippingThreshold: 200, shippingPrice: 4.9 }])("rejects invalid or inconsistent recorded thresholds %j", async facts => {
+    serve({ ...order, ...facts }); await expect(getAccountOrder(order.number)).rejects.toMatchObject({ kind: "invalid-response" });
+    serve({ ...order, ...facts }); await expect(getOrder(order.number, "test-order-link", new AbortController().signal)).rejects.toMatchObject({ kind: "invalid-response" });
+  });
+
   it("reads whole-order refunds through both scoped order routes, without exposing private refund fields", async () => {
     const fetch = serve({ ...order, refunds: [{ ...refund, refundProblem: "private-provider-reason", refundNote: "private-merchant-note" }] });
     const controller = new AbortController();
