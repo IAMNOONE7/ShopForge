@@ -15,7 +15,7 @@ public sealed class SearchCorpusTests(ToolShop shop, ShopForgeApiFactory factory
     [InlineData("šroubovák", "TS-SP-55125 TS-SK-PH2100 TS-ST-T20100 TS-SR-1 | TS-SS-6")]
     [InlineData("sroubovak", "TS-SP-55125 TS-SK-PH2100 TS-ST-T20100 TS-SR-1 | TS-SS-6")]
     [InlineData("ŠROUBOVÁK", "TS-SP-55125 TS-SK-PH2100 TS-ST-T20100 TS-SR-1 | TS-SS-6")]
-    [InlineData("šroubováky", "TS-SP-55125 TS-SK-PH2100 TS-ST-T20100 TS-SR-1 TS-SS-6")]
+    [InlineData("šroubováky", "TS-SP-55125 TS-SK-PH2100 TS-ST-T20100 TS-SR-1 TS-SS-6 | TS-SB-32 TS-NH-PH2 TS-BIT-PH2")]
     [InlineData("sroubovaky", "TS-SP-55125 TS-SK-PH2100 TS-ST-T20100 TS-SR-1 TS-SS-6")]
     [InlineData("šroubováků", "TS-SS-6 | TS-SP-55125 TS-SK-PH2100 TS-ST-T20100 TS-SR-1")]
     [InlineData("šroubovákem", "TS-SP-55125 TS-SK-PH2100 TS-ST-T20100 TS-SR-1 TS-SS-6")]
@@ -61,7 +61,7 @@ public sealed class SearchCorpusTests(ToolShop shop, ShopForgeApiFactory factory
     [InlineData("pozinkovaný", "TS-SM-840 | TS-MM8")]
     [InlineData("magnetický držák", "TS-MD-50 | TS-SB-32")]
     [InlineData("momentový klíč", "TS-KM-12")]
-    [InlineData("torx", "TS-ST-T20100 TS-VD-560 | TS-SB-32")]
+    [InlineData("torx", "TS-ST-T20100 TS-VD-560 | TS-SB-32 | TS-SR-1")]
     // Incomplete words: a beginning of two letters is a search of its own, with or without the accent.
     [InlineData("šr", "TS-SP-55125 TS-SK-PH2100 TS-ST-T20100 TS-SS-6 TS-SR-1 TS-SM-840 TS-SD-440 TS-SM3-10")]
     [InlineData("sr", "TS-SP-55125 TS-SK-PH2100 TS-ST-T20100 TS-SS-6 TS-SR-1 TS-SM-840 TS-SD-440 TS-SM3-10")]
@@ -70,10 +70,25 @@ public sealed class SearchCorpusTests(ToolShop shop, ShopForgeApiFactory factory
     // The product whose code it is comes before the one whose name only mentions it.
     [InlineData("TS-SK-PH2100", "TS-SK-PH2100 | TS-NH-PH2")]
     [InlineData("ts-sk-ph2100", "TS-SK-PH2100 | TS-NH-PH2")]
-    [InlineData("PH2", "TS-SK-PH2100 TS-NH-PH2")]
+    [InlineData("PH2", "TS-SK-PH2100 TS-NH-PH2 TS-BIT-PH2")]
     [InlineData("T20", "TS-ST-T20100")]
     [InlineData("4x40", "TS-SD-440")]
     [InlineData("100 mm", "TS-SK-PH2100 TS-ST-T20100 TS-VD-560")]
+    // What else a product is called (D-226): its brand, its barcode and part number, the merchant's keywords, the
+    // categories it is filed under and those above them, and the options of attributes marked searchable.
+    [InlineData("kovomat", "TS-SP-55125 TS-SK-PH2100 TS-SS-6 TS-NH-PH2 TS-KN-250 TS-KK-180 TS-KS-160 TS-PZ-300 TS-PP-200")]
+    [InlineData("vrtex", "TS-SR-1 TS-KM-12 TS-AV-18 TS-PV-750 TS-UB-125")]
+    [InlineData("kovomat šroubovák", "TS-SP-55125 TS-SK-PH2100 TS-SS-6 TS-NH-PH2")]
+    [InlineData("2000000001005", "TS-SK-PH2100")]
+    [InlineData("KM-1240-210", "TS-KM-12")]
+    [InlineData("km-1240-210", "TS-KM-12")]
+    [InlineData("křížák", "TS-SK-PH2100")]
+    [InlineData("phillips", "TS-SK-PH2100")]
+    [InlineData("hasák", "TS-KSI-250")]
+    [InlineData("šroubovačka", "TS-AV-18")]
+    [InlineData("akuvrtačka", "TS-AV-18")]
+    [InlineData("kombinačky", "TS-KK-180 TS-KS-160 TS-KSI-250")]
+    [InlineData("nářadí", "TS-MD-50")]
     public async Task What_a_shopper_types_finds_what_they_meant_first(string typed, string first)
     {
         var found = await shop.SearchAsync(typed);
@@ -87,13 +102,19 @@ public sealed class SearchCorpusTests(ToolShop shop, ShopForgeApiFactory factory
     }
 
     // Why each answers, read from the ranking itself rather than from the order it makes: the whole code, then every
-    // word in the name exactly, by its forms, or only as a beginning, then anywhere else.
+    // word in the name exactly, by its forms, or only as a beginning, then in what else it is called, then anywhere.
     [Theory]
     [InlineData("TS-SK-PH2100", "TS-SK-PH2100:1 TS-NH-PH2:2")]
     [InlineData("ts-sk-ph2100", "TS-SK-PH2100:1 TS-NH-PH2:2")]
+    [InlineData("2000000001005", "TS-SK-PH2100:1")]
+    [InlineData("km-1240-210", "TS-KM-12:1")]
     [InlineData("šroubovák", "TS-SP-55125:2 TS-SS-6:3 TS-SB-32:5")]
-    [InlineData("šrouby", "TS-SD-440:2 TS-SM-840:3 TS-SM3-10:4 TS-SP-55125:4 TS-MM8:5")]
-    [InlineData("imbus", "TS-KI-6:4 TS-SB-32:5")]
+    [InlineData("šrouby", "TS-SD-440:2 TS-SM-840:3 TS-SM3-10:4 TS-SP-55125:4 TS-MM8:6")]
+    [InlineData("šroubováky", "TS-SS-6:3 TS-BIT-PH2:5 TS-MD-50:6")]
+    [InlineData("kovomat", "TS-SP-55125:5")]
+    [InlineData("křížák", "TS-SK-PH2100:5")]
+    [InlineData("torx", "TS-ST-T20100:2 TS-SR-1:6")]
+    [InlineData("imbus", "TS-KI-6:4 TS-SB-32:6")]
     public async Task Each_answer_comes_for_a_reason_the_ranking_names(string typed, string reasons)
     {
         var tiers = await shop.TiersAsync(typed);
@@ -109,7 +130,9 @@ public sealed class SearchCorpusTests(ToolShop shop, ShopForgeApiFactory factory
     [Theory]
     [InlineData("\"sada bitů\"", "TS-SB-32")]
     [InlineData("zkušební", "")]
-    [InlineData("šroubovák s magnetem", "TS-SK-PH2100 TS-SB-32 TS-MD-50")]
+    [InlineData("šroubovák s magnetem", "TS-SK-PH2100 TS-SB-32 TS-MD-50 TS-BIT-PH2")]
+    [InlineData("cvočky", "TS-HS-70")]
+    [InlineData("křížák", "TS-SK-PH2100")]
     [InlineData("chrom vanadová", "TS-SP-55125 TS-SK-PH2100")]
     [InlineData("šestihranný", "TS-KI-6 TS-SM-840 TS-MM8")]
     [InlineData(":&|!()", "")]

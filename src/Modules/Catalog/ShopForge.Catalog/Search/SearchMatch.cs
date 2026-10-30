@@ -1,12 +1,18 @@
 namespace ShopForge.Catalog.Search;
 
 // The questions a search asks of a listing, each as a `to_tsquery` template and the words that fill it (D-225):
-// whether it is found at all, and whether every word is in its name exactly, by its forms, or only as a beginning,
-// which is what ranks it. A template holds operators and `%L` alone, and PostgreSQL's `format` quotes each word into
-// its place as a literal, so nothing typed is ever read as the query's own syntax.
-internal sealed record SearchMatch(SearchQueryText Found, SearchQueryText ExactInName, SearchQueryText FormsInName, SearchQueryText BeginningsInName)
+// whether it is found at all, and whether every word is in its name exactly, by its forms, or only as a beginning, or
+// in what else it is called (its keywords, brand and categories, D-226), which is what ranks it. A template holds
+// operators and `%L` alone, and PostgreSQL's `format` quotes each word into its place as a literal, so nothing typed
+// is ever read as the query's own syntax.
+internal sealed record SearchMatch(
+    SearchQueryText Found,
+    SearchQueryText ExactInName,
+    SearchQueryText FormsInName,
+    SearchQueryText BeginningsInName,
+    SearchQueryText InWhatItIsCalled)
 {
-    public bool FindsNothing => Found.Words.Count == 0;
+    public bool FindsNothing => Found.Words.Count == 0 && Found.Codes.Count == 0;
 
     public static SearchMatch For(IReadOnlyList<SearchToken> tokens, bool czechForms)
     {
@@ -14,6 +20,7 @@ internal sealed record SearchMatch(SearchQueryText Found, SearchQueryText ExactI
         var exact = new Template();
         var forms = new Template();
         var beginnings = new Template();
+        var called = new Template();
 
         foreach (var token in tokens)
         {
@@ -24,6 +31,7 @@ internal sealed record SearchMatch(SearchQueryText Found, SearchQueryText ExactI
                     found.AnyOf(prefixes, ":*");
                     exact.One(token.Text, ":A");
                     beginnings.AnyOf(prefixes, ":*A");
+                    called.AnyOf(prefixes, ":*AB");
 
                     // A language PostgreSQL stems has its forms already: the word reads as its stem.
                     if (czechForms)
@@ -36,14 +44,17 @@ internal sealed record SearchMatch(SearchQueryText Found, SearchQueryText ExactI
                     }
 
                     break;
+                // A code is read without stemming in every language, as the index holds it: "RENAMED-OAK-7" stays
+                // "renamed" rather than becoming English's "renam" (D-226).
                 case SearchTokenKind.Code:
-                    found.One(token.Text, "");
+                    found.Code(token.Text, "");
 
                     foreach (var tier in new[] { exact, forms, beginnings })
                     {
-                        tier.One(token.Text, ":A");
+                        tier.Code(token.Text, ":A");
                     }
 
+                    called.Code(token.Text, ":AB");
                     break;
                 case SearchTokenKind.Phrase:
                     found.Phrase(token.Words, "");
@@ -53,6 +64,7 @@ internal sealed record SearchMatch(SearchQueryText Found, SearchQueryText ExactI
                         tier.Phrase(token.Words, ":A");
                     }
 
+                    called.Phrase(token.Words, ":AB");
                     break;
                 case SearchTokenKind.Excluded:
                     found.Not(token.Text);
@@ -60,20 +72,28 @@ internal sealed record SearchMatch(SearchQueryText Found, SearchQueryText ExactI
             }
         }
 
-        return new SearchMatch(found.Text, exact.Text, forms.Text, beginnings.Text);
+        return new SearchMatch(found.Text, exact.Text, forms.Text, beginnings.Text, called.Text);
     }
 
     private sealed class Template
     {
         private readonly List<string> _parts = [];
         private readonly List<string> _words = [];
+        private readonly List<string> _codeParts = [];
+        private readonly List<string> _codes = [];
 
-        public SearchQueryText Text => new(string.Join(" & ", _parts), _words);
+        public SearchQueryText Text => new(string.Join(" & ", _parts), _words, string.Join(" & ", _codeParts), _codes);
 
         public void One(string word, string suffix)
         {
             _parts.Add("%L" + suffix);
             _words.Add(word);
+        }
+
+        public void Code(string code, string suffix)
+        {
+            _codeParts.Add("%L" + suffix);
+            _codes.Add(code);
         }
 
         public void AnyOf(IReadOnlyList<string> words, string suffix)
@@ -96,5 +116,6 @@ internal sealed record SearchMatch(SearchQueryText Found, SearchQueryText ExactI
     }
 }
 
-// A `to_tsquery` template and the words for its placeholders, in order.
-internal sealed record SearchQueryText(string Template, IReadOnlyList<string> Words);
+// A `to_tsquery` template and the words for its placeholders, in order, read in the store's language; and the same for
+// the codes, read without stemming. Both must match.
+internal sealed record SearchQueryText(string Template, IReadOnlyList<string> Words, string CodesTemplate, IReadOnlyList<string> Codes);

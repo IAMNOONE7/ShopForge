@@ -107,7 +107,8 @@ internal static class AdminStoreCatalogEndpoints
                 listing.SeoDescription,
                 listing.SeoSocialImageUrl,
                 listing.SeoNoIndex,
-                listing.ArchivedAt))
+                listing.ArchivedAt,
+                listing.SearchKeywords))
             .ToListAsync(cancellationToken);
 
         return TypedResults.Ok(new AdminListResponse<AdminStoreProductResponse>(wanted, total, listed.Page, listed.PageSize));
@@ -151,7 +152,8 @@ internal static class AdminStoreCatalogEndpoints
         CancellationToken cancellationToken)
     {
         var currency = (await storeSettings.GetAsync(cancellationToken)).Currency;
-        var errors = ValidateDetails(request.Name, request.Slug, request.Price, request.VatRate, currency, request.TaxClass, await taxRates.ClassesAsync(cancellationToken));
+        var errors = ValidateDetails(request.Name, request.Slug, request.Price, request.VatRate, currency, request.TaxClass, await taxRates.ClassesAsync(cancellationToken))
+            .Check(Keywords.Fit(request.SearchKeywords), "searchKeywords", KeywordsTooLong);
 
         // The tenant filter makes products of other tenants invisible, so they cannot be listed here.
         var product = await dbContext.Set<Product>().SingleOrDefaultAsync(product => product.Id == request.ProductId, cancellationToken);
@@ -180,6 +182,7 @@ internal static class AdminStoreCatalogEndpoints
         }
 
         var storeProduct = new StoreProduct(storeContext.StoreId!.Value, product!, details, currency);
+        storeProduct.SetSearchKeywords(request.SearchKeywords);
         dbContext.Add(storeProduct);
         await dbContext.SaveChangesAsync(cancellationToken);
         await search.RefreshAsync(storeProduct.Id, cancellationToken);
@@ -214,7 +217,8 @@ internal static class AdminStoreCatalogEndpoints
         // Without an explicit slug the public URL stays as it is, even when the name changes.
         var slug = request.Slug ?? storeProduct.Slug;
         var currency = (await storeSettings.GetAsync(cancellationToken)).Currency;
-        var errors = ValidateDetails(request.Name, slug, request.Price, request.VatRate, currency, request.TaxClass, await taxRates.ClassesAsync(cancellationToken));
+        var errors = ValidateDetails(request.Name, slug, request.Price, request.VatRate, currency, request.TaxClass, await taxRates.ClassesAsync(cancellationToken))
+            .Check(Keywords.Fit(request.SearchKeywords), "searchKeywords", KeywordsTooLong);
 
         if (request.IsVisible && !storeProduct.IsVisible && Unshowable(product) is { } unshowable)
         {
@@ -251,6 +255,12 @@ internal static class AdminStoreCatalogEndpoints
             storeProduct.DescribeToSearchEngines(seo.Title, seo.Description, seo.SocialImageUrl, seo.NoIndex);
         }
 
+        // Left out, the keywords stay as they are; sent empty, they go (D-226).
+        if (request.SearchKeywords is { } keywords)
+        {
+            storeProduct.SetSearchKeywords(keywords);
+        }
+
         // Only the price is worth a line of its own: the rest of an edit is visible in the listing itself, while
         // what something used to cost is not (D-116).
         if (storeProduct.Price != wasPriced)
@@ -270,6 +280,7 @@ internal static class AdminStoreCatalogEndpoints
         Guid storeProductId,
         AssignCategoriesRequest request,
         DbContext dbContext,
+        SearchIndex search,
         CancellationToken cancellationToken)
     {
         var storeProduct = await dbContext.Set<StoreProduct>()
@@ -293,6 +304,9 @@ internal static class AdminStoreCatalogEndpoints
 
         storeProduct.AssignCategories(categories);
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        // The categories a listing is filed under are words it is found by (D-226).
+        await search.RefreshAsync(storeProduct.Id, cancellationToken);
 
         var product = await dbContext.Set<Product>().AsNoTracking().SingleAsync(product => product.Id == storeProduct.ProductId, cancellationToken);
 
@@ -318,7 +332,8 @@ internal static class AdminStoreCatalogEndpoints
                 category.Attributes.OrderBy(assignment => assignment.SortOrder).Select(assignment => assignment.AttributeDefinitionId).ToList(),
                 category.SeoTitle,
                 category.SeoDescription,
-                category.PageText))
+                category.PageText,
+                category.SearchKeywords))
             .ToListAsync(cancellationToken);
 
         // Parents before their children, so the editor can indent the list as it arrives.
@@ -332,6 +347,7 @@ internal static class AdminStoreCatalogEndpoints
         CategoryRequest request,
         DbContext dbContext,
         IStoreContext storeContext,
+        CategorySearchText categorySearch,
         CancellationToken cancellationToken)
     {
         var errors = ValidateCategory(request);
@@ -365,6 +381,7 @@ internal static class AdminStoreCatalogEndpoints
 
         var category = new Category(storeContext.StoreId!.Value, request.Name!, slug, request.SortOrder);
         category.MoveTo(request.ParentId);
+        category.SetSearchKeywords(request.SearchKeywords);
 
         if (request.Seo is { } seo)
         {
@@ -373,6 +390,7 @@ internal static class AdminStoreCatalogEndpoints
 
         dbContext.Add(category);
         await dbContext.SaveChangesAsync(cancellationToken);
+        await categorySearch.RefreshAsync(cancellationToken);
 
         return TypedResults.Created(
             $"/api/admin/stores/{category.StoreId}/categories/{category.Id}",
@@ -385,7 +403,8 @@ internal static class AdminStoreCatalogEndpoints
                 [],
                 category.SeoTitle,
                 category.SeoDescription,
-                category.PageText));
+                category.PageText,
+                category.SearchKeywords));
     }
 
     private static async Task<Results<Ok<AdminCategoryResponse>, ValidationProblem, ProblemHttpResult, NotFound>> UpdateCategoryAsync(
@@ -393,6 +412,7 @@ internal static class AdminStoreCatalogEndpoints
         CategoryRequest request,
         DbContext dbContext,
         TimeProvider clock,
+        CategorySearchText categorySearch,
         CancellationToken cancellationToken)
     {
         var category = await dbContext.Set<Category>()
@@ -459,7 +479,15 @@ internal static class AdminStoreCatalogEndpoints
             category.DescribeToSearchEngines(seo.Title, seo.Description, seo.PageText);
         }
 
+        if (request.SearchKeywords is { } keywords)
+        {
+            category.SetSearchKeywords(keywords);
+        }
+
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        // A new name, a new place or new keywords change what finds everything filed beneath it (D-226).
+        await categorySearch.RefreshAsync(cancellationToken);
 
         return TypedResults.Ok(new AdminCategoryResponse(
             category.Id,
@@ -470,7 +498,8 @@ internal static class AdminStoreCatalogEndpoints
             [.. category.Attributes.OrderBy(assignment => assignment.SortOrder).Select(assignment => assignment.AttributeDefinitionId)],
             category.SeoTitle,
             category.SeoDescription,
-            category.PageText));
+            category.PageText,
+            category.SearchKeywords));
     }
 
 
@@ -566,6 +595,7 @@ internal static class AdminStoreCatalogEndpoints
         DbContext dbContext,
         TimeProvider clock,
         IAuditLog audit,
+        CategorySearchText categorySearch,
         CancellationToken cancellationToken)
     {
         var category = await Categories(dbContext).SingleOrDefaultAsync(candidate => candidate.Id == categoryId, cancellationToken);
@@ -579,6 +609,9 @@ internal static class AdminStoreCatalogEndpoints
         {
             audit.Record("catalog.category.archived", category.Slug);
             await dbContext.SaveChangesAsync(cancellationToken);
+
+            // A retired category's name finds nothing any more (D-226).
+            await categorySearch.RefreshAsync(cancellationToken);
         }
 
         return TypedResults.NoContent();
@@ -588,6 +621,7 @@ internal static class AdminStoreCatalogEndpoints
         Guid categoryId,
         DbContext dbContext,
         IAuditLog audit,
+        CategorySearchText categorySearch,
         CancellationToken cancellationToken)
     {
         var category = await Categories(dbContext).SingleOrDefaultAsync(candidate => candidate.Id == categoryId, cancellationToken);
@@ -601,6 +635,7 @@ internal static class AdminStoreCatalogEndpoints
         {
             audit.Record("catalog.category.restored", category.Slug);
             await dbContext.SaveChangesAsync(cancellationToken);
+            await categorySearch.RefreshAsync(cancellationToken);
         }
 
         return TypedResults.NoContent();
@@ -662,7 +697,10 @@ internal static class AdminStoreCatalogEndpoints
         new RequestErrors()
             .Check(!string.IsNullOrWhiteSpace(request.Name) && request.Name.Trim().Length <= 200, "name", "Name is required (up to 200 characters).")
             .Check(request.Slug is null || Slugs.IsValid(request.Slug), "slug", "Slug may contain lower-case letters, digits and single hyphens.")
-            .Check(request.Name is null || request.Slug is not null || Slugs.Create(request.Name).Length > 0, "slug", "A slug cannot be derived from this name; provide one.");
+            .Check(request.Name is null || request.Slug is not null || Slugs.Create(request.Name).Length > 0, "slug", "A slug cannot be derived from this name; provide one.")
+            .Check(Keywords.Fit(request.SearchKeywords), "searchKeywords", KeywordsTooLong);
+
+    private static readonly string KeywordsTooLong = $"Search keywords can be up to {Keywords.MaxLength} characters.";
 
     // Nothing goes in front of a shopper that delivery cannot be priced for (D-216). Only showing it is refused: a
     // listing already shown from before the rule is readiness's to name, and an edit of its price is no moment to take
@@ -696,7 +734,7 @@ internal static class AdminStoreCatalogEndpoints
         new RequestErrors().Check(false, "parentId", $"Categories can be nested up to {CategoryTree.MaxDepth} levels deep.").ToProblem();
 }
 
-internal sealed record ListProductRequest(Guid ProductId, string? Name, string? Slug, string? Description, decimal Price, decimal VatRate, bool IsVisible, int SortOrder, string? TaxClass = null);
+internal sealed record ListProductRequest(Guid ProductId, string? Name, string? Slug, string? Description, decimal Price, decimal VatRate, bool IsVisible, int SortOrder, string? TaxClass = null, string? SearchKeywords = null);
 
 internal sealed record UpdateStoreProductRequest(
     string? Name,
@@ -707,7 +745,8 @@ internal sealed record UpdateStoreProductRequest(
     bool IsVisible,
     int SortOrder,
     ListingSeoRequest? Seo = null,
-    string? TaxClass = null);
+    string? TaxClass = null,
+    string? SearchKeywords = null);
 
 // What this page says for itself. Absent leaves what is there alone; present replaces all of it (D-165).
 internal sealed record ListingSeoRequest(string? Title, string? Description, string? SocialImageUrl, bool NoIndex);
@@ -716,7 +755,9 @@ internal sealed record CategorySeoRequest(string? Title, string? Description, st
 
 internal sealed record AssignCategoriesRequest(List<Guid>? CategoryIds);
 
-internal sealed record CategoryRequest(string? Name, string? Slug, int SortOrder, CategorySeoRequest? Seo = null, Guid? ParentId = null);
+// Keywords left out leave the stored ones alone, and an empty text clears them (D-226): a screen that does not know them yet
+// changes nothing by saving.
+internal sealed record CategoryRequest(string? Name, string? Slug, int SortOrder, CategorySeoRequest? Seo = null, Guid? ParentId = null, string? SearchKeywords = null);
 
 internal sealed record AdminCategoryResponse(
     Guid Id,
@@ -727,7 +768,8 @@ internal sealed record AdminCategoryResponse(
     List<Guid> AttributeIds,
     string? SeoTitle,
     string? SeoDescription,
-    string? PageText);
+    string? PageText,
+    string? SearchKeywords = null);
 
 internal sealed record AdminStoreProductResponse(
     Guid Id,
@@ -747,7 +789,8 @@ internal sealed record AdminStoreProductResponse(
     string? SeoSocialImageUrl,
     bool SeoNoIndex,
     // Null for a listing in use; when it was retired for one that is not (D-180).
-    DateTimeOffset? ArchivedAt = null)
+    DateTimeOffset? ArchivedAt = null,
+    string? SearchKeywords = null)
 {
     public static AdminStoreProductResponse From(StoreProduct storeProduct, Product product) => new(
         storeProduct.Id,
@@ -766,5 +809,6 @@ internal sealed record AdminStoreProductResponse(
         storeProduct.SeoDescription,
         storeProduct.SeoSocialImageUrl,
         storeProduct.SeoNoIndex,
-        storeProduct.ArchivedAt);
+        storeProduct.ArchivedAt,
+        storeProduct.SearchKeywords);
 }

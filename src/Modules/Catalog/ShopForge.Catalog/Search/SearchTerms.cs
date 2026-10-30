@@ -16,9 +16,18 @@ internal sealed class SearchTerms
     public const int Shortest = 2;
     public const int Longest = 200;
 
-    // One question asked of the folded vector: a template whose words `format` quotes into place (D-225). Wrapped in
-    // a subquery so it is worked out once for the statement, rather than once for every listing it reads.
-    private const string Question = "(SELECT to_tsquery({1}::regconfig, format({template}, VARIADIC {words}::text[])))";
+    // One question asked of the folded vector: a template whose words `format` quotes into place (D-225), read in the
+    // store's language, and one for the codes, read without stemming ({3}), both to match (D-226). Wrapped in a subquery
+    // so it is worked out once for the statement, rather than once for every listing it reads; a part with nothing in
+    // it is left out rather than parsed as an empty query.
+    private const string Question = """
+        (SELECT CASE
+            WHEN {codesTemplate} = '' THEN to_tsquery({1}::regconfig, format({template}, VARIADIC {words}::text[]))
+            WHEN {template} = '' THEN to_tsquery({3}::regconfig, format({codesTemplate}, VARIADIC {codes}::text[]))
+            ELSE to_tsquery({1}::regconfig, format({template}, VARIADIC {words}::text[]))
+                && to_tsquery({3}::regconfig, format({codesTemplate}, VARIADIC {codes}::text[]))
+        END)
+        """;
 
     private const string Matched = """
         SELECT * FROM catalog.store_products AS listing
@@ -26,20 +35,23 @@ internal sealed class SearchTerms
         """;
 
     // The tiers say why a listing answers (D-225): its whole code typed, then every word in its name exactly, by its
-    // forms, or only as a beginning, then anywhere else. `ts_rank` orders a tier, and the shop's own order and the id
-    // break what is left, so pages never swap answers. The code is looked up for each listing found, through the
-    // index on its product, rather than among every variant of every company on the platform.
+    // forms, or only as a beginning, then in what else it is called (keywords, brand, categories, D-226), then
+    // anywhere else. `ts_rank` orders a tier, and the shop's own order and the id break what is left, so pages never
+    // swap answers. A code is a SKU, a barcode or a part number, looked up for each listing found through the index on
+    // its product, rather than among every variant of every company on the platform.
     private const string Ranking = """
         SELECT listing.id AS "id",
             CASE
                 WHEN EXISTS (
                     SELECT 1 FROM catalog.product_variants AS variant
-                    WHERE variant.product_id = listing.product_id AND lower(variant.sku) = lower({2}))
+                    WHERE variant.product_id = listing.product_id
+                        AND (lower(variant.sku) = lower({2}) OR variant.ean = {2} OR lower(variant.part_number) = lower({2})))
                     THEN 1
                 WHEN listing.search_vector_folded @@ @@exact@@ THEN 2
                 WHEN listing.search_vector_folded @@ @@forms@@ THEN 3
                 WHEN listing.search_vector_folded @@ @@beginnings@@ THEN 4
-                ELSE 5
+                WHEN listing.search_vector_folded @@ @@called@@ THEN 5
+                ELSE 6
             END AS "tier",
             ts_rank(listing.search_vector_folded, @@found@@) AS "rank"
         FROM catalog.store_products AS listing
@@ -120,22 +132,27 @@ internal sealed class SearchTerms
     // parameter. The configuration comes from a fixed table of names, never from a request (D-178).
     private string Statement(string sql, out object[] parameters)
     {
-        var values = new List<object> { _storeId, _configuration, Typed };
+        var values = new List<object> { _storeId, _configuration, Typed, SearchConfigurations.FoldedWithoutStemming };
         var questions = new Dictionary<string, SearchQueryText>
         {
             ["found"] = _match.Found,
             ["exact"] = _match.ExactInName,
             ["forms"] = _match.FormsInName,
             ["beginnings"] = _match.BeginningsInName,
+            ["called"] = _match.InWhatItIsCalled,
         };
 
         foreach (var (name, question) in questions.Where(question => sql.Contains($"@@{question.Key}@@", StringComparison.Ordinal)))
         {
             var asked = Question
                 .Replace("{template}", "{" + values.Count + "}", StringComparison.Ordinal)
-                .Replace("{words}", "{" + (values.Count + 1) + "}", StringComparison.Ordinal);
+                .Replace("{words}", "{" + (values.Count + 1) + "}", StringComparison.Ordinal)
+                .Replace("{codesTemplate}", "{" + (values.Count + 2) + "}", StringComparison.Ordinal)
+                .Replace("{codes}", "{" + (values.Count + 3) + "}", StringComparison.Ordinal);
             values.Add(question.Template);
             values.Add(question.Words.ToArray());
+            values.Add(question.CodesTemplate);
+            values.Add(question.Codes.ToArray());
             sql = sql.Replace($"@@{name}@@", asked, StringComparison.Ordinal);
         }
 

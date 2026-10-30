@@ -28,6 +28,40 @@ internal sealed class Category : IStoreOwned, IArchivable
     public string Slug { get; private set; } = null!;
 
     public int SortOrder { get; private set; }
+
+    // Other names a shopper might type for what is filed here (D-226).
+    public string? SearchKeywords { get; private set; }
+
+    // Its own name and keywords and those of every live category above it, in one text: what finds the listings filed
+    // under it, read by the search index without walking the tree. Nothing while it is archived (D-226).
+    public string? SearchText { get; private set; }
+
+    public bool SetSearchKeywords(string? keywords)
+    {
+        var tidied = Keywords.Tidied(keywords);
+
+        if (tidied == SearchKeywords)
+        {
+            return false;
+        }
+
+        SearchKeywords = tidied;
+
+        return true;
+    }
+
+    public bool SetSearchText(string? text)
+    {
+        if (text == SearchText)
+        {
+            return false;
+        }
+
+        SearchText = text;
+
+        return true;
+    }
+
     // Retired: gone from the shop and from the merchant's own list unless they ask for it (D-180).
     public DateTimeOffset? ArchivedAt { get; private set; }
 

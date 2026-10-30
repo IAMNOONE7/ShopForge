@@ -35,7 +35,7 @@ public sealed class ToolShop(ShopForgeApiFactory factory) : IAsyncLifetime
         {
             using var created = await Admin.PostAsJsonAsync(
                 $"/api/admin/stores/{Store.StoreId}/categories",
-                new { category.Name, category.Slug, SortOrder = index, ParentId = category.ParentSlug is { } parent ? categories[parent] : (Guid?)null },
+                new { category.Name, category.Slug, SortOrder = index, ParentId = category.ParentSlug is { } parent ? categories[parent] : (Guid?)null, SearchKeywords = category.Keywords },
                 CancellationToken);
             categories[category.Slug] = await IdOfAsync(created);
         }
@@ -52,7 +52,7 @@ public sealed class ToolShop(ShopForgeApiFactory factory) : IAsyncLifetime
                 attribute.Unit,
                 IsFilterable = attribute.Type != "text",
                 IsVisibleOnProductPage = true,
-                IsSearchable = attribute.Type == "text",
+                IsSearchable = attribute.Searchable,
                 attribute.Options,
             });
 
@@ -72,12 +72,14 @@ public sealed class ToolShop(ShopForgeApiFactory factory) : IAsyncLifetime
         var rows = ToolShopCatalogue.Products.Select(product => (object?[])
         [
             product.Sku, product.Name, product.Slug, product.Description, product.Price, 21m, 25, product.Visible, product.SortOrder, product.Category,
-            product.Brand, .. codes.Select(code => product.Values.GetValueOrDefault(code)),
+            product.Brand, product.Ean, product.PartNumber, product.Keywords, .. codes.Select(code => product.Values.GetValueOrDefault(code)),
         ]);
 
         using var imported = await Admin.ImportAsync(
             Store.StoreId,
-            ImportFiles.MeasuredWorkbook(["sku", "name", "slug", "description", "price", "vat", "stock", "visible", "sortorder", "categories", "brand", .. codes], [.. rows]));
+            ImportFiles.MeasuredWorkbook(
+                ["sku", "name", "slug", "description", "price", "vat", "stock", "visible", "sortorder", "categories", "brand", "ean", "partnumber", "search_keywords", .. codes],
+                [.. rows]));
         var report = await imported.Content.ReadFromJsonAsync<ImportReport>(CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, imported.StatusCode);

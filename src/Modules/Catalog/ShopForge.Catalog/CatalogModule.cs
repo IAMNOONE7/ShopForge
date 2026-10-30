@@ -50,6 +50,8 @@ public static class CatalogModule
         services.AddScoped<IStoreMaintenance, FeedRefresh>();
         services.AddScoped<WhatPointsAtIt>();
         services.AddScoped<SearchIndex>();
+        services.AddScoped<CategorySearchText>();
+        services.AddScoped<EveryStoreSearch>();
         services.AddScoped<IStoreMaintenance, SearchIndexRebuild>();
         services.AddScoped<IEventHandler<StoreCultureChanged>, SearchCultureChange>();
         services.AddScoped<IStoreMaintenance, SearchLogCleanup>();

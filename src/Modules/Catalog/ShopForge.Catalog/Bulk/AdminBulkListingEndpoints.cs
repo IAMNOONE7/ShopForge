@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Catalog.Domain;
+using ShopForge.Catalog.Search;
 using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Security;
@@ -136,6 +137,7 @@ internal static class AdminBulkListingEndpoints
         BulkCategoriesRequest request,
         DbContext dbContext,
         IAuditLog audit,
+        SearchIndex search,
         CancellationToken cancellationToken)
     {
         var adding = request.AddCategoryIds ?? [];
@@ -163,11 +165,15 @@ internal static class AdminBulkListingEndpoints
         }
 
         var listings = await ChosenAsync(dbContext, request.StoreProductIds!, cancellationToken);
-        var changed = listings.Count(listing => listing.AddToCategories(categories) | listing.RemoveFromCategories(removing));
+        var changed = listings.Where(listing => listing.AddToCategories(categories) | listing.RemoveFromCategories(removing)).Select(listing => listing.Id).ToList();
+        var saved = await SavedAsync(
+            dbContext, audit, "catalog.listings.categories", request.StoreProductIds!.Count, changed.Count,
+            $"changed {changed.Count}", cancellationToken);
 
-        return await SavedAsync(
-            dbContext, audit, "catalog.listings.categories", request.StoreProductIds!.Count, changed,
-            $"changed {changed}", cancellationToken);
+        // The categories a listing is filed under are words it is found by (D-226).
+        await search.RefreshAsync(changed, cancellationToken);
+
+        return saved;
     }
 
     // Retiring a range. 27b made archiving the way to take something out of use; doing it one listing at a

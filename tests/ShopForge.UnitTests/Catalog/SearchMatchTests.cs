@@ -30,18 +30,38 @@ public sealed partial class SearchMatchTests
         Asks(match.FormsInName, "%L:A", "chairs");
     }
 
+    // A code is read apart from the words, without stemming in any language, so it is matched as the index holds it.
     [Fact]
     public void A_code_is_matched_as_typed_and_a_phrase_word_by_word()
     {
         var match = SearchMatch.For(SearchTokens.Read("PH2 \"sada bitů\""), czechForms: true);
 
-        Asks(match.Found, "%L & (%L <-> %L)", "ph2", "sada", "bitů");
+        Asks(match.Found, "(%L <-> %L)", "sada", "bitů");
+        AsksCodes(match.Found, "%L", "ph2");
 
         foreach (var tier in new[] { match.ExactInName, match.FormsInName, match.BeginningsInName })
         {
-            Asks(tier, "%L:A & (%L:A <-> %L:A)", "ph2", "sada", "bitů");
+            Asks(tier, "(%L:A <-> %L:A)", "sada", "bitů");
+            AsksCodes(tier, "%L:A", "ph2");
         }
+
+        Asks(match.InWhatItIsCalled, "(%L:AB <-> %L:AB)", "sada", "bitů");
+        AsksCodes(match.InWhatItIsCalled, "%L:AB", "ph2");
     }
+
+    // What else a product is called, its keywords, brand and categories, sits at weight B beside the name's A.
+    [Fact]
+    public void A_word_is_also_asked_of_what_else_the_product_is_called()
+    {
+        var match = SearchMatch.For(SearchTokens.Read("šroubky"), czechForms: true);
+
+        Asks(match.InWhatItIsCalled, "(%L:*AB | %L:*AB)", "šroubk", "šroubek");
+        Assert.Empty(match.InWhatItIsCalled.Codes);
+    }
+
+    [Fact]
+    public void A_search_of_codes_alone_finds_something() =>
+        Assert.False(SearchMatch.For(SearchTokens.Read("PH2"), czechForms: true).FindsNothing);
 
     // An excluded word only narrows what is found; it says nothing about how well the rest answers.
     [Fact]
@@ -70,12 +90,14 @@ public sealed partial class SearchMatchTests
             var match = SearchMatch.For(SearchTokens.Read(typed), czech);
 
             Assert.All(
-                new[] { match.Found, match.ExactInName, match.FormsInName, match.BeginningsInName },
+                new[] { match.Found, match.ExactInName, match.FormsInName, match.BeginningsInName, match.InWhatItIsCalled },
                 question =>
                 {
                     Assert.Matches(Operators(), question.Template);
+                    Assert.Matches(Operators(), question.CodesTemplate);
                     Assert.Equal(question.Words.Count, Placeholders().Count(question.Template));
-                    Assert.All(question.Words, word => Assert.Matches(@"^[\p{L}\p{Nd}]+(-[\p{L}\p{Nd}]+)*$", word));
+                    Assert.Equal(question.Codes.Count, Placeholders().Count(question.CodesTemplate));
+                    Assert.All(question.Words.Concat(question.Codes), word => Assert.Matches(@"^[\p{L}\p{Nd}]+(-[\p{L}\p{Nd}]+)*$", word));
                 });
         }
     }
@@ -86,7 +108,13 @@ public sealed partial class SearchMatchTests
         Assert.Equal(words, question.Words);
     }
 
-    [GeneratedRegex(@"^((%L(:\*?A?|:\*)?)|[()|&!<\->\s])*$")]
+    private static void AsksCodes(SearchQueryText question, string template, params string[] codes)
+    {
+        Assert.Equal(template, question.CodesTemplate);
+        Assert.Equal(codes, question.Codes);
+    }
+
+    [GeneratedRegex(@"^((%L(:\*?(AB|A)?)?)|[()|&!<\->\s])*$")]
     private static partial Regex Operators();
 
     [GeneratedRegex("%L")]

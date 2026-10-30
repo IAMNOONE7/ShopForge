@@ -42,13 +42,14 @@ public static class DevelopmentToolShop
         {
             var category = new Category(storeId, entry.Name, entry.Slug, index);
             category.MoveTo(entry.ParentSlug is { } parent ? categories[parent].Id : null);
+            category.SetSearchKeywords(entry.Keywords);
             categories[entry.Slug] = category;
         }
 
         var definitions = ToolShopCatalogue.Attributes.Select((attribute, index) =>
         {
             var definition = new AttributeDefinition(storeId, attribute.Code, attribute.Name, Enum.Parse<AttributeType>(attribute.Type, ignoreCase: true),
-                new AttributeSettings(attribute.Unit, IsFilterable: attribute.Type != "text", IsVisibleOnProductPage: true, SortOrder: index, IsSearchable: attribute.Type == "text"));
+                new AttributeSettings(attribute.Unit, IsFilterable: attribute.Type != "text", IsVisibleOnProductPage: true, SortOrder: index, IsSearchable: attribute.Searchable));
 
             foreach (var option in attribute.Options)
             {
@@ -76,6 +77,8 @@ public static class DevelopmentToolShop
             provider.GetRequiredService<ITenantLimits>(),
             provider.GetRequiredService<ITaxRates>(),
             provider.GetRequiredService<SearchIndex>(),
+            provider.GetRequiredService<CategorySearchText>(),
+            provider.GetRequiredService<EveryStoreSearch>(),
             provider.GetRequiredService<IAuditLog>(),
             provider.GetRequiredService<TimeProvider>(),
             (await provider.GetRequiredService<ICurrentStoreSettings>().GetAsync(cancellationToken)).Currency);
@@ -93,15 +96,16 @@ public static class DevelopmentToolShop
         var codes = ToolShopCatalogue.Attributes.Select(attribute => attribute.Code).ToArray();
         string[] columns =
         [
-            "sku", "name", "slug", "description", "price", "vat", "stock", "visible", "sortorder", "categories", "brand",
-            "weight", "package_length_mm", "package_width_mm", "package_height_mm", .. codes,
+            "sku", "name", "slug", "description", "price", "vat", "stock", "visible", "sortorder", "categories", "brand", "ean", "partnumber",
+            "search_keywords", "weight", "package_length_mm", "package_width_mm", "package_height_mm", .. codes,
         ];
         var rows = ToolShopCatalogue.Products.Select((product, index) =>
         {
             object?[] values =
             [
                 product.Sku, product.Name, product.Slug, product.Description, product.Price, 21m, StockPerProduct, product.Visible,
-                product.SortOrder, product.Category, product.Brand, 600, 350, 120, 60, .. codes.Select(code => product.Values.GetValueOrDefault(code)),
+                product.SortOrder, product.Category, product.Brand, product.Ean, product.PartNumber, product.Keywords, 600, 350, 120, 60,
+                .. codes.Select(code => product.Values.GetValueOrDefault(code)),
             ];
 
             return new ImportRow(index + 2, columns.Zip(values).ToDictionary(cell => cell.First, cell => new ImportCell(XLCellValue.FromObject(cell.Second))));

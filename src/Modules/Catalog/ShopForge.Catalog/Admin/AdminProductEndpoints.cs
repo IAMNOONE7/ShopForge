@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Catalog.Domain;
 using ShopForge.Catalog.Images;
+using ShopForge.Catalog.Search;
 using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Files;
 using ShopForge.Shared.Http;
@@ -93,6 +94,7 @@ internal static class AdminProductEndpoints
         Guid productId,
         UpdateProductRequest request,
         DbContext dbContext,
+        EveryStoreSearch search,
         CancellationToken cancellationToken)
     {
         var errors = new RequestErrors()
@@ -141,6 +143,9 @@ internal static class AdminProductEndpoints
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        // The brand, the barcode and the part number are words the product is found by in every store that sells it.
+        await search.RefreshAsync([product.Id], besides: null, cancellationToken);
+
         return TypedResults.Ok(AdminProductResponse.From(product));
     }
 
@@ -183,6 +188,7 @@ internal static class AdminProductEndpoints
         Guid productId,
         VariantRequest request,
         DbContext dbContext,
+        EveryStoreSearch search,
         CancellationToken cancellationToken)
     {
         var product = await dbContext.Set<Product>().SingleOrDefaultAsync(product => product.Id == productId, cancellationToken);
@@ -206,6 +212,7 @@ internal static class AdminProductEndpoints
         variant.UpdatePhysicalData(request.Ean, request.WeightGrams, request.PartNumber, ConditionFrom(request.Condition));
         Measure(variant, request.LengthMm, request.WidthMm, request.HeightMm, request.ShipsAlone);
         await dbContext.SaveChangesAsync(cancellationToken);
+        await search.RefreshAsync([product.Id], besides: null, cancellationToken);
 
         return TypedResults.Created($"/api/admin/products/{productId}/variants/{variant.Id}", AdminVariantResponse.From(variant));
     }
@@ -215,6 +222,7 @@ internal static class AdminProductEndpoints
         Guid variantId,
         VariantRequest request,
         DbContext dbContext,
+        EveryStoreSearch search,
         CancellationToken cancellationToken)
     {
         var product = await dbContext.Set<Product>().SingleOrDefaultAsync(product => product.Id == productId, cancellationToken);
@@ -242,6 +250,9 @@ internal static class AdminProductEndpoints
         variant.Choose(Cleaned(request.OptionValues));
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        // A renamed SKU is findable at once in every store that sells the product (I10, D-226).
+        await search.RefreshAsync([product.Id], besides: null, cancellationToken);
+
         return TypedResults.Ok(AdminVariantResponse.From(variant));
     }
 
@@ -249,6 +260,7 @@ internal static class AdminProductEndpoints
         Guid productId,
         Guid variantId,
         DbContext dbContext,
+        EveryStoreSearch search,
         CancellationToken cancellationToken)
     {
         var product = await dbContext.Set<Product>().SingleOrDefaultAsync(product => product.Id == productId, cancellationToken);
@@ -267,6 +279,7 @@ internal static class AdminProductEndpoints
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        await search.RefreshAsync([productId], besides: null, cancellationToken);
 
         return TypedResults.NoContent();
     }

@@ -52,7 +52,8 @@ internal sealed class AttributeDefinition : IStoreOwned
     // matching: a width of 45 is found by filtering, not by typing (D-178).
     public bool IsSearchable { get; private set; }
 
-    public bool CanBeSearched => Type == AttributeType.Text;
+    // Text has words, and so do the names of the options a listing holds (D-226); a number or a date is filtered.
+    public bool CanBeSearched => Type is AttributeType.Text or AttributeType.Select or AttributeType.MultiSelect;
 
     public int SortOrder { get; private set; }
 

@@ -2,19 +2,19 @@ using ShopForge.Shared.Maintenance;
 
 namespace ShopForge.Catalog.Search;
 
-// The nightly rebuild. Every path that changes a listing's own words refreshes it there and then, the import
-// included (D-201), so this is not what makes search work — it is what bounds the cost of a path that forgets,
-// and of the migration that added the column to a catalogue already full of products (D-178).
+// The nightly rebuild. Every path that changes a listing's words refreshes it there and then, the import and the
+// company-wide product endpoints included (D-201, D-226), so this is not what makes search work: it bounds the cost
+// of a path that forgets, and of a migration that meets a catalogue already full of products (D-178).
 //
-// A variant's code is the known case. A product is the tenant's rather than one store's, and the index belongs
-// to a store, so a SKU renamed in the product endpoints, or added by one store's import to a product another
-// store also sells, becomes findable in that other store here rather than immediately.
-internal sealed class SearchIndexRebuild(SearchIndex index) : IStoreMaintenance
+// Each category's words are written first, so a category the paths that keep them did not see, such as one a
+// development seed made, is read with the rest (D-226).
+internal sealed class SearchIndexRebuild(SearchIndex index, CategorySearchText categories) : IStoreMaintenance
 {
     public string Name => "Search index";
 
     public async Task<int> RunAsync(CancellationToken cancellationToken)
     {
+        await categories.RewriteAsync(cancellationToken);
         await index.RefreshStoreAsync(cancellationToken);
 
         // Nothing is removed, and the housekeeping log counts removals.

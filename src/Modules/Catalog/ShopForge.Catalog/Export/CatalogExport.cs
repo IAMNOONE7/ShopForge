@@ -176,6 +176,7 @@ internal static class CatalogExport
         Put(product.Brand);
         Put(variant.PartNumber);
         Put(variant.Condition?.ToString());
+        Put(listing.SearchKeywords);
 
         foreach (var definition in definitions)
         {

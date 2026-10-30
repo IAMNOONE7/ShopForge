@@ -138,12 +138,15 @@ internal static class ImportColumns
     public const string PartNumber = "partnumber";
     public const string Condition = "condition";
 
+    // Other names a shopper might type for the listing (D-226). With an underscore, which no attribute code can have.
+    public const string SearchKeywords = "search_keywords";
+
     // An axis is named by the column header after this prefix, and the cell holds that row's value for it:
     // "option:size" holding "L". Several of them make several axes, in the order the columns appear (D-137).
     public const string OptionPrefix = "option:";
 
     public static readonly string[] All =
-        [Sku, Name, Slug, Description, Price, Vat, TaxClass, Stock, Visible, SortOrder, Categories, Ean, Weight, LengthMm, WidthMm, HeightMm, ShipsAlone, Brand, PartNumber, Condition];
+        [Sku, Name, Slug, Description, Price, Vat, TaxClass, Stock, Visible, SortOrder, Categories, Ean, Weight, LengthMm, WidthMm, HeightMm, ShipsAlone, Brand, PartNumber, Condition, SearchKeywords];
 
     public static bool IsOption(string column) => column.StartsWith(OptionPrefix, StringComparison.Ordinal);
 

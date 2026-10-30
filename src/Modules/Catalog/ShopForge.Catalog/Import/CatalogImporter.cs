@@ -19,6 +19,8 @@ internal sealed class CatalogImporter(
     ITenantLimits limits,
     ITaxRates taxRates,
     SearchIndex search,
+    CategorySearchText categorySearch,
+    EveryStoreSearch everyStore,
     IAuditLog audit,
     TimeProvider clock,
     Currency currency)
@@ -28,6 +30,9 @@ internal sealed class CatalogImporter(
     private readonly List<StockUpdate> _stockUpdates = [];
     private readonly List<Rename> _renames = [];
     private readonly HashSet<Guid> _touched = [];
+
+    // Products whose own words a row changed: a brand, a code, a barcode, a part number. Other stores sell them too.
+    private readonly HashSet<Guid> _products = [];
     private readonly HashSet<Guid> _repriced = [];
     private readonly HashSet<Guid> _reclassified = [];
     private readonly Dictionary<StoreProduct, Product> _shown = [];
@@ -104,8 +109,12 @@ internal sealed class CatalogImporter(
                 await dbContext.SaveChangesAsync(cancellationToken);
 
                 // What a shopper types is matched against the listing's words as they were last indexed, so what
-                // the file brought in or changed is indexed now, as an edit in the admin is (D-178, D-201).
+                // the file brought in or changed is indexed now, as an edit in the admin is (D-178, D-201). A file can
+                // name a category that did not exist, which needs its words first, and a product it changed is
+                // sold by the company's other stores too (D-226).
+                await categorySearch.RewriteAsync(cancellationToken);
                 await search.RefreshAsync(_touched, cancellationToken);
+                await everyStore.RefreshAsync(_products, besides: storeContext.StoreId, cancellationToken);
                 await ApplyStockAsync(issues, cancellationToken);
             }
             catch (DbUpdateException exception)
@@ -219,6 +228,7 @@ internal sealed class CatalogImporter(
         var brand = ReadBrand(row, product, issues);
         var partNumber = ReadPartNumber(row, variant, issues);
         var condition = ReadCondition(row, variant, issues);
+        var keywords = ReadKeywords(row, issues);
         var stockQuantity = ReadStock(row, issues);
         var optionValues = ReadOptions(row, product, issues);
 
@@ -249,6 +259,11 @@ internal sealed class CatalogImporter(
         changed |= variant.UpdatePhysicalData(ean, weight, partNumber, condition);
         changed |= variant.Measure(sizes.Length!.Value, sizes.Width!.Value, sizes.Height!.Value);
         changed |= variant.SendAlone(shipsAlone);
+
+        if (changed)
+        {
+            _products.Add(product.Id);
+        }
 
         catalog.Products[sku] = product;
         catalog.ProductsById[product.Id] = product;
@@ -302,6 +317,11 @@ internal sealed class CatalogImporter(
 
         catalog.Slugs[details!.Slug] = listing.Id;
         changed |= listing.AddToCategories(ResolveCategories(categoryNames, catalog));
+
+        if (keywords is not null)
+        {
+            changed |= listing.SetSearchKeywords(keywords);
+        }
 
         foreach (var (definition, pending) in attributes)
         {
@@ -571,6 +591,26 @@ internal sealed class CatalogImporter(
         }
 
         issues.Add(new ImportIssue(row.Number, ImportColumns.Brand, $"A brand can be up to {Product.MaxBrandLength} characters."));
+        return null;
+    }
+
+    // An empty cell leaves the keywords alone, as an empty cell does in every column (D-201); clearing them is the
+    // admin's. Null means the row says nothing about them.
+    private static string? ReadKeywords(ImportRow row, List<ImportIssue> issues)
+    {
+        if (!row.Has(ImportColumns.SearchKeywords))
+        {
+            return null;
+        }
+
+        var keywords = row[ImportColumns.SearchKeywords].Text;
+
+        if (Keywords.Fit(keywords))
+        {
+            return keywords;
+        }
+
+        issues.Add(new ImportIssue(row.Number, ImportColumns.SearchKeywords, $"Search keywords can be up to {Keywords.MaxLength} characters."));
         return null;
     }
 

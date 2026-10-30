@@ -11,6 +11,8 @@ public sealed class FoldedSearchReleaseTests(ShopForgeApiFactory factory)
 {
     private const string BeforeFolding = "20261029134918_FreeShipping";
 
+    private const string BeforeSources = "20261030103100_FoldedSearch";
+
     private static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
 
     // Every other test starts from an empty database, where seeding nothing looks the same as not seeding at all, so
@@ -32,6 +34,49 @@ public sealed class FoldedSearchReleaseTests(ShopForgeApiFactory factory)
 
         // English is stemmed: without its own rules `rocking` would have stayed whole and missed `rock`.
         Assert.Equal(["rocking-chairs"], await FoundAsync(database, "catalog.english_folded", "rocked"));
+    }
+
+    // A catalogue from before the words a product is otherwise called were indexed (D-226): each category's words are
+    // written from the tree, an archived one's left out, and every listing is found by its brand, its barcode and the
+    // categories above it the moment the migration has run.
+    [Fact]
+    public async Task A_catalogue_from_before_its_other_names_were_indexed_is_found_by_them_once_migrated()
+    {
+        await using var database = await OwnDatabase.CreateAsync(factory);
+        await database.MigrateAsync(BeforeSources);
+        var (tenant, store, tools, hand, retired, screwdrivers) =
+            (Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7());
+        var (product, listing) = (Guid.CreateVersion7(), Guid.CreateVersion7());
+        await database.ExecuteAsync($"""
+            INSERT INTO stores.tenants (id, name) VALUES ('{tenant}', 'Tenant');
+            INSERT INTO stores.stores (id, tenant_id, name, currency, culture, theme, status) VALUES
+                ('{store}', '{tenant}', 'Nářadí', 'CZK', 'cs-CZ', jsonb_build_object(), 'Published');
+            INSERT INTO catalog.categories (id, store_id, name, slug, sort_order, parent_id, archived_at) VALUES
+                ('{tools}', '{store}', 'Nářadí', 'naradi', 0, NULL, NULL),
+                ('{hand}', '{store}', 'Ruční nářadí', 'rucni-naradi', 0, '{tools}', NULL),
+                ('{retired}', '{store}', 'Výprodej', 'vyprodej', 0, '{hand}', now()),
+                ('{screwdrivers}', '{store}', 'Šroubováky', 'sroubovaky', 0, '{retired}', NULL);
+            INSERT INTO catalog.products (id, tenant_id, brand) VALUES ('{product}', '{tenant}', 'Kovomat');
+            INSERT INTO catalog.product_variants (id, tenant_id, product_id, sku, ean, part_number, option_values, position) VALUES
+                ('{Guid.CreateVersion7()}', '{tenant}', '{product}', 'TS-PH2', '2000000001005', 'KM-7', ARRAY[]::text[], 0);
+            INSERT INTO catalog.store_products (id, store_id, product_id, name, slug, price, is_visible, sort_order, vat_rate) VALUES
+                ('{listing}', '{store}', '{product}', 'Bit PH2', 'bit-ph2', 49, true, 0, 21);
+            INSERT INTO catalog.product_categories (store_product_id, category_id, store_id) VALUES ('{listing}', '{screwdrivers}', '{store}');
+            """);
+
+        await database.MigrateAsync();
+
+        var texts = await database.TextAsync(
+            $"SELECT slug || ': ' || coalesce(search_text, '-') AS \"Value\" FROM catalog.categories WHERE store_id = {store} ORDER BY slug");
+
+        Assert.Equal(["naradi: Nářadí", "rucni-naradi: Ruční nářadí Nářadí", "sroubovaky: Šroubováky Ruční nářadí Nářadí", "vyprodej: -"], texts);
+
+        foreach (var typed in new[] { "kovomat", "2000000001005", "KM-7", "sroubovaky", "rucni naradi" })
+        {
+            Assert.Equal(["bit-ph2"], await FoundAsync(database, "catalog.simple_folded", typed));
+        }
+
+        Assert.Empty(await FoundAsync(database, "catalog.simple_folded", "vyprodej"));
     }
 
     // Until V29i drops it, the vector the previous build reads is written beside the folded one, so a build brought

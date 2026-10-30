@@ -117,6 +117,7 @@ public static class DevelopmentCatalog
         await using var scope = services.CreateAsyncScope();
         scope.ServiceProvider.GetRequiredService<StoreContext>().Set(storeId, tenantId);
 
+        await scope.ServiceProvider.GetRequiredService<CategorySearchText>().RewriteAsync(cancellationToken);
         await scope.ServiceProvider.GetRequiredService<SearchIndex>().RefreshStoreAsync(cancellationToken);
     }
 

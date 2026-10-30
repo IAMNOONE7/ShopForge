@@ -49,6 +49,8 @@ internal static class ImportEndpoints
         ITenantLimits limits,
         ITaxRates taxRates,
         SearchIndex search,
+        CategorySearchText categorySearch,
+        EveryStoreSearch everyStore,
         IAuditLog audit,
         TimeProvider clock,
         ICurrentStoreSettings storeSettings,
@@ -66,7 +68,7 @@ internal static class ImportEndpoints
 
             var currency = (await storeSettings.GetAsync(cancellationToken)).Currency;
 
-            var importer = new CatalogImporter(dbContext, storeContext, stock, limits, taxRates, search, audit, clock, currency);
+            var importer = new CatalogImporter(dbContext, storeContext, stock, limits, taxRates, search, categorySearch, everyStore, audit, clock, currency);
 
             return TypedResults.Ok(await importer.ImportAsync(import, cancellationToken));
         }

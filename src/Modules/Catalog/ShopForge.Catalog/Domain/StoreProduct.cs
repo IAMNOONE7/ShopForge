@@ -41,6 +41,23 @@ internal sealed class StoreProduct : IStoreOwned, IArchivable
     // Which of the shop's tax classes this is, or nothing when the rate above is the whole answer (D-187).
     public string? TaxClass { get; private set; }
 
+    // Other names a shopper might type for it, which its name and description do not hold (D-226).
+    public string? SearchKeywords { get; private set; }
+
+    public bool SetSearchKeywords(string? keywords)
+    {
+        var tidied = Keywords.Tidied(keywords);
+
+        if (tidied == SearchKeywords)
+        {
+            return false;
+        }
+
+        SearchKeywords = tidied;
+
+        return true;
+    }
+
     // Kept on the listing so a page of products can be sorted and shown without a join per row (D-089).
     public decimal RatingAverage { get; private set; }
 

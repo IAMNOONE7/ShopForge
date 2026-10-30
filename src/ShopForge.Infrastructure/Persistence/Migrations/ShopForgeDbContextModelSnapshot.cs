@@ -378,6 +378,15 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("parent_id");
 
+                    b.Property<string>("SearchKeywords")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("search_keywords");
+
+                    b.Property<string>("SearchText")
+                        .HasColumnType("text")
+                        .HasColumnName("search_text");
+
                     b.Property<string>("SeoDescription")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
@@ -825,6 +834,11 @@ namespace ShopForge.Infrastructure.Persistence.Migrations
                     b.Property<int>("RatingCount")
                         .HasColumnType("integer")
                         .HasColumnName("rating_count");
+
+                    b.Property<string>("SearchKeywords")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("search_keywords");
 
                     b.Property<string>("SeoDescription")
                         .HasMaxLength(500)

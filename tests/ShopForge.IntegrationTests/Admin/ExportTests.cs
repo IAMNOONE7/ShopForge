@@ -176,6 +176,29 @@ public sealed class ExportTests(ShopForgeApiFactory factory)
         Assert.Equal("books", listings.Single(listing => listing.Slug == "oak-chair").TaxClass);
     }
 
+    // The keywords a merchant added for search go out with the listing and come back with it, so a file taken out and
+    // sent back leaves them where they were (D-226).
+    [Fact]
+    public async Task A_listings_search_keywords_go_out_and_come_back()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+        var oak = (await furniture.Admin.AdminListAsync<KeywordedRow>($"/api/admin/stores/{furniture.Store.StoreId}/products", CancellationToken))!
+            .Single(listing => listing.Slug == "oak-chair");
+        using var saved = await furniture.Admin.PutAsJsonAsync(
+            $"/api/admin/stores/{furniture.Store.StoreId}/products/{oak.Id}",
+            new { oak.Name, oak.Slug, oak.Description, oak.Price, oak.VatRate, oak.IsVisible, oak.SortOrder, SearchKeywords = "armchair, seat" },
+            CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+
+        var rows = Rows(await CatalogueAsync(furniture));
+        var report = await ImportAsync(furniture, await CatalogueBytesAsync(furniture));
+        var listings = await furniture.Admin.AdminListAsync<KeywordedRow>($"/api/admin/stores/{furniture.Store.StoreId}/products", CancellationToken);
+
+        Assert.Equal("armchair, seat", rows.Single(row => row["slug"] == "oak-chair")["search_keywords"]);
+        Assert.Equal((0, 0), (report.Invalid, report.Updated));
+        Assert.Equal("armchair, seat", listings!.Single(listing => listing.Slug == "oak-chair").SearchKeywords);
+    }
+
     // An attribute called Weight would be a second "weight" column in every template and export, and the
     // importer refuses a file with two columns of one name, so the shop's own export would stop coming back
     // in (D-201).
@@ -419,4 +442,7 @@ public sealed class ExportTests(ShopForgeApiFactory factory)
     private sealed record ProductDetail(string Slug, int Available, List<VariantView> Variants);
 
     private sealed record VariantView(Guid Id);
+
+    private sealed record KeywordedRow(Guid Id, string Name, string Slug, string? Description, decimal Price, decimal VatRate, bool IsVisible, int SortOrder, string? SearchKeywords);
 }
+

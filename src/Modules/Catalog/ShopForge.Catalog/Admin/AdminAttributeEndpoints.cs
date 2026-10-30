@@ -264,6 +264,7 @@ internal static class AdminAttributeEndpoints
         RenameOptionRequest request,
         DbContext dbContext,
         IAuditLog audit,
+        SearchIndex search,
         CancellationToken cancellationToken)
     {
         var definition = await Definitions(dbContext).SingleOrDefaultAsync(definition => definition.Id == attributeId, cancellationToken);
@@ -284,6 +285,14 @@ internal static class AdminAttributeEndpoints
         option.Rename(request.Name!);
         audit.Record("catalog.attribute.option.renamed", $"{definition.Code}/{option.Code}");
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        // The option's name is a word the listings holding it are found by, while the attribute is searched (D-226).
+        var holding = await dbContext.Set<ProductAttributeValue>()
+            .Where(value => value.OptionId == optionId)
+            .Select(value => value.StoreProductId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        await search.RefreshAsync(holding, cancellationToken);
 
         return TypedResults.Ok(AdminAttributeResponse.From(definition));
     }
@@ -387,7 +396,7 @@ internal static class AdminAttributeEndpoints
             .Check(!string.IsNullOrWhiteSpace(name) && name.Trim().Length <= 200, "name", "Name is required (up to 200 characters).")
             .Check(type is not null && Enum.IsDefined(type.Value), "type", "Type is required.")
             .Check(!(isFilterable && type == AttributeType.Text), "isFilterable", "Text attributes cannot be used as filters.")
-            .Check(!isSearchable || type == AttributeType.Text, "isSearchable", "Only text attributes have words to search.");
+            .Check(!isSearchable || type is AttributeType.Text or AttributeType.Select or AttributeType.MultiSelect, "isSearchable", "Only text and options have words to search.");
 
     private static AttributeSettings ToSettings(CreateAttributeRequest request) =>
         new(request.Unit, request.IsFilterable, request.IsVisibleOnProductPage, request.SortOrder, request.IsInFeeds, request.IsSearchable);

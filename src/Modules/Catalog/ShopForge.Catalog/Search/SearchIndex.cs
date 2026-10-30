@@ -12,6 +12,10 @@ namespace ShopForge.Catalog.Search;
 // somebody typed exactly counts for as much as a name. Codes are indexed with no stemming whatever the shop's
 // language is, because "FURN-OAK-CHAIR" is not a word in any of them.
 //
+// What it reads (D-226): the name and every code (SKU, barcode, part number) at A; what the product is otherwise called
+// at B, which is the merchant's keywords, the brand and the categories it is filed under, each category's words kept
+// ready on the category; the description at C; and at D the text and the option names of attributes marked searchable.
+//
 // The words are read twice, into two columns: as before, for a previous build still serving through a release
 // or brought back by a rollback, and with accents folded, which is what the storefront searches (D-224).
 internal sealed class SearchIndex(DbContext dbContext, IStoreContext storeContext, ICurrentStoreSettings settings)
@@ -19,15 +23,23 @@ internal sealed class SearchIndex(DbContext dbContext, IStoreContext storeContex
     private const string Words = """
         setweight(to_tsvector('@@config@@', coalesce(listing.name, '')), 'A')
             || setweight(to_tsvector('@@codes@@', coalesce((
-                SELECT string_agg(variant.sku, ' ')
+                SELECT string_agg(concat_ws(' ', variant.sku, variant.ean, variant.part_number), ' ')
                 FROM catalog.product_variants AS variant
                 WHERE variant.product_id = listing.product_id), '')), 'A')
+            || setweight(to_tsvector('@@config@@', concat_ws(' ',
+                listing.search_keywords,
+                (SELECT product.brand FROM catalog.products AS product WHERE product.id = listing.product_id),
+                (SELECT string_agg(category.search_text, ' ')
+                 FROM catalog.product_categories AS assignment
+                 JOIN catalog.categories AS category ON category.id = assignment.category_id
+                 WHERE assignment.store_product_id = listing.id))), 'B')
             || setweight(to_tsvector('@@config@@', coalesce(listing.description, '')), 'C')
             || setweight(to_tsvector('@@config@@', coalesce((
-                SELECT string_agg(value.text_value, ' ')
+                SELECT string_agg(coalesce(value.text_value, choice.name), ' ')
                 FROM catalog.product_attribute_values AS value
                 JOIN catalog.attribute_definitions AS definition
                     ON definition.id = value.attribute_definition_id AND definition.is_searchable
+                LEFT JOIN catalog.attribute_options AS choice ON choice.id = value.option_id
                 WHERE value.store_product_id = listing.id), '')), 'D')
         """;
 
