@@ -50,6 +50,10 @@ internal sealed class Invoices(DbContext dbContext, IStoreContext storeContext, 
             return existing;
         }
 
+        // A credit note corrects an invoice, so the invoice comes first. It is issued when the payment's event is handled,
+        // a few seconds after the payment, and money given back inside those seconds issues it here instead (D-222).
+        await IssueInvoiceAsync(order, cancellationToken);
+
         var creditNote = await StartAsync(order, InvoiceKind.CreditNote, returnId, cancellationToken);
 
         foreach (var line in lines)

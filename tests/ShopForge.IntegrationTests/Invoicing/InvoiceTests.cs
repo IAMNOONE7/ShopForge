@@ -121,6 +121,28 @@ public sealed class InvoiceTests(ShopForgeApiFactory factory)
         Assert.Contains(confirmation.Documents, document => document.Kind == "CreditNote" && document.Number.StartsWith("CN-", StringComparison.Ordinal));
     }
 
+    // A credit note corrects an invoice, so it never comes first. Refunded straight after the payment, before the worker
+    // has handled the payment's event, the refund issues the invoice itself (D-222).
+    [Fact]
+    public async Task Money_given_back_straight_after_the_payment_comes_after_its_invoice()
+    {
+        var furniture = await FurnitureStore.CreateAsync(factory);
+        using var shopper = new StorefrontApi(factory, furniture.Store);
+        using var added = await shopper.PostAsync("/api/storefront/cart/items", new { StoreProductId = furniture.Products["oak-bench"], Quantity = 1 });
+        Assert.Equal(HttpStatusCode.OK, added.StatusCode);
+        using var placed = await shopper.PostAsync("/api/storefront/checkout", Checkout.Request());
+        var order = await shopper.ReadAsync<PlacedOrder>(placed, HttpStatusCode.Created);
+
+        using var paid = await furniture.Admin.PostAsync($"/api/admin/stores/{furniture.Store.StoreId}/orders/{order.Number}/payment", null, CancellationToken);
+        using var refunded = await furniture.Admin.PostAsync($"/api/admin/stores/{furniture.Store.StoreId}/orders/{order.Number}/refund", null, CancellationToken);
+        var documents = await DocumentsAsync(furniture, order.Number);
+
+        Assert.Equal((HttpStatusCode.OK, HttpStatusCode.OK), (paid.StatusCode, refunded.StatusCode));
+        var invoice = Assert.Single(documents, document => document.Kind == "Invoice");
+        var creditNote = Assert.Single(documents, document => document.Kind == "CreditNote");
+        Assert.True(invoice.IssuedAt <= creditNote.IssuedAt);
+    }
+
     [Fact]
     public async Task A_credit_note_shows_what_is_being_given_back()
     {
