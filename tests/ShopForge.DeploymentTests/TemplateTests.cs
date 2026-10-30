@@ -246,6 +246,32 @@ public sealed partial class TemplateTests
         Assert.Superset(new HashSet<string> { "identity", "registry-access", "vault", "environment" }, after);
     }
 
+    // Azure lets the database's owner create only the extensions the server's allow-list names. One a migration creates
+    // that the list leaves out fails the release's migration; one the list names that nothing creates is a permission
+    // nobody uses. So the list is the migrations as written, and the migration job waits for it (D-224).
+    [Fact]
+    public async Task The_server_allows_exactly_the_extensions_the_migrations_create()
+    {
+        var template = await CompiledAsync();
+        var allowList = Resources(Deployment(template, "data")["properties"]!["template"]!).Single(resource =>
+            (string?)resource["type"] == "Microsoft.DBforPostgreSQL/flexibleServers/configurations"
+            && ((string)resource["name"]!).EndsWith("'azure.extensions')]", StringComparison.Ordinal));
+        var allowed = ((string)allowList["properties"]!["value"]!)
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select(name => name.ToLowerInvariant())
+            .Order(StringComparer.Ordinal);
+        var created = Directory.EnumerateFiles(Repository.PathOf("src/ShopForge.Infrastructure/Persistence/Migrations"), "*.cs")
+            .SelectMany(file => CreateExtension().Matches(File.ReadAllText(file)))
+            .Select(match => match.Groups["name"].Value.ToLowerInvariant())
+            .Distinct()
+            .Order(StringComparer.Ordinal);
+
+        Assert.Equal(created, allowed);
+        Assert.Equal("user-override", (string?)allowList["properties"]!["source"]);
+        Assert.Contains("data", DependsOn(Deployment(template, "vault")));
+        Assert.Contains("vault", DependsOn(Deployment(template, "migrations")));
+    }
+
     // Both run as the identity those roles were granted to, which is the app's own and not one the app brings with it.
     [Theory]
     [InlineData("api", "Microsoft.App/containerApps")]
@@ -589,6 +615,9 @@ public sealed partial class TemplateTests
 
     private static string OutputOf(string deployment, string output) =>
         $"'Microsoft\\.Resources/deployments', '{deployment}'\\), '[0-9-]+'\\)\\.outputs\\.{output}\\.value";
+
+    [GeneratedRegex(@"CREATE EXTENSION (?:IF NOT EXISTS )?""?(?<name>[A-Za-z0-9_-]+)", RegexOptions.IgnoreCase)]
+    private static partial Regex CreateExtension();
 
     // `[format('{0}/{1}/{2}', parameters('profileName'), parameters('endpointName'), 'platform')]` is the route named platform.
     [GeneratedRegex(@"'(?<name>[A-Za-z0-9-]+)'\)\]$")]

@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Catalog.Domain;
 using ShopForge.Shared.Stores;
@@ -33,7 +34,9 @@ internal sealed class SearchTerms
     // are the same page.
     public static SearchTerms? Of(DbContext dbContext, IStoreContext storeContext, StoreSettings settings, string? typed)
     {
-        var terms = typed?.Trim();
+        // Composed first: a letter typed as a base and a separate accent, as some keyboards and pasted text send
+        // it, is the letter itself, so the two spellings are one search and one line in the log (D-224).
+        var terms = typed?.Normalize(NormalizationForm.FormC).Trim();
 
         if (terms is null || terms.Length < Shortest)
         {
@@ -42,18 +45,21 @@ internal sealed class SearchTerms
 
         if (terms.Length > Longest)
         {
-            terms = terms[..Longest];
+            // Never between the two halves of a character beyond the first 65,536, such as an emoji: half of
+            // one is not text, and the database's driver refuses to send it, which answered a 500 (D-224).
+            terms = terms[..(char.IsHighSurrogate(terms[Longest - 1]) ? Longest - 1 : Longest)];
         }
 
         return new SearchTerms(
             dbContext,
-            SearchConfigurations.For(settings.Culture),
+            SearchConfigurations.Folded(settings.Culture),
             storeContext.StoreId ?? Guid.Empty,
             terms);
     }
 
     // `websearch_to_tsquery` is the forgiving one: it takes what a person types — bare words, "a phrase", or
-    // -excluded — and never throws on punctuation, which `to_tsquery` does.
+    // -excluded — and never throws on punctuation, which `to_tsquery` does. It reads them in the folded
+    // configuration the folded vector was written in, so both sides lose their accents the same way (D-224).
     //
     // The store is named in the statement as a second guard and for the planner's sake, not as the only one:
     // EF applies the tenancy filter around a composed query, so the entity match is scoped whether this
@@ -61,13 +67,13 @@ internal sealed class SearchTerms
     // not filtered by EF, and it is joined against this one, so neither can widen what the page returns.
     public IQueryable<StoreProduct> Matching() =>
         _dbContext.Set<StoreProduct>().FromSql(
-            $"SELECT * FROM catalog.store_products AS listing WHERE listing.store_id = {_storeId} AND listing.search_vector @@ websearch_to_tsquery({_configuration}::regconfig, {Typed})");
+            $"SELECT * FROM catalog.store_products AS listing WHERE listing.store_id = {_storeId} AND listing.search_vector_folded @@ websearch_to_tsquery({_configuration}::regconfig, {Typed})");
 
     // How well each one answers, for the order a shopper means by "best first". The column names are the ones
     // the context's snake-case convention expects of a raw projection: EF asks for `id`, not for `Id`.
     public IQueryable<SearchHit> Ranked() =>
         _dbContext.Database.SqlQuery<SearchHit>(
-            $"SELECT listing.id AS \"id\", ts_rank(listing.search_vector, websearch_to_tsquery({_configuration}::regconfig, {Typed})) AS \"rank\" FROM catalog.store_products AS listing WHERE listing.store_id = {_storeId} AND listing.search_vector @@ websearch_to_tsquery({_configuration}::regconfig, {Typed})");
+            $"SELECT listing.id AS \"id\", ts_rank(listing.search_vector_folded, websearch_to_tsquery({_configuration}::regconfig, {Typed})) AS \"rank\" FROM catalog.store_products AS listing WHERE listing.store_id = {_storeId} AND listing.search_vector_folded @@ websearch_to_tsquery({_configuration}::regconfig, {Typed})");
 }
 
 // One listing that answers, and how well.

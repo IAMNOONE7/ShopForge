@@ -13,7 +13,7 @@ internal static class SearchConfigurations
     private const string NoStemming = "simple";
 
     // Only the ones PostgreSQL ships, named as it names them. Adding a language means checking the server has
-    // it rather than guessing from the culture.
+    // it rather than guessing from the culture, and a migration creating its folded copy.
     private static readonly Dictionary<string, string> Known = new(StringComparer.OrdinalIgnoreCase)
     {
         ["da"] = "danish",
@@ -33,6 +33,10 @@ internal static class SearchConfigurations
         ["tr"] = "turkish",
     };
 
+    // Every folded configuration a culture can name, for the check that the database has each of them.
+    public static IReadOnlyList<string> AllFolded { get; } =
+        [.. Known.Values.Append(NoStemming).Distinct().Select(FoldedOf).Order(StringComparer.Ordinal)];
+
     public static string For(string? culture)
     {
         if (string.IsNullOrWhiteSpace(culture))
@@ -44,4 +48,13 @@ internal static class SearchConfigurations
 
         return Known.GetValueOrDefault(language, NoStemming);
     }
+
+    // The same configuration with accents folded away in front of its dictionary, so `šroubovák`, `sroubovak`
+    // and `ŠROUBOVÁK` are one word to both the index and the query. The migration creates one for each (D-224).
+    public static string Folded(string? culture) => FoldedOf(For(culture));
+
+    // For codes, which are words in no language: never stemmed, and folded like everything else.
+    public static string FoldedWithoutStemming { get; } = FoldedOf(NoStemming);
+
+    private static string FoldedOf(string configuration) => $"catalog.{configuration}_folded";
 }

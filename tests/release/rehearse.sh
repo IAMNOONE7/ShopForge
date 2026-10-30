@@ -55,6 +55,32 @@ fail() {
 
 status_of() { curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$@" || true; }
 
+# Whether a build's search of the demo shop finds anything for the words given: yes or no.
+finds() {
+  local url=$1 words=$2
+
+  if curl -s --max-time 10 -H "Host: $STORE_HOST" --get --data-urlencode "q=$words" "$url/api/storefront/products" \
+    | grep -qE '"totalCount":[1-9]'; then
+    echo yes
+  else
+    echo no
+  fi
+}
+
+# The same, for up to half a minute: a build that has just started may still be indexing.
+finds_soon() {
+  for _ in $(seq 1 60); do
+    if [ "$(finds "$1" "$2")" = yes ]; then
+      echo yes
+      return 0
+    fi
+
+    sleep 0.5
+  done
+
+  echo no
+}
+
 expect() {
   local name=$1 expected=$2 actual=$3
 
@@ -143,9 +169,17 @@ echo "1. The previous build serves at its own schema."
 start seed "$STATE/previous" Development "$PREVIOUS_URL"
 wait_for "$PREVIOUS_URL/health/ready" 200 || { echo "The previous build did not seed its schema; see $STATE/seed.log" >&2; exit 1; }
 stop seed
+
+# A database in service has had its nightly pass, which indexes for search whatever was written around the paths
+# that index it themselves: a seed from before D-224 wrote the demo shop that way. The previous build runs it as it
+# starts.
+"${COMPOSE[@]}" exec -T postgres psql -U shopforge -d shopforge -qc \
+  "INSERT INTO messaging.scheduled_runs (name, due_at) VALUES ('store-maintenance', now())
+   ON CONFLICT (name) DO UPDATE SET due_at = now()" >/dev/null
 start previous "$STATE/previous" Production "$PREVIOUS_URL"
 wait_for "$PREVIOUS_URL/health/ready" 200 || fail "the previous build became ready"
 expect "the previous build serves the shop" 200 "$(status_of -H "Host: $STORE_HOST" "$PREVIOUS_URL/api/storefront/products")"
+expect "the previous build finds a seeded product by its name" yes "$(finds_soon "$PREVIOUS_URL" oak)"
 
 echo "2. The release's build, started before the migration, as the deployment used to start it."
 start release "$STATE/release" Production "$RELEASE_URL"
@@ -204,6 +238,9 @@ fi
 
 expect "the previous build serves the newer schema" 200 "$(status_of -H "Host: $STORE_HOST" "$PREVIOUS_URL/api/storefront/products")"
 
+# A release may add a search vector beside the one the previous build writes and reads (D-224).
+expect "the previous build still finds it by its name" yes "$(finds "$PREVIOUS_URL" oak)"
+
 echo "4. The release's build catches up without a restart, and the previous build stops."
 
 if wait_for "$RELEASE_URL/health/ready" 200; then
@@ -213,6 +250,7 @@ else
 fi
 
 expect "the release's build serves the shop" 200 "$(status_of -H "Host: $STORE_HOST" "$RELEASE_URL/api/storefront/products")"
+expect "the release's build finds it typed with accents" yes "$(finds "$RELEASE_URL" óák)"
 "$ROOT/scripts/smoke.sh" --api "$RELEASE_URL" --version "$release" --store-host "$STORE_HOST" | sed 's/^/    /' \
   && pass "the smoke test, as the release's build" || fail "the smoke test, as the release's build"
 
@@ -234,6 +272,7 @@ else
 fi
 
 expect "the previous build serves the shop" 200 "$(status_of -H "Host: $STORE_HOST" "$PREVIOUS_URL/api/storefront/products")"
+expect "the previous build still finds it by its name" yes "$(finds "$PREVIOUS_URL" oak)"
 
 # A build from before the version endpoint is told apart by not having it: the release's build has.
 version_status=$(status_of "$PREVIOUS_URL/health/version")

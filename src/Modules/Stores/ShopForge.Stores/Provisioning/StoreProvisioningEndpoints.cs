@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using ShopForge.Shared.Auditing;
 using ShopForge.Shared.Http;
+using ShopForge.Shared.Messaging;
 using ShopForge.Shared.Payments;
 using ShopForge.Shared.Platform;
 using ShopForge.Shared.Security;
@@ -104,6 +105,7 @@ internal static class StoreProvisioningEndpoints
         DbContext dbContext,
         IStoreContext storeContext,
         IAuditLog audit,
+        IOutbox outbox,
         CancellationToken cancellationToken)
     {
         var company = request.Company?.ToCompany();
@@ -135,6 +137,7 @@ internal static class StoreProvisioningEndpoints
         }
 
         var freeShippingBefore = new { IsOn = store.FreeShippingIsOn, Threshold = store.FreeShippingThreshold };
+        var cultureBefore = store.Culture;
 
         try
         {
@@ -175,6 +178,12 @@ internal static class StoreProvisioningEndpoints
         if (!freeShippingAfter.Equals(freeShippingBefore))
         {
             audit.Record("store.free-shipping-changed", store.Name, new { Before = freeShippingBefore, After = freeShippingAfter });
+        }
+
+        // Search reads a store's words by its language, so they are read again in the new one (D-224).
+        if (store.Culture != cultureBefore)
+        {
+            outbox.Enqueue(new StoreCultureChanged(store.Culture));
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);

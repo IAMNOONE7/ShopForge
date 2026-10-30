@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using ShopForge.Catalog.Domain;
+using ShopForge.Catalog.Search;
 using ShopForge.Shared.Inventory;
 using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
@@ -104,6 +105,19 @@ public static class DevelopmentCatalog
                 ["usb-c-to-lightning-cable"] = new() { ["power"] = 30L, ["connectors"] = new[] { "usb-c", "lightning" }, ["cable-length"] = 1.5m },
             },
             cancellationToken);
+
+        // The seed writes the tables itself rather than through the endpoints that index what they change, and a new
+        // database's nightly pass is a day away: without this a fresh one found nothing for a day (D-224).
+        await IndexAsync(services, tenantId, woodenHomeStoreId, cancellationToken);
+        await IndexAsync(services, tenantId, voltElectronicsStoreId, cancellationToken);
+    }
+
+    private static async Task IndexAsync(IServiceProvider services, Guid tenantId, Guid storeId, CancellationToken cancellationToken)
+    {
+        await using var scope = services.CreateAsyncScope();
+        scope.ServiceProvider.GetRequiredService<StoreContext>().Set(storeId, tenantId);
+
+        await scope.ServiceProvider.GetRequiredService<SearchIndex>().RefreshStoreAsync(cancellationToken);
     }
 
     private static (string Code, string Name, AttributeType Type, string? Unit, string[] Options) Attribute(

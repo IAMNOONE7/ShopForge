@@ -37,6 +37,12 @@ public sealed record UnappliedPaymentRefunded(string OrderNumber, string Email, 
     public static string EventType => "payment.unapplied-refunded";
 }
 
+// A store's culture chooses how its words are read for search (D-178), so its listings are read again (D-224).
+public sealed record StoreCultureChanged(string Culture) : IDomainEvent
+{
+    public static string EventType => "store.culture-changed";
+}
+
 public sealed record EmailRequested(string To, string Subject, string Body, string? AttachmentReference = null) : IDomainEvent
 {
     public static string EventType => "email.requested";

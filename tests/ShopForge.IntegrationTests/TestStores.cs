@@ -29,11 +29,11 @@ internal static class TestStores
     public static Task<TestStore> CreateInCurrencyAsync(IServiceProvider services, string currency) =>
         CreateAsync(services, new Tenant("Test tenant"), $"{currency} store", addTenant: true, currency);
 
-    public static async Task<(TestStore A, TestStore B)> CreateTwoStoresOfOneTenantAsync(IServiceProvider services)
+    public static async Task<(TestStore A, TestStore B)> CreateTwoStoresOfOneTenantAsync(IServiceProvider services, string culture = "en-IE")
     {
         var tenant = new Tenant("Test tenant");
-        var storeA = await CreateAsync(services, tenant, "Store A", addTenant: true);
-        var storeB = await CreateAsync(services, tenant, "Store B", addTenant: false);
+        var storeA = await CreateAsync(services, tenant, "Store A", addTenant: true, culture: culture);
+        var storeB = await CreateAsync(services, tenant, "Store B", addTenant: false, culture: culture);
 
         return (storeA, storeB);
     }
@@ -50,10 +50,10 @@ internal static class TestStores
         return scope;
     }
 
-    private static async Task<TestStore> CreateAsync(IServiceProvider services, Tenant tenant, string name, bool addTenant, string code = "EUR")
+    private static async Task<TestStore> CreateAsync(IServiceProvider services, Tenant tenant, string name, bool addTenant, string code = "EUR", string culture = "en-IE")
     {
         var currency = Currency.Of(code);
-        var store = new Store(tenant.Id, name, code, "en-IE", new StoreTheme("#112233", "#FFFFFF", 4));
+        var store = new Store(tenant.Id, name, code, culture, new StoreTheme("#112233", "#FFFFFF", 4));
         var domain = store.AddPlatformDomain(Hosts, UniqueLabel(), DateTimeOffset.UtcNow);
         store.SetCompany(new StoreCompany("Test Furniture s.r.o.", "1 Workshop Lane", "Brno", "602 00", "CZ", "12345678", "CZ12345678"));
         store.Publish();

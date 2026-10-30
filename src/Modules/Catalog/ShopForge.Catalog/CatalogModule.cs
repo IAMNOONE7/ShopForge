@@ -19,6 +19,7 @@ using ShopForge.Catalog.Storefront;
 using ShopForge.Shared.Catalog;
 using ShopForge.Shared.Feeds;
 using ShopForge.Shared.Maintenance;
+using ShopForge.Shared.Messaging;
 using ShopForge.Shared.Platform;
 using ShopForge.Shared.Privacy;
 using ShopForge.Shared.Security;
@@ -50,6 +51,7 @@ public static class CatalogModule
         services.AddScoped<WhatPointsAtIt>();
         services.AddScoped<SearchIndex>();
         services.AddScoped<IStoreMaintenance, SearchIndexRebuild>();
+        services.AddScoped<IEventHandler<StoreCultureChanged>, SearchCultureChange>();
         services.AddScoped<IStoreMaintenance, SearchLogCleanup>();
         services.AddScoped<ISearchLog, SearchLog>();
 

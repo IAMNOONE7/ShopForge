@@ -15,9 +15,9 @@ internal sealed record FurnitureStore(
 
     public static string SkuOf(string slug) => $"FURN-{slug.ToUpperInvariant()}";
 
-    public static async Task<FurnitureStore> CreateAsync(ShopForgeApiFactory factory)
+    public static async Task<FurnitureStore> CreateAsync(ShopForgeApiFactory factory, string culture = "en-IE")
     {
-        var (store, otherStore) = await TestStores.CreateTwoStoresOfOneTenantAsync(factory.Services);
+        var (store, otherStore) = await TestStores.CreateTwoStoresOfOneTenantAsync(factory.Services, culture);
         var admin = await TestUsers.LoginAsync(factory, await TestUsers.CreateAsync(factory.Services, store.TenantId));
         var storeId = store.StoreId;
 

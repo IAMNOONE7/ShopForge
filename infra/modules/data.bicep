@@ -53,6 +53,17 @@ resource database 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2024-08-0
   }
 }
 
+// The extensions the migrations create, and only those: Azure lets the database's owner create what this lists and
+// nothing else. A release deploys this before its migration job runs (D-224).
+resource extensions 'Microsoft.DBforPostgreSQL/flexibleServers/configurations@2024-08-01' = {
+  parent: postgres
+  name: 'azure.extensions'
+  properties: {
+    value: 'unaccent'
+    source: 'user-override'
+  }
+}
+
 // The app and its migration job reach the server from Container Apps; nothing outside Azure does, so a release never
 // opens the database to the machine that runs it (D-205).
 resource allowAzureServices 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2024-08-01' = {

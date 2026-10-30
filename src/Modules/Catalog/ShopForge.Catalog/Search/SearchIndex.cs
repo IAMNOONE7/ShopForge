@@ -11,13 +11,14 @@ namespace ShopForge.Catalog.Search;
 // The weights are PostgreSQL's own: a hit in a name counts for more than one in a description, and a code
 // somebody typed exactly counts for as much as a name. Codes are indexed with no stemming whatever the shop's
 // language is, because "FURN-OAK-CHAIR" is not a word in any of them.
+//
+// The words are read twice, into two columns: as before, for a previous build still serving through a release
+// or brought back by a rollback, and with accents folded, which is what the storefront searches (D-224).
 internal sealed class SearchIndex(DbContext dbContext, IStoreContext storeContext, ICurrentStoreSettings settings)
 {
-    private const string Statement = """
-        UPDATE catalog.store_products AS listing
-        SET search_vector =
-            setweight(to_tsvector('@@config@@', coalesce(listing.name, '')), 'A')
-            || setweight(to_tsvector('simple', coalesce((
+    private const string Words = """
+        setweight(to_tsvector('@@config@@', coalesce(listing.name, '')), 'A')
+            || setweight(to_tsvector('@@codes@@', coalesce((
                 SELECT string_agg(variant.sku, ' ')
                 FROM catalog.product_variants AS variant
                 WHERE variant.product_id = listing.product_id), '')), 'A')
@@ -28,6 +29,12 @@ internal sealed class SearchIndex(DbContext dbContext, IStoreContext storeContex
                 JOIN catalog.attribute_definitions AS definition
                     ON definition.id = value.attribute_definition_id AND definition.is_searchable
                 WHERE value.store_product_id = listing.id), '')), 'D')
+        """;
+
+    private const string Statement = """
+        UPDATE catalog.store_products AS listing
+        SET search_vector = @@plain@@,
+            search_vector_folded = @@folded@@
         WHERE listing.store_id = {0}
         """;
 
@@ -61,8 +68,15 @@ internal sealed class SearchIndex(DbContext dbContext, IStoreContext storeContex
     // which is what makes that safe (D-178).
     private async Task<string> StatementAsync(CancellationToken cancellationToken)
     {
-        var configuration = SearchConfigurations.For((await settings.GetAsync(cancellationToken)).Culture);
+        var culture = (await settings.GetAsync(cancellationToken)).Culture;
 
-        return Statement.Replace("@@config@@", configuration, StringComparison.Ordinal);
+        return Statement
+            .Replace("@@plain@@", Read(SearchConfigurations.For(culture), "simple"), StringComparison.Ordinal)
+            .Replace("@@folded@@", Read(SearchConfigurations.Folded(culture), SearchConfigurations.FoldedWithoutStemming), StringComparison.Ordinal);
     }
+
+    private static string Read(string configuration, string codes) =>
+        Words
+            .Replace("@@config@@", configuration, StringComparison.Ordinal)
+            .Replace("@@codes@@", codes, StringComparison.Ordinal);
 }
