@@ -58,8 +58,29 @@ public sealed class SearchTokensTests
         var typed = string.Join(" ", Enumerable.Range(1, 30).Select(index => $"slovo{(char)('a' + (index % 26))}"));
 
         Assert.Equal(SearchTokens.MostTokens, SearchTokens.Read(typed).Count);
+        Assert.DoesNotContain(SearchTokens.Read(typed, unfinished: true), token => token.IsBeginning);
     }
 
+    // Somebody still typing may stop inside a word: the word or code the text ends in is only a beginning, and nothing
+    // that ends before it is (D-227). A one-letter beginning is left out like any one-letter word.
+    [Theory]
+    [InlineData("šr", "word:šr*")]
+    [InlineData("šroubovák", "word:šroubovák*")]
+    [InlineData("šroubovák kř", "word:šroubovák word:kř*")]
+    [InlineData("TS-SK-PH21", "code:ts-sk-ph21*")]
+    [InlineData("100 m", "code:100")]
+    [InlineData("šroubovák k", "word:šroubovák")]
+    [InlineData("šroubovák.", "word:šroubovák")]
+    [InlineData("aku-", "word:aku")]
+    [InlineData("\"sada bi", "phrase:sada+bi")]
+    [InlineData("šroubovák -sa", "word:šroubovák excluded:sa")]
+    public void The_word_unfinished_text_ends_in_is_a_beginning(string typed, string read) =>
+        Assert.Equal(read, Described(SearchTokens.Read(typed, unfinished: true)));
+
+    [Fact]
+    public void Finished_text_has_no_beginnings() =>
+        Assert.Equal("word:šr", Described(SearchTokens.Read("šr")));
+
     private static string Described(IReadOnlyList<SearchToken> tokens) =>
-        string.Join(" ", tokens.Select(token => $"{token.Kind.ToString().ToLowerInvariant()}:{string.Join("+", token.Words)}"));
+        string.Join(" ", tokens.Select(token => $"{token.Kind.ToString().ToLowerInvariant()}:{string.Join("+", token.Words)}{(token.IsBeginning ? "*" : "")}"));
 }

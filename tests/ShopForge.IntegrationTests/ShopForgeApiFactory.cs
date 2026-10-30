@@ -111,6 +111,7 @@ public sealed class ShopForgeApiFactory : WebApplicationFactory<Program>, IAsync
         builder.UseSetting("RateLimiting:Authentication:PermitLimit", "10000");
         builder.UseSetting("RateLimiting:Writes:PermitLimit", "100000");
         builder.UseSetting("RateLimiting:Expensive:PermitLimit", "100000");
+        builder.UseSetting("RateLimiting:Typing:PermitLimit", "100000");
         builder.UseSetting("RateLimiting:Global:PermitLimit", "1000000");
 
         // Every host built in the suite shares one database but not its stand-ins for the outside world, so one

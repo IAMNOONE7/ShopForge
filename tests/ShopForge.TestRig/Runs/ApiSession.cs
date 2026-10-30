@@ -28,32 +28,41 @@ internal sealed class ApiSession : IDisposable
     public Task<JsonElement> PutAsync(string path, object body, HttpStatusCode expected, CancellationToken cancellationToken) =>
         SendAsync(new HttpRequestMessage(HttpMethod.Put, path) { Content = JsonContent.Create(body) }, expected, cancellationToken);
 
-    public Task<JsonElement> PutFileAsync(string path, byte[] file, string fileName, string contentType, HttpStatusCode expected, CancellationToken cancellationToken)
+    public Task<JsonElement> PutFileAsync(string path, byte[] file, string fileName, string contentType, HttpStatusCode expected, CancellationToken cancellationToken) =>
+        SendAsync(new HttpRequestMessage(HttpMethod.Put, path) { Content = Form(file, fileName, contentType) }, expected, cancellationToken);
+
+    public Task<JsonElement> PostFileAsync(string path, byte[] file, string fileName, string contentType, HttpStatusCode expected, CancellationToken cancellationToken) =>
+        SendAsync(new HttpRequestMessage(HttpMethod.Post, path) { Content = Form(file, fileName, contentType) }, expected, cancellationToken);
+
+    // A file the API hands out, as it is.
+    public async Task<byte[]> GetFileAsync(string path, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, path);
+        using var response = await ReachAsync(request, cancellationToken);
+
+        if (response.StatusCode != HttpStatusCode.OK)
+        {
+            throw new RunSetupException($"GET {request.RequestUri} answered {(int)response.StatusCode} where 200 was expected.");
+        }
+
+        return await response.Content.ReadAsByteArrayAsync(cancellationToken);
+    }
+
+    public void Dispose() => _client.Dispose();
+
+    private static MultipartFormDataContent Form(byte[] file, string fileName, string contentType)
     {
         var content = new ByteArrayContent(file);
         content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
 
-        return SendAsync(new HttpRequestMessage(HttpMethod.Put, path) { Content = new MultipartFormDataContent { { content, "file", fileName } } }, expected, cancellationToken);
+        return new MultipartFormDataContent { { content, "file", fileName } };
     }
-
-    public void Dispose() => _client.Dispose();
 
     private async Task<JsonElement> SendAsync(HttpRequestMessage request, HttpStatusCode expected, CancellationToken cancellationToken)
     {
         using (request)
         {
-            HttpResponseMessage answered;
-
-            try
-            {
-                answered = await _client.SendAsync(request, cancellationToken);
-            }
-            catch (Exception exception) when (exception is HttpRequestException || (exception is TaskCanceledException && !cancellationToken.IsCancellationRequested))
-            {
-                throw new RunSetupException($"{request.Method} {request.RequestUri} could not reach the API: {exception.Message}");
-            }
-
-            using var response = answered;
+            using var response = await ReachAsync(request, cancellationToken);
             var text = await response.Content.ReadAsStringAsync(cancellationToken);
 
             if (response.StatusCode != expected)
@@ -62,6 +71,18 @@ internal sealed class ApiSession : IDisposable
             }
 
             return text.Length == 0 ? default : JsonDocument.Parse(text).RootElement.Clone();
+        }
+    }
+
+    private async Task<HttpResponseMessage> ReachAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _client.SendAsync(request, cancellationToken);
+        }
+        catch (Exception exception) when (exception is HttpRequestException || (exception is TaskCanceledException && !cancellationToken.IsCancellationRequested))
+        {
+            throw new RunSetupException($"{request.Method} {request.RequestUri} could not reach the API: {exception.Message}");
         }
     }
 

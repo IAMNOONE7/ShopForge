@@ -9,7 +9,7 @@ namespace ShopForge.TestRig.Runs;
 
 // A run made the way a merchant would make it, through the API and nothing else: the operator creates a company, its
 // owner takes up the invitation the stand-in for Mailgun received, and the owner opens two stores, connects Comgate,
-// lists a T-shirt in three sizes and a mug, stocks them and publishes. Nothing is written to the database behind the
+// lists a T-shirt in three sizes and a mug, stocks them and publishes; and, when asked, opens the tool shop beside them. Nothing is written to the database behind the
 // API's back, so a run is also a check that the platform can still be set up from nothing (D-203).
 internal sealed class RunSetup(RigOptions options, FakeComgate comgate, FakeMailgun mailgun, RunBook runs)
 {
@@ -29,7 +29,9 @@ internal sealed class RunSetup(RigOptions options, FakeComgate comgate, FakeMail
         vatNumber = "CZ12345678",
     };
 
-    public async Task<Run> StartAsync(CancellationToken cancellationToken)
+    private const string Spreadsheet = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+    public async Task<Run> StartAsync(bool withToolShop, CancellationToken cancellationToken)
     {
         var id = "r" + Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(4));
         var domain = $"{id}.e2e.test";
@@ -63,12 +65,19 @@ internal sealed class RunSetup(RigOptions options, FakeComgate comgate, FakeMail
             await ProductAsync(admin, stores, $"{id.ToUpperInvariant()}-MUG", "Mug", "mug", 190m, [], stock: 10, cancellationToken),
         };
 
-        foreach (var store in stores)
+        var toolShop = withToolShop ? await OpenStoreAsync(admin, $"Run {id} Kladívko", $"{id}-c", merchant, secret, cancellationToken) : null;
+
+        if (toolShop is not null)
+        {
+            await StockToolShopAsync(admin, anyone, toolShop, cancellationToken);
+        }
+
+        foreach (var store in toolShop is null ? stores : [.. stores, toolShop])
         {
             await admin.PostAsync($"api/admin/stores/{store.Id}/publish", null, HttpStatusCode.OK, cancellationToken);
         }
 
-        var run = new Run(id, domain, tenant.GetProperty("id").GetGuid(), owner, new ComgateAccount(merchant), stores, products, DateTimeOffset.UtcNow);
+        var run = new Run(id, domain, tenant.GetProperty("id").GetGuid(), owner, new ComgateAccount(merchant), stores, products, toolShop, DateTimeOffset.UtcNow);
         runs.Add(run);
 
         return run;
@@ -139,6 +148,73 @@ internal sealed class RunSetup(RigOptions options, FakeComgate comgate, FakeMail
             cancellationToken);
 
         return new RunStore(id, name, store.GetProperty("primaryHostName").GetString()!);
+    }
+
+    // The development data's Czech tool shop, built as a merchant would build it (D-227): the API describes the tree and
+    // the attributes, which are made through the admin API, and hands out the workbook every product is imported from.
+    private static async Task StockToolShopAsync(ApiSession admin, ApiSession anyone, RunStore store, CancellationToken cancellationToken)
+    {
+        var path = $"api/admin/stores/{store.Id}";
+        var catalogue = await anyone.GetAsync("api/e2e/catalogues/tool-shop", cancellationToken);
+        var categories = new Dictionary<string, Guid>();
+
+        foreach (var (category, index) in catalogue.GetProperty("categories").EnumerateArray().Select((category, index) => (category, index)))
+        {
+            var parent = category.GetProperty("parentSlug").GetString();
+            var created = await admin.PostAsync(
+                $"{path}/categories",
+                new
+                {
+                    name = category.GetProperty("name").GetString(),
+                    slug = category.GetProperty("slug").GetString(),
+                    sortOrder = index,
+                    parentId = parent is null ? (Guid?)null : categories[parent],
+                    searchKeywords = category.GetProperty("keywords").GetString(),
+                },
+                HttpStatusCode.Created,
+                cancellationToken);
+            categories[category.GetProperty("slug").GetString()!] = created.GetProperty("id").GetGuid();
+        }
+
+        var offered = new Dictionary<string, List<Guid>>();
+
+        foreach (var (attribute, index) in catalogue.GetProperty("attributes").EnumerateArray().Select((attribute, index) => (attribute, index)))
+        {
+            var created = await admin.PostAsync(
+                $"{path}/attributes",
+                new
+                {
+                    code = attribute.GetProperty("code").GetString(),
+                    name = attribute.GetProperty("name").GetString(),
+                    type = attribute.GetProperty("type").GetString(),
+                    unit = attribute.GetProperty("unit").GetString(),
+                    isFilterable = attribute.GetProperty("filterable").GetBoolean(),
+                    isVisibleOnProductPage = true,
+                    sortOrder = index,
+                    isSearchable = attribute.GetProperty("searchable").GetBoolean(),
+                    options = attribute.GetProperty("options").EnumerateArray().Select(option => option.GetString()).ToArray(),
+                },
+                HttpStatusCode.Created,
+                cancellationToken);
+
+            foreach (var category in attribute.GetProperty("filterIn").EnumerateArray().Select(category => category.GetString()!))
+            {
+                (offered.TryGetValue(category, out var ids) ? ids : offered[category] = []).Add(created.GetProperty("id").GetGuid());
+            }
+        }
+
+        foreach (var (category, ids) in offered)
+        {
+            await admin.PutAsync($"{path}/categories/{categories[category]}/attributes", new { attributeIds = ids }, HttpStatusCode.OK, cancellationToken);
+        }
+
+        var workbook = await anyone.GetFileAsync("api/e2e/catalogues/tool-shop/products.xlsx", cancellationToken);
+        var report = await admin.PostFileAsync($"{path}/import", workbook, "tool-shop.xlsx", Spreadsheet, HttpStatusCode.OK, cancellationToken);
+
+        if (report.GetProperty("invalid").GetInt32() > 0 || report.GetProperty("failed").GetInt32() > 0)
+        {
+            throw new RunSetupException($"The tool shop's products did not all import: {report}");
+        }
     }
 
     // One product of the company's, sold in both stores. Sizes make it a product with variants, each stocked.

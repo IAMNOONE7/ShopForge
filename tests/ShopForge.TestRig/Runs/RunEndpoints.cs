@@ -15,11 +15,12 @@ internal static class RunEndpoints
     }
 
     // A run that cannot be made says which step refused: a 502, because the failure is the API's answer, not the rig's.
-    private static async Task<Results<Created<Run>, ProblemHttpResult>> StartAsync(RunSetup setup, CancellationToken cancellationToken)
+    // `?toolShop=true` adds the development data's Czech tool shop as a third store (D-227).
+    private static async Task<Results<Created<Run>, ProblemHttpResult>> StartAsync(RunSetup setup, bool? toolShop, CancellationToken cancellationToken)
     {
         try
         {
-            var run = await setup.StartAsync(cancellationToken);
+            var run = await setup.StartAsync(toolShop ?? false, cancellationToken);
 
             return TypedResults.Created($"/runs/{run.Id}", run);
         }

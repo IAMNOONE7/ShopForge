@@ -77,27 +77,79 @@ public sealed partial class SearchMatchTests
     public void Nothing_to_match_finds_nothing() =>
         Assert.True(SearchMatch.For(SearchTokens.Read("!!! 😀"), czechForms: true).FindsNothing);
 
+    // A word somebody may still be typing is found by its beginnings or by its beginning as typed, read without stemming,
+    // wherever a beginning finds it; the words before it are asked for as a search asks (D-227).
+    [Fact]
+    public void An_unfinished_word_is_also_asked_for_as_typed()
+    {
+        var match = SearchMatch.For(SearchTokens.Read("dubový st", unfinished: true), czechForms: true);
+
+        Asks(match.Found, "(%L:* | %L:*)", "dubov", "dubův");
+        AsksUnfinished(match.Found, "(%L:*)", ["st"], "%L:*", "st");
+        Asks(match.ExactInName, "%L:A & %L:A", "dubový", "st");
+        Assert.Null(match.ExactInName.Unfinished);
+        Assert.Null(match.FormsInName.Unfinished);
+        Assert.Contains("st", match.FormsInName.Words);
+        AsksUnfinished(match.BeginningsInName, "(%L:*A)", ["st"], "%L:*A", "st");
+        AsksUnfinished(match.InWhatItIsCalled, "(%L:*AB)", ["st"], "%L:*AB", "st");
+    }
+
+    // English drops "so" as a stop word, which would lose the sofa somebody is typing.
+    [Fact]
+    public void An_unfinished_word_in_a_stemmed_language_is_found_either_way()
+    {
+        var match = SearchMatch.For(SearchTokens.Read("so", unfinished: true), czechForms: false);
+
+        Asks(match.Found, "");
+        AsksUnfinished(match.Found, "(%L:*)", ["so"], "%L:*", "so");
+        Assert.False(match.FindsNothing);
+    }
+
+    [Fact]
+    public void A_czech_word_unfinished_is_found_by_the_beginnings_of_its_forms() =>
+        AsksUnfinished(SearchMatch.For(SearchTokens.Read("šroubky", unfinished: true), czechForms: true).Found,
+            "(%L:* | %L:*)", ["šroubk", "šroubek"], "%L:*", "šroubky");
+
+    [Fact]
+    public void An_unfinished_code_is_the_beginning_of_a_code()
+    {
+        var match = SearchMatch.For(SearchTokens.Read("TS-SK-PH21", unfinished: true), czechForms: true);
+
+        AsksCodes(match.Found, "%L:*", "ts-sk-ph21");
+
+        foreach (var tier in new[] { match.ExactInName, match.FormsInName, match.BeginningsInName })
+        {
+            AsksCodes(tier, "%L:*A", "ts-sk-ph21");
+        }
+
+        AsksCodes(match.InWhatItIsCalled, "%L:*AB", "ts-sk-ph21");
+    }
+
     // Whatever is typed, a template holds placeholders and operators and nothing else, one placeholder a word.
     [Theory]
     [InlineData("šroub:*A | !(vrták) & 'x' <-> \\")]
     [InlineData("%L%s%1$s %%")]
     [InlineData("\"a' | b\" -c'd PH2:A")]
     [InlineData("Robert'); DROP TABLE store_products;--")]
+    [InlineData("šroub:*A | !(vrták) & 'x' <-> \\ ab")]
     public void Nothing_typed_reaches_a_template(string typed)
     {
-        foreach (var czech in new[] { true, false })
+        foreach (var (czech, unfinished) in new[] { (true, false), (false, false), (true, true), (false, true) })
         {
-            var match = SearchMatch.For(SearchTokens.Read(typed), czech);
+            var match = SearchMatch.For(SearchTokens.Read(typed, unfinished), czech);
 
             Assert.All(
                 new[] { match.Found, match.ExactInName, match.FormsInName, match.BeginningsInName, match.InWhatItIsCalled },
                 question =>
                 {
-                    Assert.Matches(Operators(), question.Template);
-                    Assert.Matches(Operators(), question.CodesTemplate);
+                    var beginning = question.Unfinished ?? new SearchBeginning("", [], "%L", "x");
+
+                    Assert.All([question.Template, question.CodesTemplate, beginning.Template, beginning.AsTypedTemplate], template => Assert.Matches(Operators(), template));
                     Assert.Equal(question.Words.Count, Placeholders().Count(question.Template));
                     Assert.Equal(question.Codes.Count, Placeholders().Count(question.CodesTemplate));
-                    Assert.All(question.Words.Concat(question.Codes), word => Assert.Matches(@"^[\p{L}\p{Nd}]+(-[\p{L}\p{Nd}]+)*$", word));
+                    Assert.Equal(beginning.Words.Count, Placeholders().Count(beginning.Template));
+                    Assert.Equal(1, Placeholders().Count(beginning.AsTypedTemplate));
+                    Assert.All(question.Words.Concat(question.Codes).Concat(beginning.Words).Append(beginning.AsTyped), word => Assert.Matches(@"^[\p{L}\p{Nd}]+(-[\p{L}\p{Nd}]+)*$", word));
                 });
         }
     }
@@ -112,6 +164,13 @@ public sealed partial class SearchMatchTests
     {
         Assert.Equal(template, question.CodesTemplate);
         Assert.Equal(codes, question.Codes);
+    }
+
+    private static void AsksUnfinished(SearchQueryText question, string template, string[] words, string asTypedTemplate, string asTyped)
+    {
+        Assert.NotNull(question.Unfinished);
+        Assert.Equal((template, asTypedTemplate, asTyped), (question.Unfinished.Template, question.Unfinished.AsTypedTemplate, question.Unfinished.AsTyped));
+        Assert.Equal(words, question.Unfinished.Words);
     }
 
     [GeneratedRegex(@"^((%L(:\*?(AB|A)?)?)|[()|&!<\->\s])*$")]

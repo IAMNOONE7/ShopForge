@@ -3,9 +3,10 @@ using ShopForge.Shared.Stores;
 namespace ShopForge.Catalog.Development;
 
 // A Czech tool shop written the way a real one writes its catalogue: a category tree, attributes, brands, codes and
-// descriptions in ordinary Czech. It is the search's test corpus and the development data's third store, so the live
-// checks and the screens look at the same shop the tests do (D-225). Every name and brand is made up.
-internal static class ToolShopCatalogue
+// descriptions in ordinary Czech. It is the search's test corpus, the development data's third store and, on request,
+// a run's of the end-to-end rig, so the live checks, the screens and the browser journeys look at the same shop the
+// tests do (D-225, D-227). Every name and brand is made up.
+public static class ToolShopCatalogue
 {
     public static IReadOnlyList<ToolShopCategory> Categories { get; } =
     [
@@ -105,13 +106,17 @@ internal static class ToolShopCatalogue
         values.ToDictionary(value => value.Code, value => value.Value);
 }
 
-internal sealed record ToolShopCategory(string Slug, string Name, string? ParentSlug, string? Keywords = null);
+public sealed record ToolShopCategory(string Slug, string Name, string? ParentSlug, string? Keywords = null);
 
-// An attribute, the categories that offer it as a filter, and whether its words are searched.
-internal sealed record ToolShopAttribute(
-    string Code, string Name, string Type, string? Unit, IReadOnlyList<string> Options, IReadOnlyList<string> FilterIn, bool Searchable = false);
+// An attribute, the categories that offer it as a filter, and whether its words are searched. Free text is not a
+// filter.
+public sealed record ToolShopAttribute(
+    string Code, string Name, string Type, string? Unit, IReadOnlyList<string> Options, IReadOnlyList<string> FilterIn, bool Searchable = false)
+{
+    public bool Filterable => Type != "text";
+}
 
-internal sealed record ToolShopProduct(
+public sealed record ToolShopProduct(
     string Sku,
     string Name,
     string Description,

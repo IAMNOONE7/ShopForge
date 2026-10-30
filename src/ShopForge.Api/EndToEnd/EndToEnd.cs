@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Npgsql;
+using ShopForge.Catalog.Development;
 using ShopForge.Infrastructure.Files;
 using ShopForge.Infrastructure.Persistence;
 using ShopForge.Platform.Development;
@@ -64,6 +65,13 @@ internal static class EndToEnd
                     ["advanceMinutes"] = [$"The clock moves forward only, and no more than {ShiftedClock.Furthest.TotalDays} days in all."],
                 }));
 
+        // The development data's Czech tool shop, for a run that asks for it: the rig makes the tree and the attributes
+        // through the admin API and uploads the workbook to the import, as a merchant would, so a run's tool shop is
+        // the one the search's tests and the development data have (D-227). Nothing here writes anything.
+        endToEnd.MapGet("/catalogues/tool-shop", () => TypedResults.Ok(new ToolShopDescription(ToolShopCatalogue.Categories, ToolShopCatalogue.Attributes)));
+        endToEnd.MapGet("/catalogues/tool-shop/products.xlsx", () => TypedResults.File(
+            DevelopmentToolShop.ProductsWorkbook(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "tool-shop.xlsx"));
+
         // A pass run now rather than when it falls due, so a journey that waits for the sweep does not wait a minute.
         endToEnd.MapPost("/passes/{name}", async Task<Results<NoContent, NotFound>> (
             string name, IEnumerable<IScheduledPass> passes, CancellationToken cancellationToken) =>
@@ -117,3 +125,5 @@ internal sealed record EndToEndMarker(string Environment, string? Database, Date
 internal sealed record ClockReading(DateTimeOffset Now, TimeSpan Offset);
 
 internal sealed record ClockChange(double AdvanceMinutes);
+
+internal sealed record ToolShopDescription(IReadOnlyList<ToolShopCategory> Categories, IReadOnlyList<ToolShopAttribute> Attributes);

@@ -89,6 +89,11 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy(RateLimits.Crawlers, context =>
         Window(context, "crawlers", builder.Configuration.GetValue("RateLimiting:Crawlers:PermitLimit", 300)));
 
+    // Four a second for a minute, which is somebody typing quickly and correcting what they typed, and a starting point
+    // to be measured (D-227).
+    options.AddPolicy(RateLimits.Typing, context =>
+        Window(context, "typing", builder.Configuration.GetValue("RateLimiting:Typing:PermitLimit", 240)));
+
     // Sized from what the providers document rather than from a shopper: three times the thousand a minute one
     // address must be able to send, and every provider retries what this refuses (D-196).
     options.AddPolicy(RateLimits.Webhooks, context =>

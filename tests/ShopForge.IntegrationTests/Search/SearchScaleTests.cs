@@ -19,6 +19,7 @@ namespace ShopForge.IntegrationTests.Search;
 public sealed class SearchScaleTests(ShopForgeApiFactory factory)
 {
     private const int Listings = 20_000;
+    private const string Suggestions = "/api/storefront/search/suggest";
 
     private static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
 
@@ -60,10 +61,37 @@ public sealed class SearchScaleTests(ShopForgeApiFactory factory)
         Assert.True(taken < TimeSpan.FromSeconds(30), $"a search took {taken.TotalMilliseconds:F0} ms, which is not a slow machine but a broken query");
     }
 
-    private async Task<int> QueriesAsync(FurnitureStore furniture, string terms)
+    // The search box asks on every letter, so what a suggestion costs must not grow with the catalogue either: the
+    // store's settings, its categories and one page of products, however many answer (D-227).
+    [Fact]
+    public async Task Suggesting_from_twenty_thousand_costs_three_round_trips_as_suggesting_from_four_does()
+    {
+        var small = await FurnitureStore.CreateAsync(factory);
+        var large = await FurnitureStore.CreateAsync(factory);
+        await FillAsync(large);
+
+        var forFour = await QueriesAsync(small, "ch", Suggestions);
+        var forNarrow = await QueriesAsync(large, "chesterf", Suggestions);
+        var forBroad = await QueriesAsync(large, "fil", Suggestions);
+        var forOneLetter = await QueriesAsync(large, "f", Suggestions);
+
+        using var shopper = new StorefrontApi(factory, large.Store);
+        var started = Stopwatch.GetTimestamp();
+        await shopper.GetStringAsync($"{Suggestions}?q=fil");
+        var taken = Stopwatch.GetElapsedTime(started);
+
+        TestContext.Current.TestOutputHelper?.WriteLine($"a suggestion from {Listings:n0} listings took {taken.TotalMilliseconds:F0} ms");
+
+        Assert.Equal(forFour, forNarrow);
+        Assert.Equal(forFour, forBroad);
+        Assert.Equal(forOneLetter + 3, forBroad);
+        Assert.True(taken < TimeSpan.FromSeconds(30), $"a suggestion took {taken.TotalMilliseconds:F0} ms, which is not a slow machine but a broken query");
+    }
+
+    private async Task<int> QueriesAsync(FurnitureStore furniture, string terms, string page = "/api/storefront/products")
     {
         using var shopper = new StorefrontApi(factory, furniture.Store);
-        var path = $"/api/storefront/products?q={terms}";
+        var path = $"{page}?q={terms}";
 
         // One run to warm the plans, as the load baseline does, then the one that is counted.
         using var warmed = await shopper.GetAsync(path);

@@ -49,7 +49,7 @@ public static class DevelopmentToolShop
         var definitions = ToolShopCatalogue.Attributes.Select((attribute, index) =>
         {
             var definition = new AttributeDefinition(storeId, attribute.Code, attribute.Name, Enum.Parse<AttributeType>(attribute.Type, ignoreCase: true),
-                new AttributeSettings(attribute.Unit, IsFilterable: attribute.Type != "text", IsVisibleOnProductPage: true, SortOrder: index, IsSearchable: attribute.Searchable));
+                new AttributeSettings(attribute.Unit, IsFilterable: attribute.Filterable, IsVisibleOnProductPage: true, SortOrder: index, IsSearchable: attribute.Searchable));
 
             foreach (var option in attribute.Options)
             {
@@ -82,7 +82,7 @@ public static class DevelopmentToolShop
             provider.GetRequiredService<IAuditLog>(),
             provider.GetRequiredService<TimeProvider>(),
             (await provider.GetRequiredService<ICurrentStoreSettings>().GetAsync(cancellationToken)).Currency);
-        var report = await importer.ImportAsync(Products(), cancellationToken);
+        var report = await importer.ImportAsync(ImportFile.Read(new MemoryStream(ProductsWorkbook())), cancellationToken);
 
         if (report.Created != ToolShopCatalogue.Products.Count)
         {
@@ -90,8 +90,10 @@ public static class DevelopmentToolShop
         }
     }
 
-    // One row a product, in the import's own columns, each weighed and boxed as a tool of its kind might be.
-    private static ImportFile Products()
+    // Every product as a merchant's file would bring it, one row a product in the import's own columns, each weighed and
+    // boxed as a tool of its kind might be. The development data reads it in, the search's tests and a run of the
+    // end-to-end rig upload it, so all three have the same products by the same rules (D-227).
+    public static byte[] ProductsWorkbook()
     {
         var codes = ToolShopCatalogue.Attributes.Select(attribute => attribute.Code).ToArray();
         string[] columns =
@@ -99,7 +101,16 @@ public static class DevelopmentToolShop
             "sku", "name", "slug", "description", "price", "vat", "stock", "visible", "sortorder", "categories", "brand", "ean", "partnumber",
             "search_keywords", "weight", "package_length_mm", "package_width_mm", "package_height_mm", .. codes,
         ];
-        var rows = ToolShopCatalogue.Products.Select((product, index) =>
+
+        using var workbook = new XLWorkbook();
+        var sheet = workbook.AddWorksheet("Products");
+
+        for (var column = 0; column < columns.Length; column++)
+        {
+            sheet.Cell(1, column + 1).Value = columns[column];
+        }
+
+        foreach (var (product, row) in ToolShopCatalogue.Products.Select((product, index) => (product, index + 2)))
         {
             object?[] values =
             [
@@ -108,9 +119,15 @@ public static class DevelopmentToolShop
                 .. codes.Select(code => product.Values.GetValueOrDefault(code)),
             ];
 
-            return new ImportRow(index + 2, columns.Zip(values).ToDictionary(cell => cell.First, cell => new ImportCell(XLCellValue.FromObject(cell.Second))));
-        });
+            for (var column = 0; column < values.Length; column++)
+            {
+                sheet.Cell(row, column + 1).Value = XLCellValue.FromObject(values[column]);
+            }
+        }
 
-        return new ImportFile(columns, [.. rows]);
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+
+        return stream.ToArray();
     }
 }

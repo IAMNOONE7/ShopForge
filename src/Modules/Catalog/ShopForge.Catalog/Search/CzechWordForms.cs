@@ -1,6 +1,3 @@
-using System.Globalization;
-using System.Text;
-
 namespace ShopForge.Catalog.Search;
 
 // How a Czech word typed into a search finds the other forms of it: `šroubováky`, `šroubováků` and `šroubovákem` are
@@ -44,7 +41,7 @@ internal static class CzechWordForms
     public static IReadOnlyList<string> Endings { get; } =
     [
         "", .. CaseEndings.SelectMany(endings => endings).Concat(PossessiveEndings).Concat(OneLetterEndings.Select(letter => letter.ToString()))
-            .Select(Folded).Distinct().OrderBy(ending => ending.Length).ThenBy(ending => ending, StringComparer.Ordinal),
+            .Select(Folding.Of).Distinct().OrderBy(ending => ending.Length).ThenBy(ending => ending, StringComparer.Ordinal),
     ];
 
     // The beginnings that find a word's forms: its stem, then the stem with the alternation undone. The word arrives
@@ -69,7 +66,7 @@ internal static class CzechWordForms
         }
 
         // A plain u can be a ů typed without its ring, but only in a word typed without any accent at all.
-        if (stem[^2] == 'ů' || (stem[^2] == 'u' && Folded(word) == word))
+        if (stem[^2] == 'ů' || (stem[^2] == 'u' && Folding.Of(word) == word))
         {
             prefixes.Add(stem[..^2] + "o" + stem[^1]);
         }
@@ -100,13 +97,5 @@ internal static class CzechWordForms
     private static bool IsVowel(char letter) => Vowels.Contains(letter);
 
     private static string[] WithoutAccents(params string[] endings) =>
-        [.. endings.Concat(endings.Select(Folded)).Distinct()];
-
-    private static string Folded(string text)
-    {
-        var letters = text.Normalize(NormalizationForm.FormD)
-            .Where(letter => CharUnicodeInfo.GetUnicodeCategory(letter) != UnicodeCategory.NonSpacingMark);
-
-        return new string([.. letters]).Normalize(NormalizationForm.FormC);
-    }
+        [.. endings.Concat(endings.Select(Folding.Of)).Distinct()];
 }

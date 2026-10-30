@@ -27,6 +27,20 @@ internal static class StoreCategories
         return new StoreCategoryTree(rows);
     }
 
+    // The same list with names and keywords and nothing a category's own page shows, for the search box, which asks
+    // on every letter typed (D-227).
+    public static async Task<StoreCategoryTree> NamesAsync(DbContext dbContext, CancellationToken cancellationToken)
+    {
+        var rows = await dbContext.Set<Category>()
+            .AsNoTracking()
+            .OrderBy(category => category.SortOrder)
+            .ThenBy(category => category.Name)
+            .Select(category => new CategoryRow(category.Id, category.ParentId, category.Name, category.Slug, null, null, null, category.SearchKeywords))
+            .ToListAsync(cancellationToken);
+
+        return new StoreCategoryTree(rows);
+    }
+
     // Only the shape, for whoever needs to know where a category sits and nothing about what it says.
     public static async Task<CategoryTree> ShapeAsync(DbContext dbContext, CancellationToken cancellationToken)
     {
@@ -48,7 +62,8 @@ internal sealed record CategoryRow(
     string Slug,
     string? SeoTitle,
     string? SeoDescription,
-    string? PageText);
+    string? PageText,
+    string? SearchKeywords = null);
 
 // The rows and their shape together, since every caller that wants one wants the other.
 internal sealed class StoreCategoryTree(IReadOnlyList<CategoryRow> rows)

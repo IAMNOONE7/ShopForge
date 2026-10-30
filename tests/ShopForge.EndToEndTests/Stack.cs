@@ -37,10 +37,12 @@ internal sealed class Stack
             new Uri(described.RootElement.GetProperty("rig").GetString()!));
     }
 
-    public async Task<JsonElement> StartRunAsync(CancellationToken cancellationToken)
+    public Task<JsonElement> StartRunAsync(CancellationToken cancellationToken) => StartRunAsync(toolShop: false, cancellationToken);
+
+    public async Task<JsonElement> StartRunAsync(bool toolShop, CancellationToken cancellationToken)
     {
         using var client = new HttpClient { BaseAddress = Rig };
-        using var response = await client.PostAsync("runs", null, cancellationToken);
+        using var response = await client.PostAsync(toolShop ? "runs?toolShop=true" : "runs", null, cancellationToken);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
 
         Assert.True(response.StatusCode == HttpStatusCode.Created, $"The rig did not start a run: {body}");

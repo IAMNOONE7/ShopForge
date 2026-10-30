@@ -11,6 +11,7 @@ using ShopForge.Catalog.Search;
 using ShopForge.Shared.Files;
 using ShopForge.Shared.Http;
 using ShopForge.Shared.Inventory;
+using ShopForge.Shared.Security;
 using ShopForge.Shared.Stores;
 using ShopForge.Shared.Tenancy;
 
@@ -19,6 +20,8 @@ namespace ShopForge.Catalog.Storefront;
 internal static class StorefrontCatalogEndpoints
 {
     private const int MaxPageSize = 100;
+    private const int DefaultSuggestions = 6;
+    private const int MostSuggestions = 10;
 
     public static void MapStorefrontCatalog(this IEndpointRouteBuilder storefront)
     {
@@ -26,6 +29,9 @@ internal static class StorefrontCatalogEndpoints
         storefront.MapGet("/products", GetProductsAsync);
         storefront.MapGet("/products/{slug}", GetProductAsync);
         storefront.MapGet("/products/{storeProductId:guid}/images/{imageId:guid}", GetImageAsync);
+
+        // Its own window: somebody typing asks on every letter, which is not a shopper's rhythm on any other page.
+        storefront.MapGet("/search/suggest", SuggestAsync).RequireRateLimiting(RateLimits.Typing);
     }
 
     private static async Task<Ok<List<StorefrontCategoryResponse>>> GetCategoriesAsync(DbContext dbContext, CancellationToken cancellationToken)
@@ -241,6 +247,63 @@ internal static class StorefrontCatalogEndpoints
             CategoryLinkedData(settings, path),
             listUrl is null ? null : PagedPages.Previous(listUrl, pageNumber, narrowedOrReordered),
             listUrl is null ? null : PagedPages.Next(listUrl, pageNumber, size, totalCount, narrowedOrReordered)));
+    }
+
+    // What the search box offers while somebody types (D-227): the categories and products the words so far are
+    // probably after, best first. It costs the same three round trips whatever the store sells, it is never written to
+    // the search log, and a browser that has moved on to the next letter takes the work with it.
+    private static async Task<Ok<SuggestionsResponse>> SuggestAsync(
+        HttpContext httpContext,
+        DbContext dbContext,
+        ICurrentStoreSettings storeSettings,
+        IStoreContext storeContext,
+        string? q,
+        int? limit,
+        CancellationToken cancellationToken)
+    {
+        // The same letters a moment later have the same answer, and somebody typing back over them asks for it again.
+        httpContext.Response.Headers.CacheControl = "private, max-age=60";
+        var typed = SearchTerms.Tidied(q);
+
+        if (typed.Length < SearchTerms.Shortest)
+        {
+            return TypedResults.Ok(new SuggestionsResponse(typed, [], []));
+        }
+
+        var settings = await storeSettings.GetAsync(cancellationToken);
+
+        if (SearchTerms.Of(dbContext, storeContext, settings, q, typing: true) is not { } search)
+        {
+            return TypedResults.Ok(new SuggestionsResponse(typed, [], []));
+        }
+
+        var categories = await StoreCategories.NamesAsync(dbContext, cancellationToken);
+        var query = new ProductQuery(dbContext, [], [], search);
+        var products = await query.Sort(query.Products(), new ProductSort("relevance", Descending: false, Attribute: null))
+            .Take(Math.Clamp(limit ?? DefaultSuggestions, 1, MostSuggestions))
+            .Select(storeProduct => new
+            {
+                storeProduct.Id,
+                storeProduct.Slug,
+                storeProduct.Name,
+                storeProduct.Price,
+                ImageId = dbContext.Set<Product>()
+                    .Where(product => product.Id == storeProduct.ProductId)
+                    .SelectMany(product => product.Images)
+                    .OrderBy(image => image.Position)
+                    .Select(image => (Guid?)image.Id)
+                    .FirstOrDefault(),
+            })
+            .ToListAsync(cancellationToken);
+
+        return TypedResults.Ok(new SuggestionsResponse(
+            typed,
+            [
+                .. CategorySuggestions.For(categories, search.Tokens, SearchConfigurations.ReadsCzechForms(settings.Culture))
+                    .Select(category => new SuggestedCategoryResponse(
+                        category.Name, category.Slug, [.. categories.PathTo(category.Id).SkipLast(1).Select(above => above.Name)])),
+            ],
+            [.. products.Select(product => new SuggestedProductResponse(product.Id, product.Slug, product.Name, product.Price, ImageUrl(product.Id, product.ImageId)))]));
     }
 
     private static async Task<Results<Ok<ProductDetailResponse>, RedirectHttpResult, NotFound>> GetProductAsync(
@@ -616,6 +679,14 @@ internal sealed record ProductPageResponse(
     // How a reader walks the list, and nothing on a view of it that canonicalises away (D-174).
     string? PreviousPage,
     string? NextPage);
+
+// What the search box shows while somebody types (D-227): the categories, each with the names of those above it from
+// the top down, and the products, best first.
+internal sealed record SuggestionsResponse(string Query, List<SuggestedCategoryResponse> Categories, List<SuggestedProductResponse> Products);
+
+internal sealed record SuggestedCategoryResponse(string Name, string Slug, List<string> Path);
+
+internal sealed record SuggestedProductResponse(Guid Id, string Slug, string Name, decimal Price, string? ImageUrl);
 
 internal sealed record ProductSummaryResponse(
     Guid Id,

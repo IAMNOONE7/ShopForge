@@ -13,7 +13,7 @@ using ShopForge.Shared.Tenancy;
 namespace ShopForge.IntegrationTests.Search;
 
 // The development data's Czech tool shop (`ToolShopCatalogue`), set up through the admin API as a merchant would: its
-// category tree, its attributes and the categories that offer them, and one import for every product (D-225). Built
+// category tree, its attributes and the categories that offer them, and one import of its workbook (D-225, D-227). Built
 // once for the tests that read it, which change nothing in it.
 public sealed class ToolShop(ShopForgeApiFactory factory) : IAsyncLifetime
 {
@@ -50,7 +50,7 @@ public sealed class ToolShop(ShopForgeApiFactory factory) : IAsyncLifetime
                 attribute.Name,
                 attribute.Type,
                 attribute.Unit,
-                IsFilterable = attribute.Type != "text",
+                IsFilterable = attribute.Filterable,
                 IsVisibleOnProductPage = true,
                 IsSearchable = attribute.Searchable,
                 attribute.Options,
@@ -68,18 +68,7 @@ public sealed class ToolShop(ShopForgeApiFactory factory) : IAsyncLifetime
             Assert.Equal(HttpStatusCode.OK, assigned.StatusCode);
         }
 
-        var codes = ToolShopCatalogue.Attributes.Select(attribute => attribute.Code).ToArray();
-        var rows = ToolShopCatalogue.Products.Select(product => (object?[])
-        [
-            product.Sku, product.Name, product.Slug, product.Description, product.Price, 21m, 25, product.Visible, product.SortOrder, product.Category,
-            product.Brand, product.Ean, product.PartNumber, product.Keywords, .. codes.Select(code => product.Values.GetValueOrDefault(code)),
-        ]);
-
-        using var imported = await Admin.ImportAsync(
-            Store.StoreId,
-            ImportFiles.MeasuredWorkbook(
-                ["sku", "name", "slug", "description", "price", "vat", "stock", "visible", "sortorder", "categories", "brand", "ean", "partnumber", "search_keywords", .. codes],
-                [.. rows]));
+        using var imported = await Admin.ImportAsync(Store.StoreId, ImportFiles.Upload(DevelopmentToolShop.ProductsWorkbook(), "tool-shop.xlsx"));
         var report = await imported.Content.ReadFromJsonAsync<ImportReport>(CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, imported.StatusCode);

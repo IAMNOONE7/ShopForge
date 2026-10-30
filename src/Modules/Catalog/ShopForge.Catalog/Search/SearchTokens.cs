@@ -11,7 +11,9 @@ internal static class SearchTokens
     // A pasted paragraph is not a search for each of its words.
     public const int MostTokens = 10;
 
-    public static IReadOnlyList<SearchToken> Read(string typed)
+    // Somebody still typing may stop in the middle of a word: when the text may be unfinished, a word or code it ends
+    // in is only a beginning (D-227). One it does not end in, followed by a space or anything else, is finished.
+    public static IReadOnlyList<SearchToken> Read(string typed, bool unfinished = false)
     {
         var tokens = new List<SearchToken>();
         var runes = typed.EnumerateRunes().ToArray();
@@ -43,7 +45,7 @@ internal static class SearchTokens
             else if (IsWordRune(rune))
             {
                 var (word, next) = WordAt(runes, index);
-                tokens.Add(new SearchToken(word.IsCode ? SearchTokenKind.Code : SearchTokenKind.Word, [word.Lowered]));
+                tokens.Add(new SearchToken(word.IsCode ? SearchTokenKind.Code : SearchTokenKind.Word, [word.Lowered], IsBeginning: unfinished && next == runes.Length));
                 index = next;
             }
             else
@@ -118,8 +120,9 @@ internal enum SearchTokenKind
     Excluded,
 }
 
-// One thing to match. Every kind holds one word but a phrase, which holds its words in order.
-internal sealed record SearchToken(SearchTokenKind Kind, IReadOnlyList<string> Words)
+// One thing to match. Every kind holds one word but a phrase, which holds its words in order. A beginning is a word
+// or code somebody may still be typing.
+internal sealed record SearchToken(SearchTokenKind Kind, IReadOnlyList<string> Words, bool IsBeginning = false)
 {
     public string Text => Words[0];
 }

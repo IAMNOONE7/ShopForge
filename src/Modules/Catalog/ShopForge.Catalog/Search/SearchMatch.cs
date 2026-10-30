@@ -12,7 +12,7 @@ internal sealed record SearchMatch(
     SearchQueryText BeginningsInName,
     SearchQueryText InWhatItIsCalled)
 {
-    public bool FindsNothing => Found.Words.Count == 0 && Found.Codes.Count == 0;
+    public bool FindsNothing => Found.Words.Count == 0 && Found.Codes.Count == 0 && Found.Unfinished is null;
 
     public static SearchMatch For(IReadOnlyList<SearchToken> tokens, bool czechForms)
     {
@@ -28,33 +28,38 @@ internal sealed record SearchMatch(
             {
                 case SearchTokenKind.Word:
                     var prefixes = czechForms ? CzechWordForms.PrefixesOf(token.Text) : [token.Text];
-                    found.AnyOf(prefixes, ":*");
                     exact.One(token.Text, ":A");
-                    beginnings.AnyOf(prefixes, ":*A");
-                    called.AnyOf(prefixes, ":*AB");
+                    forms.Forms(prefixes, token.Text, czechForms);
 
-                    // A language PostgreSQL stems has its forms already: the word reads as its stem.
-                    if (czechForms)
+                    // A word somebody may still be typing is also asked for as typed, without stemming, wherever a
+                    // beginning finds it: the store's language may drop it as a stop word, as English drops the "so" of
+                    // "sofa", or stem it into something no word begins with (D-227).
+                    foreach (var (question, suffix) in new[] { (found, ":*"), (beginnings, ":*A"), (called, ":*AB") })
                     {
-                        forms.AnyOf([.. prefixes.SelectMany(prefix => CzechWordForms.Endings.Select(ending => prefix + ending))], ":A");
-                    }
-                    else
-                    {
-                        forms.One(token.Text, ":A");
+                        if (token.IsBeginning)
+                        {
+                            question.Beginning(prefixes, token.Text, suffix);
+                        }
+                        else
+                        {
+                            question.AnyOf(prefixes, suffix);
+                        }
                     }
 
                     break;
                 // A code is read without stemming in every language, as the index holds it: "RENAMED-OAK-7" stays
-                // "renamed" rather than becoming English's "renam" (D-226).
+                // "renamed" rather than becoming English's "renam" (D-226). One somebody may still be typing is the
+                // beginning of a code (D-227).
                 case SearchTokenKind.Code:
-                    found.Code(token.Text, "");
+                    var (anywhere, inName, asCalled) = token.IsBeginning ? (":*", ":*A", ":*AB") : ("", ":A", ":AB");
+                    found.Code(token.Text, anywhere);
 
                     foreach (var tier in new[] { exact, forms, beginnings })
                     {
-                        tier.Code(token.Text, ":A");
+                        tier.Code(token.Text, inName);
                     }
 
-                    called.Code(token.Text, ":AB");
+                    called.Code(token.Text, asCalled);
                     break;
                 case SearchTokenKind.Phrase:
                     found.Phrase(token.Words, "");
@@ -82,7 +87,9 @@ internal sealed record SearchMatch(
         private readonly List<string> _codeParts = [];
         private readonly List<string> _codes = [];
 
-        public SearchQueryText Text => new(string.Join(" & ", _parts), _words, string.Join(" & ", _codeParts), _codes);
+        private SearchBeginning? _unfinished;
+
+        public SearchQueryText Text => new(string.Join(" & ", _parts), _words, string.Join(" & ", _codeParts), _codes, _unfinished);
 
         public void One(string word, string suffix)
         {
@@ -102,6 +109,23 @@ internal sealed record SearchMatch(
             _words.AddRange(words);
         }
 
+        // A language PostgreSQL stems has its forms already: the word reads as its stem.
+        public void Forms(IReadOnlyList<string> prefixes, string word, bool czechForms)
+        {
+            if (czechForms)
+            {
+                AnyOf([.. prefixes.SelectMany(prefix => CzechWordForms.Endings.Select(ending => prefix + ending))], ":A");
+            }
+            else
+            {
+                One(word, ":A");
+            }
+        }
+
+        // Only the last word can be unfinished, so a question has one at most.
+        public void Beginning(IReadOnlyList<string> prefixes, string typed, string suffix) =>
+            _unfinished = new SearchBeginning("(" + string.Join(" | ", prefixes.Select(_ => "%L" + suffix)) + ")", prefixes, "%L" + suffix, typed);
+
         public void Phrase(IReadOnlyList<string> words, string suffix)
         {
             _parts.Add("(" + string.Join(" <-> ", words.Select(_ => "%L" + suffix)) + ")");
@@ -116,6 +140,15 @@ internal sealed record SearchMatch(
     }
 }
 
-// A `to_tsquery` template and the words for its placeholders, in order, read in the store's language; and the same for
-// the codes, read without stemming. Both must match.
-internal sealed record SearchQueryText(string Template, IReadOnlyList<string> Words, string CodesTemplate, IReadOnlyList<string> Codes);
+// A `to_tsquery` template and the words for its placeholders, in order, read in the store's language; the same for
+// the codes, read without stemming; and a word somebody may still be typing. All must match.
+internal sealed record SearchQueryText(
+    string Template,
+    IReadOnlyList<string> Words,
+    string CodesTemplate,
+    IReadOnlyList<string> Codes,
+    SearchBeginning? Unfinished = null);
+
+// An unfinished word, found either way: by its beginnings read in the store's language, or by its beginning as typed,
+// read without stemming (D-227).
+internal sealed record SearchBeginning(string Template, IReadOnlyList<string> Words, string AsTypedTemplate, string AsTyped);

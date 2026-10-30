@@ -30,6 +30,7 @@ public sealed class JourneyTests
         var (_, post) = await stack.RigAsync(HttpMethod.Get, $"runs/{Id(second)}/mail", null, CancellationToken);
 
         Assert.NotEqual(StoreId(first), StoreId(second));
+        Assert.Equal(JsonValueKind.Null, first.GetProperty("toolShop").ValueKind);
         Assert.Equal(HttpStatusCode.NotFound, read);
         Assert.DoesNotContain(post.EnumerateArray(), letter => letter.GetProperty("to").GetString()!.EndsWith(Domain(first), StringComparison.Ordinal));
     }
@@ -110,6 +111,28 @@ public sealed class JourneyTests
         Assert.Equal(HttpStatusCode.OK, changed);
         Assert.Equal("AwaitingPayment", order.GetProperty("order").GetProperty("status").GetString());
         Assert.Equal(["Unrecognised"], Statuses(order));
+    }
+
+    // A run asked for with the tool shop has the development data's Czech shop as a third store of its company, built
+    // through the admin API and the import, beside the two every run has. A shopper typing without accents is offered
+    // its screwdrivers, and the hidden sample is not for sale (D-227).
+    [Fact]
+    public async Task A_run_with_the_tool_shop_suggests_what_is_typed_without_accents()
+    {
+        var stack = Stack.Required();
+        var run = await stack.StartRunAsync(toolShop: true, CancellationToken);
+        var toolShop = run.GetProperty("toolShop");
+        using var browser = new Shopper(stack.Api, toolShop.GetProperty("host").GetString()!);
+
+        var (suggesting, suggested) = await browser.SendAsync(HttpMethod.Get, "api/storefront/search/suggest?q=sroubovak", null, CancellationToken);
+        var (listing, everything) = await browser.SendAsync(HttpMethod.Get, "api/storefront/products?pageSize=100", null, CancellationToken);
+
+        Assert.Equal((HttpStatusCode.OK, HttpStatusCode.OK), (suggesting, listing));
+        Assert.Equal("sroubovaky", suggested.GetProperty("categories")[0].GetProperty("slug").GetString());
+        Assert.StartsWith("Šroubovák", suggested.GetProperty("products")[0].GetProperty("name").GetString(), StringComparison.Ordinal);
+        Assert.Equal(39, everything.GetProperty("totalCount").GetInt32());
+        Assert.Equal(2, run.GetProperty("stores").GetArrayLength());
+        Assert.DoesNotContain(run.GetProperty("stores").EnumerateArray(), store => store.GetProperty("id").GetGuid() == toolShop.GetProperty("id").GetGuid());
     }
 
     // A guest's order of one T-shirt in the size given, placed on the run's first store with Comgate.
